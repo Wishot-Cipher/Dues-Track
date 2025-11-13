@@ -182,6 +182,8 @@ export default function ScanQRCodePage() {
           approved_by: user.id,
           approved_at: new Date().toISOString(),
           notes: `Cash payment verified via QR code scan by ${user.email}`,
+          // receipts are optional for cash flow in UI, but DB requires a non-null value for now
+          receipt_url: '',
         })
         .select()
         .single();
