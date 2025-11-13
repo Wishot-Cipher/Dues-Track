@@ -39,7 +39,7 @@ const Checkbox: React.FC<CheckboxProps> = ({
   return (
     <div>
       <label className={`flex items-start gap-3 cursor-pointer ${className}`}>
-        <div className="relative flex-shrink-0 mt-0.5">
+        <div className="relative shrink-0 mt-0.5">
           <input
             type="checkbox"
             checked={checked}

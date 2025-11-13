@@ -111,7 +111,8 @@ export default function CompleteProfilePage() {
         }}
       />
 
-      {/* Animated Gradient Orbs */}
+  
+     {/* Animated Gradient Orbs */}
       <div className="fixed inset-0 overflow-hidden pointer-events-none">
         <div
           className="absolute w-[500px] h-[500px] rounded-full blur-[120px] opacity-30 animate-pulse"
@@ -131,6 +132,19 @@ export default function CompleteProfilePage() {
             animation: 'pulse 6s ease-in-out infinite',
           }}
         />
+        
+        {/* ECE Logo Background - Creative Element */}
+        <div className="hidden lg:block absolute right-0 top-1/2 -translate-y-1/2 w-[600px] h-[600px] opacity-[0.08] pointer-events-none">
+          <img 
+            src="/Ece picture.jpg" 
+            alt="ECE Background"
+            className="w-full h-full object-contain"
+            style={{
+              filter: 'grayscale(0.5) brightness(0.8)',
+              mixBlendMode: 'soft-light',
+            }}
+          />
+        </div>
       </div>
 
       {/* Main Content Container */}

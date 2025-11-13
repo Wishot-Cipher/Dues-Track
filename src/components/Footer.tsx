@@ -27,7 +27,7 @@ export default function Footer() {
               Developed with{' '}
               <span className="inline-block animate-pulse" style={{ color: colors.primary }}>💙</span>{' '}
               by{' '}
-              <span className="font-bold bg-clip-text text-transparent bg-gradient-to-r from-orange-400 to-orange-600">
+              <span className="font-bold bg-clip-text text-transparent bg-linear-to-r from-orange-400 to-orange-600">
                 Dev_Wishot
               </span>
             </p>

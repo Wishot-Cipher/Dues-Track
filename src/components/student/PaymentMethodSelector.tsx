@@ -145,7 +145,7 @@ function PaymentMethodSelector({
                     {/* Icon & Title in one row */}
                     <div className="flex items-center gap-3">
                       <div
-                        className="w-12 h-12 rounded-xl flex items-center justify-center flex-shrink-0"
+                        className="w-12 h-12 rounded-xl flex items-center justify-center shrink-0"
                         style={{ background: `${method.color}20` }}
                       >
                         <Icon className="w-6 h-6" style={{ color: method.color }} />
@@ -165,7 +165,7 @@ function PaymentMethodSelector({
                       {method.process.map((step, i) => (
                         <div key={i} className="flex items-center gap-2">
                           <span
-                            className="w-5 h-5 rounded-full flex items-center justify-center flex-shrink-0 text-xs font-bold"
+                            className="w-5 h-5 rounded-full flex items-center justify-center shrink-0 text-xs font-bold"
                             style={{
                               background: `${method.color}20`,
                               color: method.color
