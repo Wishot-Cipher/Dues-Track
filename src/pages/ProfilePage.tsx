@@ -145,9 +145,10 @@ export default function ProfilePage() {
           <div className="flex items-center gap-3 sm:gap-4">
             <motion.button
               onClick={() => navigate('/dashboard')}
-              className="p-2 rounded-xl transition-colors"
-              style={{ background: 'rgba(255, 255, 255, 0.05)' }}
-              whileHover={{ background: 'rgba(255, 255, 255, 0.1)' }}
+              className="flex items-center justify-center sm:justify-start gap-2 mb-4 px-3 py-2 rounded-lg transition-colors w-auto outline outline-orange-500 "
+            style={{ color: colors.textSecondary }}
+            onMouseEnter={(e) => (e.currentTarget.style.color = colors.primary)}
+            onMouseLeave={(e) => (e.currentTarget.style.color = colors.textSecondary)}
             >
               <ArrowLeft size={20} style={{ color: colors.textPrimary }} />
             </motion.button>

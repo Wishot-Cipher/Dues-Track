@@ -249,8 +249,10 @@ export default function PaymentHistoryPage() {
         >
           <button
             onClick={() => navigate('/dashboard')}
-            className="flex items-center justify-center sm:justify-start gap-2 mb-4 px-4 py-2 rounded-lg w-full sm:w-auto"
-            style={{ color: colors.textPrimary, background: 'rgba(255, 255, 255, 0.05)' }}
+            className="flex items-center justify-center sm:justify-start gap-2 mb-4 px-3 py-2 rounded-lg transition-colors w-auto outline outline-orange-500 "
+            style={{ color: colors.textSecondary }}
+            onMouseEnter={(e) => (e.currentTarget.style.color = colors.primary)}
+            onMouseLeave={(e) => (e.currentTarget.style.color = colors.textSecondary)}
           >
             <ArrowLeft size={20} />
             <span className="font-medium">Back to Dashboard</span>

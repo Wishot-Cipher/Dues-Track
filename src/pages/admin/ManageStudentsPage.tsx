@@ -310,7 +310,7 @@ export default function ManageStudentsPage() {
         >
           <button
             onClick={() => navigate('/admin/dashboard')}
-            className="flex items-center justify-center sm:justify-start gap-2 mb-4 px-3 py-2 rounded-lg transition-colors w-full sm:w-auto"
+            className="flex items-center justify-center sm:justify-start gap-2 mb-4 px-3 py-2 rounded-lg transition-colors w-auto outline outline-orange-500 "
             style={{ color: colors.textSecondary }}
             onMouseEnter={(e) => (e.currentTarget.style.color = colors.primary)}
             onMouseLeave={(e) => (e.currentTarget.style.color = colors.textSecondary)}

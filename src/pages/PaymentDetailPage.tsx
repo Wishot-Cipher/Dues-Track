@@ -363,7 +363,7 @@ export default function PaymentDetailPage() {
     <div
       className="min-h-screen py-2 sm:py-6 overflow-x-hidden"
       style={{
-        background: 'radial-gradient(ellipse at top, #1A0E09 0%, #0F0703 100%)',
+        background: "radial-gradient(ellipse at top, #1A0E09 0%, #0F0703 100%)",
       }}
     >
       {/* Background Grid Pattern */}
@@ -374,7 +374,7 @@ export default function PaymentDetailPage() {
             linear-gradient(${colors.primary}40 1px, transparent 1px),
             linear-gradient(90deg, ${colors.primary}40 1px, transparent 1px)
           `,
-          backgroundSize: '50px 50px',
+          backgroundSize: "50px 50px",
         }}
       />
 
@@ -384,30 +384,30 @@ export default function PaymentDetailPage() {
           className="absolute w-[500px] h-[500px] rounded-full blur-[120px] opacity-30 animate-pulse"
           style={{
             background: `radial-gradient(circle, ${colors.primary} 0%, transparent 70%)`,
-            top: '-10%',
-            right: '-5%',
-            animationDuration: '4s',
+            top: "-10%",
+            right: "-5%",
+            animationDuration: "4s",
           }}
         />
         <div
           className="absolute w-[400px] h-[400px] rounded-full blur-[100px] opacity-20"
           style={{
             background: `radial-gradient(circle, ${colors.accentMint} 0%, transparent 70%)`,
-            bottom: '-5%',
-            left: '-5%',
-            animation: 'pulse 6s ease-in-out infinite',
+            bottom: "-5%",
+            left: "-5%",
+            animation: "pulse 6s ease-in-out infinite",
           }}
         />
-        
+
         {/* ECE Logo Background - Creative Element */}
         <div className="hidden lg:block absolute right-0 top-1/2 -translate-y-1/2 w-[600px] h-[600px] opacity-[0.08] pointer-events-none">
-          <img 
-            src="/Ece picture.jpg" 
+          <img
+            src="/Ece picture.jpg"
             alt="ECE Background"
             className="w-full h-full object-contain"
             style={{
-              filter: 'grayscale(0.5) brightness(0.8)',
-              mixBlendMode: 'soft-light',
+              filter: "grayscale(0.5) brightness(0.8)",
+              mixBlendMode: "soft-light",
             }}
           />
         </div>
@@ -423,11 +423,14 @@ export default function PaymentDetailPage() {
           >
             <button
               onClick={() => navigate("/dashboard")}
-              className="flex items-center justify-center sm:justify-start gap-2 mb-4 px-4 py-4 rounded-lg transition-colors w-full sm:w-auto"
-              style={{
-                color: colors.textPrimary,
-                background: "rgba(255, 255, 255, 0.05)",
-              }}
+              className="flex items-center justify-center sm:justify-start gap-2 mb-4 px-3 py-2 rounded-lg transition-colors w-auto outline outline-orange-500 "
+              style={{ color: colors.textSecondary }}
+              onMouseEnter={(e) =>
+                (e.currentTarget.style.color = colors.primary)
+              }
+              onMouseLeave={(e) =>
+                (e.currentTarget.style.color = colors.textSecondary)
+              }
             >
               <ArrowLeft size={20} />
               <span className="font-medium">Back to Dashboard</span>

@@ -337,8 +337,12 @@ export default function ScanQRCodePage() {
         >
           <button
             onClick={() => navigate("/admin/dashboard")}
-            className="flex items-center gap-2 mb-4 transition-all hover:gap-3"
-            style={{ color: colors.primary }}
+            className="flex items-center justify-center sm:justify-start gap-2 mb-4 px-3 py-2 rounded-lg transition-colors w-auto outline outline-orange-500 "
+            style={{ color: colors.textSecondary }}
+            onMouseEnter={(e) => (e.currentTarget.style.color = colors.primary)}
+            onMouseLeave={(e) =>
+              (e.currentTarget.style.color = colors.textSecondary)
+            }
           >
             <ArrowLeft className="w-5 h-5" />
             <span className="font-medium">Back to Dashboard</span>
