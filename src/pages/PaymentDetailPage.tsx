@@ -378,7 +378,7 @@ export default function PaymentDetailPage() {
       </div>
 
       {/* Main Container - FIXED */}
-      <div className="container sm:px-6 lg:px-8 max-w-4xl mx-auto">
+      <div className="container px-3 sm:px-6 lg:px-8 max-w-4xl mx-auto">
         <div className="w-full space-y-6 relative z-10">
           {/* Header */}
           <motion.div
@@ -413,7 +413,7 @@ export default function PaymentDetailPage() {
                   {paymentType.icon}
                 </div>
                 <div className="flex-1 text-center sm:text-left">
-                  <h1 className=" text-xl sm:text-3xl font-bold text-white mb-2">
+                  <h1 className=" text-lg sm:text-3xl font-bold text-white mb-2">
                     {paymentType.title}
                   </h1>
                   <p
@@ -801,7 +801,7 @@ export default function PaymentDetailPage() {
                             >
                               Bank Name
                             </p>
-                            <p className="font-medium text-white break-words">
+                            <p className="font-medium text-white wrap-break-words">
                               {paymentType.bank_name}
                             </p>
                           </div>
@@ -812,7 +812,7 @@ export default function PaymentDetailPage() {
                             >
                               Account Name
                             </p>
-                            <p className="font-medium text-white break-words">
+                            <p className="font-medium text-white wrap-break-word">
                               {paymentType.account_name}
                             </p>
                           </div>
