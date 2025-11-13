@@ -60,6 +60,11 @@ export default function AdminReviewPage() {
   const [filter, setFilter] = useState<'all' | 'pending' | 'approved' | 'rejected'>('all');
   const itemsPerPage = 10;
 
+  // Scroll to top helper
+  const scrollToTop = () => {
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
   // Filter and paginate payments
   const filteredPayments = payments.filter(p => filter === 'all' || p.status === filter);
   const totalPages = Math.ceil(filteredPayments.length / itemsPerPage);
@@ -202,15 +207,15 @@ export default function AdminReviewPage() {
 
       if (error) throw error;
 
-      // Send notification to student using notification service
-      await notificationService.sendPaymentRejectedNotification(
-        selectedPayment.student_id,
-        selectedPayment.students.full_name,
-        selectedPayment.payment_types?.title || 'Payment',
-        selectedPayment.amount,
-        rejectionReason.trim(),
-        selectedPayment.id
-      );
+// Send notification to student using notification service
+await notificationService.sendPaymentRejectedNotification(
+  selectedPayment.student_id,
+  selectedPayment.students.full_name,
+  selectedPayment.payment_types?.title || 'Payment',
+  selectedPayment.amount,
+  rejectionReason.trim(),
+  selectedPayment.id
+);
 
       showSuccess('Payment rejected');
       setShowRejectModal(false);
@@ -226,7 +231,7 @@ export default function AdminReviewPage() {
   };
 
   return (
-    <div className="min-h-screen py-6 px-4 sm:px-6 lg:px-8 relative overflow-x-hidden" style={{ background: gradients.darkBackground }}>
+    <div className="min-h-screen py-4 sm:py-6 relative overflow-x-hidden" style={{ background: gradients.darkBackground }}>
       {/* ECE Logo Background - Creative Element */}
       <div className="hidden lg:block fixed right-0 top-1/2 -translate-y-1/2 w-[600px] h-[600px] opacity-[0.08] pointer-events-none z-0">
         <img 
@@ -240,18 +245,18 @@ export default function AdminReviewPage() {
         />
       </div>
       
-      <div className="max-w-7xl mx-auto space-y-6 relative z-10">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-6 relative z-10">
         {/* Header */}
         <motion.div
           initial={{ opacity: 0, y: -20 }}
           animate={{ opacity: 1, y: 0 }}
         >
           <GlassCard>
-            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-              <div>
+            <div className="flex flex-col sm:flex-row items-center sm:items-start justify-between gap-4">
+              <div className="text-center sm:text-left w-full sm:w-auto">
                 <button
                   onClick={() => navigate('/admin/dashboard')}
-                  className="flex items-center gap-2 mb-3 px-3 py-1.5 rounded-lg transition-colors text-sm"
+                  className="flex items-center justify-center sm:justify-start gap-2 mb-3 px-3 py-1.5 rounded-lg transition-colors text-sm w-full sm:w-auto"
                   style={{ 
                     color: colors.textSecondary,
                     background: 'rgba(255, 255, 255, 0.05)',
@@ -261,12 +266,12 @@ export default function AdminReviewPage() {
                   <span>Back to Dashboard</span>
                 </button>
                 <h1 className="text-2xl sm:text-3xl font-bold text-white mb-2">Payment Review</h1>
-                <p style={{ color: colors.textSecondary }}>Review and approve pending payment submissions</p>
+                <p className="text-sm sm:text-base" style={{ color: colors.textSecondary }}>Review and approve pending payment submissions</p>
               </div>
-              <div className="flex items-center gap-3">
-                <div className="px-6 py-4 rounded-xl" style={{ background: `${colors.warning}20`, border: `1px solid ${colors.warning}40` }}>
-                  <p className="text-sm" style={{ color: colors.textSecondary }}>Pending Review</p>
-                  <p className="text-3xl font-bold mt-1" style={{ color: colors.warning }}>
+              <div className="flex items-center gap-3 w-full sm:w-auto justify-center">
+                <div className="px-4 sm:px-6 py-3 sm:py-4 rounded-xl w-full sm:w-auto text-center" style={{ background: `${colors.warning}20`, border: `1px solid ${colors.warning}40` }}>
+                  <p className="text-xs sm:text-sm" style={{ color: colors.textSecondary }}>Pending Review</p>
+                  <p className="text-2xl sm:text-3xl font-bold mt-1" style={{ color: colors.warning }}>
                     {payments.filter(p => p.status === 'pending').length}
                   </p>
                 </div>
@@ -477,28 +482,24 @@ export default function AdminReviewPage() {
                     key={payment.id}
                     initial={{ opacity: 0, y: 20 }}
                     animate={{ opacity: 1, y: 0 }}
-                    transition={{ delay: index * 0.05 }}
+                    transition={{ delay: Math.min(index * 0.02, 0.3) }}
                     className="p-4 rounded-lg" 
                     style={{ background: 'rgba(255, 255, 255, 0.05)' }}
                   >
-                    {/* Student Info */}
-                    <div className="flex items-start justify-between mb-3">
-                      <div className="flex items-center gap-3">
-                        <div className="w-10 h-10 rounded-full flex items-center justify-center" 
-                             style={{ background: `${colors.primary}20` }}>
-                          <User className="w-5 h-5" style={{ color: colors.primary }} />
-                        </div>
-                        <div>
-                          <p className="text-white font-medium">{payment.students.full_name}</p>
-                          <p className="text-xs" style={{ color: colors.textSecondary }}>
-                            {payment.students.reg_number}
-                          </p>
-                        </div>
+                    {/* Student Info - Centered */}
+                    <div className="flex flex-col items-center text-center mb-4">
+                      <div className="w-14 h-14 rounded-full flex items-center justify-center mb-3" 
+                           style={{ background: `${colors.primary}20` }}>
+                        <User className="w-6 h-6" style={{ color: colors.primary }} />
                       </div>
+                      <p className="text-white font-semibold text-lg">{payment.students.full_name}</p>
+                      <p className="text-sm mb-2" style={{ color: colors.textSecondary }}>
+                        {payment.students.reg_number}
+                      </p>
                       {(() => {
                         const badge = getStatusBadge(payment.status, payment.transaction_ref);
                         return (
-                          <span className="px-2 py-1 rounded-full text-xs font-medium" 
+                          <span className="px-3 py-1.5 rounded-full text-xs font-medium" 
                                 style={{ background: badge.bg, color: badge.color }}>
                             {badge.label}
                           </span>
@@ -506,33 +507,33 @@ export default function AdminReviewPage() {
                       })()}
                     </div>
 
-                    {/* Payment Details */}
-                    <div className="space-y-2 mb-4">
-                      <div>
+                    {/* Payment Details - Organized Grid */}
+                    <div className="space-y-3 mb-4">
+                      <div className="p-3 rounded-lg text-center" style={{ background: 'rgba(255, 255, 255, 0.03)' }}>
                         <p className="text-xs mb-1" style={{ color: colors.textSecondary }}>Payment Type</p>
                         <p className="text-white text-sm font-medium">{payment.payment_types.title}</p>
                       </div>
                       <div className="grid grid-cols-2 gap-3">
-                        <div>
+                        <div className="p-3 rounded-lg text-center" style={{ background: 'rgba(255, 255, 255, 0.03)' }}>
                           <p className="text-xs mb-1" style={{ color: colors.textSecondary }}>Amount</p>
-                          <p className="text-white font-semibold">{formatCurrency(payment.amount)}</p>
+                          <p className="text-white font-semibold text-sm">{formatCurrency(payment.amount)}</p>
                         </div>
-                        <div>
+                        <div className="p-3 rounded-lg text-center" style={{ background: 'rgba(255, 255, 255, 0.03)' }}>
                           <p className="text-xs mb-1" style={{ color: colors.textSecondary }}>Submitted</p>
-                          <p className="text-white text-sm">{formatDate(payment.created_at, 'short')}</p>
+                          <p className="text-white text-xs">{formatDate(payment.created_at, 'short')}</p>
                         </div>
                       </div>
-                      <div>
+                      <div className="p-3 rounded-lg text-center" style={{ background: 'rgba(255, 255, 255, 0.03)' }}>
                         <p className="text-xs mb-1" style={{ color: colors.textSecondary }}>Transaction Ref</p>
-                        <p className="text-white text-sm font-mono">{payment.transaction_ref}</p>
+                        <p className="text-white text-xs font-mono break-all">{payment.transaction_ref}</p>
                       </div>
                     </div>
 
-                    {/* Actions */}
-                    <div className="flex gap-2">
+                    {/* Actions - Stacked Layout */}
+                    <div className="space-y-2">
                       <button
                         onClick={() => setSelectedPayment(payment)}
-                        className="flex-1 flex items-center justify-center gap-2 py-2 rounded-lg text-sm font-medium transition-all"
+                        className="w-full flex items-center justify-center gap-2 py-2.5 rounded-lg text-sm font-medium transition-all"
                         style={{ 
                           background: `${colors.primary}20`,
                           border: `1px solid ${colors.primary}40`,
@@ -540,17 +541,17 @@ export default function AdminReviewPage() {
                         }}
                       >
                         <Eye className="w-4 h-4" />
-                        View
+                        View Receipt
                       </button>
                       {payment.status === 'pending' && (
-                        <>
+                        <div className="grid grid-cols-2 gap-2">
                           <button
                             onClick={() => {
                               setSelectedPayment(payment);
                               setShowApproveModal(true);
                             }}
                             disabled={processingId === payment.id}
-                            className="flex-1 flex items-center justify-center gap-2 py-2 rounded-lg text-sm font-medium transition-all disabled:opacity-50"
+                            className="flex items-center justify-center gap-2 py-2.5 rounded-lg text-sm font-medium transition-all disabled:opacity-50"
                             style={{ 
                               background: `${colors.statusPaid}20`,
                               border: `1px solid ${colors.statusPaid}40`,
@@ -561,7 +562,7 @@ export default function AdminReviewPage() {
                               <>
                                 <div className="animate-spin rounded-full h-4 w-4 border-2 border-t-transparent" 
                                      style={{ borderColor: colors.statusPaid, borderTopColor: 'transparent' }} />
-                                Processing
+                                <span className="hidden sm:inline">Processing</span>
                               </>
                             ) : (
                               <>
@@ -576,7 +577,7 @@ export default function AdminReviewPage() {
                               setShowRejectModal(true);
                             }}
                             disabled={processingId === payment.id}
-                            className="flex-1 flex items-center justify-center gap-2 py-2 rounded-lg text-sm font-medium transition-all disabled:opacity-50"
+                            className="flex items-center justify-center gap-2 py-2.5 rounded-lg text-sm font-medium transition-all disabled:opacity-50"
                             style={{ 
                               background: `${colors.statusUnpaid}20`,
                               border: `1px solid ${colors.statusUnpaid}40`,
@@ -586,7 +587,7 @@ export default function AdminReviewPage() {
                             <X className="w-4 h-4" />
                             Reject
                           </button>
-                        </>
+                        </div>
                       )}
                     </div>
                   </motion.div>
@@ -597,56 +598,73 @@ export default function AdminReviewPage() {
         )}
 
         {/* Pagination */}
-        {!loading && totalPages > 1 && (
+        {!loading && filteredPayments.length > 0 && (
           <motion.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
           >
             <GlassCard>
-              <div className="flex items-center justify-between">
-                <p className="text-sm" style={{ color: colors.textSecondary }}>
-                  Showing {(currentPage - 1) * itemsPerPage + 1} - {Math.min(currentPage * itemsPerPage, filteredPayments.length)} of {filteredPayments.length}
-                </p>
-                <div className="flex gap-2">
-                  <button
-                    onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
-                    disabled={currentPage === 1}
-                    className="px-4 py-2 rounded-lg text-sm font-medium transition-all disabled:opacity-30 disabled:cursor-not-allowed"
-                    style={{
-                      background: currentPage === 1 ? 'rgba(255, 255, 255, 0.05)' : `${colors.primary}20`,
-                      color: currentPage === 1 ? colors.textSecondary : colors.primary,
-                    }}
-                  >
-                    Previous
-                  </button>
-                  <div className="flex gap-1">
-                    {Array.from({ length: totalPages }, (_, i) => i + 1).map(page => (
-                      <button
-                        key={page}
-                        onClick={() => setCurrentPage(page)}
-                        className="w-10 h-10 rounded-lg text-sm font-medium transition-all"
-                        style={{
-                          background: currentPage === page ? colors.primary : 'rgba(255, 255, 255, 0.05)',
-                          color: currentPage === page ? 'white' : colors.textSecondary,
-                        }}
-                      >
-                        {page}
-                      </button>
-                    ))}
+              {totalPages > 1 ? (
+                <div className="flex flex-col sm:flex-row items-center justify-between gap-3">
+                  <p className="text-xs sm:text-sm text-center sm:text-left" style={{ color: colors.textSecondary }}>
+                    Showing {(currentPage - 1) * itemsPerPage + 1} - {Math.min(currentPage * itemsPerPage, filteredPayments.length)} of {filteredPayments.length}
+                  </p>
+                  <div className="flex flex-wrap items-center justify-center gap-2">
+                    <button
+                      onClick={() => {
+                        setCurrentPage(p => Math.max(1, p - 1));
+                        scrollToTop();
+                      }}
+                      disabled={currentPage === 1}
+                      className="px-3 sm:px-4 py-2 rounded-lg text-xs sm:text-sm font-medium transition-all disabled:opacity-30 disabled:cursor-not-allowed"
+                      style={{
+                        background: currentPage === 1 ? 'rgba(255, 255, 255, 0.05)' : `${colors.primary}20`,
+                        color: currentPage === 1 ? colors.textSecondary : colors.primary,
+                      }}
+                    >
+                      Previous
+                    </button>
+                    <div className="flex flex-wrap gap-1 justify-center">
+                      {Array.from({ length: totalPages }, (_, i) => i + 1).map(page => (
+                        <button
+                          key={page}
+                          onClick={() => {
+                            setCurrentPage(page);
+                            scrollToTop();
+                          }}
+                          className="w-8 h-8 sm:w-10 sm:h-10 rounded-lg text-xs sm:text-sm font-medium transition-all"
+                          style={{
+                            background: currentPage === page ? colors.primary : 'rgba(255, 255, 255, 0.05)',
+                            color: currentPage === page ? 'white' : colors.textSecondary,
+                          }}
+                        >
+                          {page}
+                        </button>
+                      ))}
+                    </div>
+                    <button
+                      onClick={() => {
+                        setCurrentPage(p => Math.min(totalPages, p + 1));
+                        scrollToTop();
+                      }}
+                      disabled={currentPage === totalPages}
+                      className="px-3 sm:px-4 py-2 rounded-lg text-xs sm:text-sm font-medium transition-all disabled:opacity-30 disabled:cursor-not-allowed"
+                      style={{
+                        background: currentPage === totalPages ? 'rgba(255, 255, 255, 0.05)' : `${colors.primary}20`,
+                        color: currentPage === totalPages ? colors.textSecondary : colors.primary,
+                      }}
+                    >
+                      Next
+                    </button>
                   </div>
-                  <button
-                    onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
-                    disabled={currentPage === totalPages}
-                    className="px-4 py-2 rounded-lg text-sm font-medium transition-all disabled:opacity-30 disabled:cursor-not-allowed"
-                    style={{
-                      background: currentPage === totalPages ? 'rgba(255, 255, 255, 0.05)' : `${colors.primary}20`,
-                      color: currentPage === totalPages ? colors.textSecondary : colors.primary,
-                    }}
-                  >
-                    Next
-                  </button>
                 </div>
-              </div>
+              ) : (
+                <div className="text-center">
+                  <p className="text-xs sm:text-sm" style={{ color: colors.textSecondary }}>
+                    Showing all {filteredPayments.length} payment{filteredPayments.length !== 1 ? 's' : ''}
+                  </p>
+                </div>
+              )}
             </GlassCard>
           </motion.div>
         )}

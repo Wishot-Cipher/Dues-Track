@@ -17,7 +17,7 @@ const ProtectedRoute = ({
 
   // Show loading spinner while checking authentication
   if (loading) {
-    return <LoadingSpinner fullScreen text="Loading..." />;
+    return <LoadingSpinner fullScreen size="lg" />;
   }
 
   // Redirect to login if not authenticated

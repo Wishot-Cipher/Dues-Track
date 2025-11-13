@@ -12,7 +12,7 @@ interface LoadingSpinnerProps {
 }
 
 const LoadingSpinner: React.FC<LoadingSpinnerProps> = ({
-  size = 'md',
+  size = 'lg',
   color = colors.primary,
   text,
   fullScreen = false,
@@ -36,9 +36,10 @@ const LoadingSpinner: React.FC<LoadingSpinnerProps> = ({
         alignItems: 'center',
         justifyContent: 'center',
         gap: '16px',
-        background: overlay ? 'rgba(15, 7, 3, 0.9)' : 'transparent',
+        background: overlay ? 'rgba(15, 7, 3, 0.9)' : 'rgba(15, 7, 3, 1)',
         backdropFilter: overlay ? 'blur(8px)' : 'none',
         zIndex: 9999,
+        padding: '16px',
       }
     : {
         display: 'flex',
@@ -57,7 +58,7 @@ const LoadingSpinner: React.FC<LoadingSpinnerProps> = ({
       />
       {text && (
         <p 
-          className="text-sm font-medium"
+          className="text-sm font-medium text-center"
           style={{ color: colors.textSecondary }}
         >
           {text}

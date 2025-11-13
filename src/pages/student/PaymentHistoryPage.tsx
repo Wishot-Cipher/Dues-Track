@@ -50,6 +50,11 @@ export default function PaymentHistoryPage() {
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 10;
 
+  // Scroll to top function
+  const scrollToTop = () => {
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
   useEffect(() => {
     if (!user) return;
 
@@ -226,7 +231,7 @@ export default function PaymentHistoryPage() {
         </motion.div>
 
         {/* Stats Cards */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-5 gap-4 sm:gap-5">
+        <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-5 gap-3 sm:gap-4 md:gap-5">
           <motion.div
             initial={{ opacity: 0, scale: 0.9 }}
             animate={{ opacity: 1, scale: 1 }}
@@ -562,7 +567,10 @@ export default function PaymentHistoryPage() {
                   <div className="flex flex-wrap items-center gap-2">
                     {/* Previous Button */}
                     <button
-                      onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
+                      onClick={() => {
+                        setCurrentPage(prev => Math.max(1, prev - 1));
+                        scrollToTop();
+                      }}
                       disabled={currentPage === 1}
                       className="px-3 sm:px-4 py-2 rounded-lg font-medium transition-all disabled:opacity-50 disabled:cursor-not-allowed"
                       style={{
@@ -591,7 +599,10 @@ export default function PaymentHistoryPage() {
                         return (
                           <button
                             key={i}
-                            onClick={() => setCurrentPage(pageNumber)}
+                            onClick={() => {
+                              setCurrentPage(pageNumber);
+                              scrollToTop();
+                            }}
                             className="w-10 h-10 rounded-lg font-medium transition-all"
                             style={{
                               background: currentPage === pageNumber ? gradients.primary : 'rgba(255, 255, 255, 0.05)',
@@ -613,7 +624,10 @@ export default function PaymentHistoryPage() {
 
                     {/* Next Button */}
                     <button
-                      onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
+                      onClick={() => {
+                        setCurrentPage(prev => Math.min(totalPages, prev + 1));
+                        scrollToTop();
+                      }}
                       disabled={currentPage === totalPages}
                       className="px-3 sm:px-4 py-2 rounded-lg font-medium transition-all disabled:opacity-50 disabled:cursor-not-allowed"
                       style={{
