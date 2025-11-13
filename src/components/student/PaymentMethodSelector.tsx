@@ -76,7 +76,7 @@ function PaymentMethodSelector({
   ];
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 w-full overflow-hidden px-4 sm:px-0">
       {/* Header */}
       <motion.div
         initial={{ opacity: 0, y: -20 }}
@@ -212,11 +212,11 @@ function PaymentMethodSelector({
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.3 }}
         >
-          <button
+            <button
             onClick={onPayForOthers}
             className="w-full group"
           >
-            <GlassCard className="relative overflow-hidden hover:scale-[1.02] transition-transform">
+            <GlassCard className="relative overflow-hidden md:hover:scale-[1.02] transition-transform">
               <div className="flex items-center justify-between p-6">
                 <div className="flex items-center gap-4">
                   <div

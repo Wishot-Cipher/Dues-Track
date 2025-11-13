@@ -170,7 +170,7 @@ export default function ScanQRCodePage() {
       const transactionRef = `CASH-${student.reg_number}-${Date.now()}`;
 
       // Create payment record
-      const { error: paymentError } = await supabase
+      const paymentResponse = await supabase
         .from('payments')
         .insert({
           student_id: qrData.studentId,
@@ -186,16 +186,25 @@ export default function ScanQRCodePage() {
         .select()
         .single();
 
-      if (paymentError) throw paymentError;
+      if (paymentResponse?.error) {
+        console.error('Supabase payment insert error:', paymentResponse.error);
+        throw paymentResponse.error;
+      }
 
       // Send notification to student
-      await supabase.from('notifications').insert({
+      const notifResponse = await supabase.from('notifications').insert({
         recipient_id: qrData.studentId,
         type: 'payment_approved',
         title: `Cash Payment Received - ${qrData.paymentTypeName}`,
         message: `Your cash payment of ${formatCurrency(qrData.amount)} has been received and approved.\n\nTransaction Ref: ${transactionRef}\n\nThank you for your payment!`,
         link: '/payments',
       });
+
+      if (notifResponse?.error) {
+        console.error('Supabase notification insert error:', notifResponse.error);
+        // don't block success for notification failures, but show a warning
+        toast.error('Payment saved but failed to send notification.');
+      }
 
       toast.success(`Payment confirmed for ${student.full_name}!`);
 
@@ -221,9 +230,15 @@ export default function ScanQRCodePage() {
         newScanner.render(onScanSuccess, onScanError);
         setScanner(newScanner);
       }, 2000);
-    } catch (error) {
+    } catch (error: unknown) {
       console.error('Error confirming payment:', error);
-      toast.error('Failed to confirm payment');
+      // Try to surface useful error message
+      let message = 'Failed to confirm payment';
+      if (error && typeof error === 'object') {
+        const errObj = error as { message?: string };
+        if (errObj.message) message = errObj.message;
+      }
+      toast.error(message);
     } finally {
       setConfirming(false);
     }
@@ -331,7 +346,7 @@ export default function ScanQRCodePage() {
                 {/* Instructions */}
                 <div className="mt-6 p-4 rounded-xl" style={{ background: `${colors.primary}10` }}>
                   <div className="flex items-start gap-3">
-                    <ScanLine className="w-5 h-5 flex-shrink-0 mt-0.5" style={{ color: colors.primary }} />
+                    <ScanLine className="w-5 h-5 shrink-0 mt-0.5" style={{ color: colors.primary }} />
                     <div className="flex-1">
                       <p className="font-medium text-white mb-1">Scanning Tips</p>
                       <ul className="text-sm space-y-1" style={{ color: colors.textSecondary }}>
@@ -423,7 +438,7 @@ export default function ScanQRCodePage() {
                     className="flex items-start gap-3 p-4 rounded-xl"
                     style={{ background: `${colors.warning}15` }}
                   >
-                    <AlertTriangle className="w-5 h-5 flex-shrink-0 mt-0.5" style={{ color: colors.warning }} />
+                    <AlertTriangle className="w-5 h-5 shrink-0 mt-0.5" style={{ color: colors.warning }} />
                     <div className="flex-1">
                       <p className="font-medium text-white mb-1">Verify Cash Received</p>
                       <p className="text-sm" style={{ color: colors.textSecondary }}>

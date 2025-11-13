@@ -1,4 +1,29 @@
 @import "tailwindcss";
+html, body {
+  overflow-x: hidden;
+  max-width: 100vw;
+}
+
+/* Ensure all containers respect mobile boundaries */
+* {
+  box-sizing: border-box;
+}
+
+/* Word breaking utility for long text */
+.break-word {
+  word-wrap: break-word;
+  overflow-wrap: break-word;
+  word-break: break-word;
+  hyphens: auto;
+}
+
+/* Prevent canvas overflow */
+canvas {
+  max-width: 100% !important;
+  height: auto !important;
+}
+
+
 :root {
   font-family: system-ui, Avenir, Helvetica, Arial, sans-serif;
   line-height: 1.5;

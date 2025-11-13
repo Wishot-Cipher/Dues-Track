@@ -21,6 +21,12 @@ const GlassCard: React.FC<GlassCardProps> = ({
 }) => {
   const [isHovered, setIsHovered] = useState(false)
 
+  // disable hover effects on touch devices to avoid layout shifts when tapping
+  const isTouchDevice =
+    typeof window !== 'undefined' && (
+      'ontouchstart' in window || (navigator.maxTouchPoints ?? 0) > 0)
+
+
   // glass may come from your config; keep it flexible
   const glassMap = glass as Record<Intensity, CSSProperties | undefined>
   const glassStyles = glassMap[intensity] ?? glassMap.light ?? ({} as CSSProperties)
@@ -43,9 +49,9 @@ const GlassCard: React.FC<GlassCardProps> = ({
   return (
     <div
       onClick={onClick}
-      onMouseEnter={() => hover && setIsHovered(true)}
-      onMouseLeave={() => setIsHovered(false)}
-      className={`relative rounded-2xl p-6 transition-all duration-300 ${onClick ? 'cursor-pointer' : ''} ${className}`}
+  onMouseEnter={() => hover && !isTouchDevice && setIsHovered(true)}
+  onMouseLeave={() => !isTouchDevice && setIsHovered(false)}
+  className={`relative rounded-2xl p-6 transition-all duration-300 transform-gpu ${onClick ? 'cursor-pointer' : ''} ${className}`}
       style={style}
     >
       {children}
