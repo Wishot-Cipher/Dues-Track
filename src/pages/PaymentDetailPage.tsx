@@ -387,7 +387,7 @@ export default function PaymentDetailPage() {
           >
             <button
               onClick={() => navigate("/dashboard")}
-              className="flex items-center justify-center sm:justify-start gap-2 mb-4 px-4 py-2 rounded-lg transition-colors w-full sm:w-auto"
+              className="flex items-center justify-center sm:justify-start gap-2 mb-4 px-4 py-4 rounded-lg transition-colors w-full sm:w-auto"
               style={{
                 color: colors.textPrimary,
                 background: "rgba(255, 255, 255, 0.05)",
@@ -413,7 +413,7 @@ export default function PaymentDetailPage() {
                   {paymentType.icon}
                 </div>
                 <div className="flex-1 text-center sm:text-left">
-                  <h1 className="text-2xl sm:text-3xl font-bold text-white mb-2">
+                  <h1 className=" text-xl sm:text-3xl font-bold text-white mb-2">
                     {paymentType.title}
                   </h1>
                   <p
