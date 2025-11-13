@@ -378,7 +378,7 @@ export default function PaymentDetailPage() {
       </div>
 
       {/* Main Container - FIXED */}
-      <div className="container px-3 sm:px-6 lg:px-8 max-w-4xl mx-auto">
+      <div className="container sm:px-6 lg:px-8 max-w-4xl mx-auto">
         <div className="w-full space-y-6 relative z-10">
           {/* Header */}
           <motion.div
