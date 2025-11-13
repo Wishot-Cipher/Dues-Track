@@ -315,7 +315,7 @@ export default function PaymentDetailPage() {
   }
 
   return (
-    <div className="min-h-screen py-4 sm:py-6 relative overflow-x-hidden" style={{ background: gradients.darkBackground }}>
+    <div className="min-h-screen py-4 sm:py-6 relative" style={{ background: gradients.darkBackground }}>
       {/* ECE Logo Background */}
       <div className="hidden lg:block fixed right-0 top-1/2 -translate-y-1/2 w-[600px] h-[600px] opacity-[0.08] pointer-events-none z-0">
         <img 
@@ -329,7 +329,7 @@ export default function PaymentDetailPage() {
         />
       </div>
 
-      <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 space-y-6 relative z-10">
+      <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 space-y-6 relative z-10 w-full">
         {/* Header */}
         <motion.div
           initial={{ opacity: 0, y: -20 }}
@@ -391,22 +391,22 @@ export default function PaymentDetailPage() {
             transition={{ delay: 0.2 }}
           >
             <GlassCard>
-              <h3 className="text-lg font-bold text-white mb-4">Payment Status</h3>
+              <h3 className="text-lg font-bold text-white mb-4 text-center sm:text-left">Payment Status</h3>
               
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-4">
-                <div>
-                  <p className="text-sm mb-1" style={{ color: colors.textSecondary }}>Total Amount</p>
-                  <p className="text-xl font-bold text-white">{formatCurrency(paymentTypeAmount)}</p>
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 sm:gap-4 mb-4">
+                <div className="text-center sm:text-left p-3 rounded-lg" style={{ background: 'rgba(255, 255, 255, 0.03)' }}>
+                  <p className="text-xs sm:text-sm mb-1" style={{ color: colors.textSecondary }}>Total Amount</p>
+                  <p className="text-lg sm:text-xl font-bold text-white">{formatCurrency(paymentTypeAmount)}</p>
                 </div>
-                <div>
-                  <p className="text-sm mb-1" style={{ color: colors.textSecondary }}>Paid So Far</p>
-                  <p className="text-xl font-bold" style={{ color: colors.statusPaid }}>
+                <div className="text-center sm:text-left p-3 rounded-lg" style={{ background: 'rgba(255, 255, 255, 0.03)' }}>
+                  <p className="text-xs sm:text-sm mb-1" style={{ color: colors.textSecondary }}>Paid So Far</p>
+                  <p className="text-lg sm:text-xl font-bold" style={{ color: colors.statusPaid }}>
                     {formatCurrency(totalPaid)}
                   </p>
                 </div>
-                <div>
-                  <p className="text-sm mb-1" style={{ color: colors.textSecondary }}>Remaining</p>
-                  <p className="text-xl font-bold" style={{ color: isFullyPaid ? colors.statusPaid : colors.statusUnpaid }}>
+                <div className="text-center sm:text-left p-3 rounded-lg col-span-2 sm:col-span-1" style={{ background: 'rgba(255, 255, 255, 0.03)' }}>
+                  <p className="text-xs sm:text-sm mb-1" style={{ color: colors.textSecondary }}>Remaining</p>
+                  <p className="text-lg sm:text-xl font-bold" style={{ color: isFullyPaid ? colors.statusPaid : colors.statusUnpaid }}>
                     {formatCurrency(Math.max(0, remainingAmount))}
                   </p>
                 </div>
@@ -437,7 +437,7 @@ export default function PaymentDetailPage() {
             transition={{ delay: 0.3 }}
           >
             <GlassCard>
-              <h3 className="text-lg font-bold text-white mb-4">Payment History</h3>
+              <h3 className="text-lg font-bold text-white mb-4 text-center sm:text-left">Payment History</h3>
               <div className="space-y-3">
                 {existingPayments.map((payment) => (
                   <div
@@ -600,9 +600,9 @@ export default function PaymentDetailPage() {
                 {/* Bank Account Details */}
                 {selectedMethod === 'bank_transfer' && (
                   <GlassCard>
-                    <div className="flex flex-col sm:flex-row items-start gap-4 mb-4">
+                    <div className="flex flex-col sm:flex-row items-center sm:items-start gap-4 mb-4">
                       <Building2 className="w-6 h-6 sm:shrink-0" style={{ color: colors.primary }} />
-                      <div className="flex-1">
+                      <div className="flex-1 text-center sm:text-left">
                         <h3 className="text-lg font-bold text-white mb-1">Bank Account Details</h3>
                         <p className="text-sm" style={{ color: colors.textSecondary }}>
                           Transfer to this account and upload proof of payment
@@ -611,21 +611,21 @@ export default function PaymentDetailPage() {
                     </div>
                     
                     <div className="space-y-3">
-                      <div>
+                      <div className="text-center sm:text-left">
                         <p className="text-sm mb-1" style={{ color: colors.textSecondary }}>Bank Name</p>
                         <p className="font-medium text-white wrap-break-word">{paymentType.bank_name}</p>
                       </div>
-                      <div>
+                      <div className="text-center sm:text-left">
                         <p className="text-sm mb-1" style={{ color: colors.textSecondary }}>Account Name</p>
                         <p className="font-medium text-white wrap-break-word">{paymentType.account_name}</p>
                       </div>
-                      <div>
+                      <div className="text-center sm:text-left">
                         <p className="text-sm mb-1" style={{ color: colors.textSecondary }}>Account Number</p>
-                        <div className="flex flex-col sm:flex-row items-start sm:items-center gap-2">
+                        <div className="flex flex-col sm:flex-row items-center sm:items-start gap-2">
                           <p className="font-bold text-lg sm:text-xl text-white break-all">{paymentType.account_number}</p>
                           <button
                             onClick={copyAccountNumber}
-                            className="p-2 rounded-lg transition-colors self-start"
+                            className="p-2 rounded-lg transition-colors"
                             style={{ background: 'rgba(255, 255, 255, 0.1)' }}
                             title="Copy account number"
                           >
