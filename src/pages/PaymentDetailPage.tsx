@@ -315,8 +315,9 @@ export default function PaymentDetailPage() {
   }
 
   return (
-    <div className="min-h-screen py-4 sm:py-6 relative" style={{ background: gradients.darkBackground }}>
+  <div className="min-h-screen py-2 sm:py-6 " style={{ background: gradients.darkBackground }}>
       {/* ECE Logo Background */}
+      {/* ECE Logo Background - Only show on large screens */}
       <div className="hidden lg:block fixed right-0 top-1/2 -translate-y-1/2 w-[600px] h-[600px] opacity-[0.08] pointer-events-none z-0">
         <img 
           src="/Ece picture.jpg" 
@@ -329,7 +330,8 @@ export default function PaymentDetailPage() {
         />
       </div>
 
-      <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 space-y-6 relative z-10 w-full">
+  <div className="w-full flex justify-center sm:px-6 lg:px-8 flex-wrap">
+    <div className="w-full max-w-4xl space-y-6 relative z-10">
         {/* Header */}
         <motion.div
           initial={{ opacity: 0, y: -20 }}
@@ -352,7 +354,7 @@ export default function PaymentDetailPage() {
           transition={{ delay: 0.1 }}
         >
           <GlassCard>
-            <div className="flex flex-col sm:flex-row items-center sm:items-start gap-4">
+            <div className="flex flex-col sm:flex-row items-center sm:items-start gap-4 w-full">
               <div
                 className="w-16 h-16 sm:w-16 sm:h-16 rounded-2xl flex items-center justify-center text-3xl shrink-0"
                 style={{ background: `${paymentType.color}20` }}
@@ -390,7 +392,7 @@ export default function PaymentDetailPage() {
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.2 }}
           >
-            <GlassCard>
+            <GlassCard className="w-full">
               <h3 className="text-lg font-bold text-white mb-4 text-center sm:text-left">Payment Status</h3>
               
               <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 sm:gap-4 mb-4">
@@ -436,7 +438,7 @@ export default function PaymentDetailPage() {
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.3 }}
           >
-            <GlassCard>
+            <GlassCard className="w-full">
               <h3 className="text-lg font-bold text-white mb-4 text-center sm:text-left">Payment History</h3>
               <div className="space-y-3">
                 {existingPayments.map((payment) => (
@@ -513,7 +515,7 @@ export default function PaymentDetailPage() {
             animate={{ opacity: 1, scale: 1 }}
             transition={{ delay: 0.4 }}
           >
-            <GlassCard>
+            <GlassCard className="w-full">
               <div className="text-center p-8">
                 <CheckCircle className="w-16 h-16 mx-auto mb-4" style={{ color: colors.statusPaid }} />
                 <h2 className="text-2xl font-bold text-white mb-2">Payment Complete! 🎉</h2>
@@ -532,7 +534,7 @@ export default function PaymentDetailPage() {
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.4 }}
           >
-            <GlassCard>
+            <GlassCard className="w-full">
               <div className="flex items-start gap-4 p-4" style={{ background: `${colors.warning}10` }}>
                 <Info className="w-6 h-6 shrink-0 mt-1" style={{ color: colors.warning }} />
                 <div>
@@ -599,7 +601,7 @@ export default function PaymentDetailPage() {
 
                 {/* Bank Account Details */}
                 {selectedMethod === 'bank_transfer' && (
-                  <GlassCard>
+                  <GlassCard className="w-full">
                     <div className="flex flex-col sm:flex-row items-center sm:items-start gap-4 mb-4">
                       <Building2 className="w-6 h-6 sm:shrink-0" style={{ color: colors.primary }} />
                       <div className="flex-1 text-center sm:text-left">
@@ -822,6 +824,7 @@ export default function PaymentDetailPage() {
             )}
           </>
         )}
+      </div>
       </div>
 
       {/* Pay For Others Modal */}

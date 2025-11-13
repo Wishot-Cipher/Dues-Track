@@ -94,7 +94,7 @@ export default function QRCodeGenerator({
   };
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 w-full flex flex-col items-center justify-center">
       {/* Header */}
       <motion.div
         initial={{ opacity: 0, y: -20 }}
@@ -197,7 +197,7 @@ export default function QRCodeGenerator({
             }}
           />
 
-          <div className="relative z-10 flex flex-col items-center p-8">
+          <div className="relative z-10 flex flex-col items-center p-8 w-full">
             {/* QR Code */}
             <div className="bg-white p-6 rounded-2xl shadow-2xl mb-6">
               <canvas ref={canvasRef} className="mx-auto" />
