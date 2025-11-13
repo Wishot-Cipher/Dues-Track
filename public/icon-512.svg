@@ -1,0 +1,106 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" fill="none">
+  <defs>
+    <linearGradient id="mainGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#ff6803;stop-opacity:1" />
+      <stop offset="50%" style="stop-color:#ff8534;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#06b6d4;stop-opacity:1" />
+    </linearGradient>
+    <linearGradient id="darkGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#1a1a2e;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#0f0f1e;stop-opacity:1" />
+    </linearGradient>
+    <filter id="chipGlow">
+      <feGaussianBlur stdDeviation="4" result="coloredBlur"/>
+      <feMerge>
+        <feMergeNode in="coloredBlur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+    <radialGradient id="centerGlow">
+      <stop offset="0%" style="stop-color:#ff6803;stop-opacity:0.3" />
+      <stop offset="100%" style="stop-color:#ff6803;stop-opacity:0" />
+    </radialGradient>
+  </defs>
+  
+  <!-- Background Circle -->
+  <circle cx="256" cy="256" r="256" fill="url(#darkGrad)"/>
+  
+  <!-- Outer glow rings -->
+  <circle cx="256" cy="256" r="240" fill="none" stroke="url(#mainGrad)" stroke-width="3" opacity="0.15"/>
+  <circle cx="256" cy="256" r="220" fill="none" stroke="url(#mainGrad)" stroke-width="2" opacity="0.1"/>
+  
+  <!-- Center glow effect -->
+  <circle cx="256" cy="256" r="180" fill="url(#centerGlow)"/>
+  
+  <!-- Main Microchip Body -->
+  <rect x="144" y="144" width="224" height="224" rx="20" fill="url(#mainGrad)" opacity="0.95" filter="url(#chipGlow)"/>
+  
+  <!-- Inner chip surface -->
+  <rect x="176" y="176" width="160" height="160" rx="16" fill="#1a1a2e" opacity="0.85"/>
+  
+  <!-- Central circuit board traces -->
+  <path d="M256 208 L256 176" stroke="#ff6803" stroke-width="10" stroke-linecap="round" opacity="0.9"/>
+  <path d="M256 336 L256 304" stroke="#ff6803" stroke-width="10" stroke-linecap="round" opacity="0.9"/>
+  <path d="M208 256 L176 256" stroke="#ff6803" stroke-width="10" stroke-linecap="round" opacity="0.9"/>
+  <path d="M336 256 L304 256" stroke="#ff6803" stroke-width="10" stroke-linecap="round" opacity="0.9"/>
+  
+  <!-- Diagonal circuit traces -->
+  <path d="M208 208 L176 176" stroke="#06b6d4" stroke-width="10" stroke-linecap="round" opacity="0.85"/>
+  <path d="M304 208 L336 176" stroke="#06b6d4" stroke-width="10" stroke-linecap="round" opacity="0.85"/>
+  <path d="M208 304 L176 336" stroke="#06b6d4" stroke-width="10" stroke-linecap="round" opacity="0.85"/>
+  <path d="M304 304 L336 336" stroke="#06b6d4" stroke-width="10" stroke-linecap="round" opacity="0.85"/>
+  
+  <!-- Corner connection nodes -->
+  <circle cx="176" cy="176" r="8" fill="#06b6d4" opacity="0.9"/>
+  <circle cx="336" cy="176" r="8" fill="#06b6d4" opacity="0.9"/>
+  <circle cx="176" cy="336" r="8" fill="#06b6d4" opacity="0.9"/>
+  <circle cx="336" cy="336" r="8" fill="#06b6d4" opacity="0.9"/>
+  
+  <!-- Center "W" for Wishot with shadow -->
+  <text x="256" y="288" font-family="'Segoe UI', Arial, sans-serif" font-size="96" font-weight="bold" fill="#0f0f1e" text-anchor="middle" opacity="0.3">W</text>
+  <text x="256" y="285" font-family="'Segoe UI', Arial, sans-serif" font-size="96" font-weight="bold" fill="#ff6803" text-anchor="middle" filter="url(#chipGlow)">W</text>
+  
+  <!-- Chip pins - Left side (6 pins) -->
+  <rect x="112" y="180" width="32" height="16" rx="6" fill="#ff8534" opacity="0.9"/>
+  <rect x="112" y="220" width="32" height="16" rx="6" fill="#ff8534" opacity="0.9"/>
+  <rect x="112" y="248" width="32" height="16" rx="6" fill="#ff8534" opacity="0.9"/>
+  <rect x="112" y="276" width="32" height="16" rx="6" fill="#ff8534" opacity="0.9"/>
+  <rect x="112" y="304" width="32" height="16" rx="6" fill="#ff8534" opacity="0.9"/>
+  <rect x="112" y="332" width="32" height="16" rx="6" fill="#ff8534" opacity="0.9"/>
+  
+  <!-- Chip pins - Right side (6 pins) -->
+  <rect x="368" y="180" width="32" height="16" rx="6" fill="#ff8534" opacity="0.9"/>
+  <rect x="368" y="220" width="32" height="16" rx="6" fill="#ff8534" opacity="0.9"/>
+  <rect x="368" y="248" width="32" height="16" rx="6" fill="#ff8534" opacity="0.9"/>
+  <rect x="368" y="276" width="32" height="16" rx="6" fill="#ff8534" opacity="0.9"/>
+  <rect x="368" y="304" width="32" height="16" rx="6" fill="#ff8534" opacity="0.9"/>
+  <rect x="368" y="332" width="32" height="16" rx="6" fill="#ff8534" opacity="0.9"/>
+  
+  <!-- Chip pins - Top (6 pins) -->
+  <rect x="180" y="112" width="16" height="32" rx="6" fill="#ff8534" opacity="0.9"/>
+  <rect x="220" y="112" width="16" height="32" rx="6" fill="#ff8534" opacity="0.9"/>
+  <rect x="248" y="112" width="16" height="32" rx="6" fill="#ff8534" opacity="0.9"/>
+  <rect x="276" y="112" width="16" height="32" rx="6" fill="#ff8534" opacity="0.9"/>
+  <rect x="304" y="112" width="16" height="32" rx="6" fill="#ff8534" opacity="0.9"/>
+  <rect x="332" y="112" width="16" height="32" rx="6" fill="#ff8534" opacity="0.9"/>
+  
+  <!-- Chip pins - Bottom (6 pins) -->
+  <rect x="180" y="368" width="16" height="32" rx="6" fill="#ff8534" opacity="0.9"/>
+  <rect x="220" y="368" width="16" height="32" rx="6" fill="#ff8534" opacity="0.9"/>
+  <rect x="248" y="368" width="16" height="32" rx="6" fill="#ff8534" opacity="0.9"/>
+  <rect x="276" y="368" width="16" height="32" rx="6" fill="#ff8534" opacity="0.9"/>
+  <rect x="304" y="368" width="16" height="32" rx="6" fill="#ff8534" opacity="0.9"/>
+  <rect x="332" y="368" width="16" height="32" rx="6" fill="#ff8534" opacity="0.9"/>
+  
+  <!-- Inner circuit micro-details -->
+  <circle cx="224" cy="224" r="5" fill="#06b6d4" opacity="0.7"/>
+  <circle cx="288" cy="224" r="5" fill="#06b6d4" opacity="0.7"/>
+  <circle cx="224" cy="288" r="5" fill="#06b6d4" opacity="0.7"/>
+  <circle cx="288" cy="288" r="5" fill="#06b6d4" opacity="0.7"/>
+  
+  <!-- Corner circuit patterns -->
+  <path d="M200 200 L216 200 L216 216" stroke="#ff6803" stroke-width="3" opacity="0.5" fill="none" stroke-linecap="round"/>
+  <path d="M312 200 L296 200 L296 216" stroke="#ff6803" stroke-width="3" opacity="0.5" fill="none" stroke-linecap="round"/>
+  <path d="M200 312 L216 312 L216 296" stroke="#ff6803" stroke-width="3" opacity="0.5" fill="none" stroke-linecap="round"/>
+  <path d="M312 312 L296 312 L296 296" stroke="#ff6803" stroke-width="3" opacity="0.5" fill="none" stroke-linecap="round"/>
+</svg>

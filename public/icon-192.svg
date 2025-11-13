@@ -1,0 +1,79 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 192 192" fill="none">
+  <defs>
+    <linearGradient id="chipGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#ff6803;stop-opacity:1" />
+      <stop offset="50%" style="stop-color:#ff8534;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#06b6d4;stop-opacity:1" />
+    </linearGradient>
+    <linearGradient id="bgGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#1a1a2e;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#0f0f1e;stop-opacity:1" />
+    </linearGradient>
+    <filter id="glow">
+      <feGaussianBlur stdDeviation="3" result="coloredBlur"/>
+      <feMerge>
+        <feMergeNode in="coloredBlur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+  </defs>
+  
+  <!-- Background Circle with gradient -->
+  <circle cx="96" cy="96" r="96" fill="url(#bgGrad)"/>
+  
+  <!-- Outer glow ring -->
+  <circle cx="96" cy="96" r="84" fill="none" stroke="url(#chipGrad)" stroke-width="2" opacity="0.2"/>
+  
+  <!-- Microchip Body -->
+  <rect x="54" y="54" width="84" height="84" rx="8" fill="url(#chipGrad)" opacity="0.95" filter="url(#glow)"/>
+  
+  <!-- Inner chip detail -->
+  <rect x="66" y="66" width="60" height="60" rx="6" fill="#1a1a2e" opacity="0.8"/>
+  
+  <!-- Circuit board pattern -->
+  <path d="M96 78 L96 66" stroke="#ff6803" stroke-width="4" stroke-linecap="round" opacity="0.9"/>
+  <path d="M96 126 L96 114" stroke="#ff6803" stroke-width="4" stroke-linecap="round" opacity="0.9"/>
+  <path d="M78 96 L66 96" stroke="#ff6803" stroke-width="4" stroke-linecap="round" opacity="0.9"/>
+  <path d="M126 96 L114 96" stroke="#ff6803" stroke-width="4" stroke-linecap="round" opacity="0.9"/>
+  
+  <!-- Diagonal circuits -->
+  <path d="M78 78 L66 66" stroke="#06b6d4" stroke-width="4" stroke-linecap="round" opacity="0.8"/>
+  <path d="M114 78 L126 66" stroke="#06b6d4" stroke-width="4" stroke-linecap="round" opacity="0.8"/>
+  <path d="M78 114 L66 126" stroke="#06b6d4" stroke-width="4" stroke-linecap="round" opacity="0.8"/>
+  <path d="M114 114 L126 126" stroke="#06b6d4" stroke-width="4" stroke-linecap="round" opacity="0.8"/>
+  
+  <!-- Connection nodes -->
+  <circle cx="66" cy="66" r="4" fill="#06b6d4" opacity="0.9"/>
+  <circle cx="126" cy="66" r="4" fill="#06b6d4" opacity="0.9"/>
+  <circle cx="66" cy="126" r="4" fill="#06b6d4" opacity="0.9"/>
+  <circle cx="126" cy="126" r="4" fill="#06b6d4" opacity="0.9"/>
+  
+  <!-- Center "W" for Wishot -->
+  <text x="96" y="108" font-family="'Segoe UI', Arial, sans-serif" font-size="36" font-weight="bold" fill="#ff6803" text-anchor="middle" filter="url(#glow)">W</text>
+  
+  <!-- Chip pins - Left side -->
+  <rect x="42" y="72" width="12" height="6" rx="2" fill="#ff8534" opacity="0.9"/>
+  <rect x="42" y="90" width="12" height="6" rx="2" fill="#ff8534" opacity="0.9"/>
+  <rect x="42" y="108" width="12" height="6" rx="2" fill="#ff8534" opacity="0.9"/>
+  
+  <!-- Chip pins - Right side -->
+  <rect x="138" y="72" width="12" height="6" rx="2" fill="#ff8534" opacity="0.9"/>
+  <rect x="138" y="90" width="12" height="6" rx="2" fill="#ff8534" opacity="0.9"/>
+  <rect x="138" y="108" width="12" height="6" rx="2" fill="#ff8534" opacity="0.9"/>
+  
+  <!-- Chip pins - Top -->
+  <rect x="72" y="42" width="6" height="12" rx="2" fill="#ff8534" opacity="0.9"/>
+  <rect x="90" y="42" width="6" height="12" rx="2" fill="#ff8534" opacity="0.9"/>
+  <rect x="108" y="42" width="6" height="12" rx="2" fill="#ff8534" opacity="0.9"/>
+  
+  <!-- Chip pins - Bottom -->
+  <rect x="72" y="138" width="6" height="12" rx="2" fill="#ff8534" opacity="0.9"/>
+  <rect x="90" y="138" width="6" height="12" rx="2" fill="#ff8534" opacity="0.9"/>
+  <rect x="108" y="138" width="6" height="12" rx="2" fill="#ff8534" opacity="0.9"/>
+  
+  <!-- Inner circuit details -->
+  <circle cx="84" cy="84" r="2" fill="#06b6d4" opacity="0.7"/>
+  <circle cx="108" cy="84" r="2" fill="#06b6d4" opacity="0.7"/>
+  <circle cx="84" cy="108" r="2" fill="#06b6d4" opacity="0.7"/>
+  <circle cx="108" cy="108" r="2" fill="#06b6d4" opacity="0.7"/>
+</svg>

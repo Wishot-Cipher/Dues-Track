@@ -1,0 +1,2 @@
+// This is a placeholder. You should add an actual notification.mp3 sound file to this location.
+// For now, we'll use the Web Audio API to generate a sound programmatically.
