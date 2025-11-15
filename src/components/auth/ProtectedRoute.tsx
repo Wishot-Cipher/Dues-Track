@@ -1,18 +1,21 @@
 import { type ReactNode } from "react";
 import { Navigate, useLocation } from "react-router-dom";
 import { useAuth } from "@/hooks/useAuth";
+// Removed unused import of Student to fix linter warning
 import LoadingSpinner from "@/components/ui/LoadingSpinner";
 
 interface ProtectedRouteProps {
   children: ReactNode;
   requireAdmin?: boolean;
+  requiredPermission?: 'can_create_payments' | 'can_approve_payments' | 'can_manage_students' | 'can_view_analytics';
 }
 
 const ProtectedRoute = ({
   children,
   requireAdmin = false,
+  requiredPermission,
 }: ProtectedRouteProps) => {
-  const { user, loading, needsPasswordChange, isProfileComplete } = useAuth();
+  const { user, loading, needsPasswordChange, isProfileComplete, hasPermission } = useAuth();
   const location = useLocation();
 
   // Show loading spinner while checking authentication
@@ -39,8 +42,12 @@ const ProtectedRoute = ({
     return <Navigate to="/complete-profile" replace />;
   }
 
-  // Admin role requirement check
-  if (requireAdmin) {
+  // Permission-based admin checks
+  if (requiredPermission) {
+    if (!hasPermission(requiredPermission)) {
+      return <Navigate to="/dashboard" replace />;
+    }
+  } else if (requireAdmin) {
     const isAdmin =
       user.roles?.includes("admin") ||
       user.roles?.includes("finsec") ||

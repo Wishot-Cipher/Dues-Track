@@ -18,6 +18,8 @@ import {
   Crown
 } from 'lucide-react';
 import Footer from '@/components/Footer';
+import { useAuth } from '@/hooks/useAuth';
+import authService from '@/services/authService';
 
 interface Student {
   id: string;
@@ -29,14 +31,25 @@ interface Student {
   department: string;
   section: string;
   is_active: boolean;
-  is_finsec: boolean;
-  is_admin: boolean;
+  // Admin roles are stored in the separate `admins` table in the database.
+  // We'll fetch the `admins` relation and compute the booleans client-side.
+  admins?: Array<{
+    id: string;
+    role: string;
+    can_create_payments: boolean;
+    can_approve_payments: boolean;
+    can_manage_students: boolean;
+    can_view_analytics: boolean;
+  }>;
+  is_finsec?: boolean; // computed from admins
+  is_admin?: boolean; // computed from admins
   created_at: string;
 }
 
 export default function ManageStudentsPage() {
   const navigate = useNavigate();
   const { success, error: showError } = useToast();
+  const { hasPermission, user } = useAuth();
   const [loading, setLoading] = useState(true);
   const [students, setStudents] = useState<Student[]>([]);
   const [filteredStudents, setFilteredStudents] = useState<Student[]>([]);
@@ -88,18 +101,38 @@ export default function ManageStudentsPage() {
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
+  interface AdminRecord {
+    id: string;
+    role: string;
+    can_create_payments: boolean;
+    can_approve_payments: boolean;
+    can_manage_students: boolean;
+    can_view_analytics: boolean;
+  }
+
+  const computeRoleFlags = (s: Partial<Student> & { admins?: AdminRecord[] }): Student => {
+    const admins = s.admins || [];
+    return {
+      ...(s as Student),
+      admins,
+      is_admin: admins.some(a => a.role === 'admin'),
+      is_finsec: admins.some(a => a.role === 'finsec'),
+    } as Student;
+  };
+
   const fetchStudents = async () => {
     try {
       setLoading(true);
       const { data, error } = await supabase
         .from('students')
-        .select('*')
+        .select(`*, admins (id, role, can_create_payments, can_approve_payments, can_manage_students, can_view_analytics)`)
         .order('created_at', { ascending: false });
 
       if (error) throw error;
 
-      setStudents(data || []);
-      setFilteredStudents(data || []);
+  const mapped = (data || []).map((s: Partial<Student> & { admins?: AdminRecord[] }) => computeRoleFlags(s));
+  setStudents(mapped);
+  setFilteredStudents(mapped);
     } catch (error) {
       console.error('Error fetching students:', error);
       showError('Failed to fetch students');
@@ -149,8 +182,6 @@ export default function ManageStudentsPage() {
           department: selectedStudent.department,
           section: selectedStudent.section,
           is_active: selectedStudent.is_active,
-          is_finsec: selectedStudent.is_finsec,
-          is_admin: selectedStudent.is_admin,
         })
         .eq('id', selectedStudent.id);
 
@@ -187,15 +218,64 @@ export default function ManageStudentsPage() {
 
   const toggleFinsec = async (student: Student) => {
     try {
-      const { error } = await supabase
-        .from('students')
-        .update({ is_finsec: !student.is_finsec })
-        .eq('id', student.id);
+      if (!hasPermission('can_manage_students')) {
+        showError('You do not have permission to manage student roles');
+        return;
+      }
+      // Use admins table for role management instead of a column on students
+      // Check if already has finsec role
+      const { data: existingFinsec } = await supabase
+        .from('admins')
+        .select('id')
+        .match({ student_id: student.id, role: 'finsec' })
+        .limit(1);
 
-      if (error) throw error;
-
-      success(`Finsec role ${student.is_finsec ? 'removed' : 'granted'} successfully`);
+  if (existingFinsec && existingFinsec.length > 0) {
+        // Remove existing finsec role
+        const { error } = await supabase
+          .from('admins')
+          .delete()
+          .match({ student_id: student.id, role: 'finsec' });
+        if (error) throw error;
+        success('Finsec role removed successfully');
+        // Notify the user
+        await supabase.from('notifications').insert({
+          recipient_id: student.id,
+          type: 'role_removed',
+          title: 'Finsec Role Removed',
+          message: 'Your Finsec role has been removed. Contact admin for more details.',
+          link: '/profile',
+        });
+  } else {
+        // Add finsec role with sensible defaults
+        const { error } = await supabase
+          .from('admins')
+          .insert({
+            student_id: student.id,
+            role: 'finsec',
+            permissions: [],
+            can_create_payments: true,
+            can_approve_payments: true,
+            can_manage_students: false,
+            can_view_analytics: true,
+          });
+        if (error) throw error;
+        success('Finsec role granted successfully');
+        await supabase.from('notifications').insert({
+          recipient_id: student.id,
+          type: 'role_assigned',
+          title: 'Finsec Role Granted',
+          message: 'You have been granted Finsec permissions. You can now approve and create payments.',
+          link: '/admin/dashboard',
+        });
+      }
       fetchStudents();
+      // If current user was updated, refresh their session
+      if (user?.id === student.id) {
+        // Re-fetch user session and reload so permissions update immediately
+        await authService.getCurrentUser();
+        window.location.reload();
+      }
     } catch (error) {
       console.error('Error toggling finsec:', error);
       showError('Failed to update finsec role');
@@ -204,15 +284,59 @@ export default function ManageStudentsPage() {
 
   const toggleAdmin = async (student: Student) => {
     try {
-      const { error } = await supabase
-        .from('students')
-        .update({ is_admin: !student.is_admin })
-        .eq('id', student.id);
+      if (!hasPermission('can_manage_students')) {
+        showError('You do not have permission to manage student roles');
+        return;
+      }
+      // Use admins table to create or remove admin records
+      // Check if admin record exists
+      const { data: existingAdmin } = await supabase
+        .from('admins')
+        .select('id')
+        .match({ student_id: student.id, role: 'admin' })
+        .limit(1);
 
-      if (error) throw error;
-
-      success(`Admin role ${student.is_admin ? 'removed' : 'granted'} successfully`);
+  if (existingAdmin && existingAdmin.length > 0) {
+        const { error } = await supabase
+          .from('admins')
+          .delete()
+          .match({ student_id: student.id, role: 'admin' });
+        if (error) throw error;
+        success('Admin role removed successfully');
+        await supabase.from('notifications').insert({
+          recipient_id: student.id,
+          type: 'role_removed',
+          title: 'Admin Role Removed',
+          message: 'Your Admin role has been removed. Contact admin for more details.',
+          link: '/profile',
+        });
+  } else {
+        const { error } = await supabase
+          .from('admins')
+          .insert({
+            student_id: student.id,
+            role: 'admin',
+            permissions: [],
+            can_create_payments: true,
+            can_approve_payments: true,
+            can_manage_students: true,
+            can_view_analytics: true,
+          });
+        if (error) throw error;
+        success('Admin role granted successfully');
+        await supabase.from('notifications').insert({
+          recipient_id: student.id,
+          type: 'role_assigned',
+          title: 'Admin Role Granted',
+          message: 'You have been granted Admin permissions. You can now manage students, create payments, and view analytics.',
+          link: '/admin/dashboard',
+        });
+      }
       fetchStudents();
+        // If current user was updated, refresh their session
+        if (user?.id === student.id) {
+          await authService.getCurrentUser();
+        }
     } catch (error) {
       console.error('Error toggling admin:', error);
       showError('Failed to update admin role');

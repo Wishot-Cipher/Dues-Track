@@ -5,6 +5,7 @@ import { supabase } from '@/config/supabase';
 import { useAuth } from '@/hooks/useAuth';
 import { formatCurrency } from '@/utils/formatters';
 import { colors } from '@/config/colors';
+import { useNavigate } from 'react-router-dom';
 import { notificationSound } from '@/utils/notificationSound';
 
 interface Notification {
@@ -22,10 +23,12 @@ interface Notification {
     waived_by?: string;
     amount?: number;
   };
+  link?: string | null;
 }
 
 export const NotificationCenter = () => {
   const { user } = useAuth();
+  const navigate = useNavigate();
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [unreadCount, setUnreadCount] = useState(0);
   const [showPanel, setShowPanel] = useState(false);
@@ -169,11 +172,25 @@ export const NotificationCenter = () => {
     return `${days}d ago`;
   };
 
+  // The dedicated portal content was duplicated inside the component return and
+  // caused nested/imbalanced JSX fragments; the panel is rendered directly in the
+  // return's AnimatePresence to avoid fragment errors.
+
   return (
     <>
       {/* Notification Bell */}
       <button
-        onClick={() => setShowPanel(!showPanel)}
+        onClick={() => {
+          // Toggle panel and fetch fresh notifications when opening
+          setShowPanel(prev => {
+            const opening = !prev;
+            if (opening) {
+              // load latest notifications when the user opens the panel
+              void fetchNotifications();
+            }
+            return !prev;
+          });
+        }}
         className="relative p-2 rounded-lg transition-all duration-200 hover:scale-105"
         style={{
           background: showPanel ? `${colors.accent}20` : 'transparent',
@@ -192,36 +209,20 @@ export const NotificationCenter = () => {
           </motion.div>
         )}
       </button>
+                        
 
       {/* Notification Panel */}
       <AnimatePresence>
         {showPanel && (
-          <>
-            {/* Backdrop */}
-            <motion.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              onClick={() => setShowPanel(false)}
-              className="fixed inset-0 z-40"
-              style={{ background: 'rgba(0, 0, 0, 0.5)' }}
-            />
-
-            {/* Panel */}
-            <motion.div
-              initial={{ opacity: 0, x: 300 }}
-              animate={{ opacity: 1, x: 0 }}
-              exit={{ opacity: 0, x: 300 }}
-              transition={{ type: 'spring', damping: 25 }}
-              className="fixed right-0 top-0 h-full w-full sm:w-96 z-50 overflow-hidden"
-              style={{
-                background: colors.cardBg,
-                borderLeft: `1px solid ${colors.border}`,
-                boxShadow: '-4px 0 24px rgba(0, 0, 0, 0.3)',
-              }}
-            >
+          <motion.div
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: 10 }}
+            className="absolute right-0 mt-2 top-0 w-[360px] max-h-[60vh] bg-[#0B0B0C] rounded-lg shadow-lg z-50 flex flex-col"
+            style={{ boxShadow: '0 10px 30px rgba(0,0,0,0.5)' }}
+          >
               {/* Header */}
-              <div className="p-4 border-b" style={{ borderColor: colors.border }}>
+              <div className="p-4 border-b" style={{ borderColor: colors.borderMedium }}>
                 <div className="flex items-center justify-between mb-3">
                   <h3 className="text-xl font-bold text-white flex items-center gap-2">
                     <Bell className="w-6 h-6" style={{ color: colors.accent }} />
@@ -249,7 +250,7 @@ export const NotificationCenter = () => {
               </div>
 
               {/* Notifications List */}
-              <div className="overflow-y-auto h-[calc(100%-80px)]">
+              <div className="flex-1 overflow-y-auto">
                 {loading ? (
                   <div className="flex items-center justify-center h-32">
                     <div className="w-8 h-8 border-4 border-t-transparent rounded-full animate-spin"
@@ -257,14 +258,14 @@ export const NotificationCenter = () => {
                     />
                   </div>
                 ) : notifications.length === 0 ? (
-                  <div className="flex flex-col items-center justify-center h-32 px-4">
-                    <Bell className="w-12 h-12 mb-2" style={{ color: colors.textSecondary }} />
+                    <div className="flex flex-col items-center justify-center h-32 px-4">
+                        <Bell className="w-12 h-12 mb-2" style={{ color: colors.textSecondary }} />
                     <p className="text-center" style={{ color: colors.textSecondary }}>
                       No notifications yet
                     </p>
                   </div>
                 ) : (
-                  <div className="divide-y" style={{ borderColor: colors.border }}>
+                  <div className="divide-y" style={{ borderColor: colors.borderMedium }}>
                     {notifications.map((notification) => (
                       <motion.div
                         key={notification.id}
@@ -272,9 +273,24 @@ export const NotificationCenter = () => {
                         animate={{ opacity: 1, y: 0 }}
                         className="p-4 cursor-pointer transition-colors hover:bg-white/5"
                         style={{
-                          background: notification.is_read ? 'transparent' : `${getNotificationColor(notification.type)}10`,
+                          background: notification.is_read ? 'transparent' : `${getNotificationColor(notification.type)}14`,
+                          borderLeft: notification.is_read ? '2px solid transparent' : `3px solid ${getNotificationColor(notification.type)}`,
                         }}
-                        onClick={() => !notification.is_read && markAsRead(notification.id)}
+                        onClick={async () => {
+                          // Mark notification as read and navigate if a link exists
+                          try {
+                            if (!notification.is_read) {
+                              await markAsRead(notification.id);
+                            }
+                            // Navigate to linked resource if present (e.g., '/payments')
+                            if (notification.link) {
+                              navigate(notification.link);
+                              setShowPanel(false);
+                            }
+                          } catch (err) {
+                            console.error('Error on notification click:', err);
+                          }
+                        }}
                       >
                         <div className="flex gap-3">
                           <div className="shrink-0 mt-1">
@@ -294,7 +310,7 @@ export const NotificationCenter = () => {
                             </div>
                             <p
                               className="text-xs mb-2 whitespace-pre-line line-clamp-3"
-                              style={{ color: colors.textSecondary }}
+                              style={{ color: notification.is_read ? colors.textSecondary : colors.textPrimary }}
                             >
                               {notification.message}
                             </p>
@@ -315,8 +331,7 @@ export const NotificationCenter = () => {
                   </div>
                 )}
               </div>
-            </motion.div>
-          </>
+          </motion.div>
         )}
       </AnimatePresence>
     </>

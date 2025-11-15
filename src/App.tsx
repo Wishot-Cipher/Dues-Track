@@ -19,6 +19,7 @@ import AdminReviewPage from '@/pages/admin/AdminReviewPage';
 import WaivePaymentPage from '@/pages/admin/WaivePaymentPage';
 import ScanQRCodePage from '@/pages/admin/ScanQRCodePage';
 import ManageStudentsPage from '@/pages/admin/ManageStudentsPage';
+import AdminCollectedPage from '@/pages/admin/AdminCollectedPage';
 
 function App() {
   return (
@@ -115,7 +116,7 @@ function App() {
             <Route
               path="/admin/create-payment"
               element={
-                <ProtectedRoute requireAdmin>
+                <ProtectedRoute requiredPermission="can_create_payments">
                   <CreatePaymentTypePage />
                 </ProtectedRoute>
               }
@@ -125,7 +126,7 @@ function App() {
             <Route
               path="/admin/review"
               element={
-                <ProtectedRoute requireAdmin>
+                <ProtectedRoute requiredPermission="can_approve_payments">
                   <AdminReviewPage />
                 </ProtectedRoute>
               }
@@ -135,7 +136,7 @@ function App() {
             <Route
               path="/admin/scan-qr"
               element={
-                <ProtectedRoute requireAdmin>
+                <ProtectedRoute requiredPermission="can_approve_payments">
                   <ScanQRCodePage />
                 </ProtectedRoute>
               }
@@ -145,13 +146,22 @@ function App() {
             <Route
               path="/admin/manage-students"
               element={
-                <ProtectedRoute requireAdmin>
+                <ProtectedRoute requiredPermission="can_manage_students">
                   <ManageStudentsPage />
                 </ProtectedRoute>
               }
             />
 
             {/* Default Redirect */}
+            {/* Collected by category */}
+            <Route
+              path="/admin/collected"
+              element={
+                <ProtectedRoute requireAdmin>
+                  <AdminCollectedPage />
+                </ProtectedRoute>
+              }
+            />
             <Route path="/" element={<Navigate to="/dashboard" replace />} />
             <Route path="*" element={<Navigate to="/dashboard" replace />} />
           </Routes>

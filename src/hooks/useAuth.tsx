@@ -53,7 +53,9 @@ export function AuthProvider({ children }: AuthProviderProps) {
   const login = async (regNumber: string, password: string) => {
     try {
       const result = await authService.login(regNumber, password);
-      setUser(result.student);
+      // Re-fetch full current user record to include admin roles & permissions
+      const current = await authService.getCurrentUser();
+      setUser(current?.student || result.student);
       return result;
     } catch (error) {
       console.error('Login error:', error);
@@ -106,6 +108,11 @@ export function AuthProvider({ children }: AuthProviderProps) {
     isAuthenticated: !!user,
     isProfileComplete: user ? authService.isProfileComplete(user) : false,
     needsPasswordChange: user?.force_password_change || false,
+  hasPermission: (permission: 'can_create_payments' | 'can_approve_payments' | 'can_manage_students' | 'can_view_analytics') => {
+      if (!user) return false;
+      if (user.roles?.includes('admin')) return true; // full admin
+      return Boolean(user.admin_permissions && user.admin_permissions[permission]);
+    },
   };
 
   return (

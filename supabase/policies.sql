@@ -35,6 +35,48 @@ CREATE POLICY admins_select_all_students ON students
   );
 
 -- ============================================
+-- ADMINS TABLE POLICIES
+-- ============================================
+-- Admins can view admin records (all admins or their own record)
+CREATE POLICY admins_select_admins ON admins
+  FOR SELECT USING (
+    auth.uid()::text = student_id::text
+    OR EXISTS (
+      SELECT 1 FROM admins WHERE student_id = auth.uid()
+    )
+  );
+
+-- Only admins with can_manage_students can insert admin records
+CREATE POLICY admins_insert_management ON admins
+  FOR INSERT WITH CHECK (
+    EXISTS (
+      SELECT 1 FROM admins
+      WHERE student_id = auth.uid()
+      AND can_manage_students = true
+    )
+  );
+
+-- Only admins with can_manage_students can delete admin records
+CREATE POLICY admins_delete_management ON admins
+  FOR DELETE USING (
+    EXISTS (
+      SELECT 1 FROM admins
+      WHERE student_id = auth.uid()
+      AND can_manage_students = true
+    )
+  );
+
+-- Only admins with can_manage_students can update admin records
+CREATE POLICY admins_update_management ON admins
+  FOR UPDATE USING (
+    EXISTS (
+      SELECT 1 FROM admins
+      WHERE student_id = auth.uid()
+      AND can_manage_students = true
+    )
+  );
+
+-- ============================================
 -- PAYMENT TYPES POLICIES
 -- ============================================
 -- Anyone can read active payment types
@@ -80,10 +122,36 @@ CREATE POLICY payments_update_own ON payments
 -- Admins can read payments for payment types they manage
 CREATE POLICY admins_select_payments ON payments
   FOR SELECT USING (
-    payment_type_id IN (
-      SELECT id FROM payment_types pt
-      WHERE pt.approver_id IN (
-        SELECT id FROM admins WHERE student_id = auth.uid()
+    (
+      -- Payments where current admin is the approver
+      payment_type_id IN (
+        SELECT id FROM payment_types pt
+        WHERE pt.approver_id IN (
+          SELECT id FROM admins WHERE student_id = auth.uid()
+        )
+      )
+      OR
+      (
+        -- OR class reps with permission can access payments in their department
+        EXISTS (
+          SELECT 1 FROM admins a JOIN students s ON s.id = payments.student_id
+          WHERE a.student_id = auth.uid() AND a.role = 'class_rep' AND a.can_approve_payments = true
+          AND s.department = (SELECT department FROM students WHERE id = auth.uid())
+        )
+      )
+    )
+  );
+
+-- Additional: allow admins with explicit management/analytics privileges to view ALL payments
+-- This is intentional: some admin roles (e.g., financial secretaries) need visibility across the board
+CREATE POLICY admins_select_all_payments ON payments
+  FOR SELECT USING (
+    EXISTS (
+      SELECT 1 FROM admins
+      WHERE student_id = auth.uid()
+      AND (
+        can_manage_students = true
+        OR can_view_analytics = true
       )
     )
   );
@@ -91,10 +159,22 @@ CREATE POLICY admins_select_payments ON payments
 -- Admins can update payments they're assigned to approve
 CREATE POLICY admins_update_payments ON payments
   FOR UPDATE USING (
-    payment_type_id IN (
-      SELECT id FROM payment_types pt
-      WHERE pt.approver_id IN (
-        SELECT id FROM admins WHERE student_id = auth.uid()
+    (
+      -- Payments where current admin is the approver
+      payment_type_id IN (
+        SELECT id FROM payment_types pt
+        WHERE pt.approver_id IN (
+          SELECT id FROM admins WHERE student_id = auth.uid()
+        )
+      )
+      OR
+      (
+        -- OR class reps with permission can update payments in their department
+        EXISTS (
+          SELECT 1 FROM admins a JOIN students s ON s.id = payments.student_id
+          WHERE a.student_id = auth.uid() AND a.role = 'class_rep' AND a.can_approve_payments = true
+          AND s.department = (SELECT department FROM students WHERE id = auth.uid())
+        )
       )
     )
   );

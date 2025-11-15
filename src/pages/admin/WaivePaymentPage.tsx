@@ -40,7 +40,7 @@ interface PaymentType {
 
 export default function WaivePaymentPage() {
   const navigate = useNavigate();
-  const { user } = useAuth();
+  const { user, hasPermission } = useAuth();
   const { success, error: showError } = useToast();
   const [loading, setLoading] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
@@ -125,6 +125,10 @@ export default function WaivePaymentPage() {
   };
 
   const handleWaivePayment = async () => {
+    if (!hasPermission('can_approve_payments')) {
+      showError('You do not have permission to waive payments');
+      return;
+    }
     if (!selectedStudent || !selectedPaymentType || !waiverReason) {
       showError("Please fill in all required fields");
       return;
@@ -755,7 +759,7 @@ export default function WaivePaymentPage() {
               </button>
               <button
                 onClick={handleWaivePayment}
-                disabled={loading}
+                disabled={loading || !hasPermission('can_approve_payments')}
                 className="flex-1 px-6 py-3 rounded-xl font-medium text-white transition-opacity disabled:opacity-50"
                 style={{ background: gradients.primary }}
               >

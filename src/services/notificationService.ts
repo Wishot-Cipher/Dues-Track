@@ -16,12 +16,14 @@ class NotificationService {
    */
   async createNotification(params: CreateNotificationParams): Promise<boolean> {
     try {
+      const link = params.relatedPaymentId ? `/payment/${params.relatedPaymentId}` : null;
+
       const { error } = await supabase.from('notifications').insert({
         recipient_id: params.recipientId,
         type: params.type,
         title: params.title,
         message: params.message,
-        related_payment_id: params.relatedPaymentId,
+        link,
         is_read: false,
       });
 

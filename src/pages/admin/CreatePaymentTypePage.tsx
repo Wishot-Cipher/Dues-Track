@@ -69,7 +69,7 @@ const NIGERIAN_BANKS = [
 ];
 
 export default function CreatePaymentTypePage() {
-  const { user } = useAuth();
+  const { user, hasPermission } = useAuth();
   const navigate = useNavigate();
   const toast = useToast();
   const [loading, setLoading] = useState(false);
@@ -97,15 +97,9 @@ export default function CreatePaymentTypePage() {
       return;
     }
 
-    // Check if user has admin roles
-    const isAdmin =
-      user.roles &&
-      (user.roles.includes("admin") ||
-        user.roles.includes("finsec") ||
-        user.roles.includes("class_rep"));
-
-    if (!isAdmin) {
-      toast.error("You must be an admin to create payment types");
+    // Check permission to create payments
+    if (!hasPermission('can_create_payments')) {
+      toast.error('You must have permission to create payment types');
       return;
     }
 

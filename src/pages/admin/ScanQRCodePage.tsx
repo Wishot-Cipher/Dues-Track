@@ -48,7 +48,7 @@ interface PaymentType {
 
 export default function ScanQRCodePage() {
   const navigate = useNavigate();
-  const { user } = useAuth();
+  const { user, hasPermission } = useAuth();
   const toast = useToast();
 
   const [scanning, setScanning] = useState(true);
@@ -162,8 +162,23 @@ export default function ScanQRCodePage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  useEffect(() => {
+    // Redirect if the current user does not have permission to approve payments
+    if (!hasPermission?.("can_approve_payments")) {
+      toast.error("You are not authorized to access this page");
+      navigate("/admin/dashboard");
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [hasPermission]);
+
   const handleConfirmPayment = async () => {
     if (!qrData || !user || !student || !paymentType) return;
+
+    // Ensure current user has permission to approve
+    if (!hasPermission?.("can_approve_payments")) {
+      toast.error("You don't have permission to confirm payments");
+      return;
+    }
 
     setConfirming(true);
     try {
@@ -585,7 +600,7 @@ export default function ScanQRCodePage() {
                   </button>
                   <button
                     onClick={handleConfirmPayment}
-                    disabled={confirming}
+                    disabled={confirming || !hasPermission?.("can_approve_payments")}
                     className="flex-1 py-3 rounded-xl font-medium transition-all disabled:opacity-50 flex items-center justify-center gap-2"
                     style={{
                       background: gradients.mint,

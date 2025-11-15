@@ -46,7 +46,7 @@ interface PendingPayment {
 }
 
 export default function AdminReviewPage() {
-  const { user } = useAuth();
+  const { user, hasPermission } = useAuth();
   const navigate = useNavigate();
   const { success: showSuccess, error: showError } = useToast();
   const [payments, setPayments] = useState<PendingPayment[]>([]);
@@ -584,7 +584,7 @@ export default function AdminReviewPage() {
                             >
                               <Eye className="w-5 h-5" />
                             </button>
-                            {payment.status === "pending" && (
+                            {payment.status === "pending" && hasPermission('can_approve_payments') && (
                               <>
                                 <button
                                   onClick={() => {
@@ -759,7 +759,7 @@ export default function AdminReviewPage() {
                         <Eye className="w-4 h-4" />
                         View Receipt
                       </button>
-                      {payment.status === "pending" && (
+                            {payment.status === "pending" && hasPermission('can_approve_payments') && (
                         <div className="grid grid-cols-2 gap-2">
                           <button
                             onClick={() => {

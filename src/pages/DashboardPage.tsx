@@ -27,7 +27,7 @@ import { NotificationCenter } from '@/components/NotificationCenter';
 import Footer from '@/components/Footer';
 
 export default function DashboardPage() {
-  const { user, logout } = useAuth();
+  const { user, logout, hasPermission } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
   const [showProfileMenu, setShowProfileMenu] = useState(false);
@@ -312,7 +312,7 @@ export default function DashboardPage() {
                       </button>
 
                       {/* Admin Dashboard Link - Only visible for admins */}
-                      {user?.roles?.includes('admin') && (
+                      {(user?.admins && user.admins.length > 0) && (
                         <button
                           onClick={() => navigate('/admin/dashboard')}
                           className="w-full flex items-center gap-3 px-3 py-2 rounded-lg transition-colors text-left"
@@ -416,7 +416,7 @@ export default function DashboardPage() {
                 <span>Profile</span>
               </button>
 
-              {user?.roles?.includes('admin') && (
+              {(user?.admins && user.admins.length > 0) && (
                 <button
                   onClick={() => {
                     navigate('/admin/dashboard');
@@ -851,8 +851,8 @@ export default function DashboardPage() {
         </div>
       </div>
 
-      {/* Floating Action Button - Admin/Finsec/Class Rep */}
-      {user?.roles && (user.roles.includes('admin') || user.roles.includes('finsec') || user.roles.includes('class_rep')) && (
+  {/* Floating Action Button - Admin/Finsec/Class Rep */}
+  {hasPermission('can_create_payments') && (
         <motion.button
           className="fixed bottom-8 right-8 w-16 h-16 rounded-full flex items-center justify-center shadow-2xl z-50"
           style={{

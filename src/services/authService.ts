@@ -208,7 +208,12 @@ export const authService = {
         .select(`
           *,
           admins (
-            role
+            id,
+            role,
+            can_create_payments,
+            can_approve_payments,
+            can_manage_students,
+            can_view_analytics
           )
         `)
         .eq('id', student.id)
@@ -222,14 +227,25 @@ export const authService = {
       }
 
       // Extract roles from admins join
-      const roles = data.admins?.map((admin: { role: string }) => admin.role) || [];
+  interface AdminRow { id: string; role: string; can_create_payments?: boolean; can_approve_payments?: boolean; can_manage_students?: boolean; can_view_analytics?: boolean }
+  const admins: AdminRow[] = data.admins || [];
+  const roles = admins.map((admin: AdminRow) => admin.role) || [];
+      const admin_permissions = {
+  can_create_payments: admins.some((a: AdminRow) => a.can_create_payments === true),
+  can_approve_payments: admins.some((a: AdminRow) => a.can_approve_payments === true),
+  can_manage_students: admins.some((a: AdminRow) => a.can_manage_students === true),
+  can_view_analytics: admins.some((a: AdminRow) => a.can_view_analytics === true),
+      };
+
       const studentWithRoles = {
         ...data,
         roles,
+        admins,
+        admin_permissions,
       };
 
       // Update stored session with latest data including roles
-      this.saveSession(studentWithRoles as Student);
+  this.saveSession(studentWithRoles as LoginResponse['student']);
 
       // Return fresh data from database
       return {

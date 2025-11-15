@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { useNavigate } from 'react-router-dom';
+import { useAuth } from '@/hooks/useAuth';
 import { supabase } from '@/config/supabase';
 import { colors, gradients } from '@/config/colors';
 import GlassCard from '@/components/ui/GlassCard';
@@ -50,6 +51,7 @@ interface RecentPayment {
 
 export default function AdminDashboardPage() {
   const navigate = useNavigate();
+  const { hasPermission } = useAuth();
   const [loading, setLoading] = useState(true);
   const [showReceiptModal, setShowReceiptModal] = useState(false);
   const [selectedPayment, setSelectedPayment] = useState<RecentPayment | null>(null);
@@ -236,6 +238,7 @@ export default function AdminDashboardPage() {
                 <p style={{ color: colors.textSecondary }}>Manage payments and monitor class finances</p>
               </div>
               <div className="flex flex-wrap gap-3">
+                {hasPermission('can_create_payments') && (
                 <button
                   onClick={() => navigate('/admin/create-payment')}
                   className="flex items-center gap-2 px-4 py-2 rounded-lg font-medium text-white transition-all"
@@ -244,6 +247,8 @@ export default function AdminDashboardPage() {
                   <Plus className="w-5 h-5" />
                   <span className="hidden sm:inline">Create Payment</span>
                 </button>
+                )}
+                {hasPermission('can_approve_payments') && (
                 <button
                   onClick={() => navigate('/admin/scan-qr')}
                   className="flex items-center gap-2 px-4 py-2 rounded-lg font-medium text-white transition-all"
@@ -252,6 +257,8 @@ export default function AdminDashboardPage() {
                   <QrCode className="w-5 h-5" />
                   <span className="hidden sm:inline">Scan QR Code</span>
                 </button>
+                )}
+                {hasPermission('can_approve_payments') && (
                 <button
                   onClick={() => navigate('/admin/review')}
                   className="flex items-center gap-2 px-4 py-2 rounded-lg font-medium transition-all relative"
@@ -270,6 +277,7 @@ export default function AdminDashboardPage() {
                     </span>
                   )}
                 </button>
+                )}
               </div>
             </div>
           </GlassCard>
@@ -332,8 +340,8 @@ export default function AdminDashboardPage() {
               <GlassCard>
                 <div className="flex items-center justify-between">
                   <div>
-                    <p className="text-sm mb-1" style={{ color: colors.textSecondary }}>Total Collected</p>
-                    <p className="text-2xl font-bold text-white">{formatCurrency(stats.totalCollected)}</p>
+                    <p className="text-sm mb-1 cursor-pointer" style={{ color: colors.textSecondary }} onClick={() => navigate('/admin/collected')}>Total Collected</p>
+                    <p className="text-2xl font-bold text-white cursor-pointer" onClick={() => navigate('/admin/collected')}>{formatCurrency(stats.totalCollected)}</p>
                   </div>
                   <div className="w-12 h-12 rounded-xl flex items-center justify-center"
                        style={{ background: `${colors.statusPaid}20` }}>
@@ -501,6 +509,7 @@ export default function AdminDashboardPage() {
                 <Wallet className="w-5 h-5" style={{ color: colors.primary }} />
                 <span className="text-white font-medium">Student Dashboard</span>
               </button>
+              {hasPermission('can_create_payments') && (
               <button
                 onClick={() => navigate('/admin/create-payment')}
                 className="flex items-center gap-3 p-4 rounded-lg transition-all"
@@ -509,6 +518,8 @@ export default function AdminDashboardPage() {
                 <Plus className="w-5 h-5" style={{ color: colors.primary }} />
                 <span className="text-white font-medium">Create Payment</span>
               </button>
+              )}
+              {hasPermission('can_approve_payments') && (
               <button
                 onClick={() => navigate('/admin/review')}
                 className="flex items-center gap-3 p-4 rounded-lg transition-all"
@@ -517,6 +528,8 @@ export default function AdminDashboardPage() {
                 <Eye className="w-5 h-5" style={{ color: colors.warning }} />
                 <span className="text-white font-medium">Review Submissions</span>
               </button>
+              )}
+              {hasPermission('can_manage_students') && (
               <button
                 onClick={() => navigate('/admin/manage-students')}
                 className="flex items-center gap-3 p-4 rounded-lg transition-all"
@@ -525,6 +538,8 @@ export default function AdminDashboardPage() {
                 <Users className="w-5 h-5" style={{ color: colors.accentMint }} />
                 <span className="text-white font-medium">Manage Students</span>
               </button>
+              )}
+              {hasPermission('can_approve_payments') && (
               <button
                 onClick={() => navigate('/admin/waive-payment')}
                 className="flex items-center gap-3 p-4 rounded-lg transition-all"
@@ -533,6 +548,7 @@ export default function AdminDashboardPage() {
                 <Edit className="w-5 h-5" style={{ color: colors.statusPaid }} />
                 <span className="text-white font-medium">Waive Payment</span>
               </button>
+              )}
             </div>
           </GlassCard>
         </motion.div>
