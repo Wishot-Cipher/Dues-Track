@@ -12,6 +12,8 @@ import { ChevronDown, ChevronUp, ArrowLeft } from 'lucide-react';
 interface CategorySummary {
   category: string;
   total: number;
+  expenses: number;
+  net: number;
   breakdown: { title: string; total: number }[];
   count?: number;
 }
@@ -39,11 +41,15 @@ export default function AdminCollectedPage() {
   const [categoryPayments, setCategoryPayments] = useState<PaymentWithRelations[]>([]);
   const [studentTotals, setStudentTotals] = useState<{ name: string; reg: string; total: number; count: number; id?: string }[]>([]);
   const [studentFilter, setStudentFilter] = useState<string | null>(null);
-  const [includePending, setIncludePending] = useState(false);
+  // include partial payments by default so partially-paid students appear in lists
+  const [includePending, setIncludePending] = useState(true);
+  const [selectedTypeTitle, setSelectedTypeTitle] = useState<string | null>(null);
   const [catLoading, setCatLoading] = useState(false);
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 8;
   const [searchTerm, setSearchTerm] = useState('');
+  const [categoryExpenses, setCategoryExpenses] = useState<any[]>([]);
+  const [expensesLoading, setExpensesLoading] = useState(false);
 
   const fetchCollectedByCategory = useCallback(async () => {
     try {
@@ -51,26 +57,34 @@ export default function AdminCollectedPage() {
 
       // Fetch payments with chosen statuses with their payment type's title and category
       const statuses = includePending ? ['approved', 'pending', 'partial'] : ['approved'];
-      const { data } = await supabase
+      const { data: paymentsData } = await supabase
         .from('payments')
         .select(`amount, transaction_ref, status, payment_types (title, category)`, { count: 'exact' })
         .in('status', statuses)
         .order('created_at', { ascending: false });
 
+      // Fetch all expenses
+      const { data: expensesData } = await supabase
+        .from('expenses')
+        .select(`amount, payment_types (category)`);
+
       // Filter out waived amounts (transaction_ref starting with WAIVED-)
-      const payments = (data || []) as _PaymentWithType[];
-      const filtered = payments.filter((p) => !p.transaction_ref?.startsWith('WAIVED-'));
+      const payments = (paymentsData || []) as _PaymentWithType[];
+      const filteredPayments = payments.filter((p) => !p.transaction_ref?.startsWith('WAIVED-'));
+
+      const expenses = expensesData || [];
 
       const map = new Map<string, CategorySummary>();
 
-      for (const p of filtered) {
+      // Aggregate payments by category
+      for (const p of filteredPayments) {
         const pt = Array.isArray(p.payment_types) ? p.payment_types[0] : p.payment_types;
         const category = pt?.category || 'Other';
         const title = pt?.title || 'Unknown';
         const amount = Number(p.amount || 0);
 
         if (!map.has(category)) {
-          map.set(category, { category, total: 0, breakdown: [] });
+          map.set(category, { category, total: 0, expenses: 0, net: 0, breakdown: [] });
         }
         const entry = map.get(category)!;
         entry.total += amount;
@@ -80,6 +94,24 @@ export default function AdminCollectedPage() {
         const byTitle = entry.breakdown.find(b => b.title === title);
         if (byTitle) byTitle.total += amount;
         else entry.breakdown.push({ title, total: amount });
+      }
+
+      // Aggregate expenses by category
+      for (const e of expenses) {
+        const pt = Array.isArray(e.payment_types) ? e.payment_types[0] : e.payment_types;
+        const category = pt?.category || 'Other';
+        const amount = Number(e.amount || 0);
+
+        if (!map.has(category)) {
+          map.set(category, { category, total: 0, expenses: 0, net: 0, breakdown: [] });
+        }
+        const entry = map.get(category)!;
+        entry.expenses += amount;
+      }
+
+      // Calculate net for each category
+      for (const entry of map.values()) {
+        entry.net = entry.total - entry.expenses;
       }
 
       // Convert map into array and sort by total
@@ -98,7 +130,25 @@ export default function AdminCollectedPage() {
     void fetchCollectedByCategory();
   }, [fetchCollectedByCategory]);
 
-  const fetchPaymentsForCategory = useCallback(async (category: string) => {
+  const fetchExpensesForCategory = useCallback(async (category: string) => {
+    try {
+      setExpensesLoading(true);
+      const { data } = await supabase
+        .from('expenses')
+        .select(`*, payment_types (title, category), admins (full_name)`)
+        .eq('payment_types.category', category)
+        .order('expense_date', { ascending: false });
+
+      setCategoryExpenses(data || []);
+    } catch (error) {
+      console.error('Error fetching expenses for category:', error);
+      setCategoryExpenses([]);
+    } finally {
+      setExpensesLoading(false);
+    }
+  }, []);
+
+  const fetchPaymentsForCategory = useCallback(async (category: string, typeTitle?: string | null) => {
     try {
       setCatLoading(true);
       const statuses = includePending ? ['approved', 'pending', 'partial'] : ['approved'];
@@ -110,12 +160,21 @@ export default function AdminCollectedPage() {
 
   const payments = (data || []) as PaymentWithRelations[];
       // filter by category client-side because Supabase doesn't let us query joined fields directly
-      const filtered = payments.filter(p => {
+      let filtered = payments.filter(p => {
         const pt = Array.isArray(p.payment_types) ? p.payment_types[0] : p.payment_types;
         return (pt?.category || 'Other') === category && !p.transaction_ref?.startsWith('WAIVED-');
       });
-  setCategoryPayments(filtered);
-      // Aggregate by student for quick totals per student in this category
+
+      // If a specific payment type title is selected, further filter to that type (case-insensitive)
+      if (typeTitle) {
+        filtered = filtered.filter(p => {
+          const pt = Array.isArray(p.payment_types) ? p.payment_types[0] : p.payment_types;
+          return (pt?.title || '').toLowerCase() === typeTitle.toLowerCase();
+        });
+      }
+
+    setCategoryPayments(filtered);
+    // Aggregate by student for quick totals per student in this category
       const map = new Map<string, { name: string; reg: string; total: number; count: number; id?: string }>();
       for (const p of filtered) {
         const sid = p.student_id || p.students?.reg_number || p.id;
@@ -141,8 +200,10 @@ export default function AdminCollectedPage() {
 
   useEffect(() => {
     if (!selectedCategory) return;
-    void fetchPaymentsForCategory(selectedCategory);
-  }, [selectedCategory, fetchPaymentsForCategory]);
+    // re-fetch payments when either category or selected payment-type title changes
+    void fetchPaymentsForCategory(selectedCategory, selectedTypeTitle);
+    void fetchExpensesForCategory(selectedCategory);
+  }, [selectedCategory, selectedTypeTitle, fetchPaymentsForCategory, fetchExpensesForCategory]);
 
   // Filter and Paginate Category Payments
   const filteredPayments = categoryPayments.filter(p => {
@@ -238,6 +299,7 @@ export default function AdminCollectedPage() {
         <GlassCard>
           <p className="text-sm mb-4" style={{ color: colors.textSecondary }}>
             A quick summary of amounts collected by payment category. Click a category to view a breakdown of payment types within it.
+            Partial payments are included by default so contributors who paid in instalments show up.
           </p>
 
           {/* Permission hint: RLS may hide rows if your admin record lacks global flags */}
@@ -264,7 +326,11 @@ export default function AdminCollectedPage() {
                   <div className="flex items-center justify-between p-4 cursor-pointer" style={{ background: 'rgba(255,255,255,0.03)' }} onClick={() => setExpanded(prev => ({ ...prev, [cat.category]: !prev[cat.category] }))}>
                     <div>
                       <p className="text-sm" style={{ color: colors.textSecondary }}>{cat.category.replace(/_/g, ' ')}</p>
-                      <p className="text-lg font-semibold text-white">{formatCurrency(cat.total)}</p>
+                      <div className="flex gap-4 text-sm">
+                        <span className="text-green-400">Collected: {formatCurrency(cat.total)}</span>
+                        <span className="text-red-400">Expenses: {formatCurrency(cat.expenses)}</span>
+                        <span className="text-blue-400 font-semibold">Net: {formatCurrency(cat.net)}</span>
+                      </div>
                     </div>
                     <div className="flex items-center gap-2">
                       <p className="text-sm font-medium" style={{ color: colors.textSecondary }}>{cat.breakdown.length} types</p>
@@ -276,10 +342,18 @@ export default function AdminCollectedPage() {
                     <div className="p-3 bg-[#0B0B0C] border-t" style={{ borderColor: 'rgba(255,255,255,0.03)' }}>
                       <div className="space-y-2">
                         {cat.breakdown.map(b => (
-                          <div key={b.title} className="flex items-center justify-between p-3 rounded-lg hover:bg-white/5" style={{ background: 'rgba(255,255,255,0.01)' }}>
+                          <button
+                            key={b.title}
+                            onClick={() => {
+                              setSelectedCategory(cat.category);
+                              setSelectedTypeTitle(b.title);
+                            }}
+                            className={`w-full text-left flex items-center justify-between p-3 rounded-lg hover:bg-white/5 ${selectedTypeTitle === b.title ? 'outline outline-orange-500' : ''}`}
+                            style={{ background: 'rgba(255,255,255,0.01)' }}
+                          >
                             <p className="text-sm text-white">{b.title}</p>
                             <p className="text-sm font-semibold text-white">{formatCurrency(b.total)}</p>
-                          </div>
+                          </button>
                         ))}
                       </div>
                     </div>
@@ -332,6 +406,13 @@ export default function AdminCollectedPage() {
                 />
               </div>
             </div>
+
+                  {selectedTypeTitle && (
+                    <div className="mb-3 flex items-center gap-3">
+                      <div className="px-3 py-1 rounded-full text-sm font-medium" style={{ background: 'rgba(255,255,255,0.03)' }}>{selectedTypeTitle}</div>
+                      <button onClick={() => setSelectedTypeTitle(null)} className="text-sm underline" style={{ color: colors.primary }}>Clear type filter</button>
+                    </div>
+                  )}
 
                 <div className="flex items-center justify-between mb-4">
                   <div className="flex items-center gap-3">

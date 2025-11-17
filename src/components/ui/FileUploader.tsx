@@ -204,8 +204,32 @@ const FileUploader: React.FC<FileUploaderProps> = ({
             >
               {/* Preview */}
               {item.preview && showPreview && (
-                <div className="relative w-full h-48 bg-black/20">
-                  <img src={item.preview} alt="Preview" className="w-full h-full object-contain" />
+                <div className="mt-3 relative">
+                  <div
+                    className="rounded-lg overflow-hidden flex items-center justify-center"
+                    style={{
+                      maxHeight: '400px',
+                      background: 'rgba(0,0,0,0.2)',
+                      minHeight: '200px',
+                    }}
+                  >
+                    <img
+                      src={item.preview}
+                      alt="Receipt preview"
+                      className="max-w-full max-h-full object-contain"
+                      style={{
+                        maxHeight: '400px',
+                        display: 'block',
+                      }}
+                    />
+                  </div>
+                  {/* <button
+                    type="button"
+                    onClick={() => removeFile(index)}
+                    className="absolute top-2 right-2 p-2 rounded-full bg-red-500 hover:bg-red-600"
+                  >
+                    <X className="w-4 h-4 text-white" />
+                  </button> */}
                 </div>
               )}
 
@@ -219,7 +243,12 @@ const FileUploader: React.FC<FileUploaderProps> = ({
                 </div>
 
                 <div className="flex-1 min-w-0">
-                  <p className="font-medium text-sm truncate">{item.file.name}</p>
+                  <p
+                    className="font-medium text-sm wrap-break-word whitespace-normal"
+                    title={item.file.name}
+                  >
+                    {item.file.name}
+                  </p>
                   <p className="text-xs" style={{ color: colors.textSecondary }}>
                     {formatFileSize(item.file.size)}
                   </p>
