@@ -1039,11 +1039,11 @@ export default function ManageStudentsPage() {
                       className="w-full px-4 py-2 rounded-lg text-white focus:outline-none focus:ring-2"
                       style={{ background: 'rgba(255, 255, 255, 0.05)', border: '1px solid rgba(255, 255, 255, 0.1)' }}
                     >
-                      <option value="100" style={{ background: colors.background }}>100 Level</option>
-                      <option value="200" style={{ background: colors.background }}>200 Level</option>
-                      <option value="300" style={{ background: colors.background }}>300 Level</option>
-                      <option value="400" style={{ background: colors.background }}>400 Level</option>
-                      <option value="500" style={{ background: colors.background }}>500 Level</option>
+                      <option value="100L" style={{ background: colors.background }}>100 Level</option>
+                      <option value="200L" style={{ background: colors.background }}>200 Level</option>
+                      <option value="300L" style={{ background: colors.background }}>300 Level</option>
+                      <option value="400L" style={{ background: colors.background }}>400 Level</option>
+                      <option value="500L" style={{ background: colors.background }}>500 Level</option>
                     </select>
                   </div>
 
