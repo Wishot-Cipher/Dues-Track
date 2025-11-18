@@ -205,24 +205,28 @@ const FileUploader: React.FC<FileUploaderProps> = ({
               {/* Preview */}
               {item.preview && showPreview && (
                 <div className="mt-3 relative">
-                  <div
-                    className="rounded-lg overflow-hidden flex items-center justify-center"
-                    style={{
-                      maxHeight: '400px',
-                      background: 'rgba(0,0,0,0.2)',
-                      minHeight: '200px',
-                    }}
-                  >
-                    <img
-                      src={item.preview}
-                      alt="Receipt preview"
-                      className="max-w-full max-h-full object-contain"
+                    <div
+                      className="rounded-lg overflow-hidden flex items-center justify-center w-full"
                       style={{
-                        maxHeight: '400px',
-                        display: 'block',
+                        maxWidth: '100%',
+                        maxHeight: '60vh',
+                        background: 'rgba(0,0,0,0.2)',
+                        minHeight: '120px',
                       }}
-                    />
-                  </div>
+                    >
+                      <img
+                        src={item.preview}
+                        alt="Receipt preview"
+                        className="object-contain"
+                        style={{
+                          maxWidth: '100%',
+                          width: 'auto',
+                          maxHeight: '60vh',
+                          height: 'auto',
+                          display: 'block',
+                        }}
+                      />
+                    </div>
                   {/* <button
                     type="button"
                     onClick={() => removeFile(index)}
