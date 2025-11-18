@@ -424,7 +424,7 @@ export default function PaymentDetailPage() {
           >
             <button
               onClick={() => navigate("/dashboard")}
-              className="flex items-center justify-center sm:justify-start gap-2 mb-4 px-3 py-2 rounded-lg transition-colors w-auto outline outline-orange-500 "
+              className="flex items-center justify-center sm:justify-start gap-2 mb-4 px-3 py-2 rounded-lg transition-colors w-auto outline outline-orange-500 mt-2"
               style={{ color: colors.textSecondary }}
               onMouseEnter={(e) =>
                 (e.currentTarget.style.color = colors.primary)

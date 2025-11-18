@@ -22,6 +22,7 @@ interface _PaymentWithType {
   amount: number;
   transaction_ref?: string | null;
   payment_types?: { title?: string; category?: string } | { title?: string; category?: string }[];
+  status?: string | null;
 }
 
 interface PaymentWithRelations extends _PaymentWithType {
@@ -39,46 +40,92 @@ export default function AdminCollectedPage() {
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
   const [categoryPayments, setCategoryPayments] = useState<PaymentWithRelations[]>([]);
-  const [studentTotals, setStudentTotals] = useState<{ name: string; reg: string; total: number; count: number; id?: string }[]>([]);
+  const [studentTotals, setStudentTotals] = useState<{ name: string; reg: string; total: number; count: number; id?: string; hasApproved?: boolean; is_active?: boolean }[]>([]);
+  const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'paid' | 'inactive'>('all');
   const [studentFilter, setStudentFilter] = useState<string | null>(null);
-  // include partial payments by default so partially-paid students appear in lists
+  // include pending and partial payments separately so admin can toggle them
   const [includePending, setIncludePending] = useState(true);
+  const [includePartial, setIncludePartial] = useState(true);
   const [selectedTypeTitle, setSelectedTypeTitle] = useState<string | null>(null);
   const [catLoading, setCatLoading] = useState(false);
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 8;
   const [searchTerm, setSearchTerm] = useState('');
-  const [categoryExpenses, setCategoryExpenses] = useState<any[]>([]);
-  const [expensesLoading, setExpensesLoading] = useState(false);
+  // expensesLoading state removed — expenses are optional and not used in the UI
+  // developer-only debug removed from UI — keep only dev logs below
 
   const fetchCollectedByCategory = useCallback(async () => {
     try {
       setLoading(true);
 
-      // Fetch payments with chosen statuses with their payment type's title and category
-      const statuses = includePending ? ['approved', 'pending', 'partial'] : ['approved'];
+      // Fetch payments with chosen statuses — include pending and partial separately
+      const statuses = ['approved'];
+        if (includePending) {
+          statuses.push('pending');
+        }
+        if (includePartial) {
+          statuses.push('partial');
+        }
       const { data: paymentsData } = await supabase
         .from('payments')
         .select(`amount, transaction_ref, status, payment_types (title, category)`, { count: 'exact' })
         .in('status', statuses)
         .order('created_at', { ascending: false });
 
-      // Fetch all expenses
-      const { data: expensesData } = await supabase
-        .from('expenses')
-        .select(`amount, payment_types (category)`);
+      if (import.meta.env.DEV) {
+        console.log('DEV: fetchCollectedByCategory — statuses:', statuses, 'payments fetched:', (paymentsData || []).length);
+        console.log('DEV: first 5 payments (raw):', (paymentsData || []).slice(0, 5));
+      }
+
+      // Fetch all expenses (guard if table missing)
+      let expensesData: unknown[] = [];
+      try {
+        const { data: expensesDataRes, error: expensesError } = await supabase
+          .from('expenses')
+          .select(`amount, payment_types (category)`);
+        if (expensesError) {
+          console.warn('Expenses query error, continuing without expenses', expensesError);
+          expensesData = [];
+        } else {
+          expensesData = expensesDataRes || [];
+        }
+      } catch (e) {
+        console.warn('Expenses table missing or query failed, continuing without expenses', e);
+        expensesData = [];
+      }
 
       // Filter out waived amounts (transaction_ref starting with WAIVED-)
-      const payments = (paymentsData || []) as _PaymentWithType[];
+      type PTRec = { id: string; title?: string; category?: string };
+      type PaymentRec = _PaymentWithType & { payment_type_id?: string; payment_types?: PTRec | PTRec[] };
+      // Payment shapes from supabase may not be exact; cast via unknown to avoid strict overlap errors
+      const payments = (paymentsData || []) as unknown as PaymentRec[];
       const filteredPayments = payments.filter((p) => !p.transaction_ref?.startsWith('WAIVED-'));
 
+      // Ensure we can determine a payment type/category even if the joined relation is missing
+      const paymentTypeIds = Array.from(new Set(filteredPayments.map(p => p.payment_type_id).filter(Boolean) as string[]));
+      let ptMap = new Map<string, PTRec>();
+      if (paymentTypeIds.length > 0) {
+        try {
+          const { data: ptData } = await supabase
+            .from('payment_types')
+            .select('id, title, category')
+            .in('id', paymentTypeIds);
+          const arr = (ptData || []) as PTRec[];
+          ptMap = new Map(arr.map(t => [t.id, t] as [string, PTRec]));
+        } catch (e) {
+          console.warn('Failed to fetch payment_types for category mapping', e);
+        }
+      }
+
       const expenses = expensesData || [];
+      type ExpenseRecLocal = { payment_types?: PTRec[] | PTRec | undefined; amount?: string | number };
 
       const map = new Map<string, CategorySummary>();
 
       // Aggregate payments by category
       for (const p of filteredPayments) {
-        const pt = Array.isArray(p.payment_types) ? p.payment_types[0] : p.payment_types;
+        const ptRel = Array.isArray(p.payment_types) ? p.payment_types[0] : p.payment_types;
+        const pt = ptRel || (p.payment_type_id ? ptMap.get(p.payment_type_id) : undefined);
         const category = pt?.category || 'Other';
         const title = pt?.title || 'Unknown';
         const amount = Number(p.amount || 0);
@@ -97,7 +144,8 @@ export default function AdminCollectedPage() {
       }
 
       // Aggregate expenses by category
-      for (const e of expenses) {
+      const expensesArr = (expenses as ExpenseRecLocal[]);
+      for (const e of expensesArr) {
         const pt = Array.isArray(e.payment_types) ? e.payment_types[0] : e.payment_types;
         const category = pt?.category || 'Other';
         const amount = Number(e.amount || 0);
@@ -124,7 +172,7 @@ export default function AdminCollectedPage() {
     } finally {
       setLoading(false);
     }
-  }, [includePending]);
+  }, [includePending, includePartial]);
 
   useEffect(() => {
     void fetchCollectedByCategory();
@@ -132,38 +180,119 @@ export default function AdminCollectedPage() {
 
   const fetchExpensesForCategory = useCallback(async (category: string) => {
     try {
-      setExpensesLoading(true);
-      const { data } = await supabase
+      // PostgREST (used by Supabase) can return 400 for certain relation filters.
+      // Fetch the expenses with the `payment_types` relation and handle errors
+      // from the Supabase client gracefully.
+      const { data, error } = await supabase
         .from('expenses')
-        .select(`*, payment_types (title, category), admins (full_name)`)
-        .eq('payment_types.category', category)
+        .select(`*, payment_types (title, category)`)
         .order('expense_date', { ascending: false });
 
-      setCategoryExpenses(data || []);
+      if (error) {
+        // If the table doesn't exist or the request was bad, log and continue.
+        console.warn('Expenses query error, returning empty list for category:', error);
+        return;
+      }
+
+      const allExpenses = data || [];
+      type ExpenseRec = { payment_types?: { title?: string; category?: string }[] | { title?: string; category?: string } };
+      const filtered = (allExpenses as ExpenseRec[]).filter((e) => {
+        const pt = Array.isArray(e.payment_types) ? e.payment_types[0] : e.payment_types;
+        return (pt?.category || 'Other') === category;
+      });
+
+      // Note: we no longer store filtered expenses in component state because
+      // the component does not read that state; callers can extend this function
+      // to return the filtered data if needed.
+      return filtered;
     } catch (error) {
       console.error('Error fetching expenses for category:', error);
-      setCategoryExpenses([]);
+      return [];
     } finally {
-      setExpensesLoading(false);
+      // no cleanup required here; include a no-op to avoid an empty block
+      void 0;
     }
   }, []);
-
   const fetchPaymentsForCategory = useCallback(async (category: string, typeTitle?: string | null) => {
     try {
       setCatLoading(true);
-      const statuses = includePending ? ['approved', 'pending', 'partial'] : ['approved'];
-      const { data } = await supabase
+      const statuses = ['approved'];
+      if (includePending) statuses.push('pending');
+      if (includePartial) statuses.push('partial');
+      // Disambiguate the `students` relation — use the FK relation alias so PostgREST
+      // does not complain when multiple student relations exist on payments.
+      const { data, error } = await supabase
         .from('payments')
-        .select(`*, students (full_name, reg_number), payment_types (title, category), student_id, status`)
+        .select(`*, students!payments_student_id_fkey (full_name, reg_number, is_active), payment_types (title, category), student_id, status`)
         .in('status', statuses)
         .order('created_at', { ascending: false });
 
-  const payments = (data || []) as PaymentWithRelations[];
+        if (import.meta.env.DEV) {
+            console.log('DEV: payments query returned', (data || []).length, 'rows; error:', error);
+            if (error) console.warn('payments query error', error);
+          // show the first payment so we can inspect the joined student field name
+          if ((data || []).length > 0) console.log('DEV: payment with joined students keys', Object.keys((data || [])[0]));
+        }
+
+      // Fallback: when joins cause RLS or other issues the above may return 0 rows.
+      // Try a minimal query (no joins) to detect RLS/hide behavior.
+      type SimplePayment = { id: string; student_id?: string; payment_type_id?: string; amount?: number; transaction_ref?: string; status?: string };
+      let fallbackData: SimplePayment[] | null = null;
+      if ((!data || (data as unknown as SimplePayment[]).length === 0) && !error) {
+        try {
+          const { data: simple, error: simpleError } = await supabase
+            .from('payments')
+            .select('id, student_id, payment_type_id, amount, transaction_ref, status')
+            .in('status', statuses)
+            .order('created_at', { ascending: false });
+          fallbackData = simple || null;
+          if (import.meta.env.DEV) {
+            console.log('DEV: fallback payments (no joins) returned', (fallbackData || []).length, 'rows; error:', simpleError);
+          }
+        } catch (e) {
+          console.warn('DEV: fallback minimal payments query failed', e);
+        }
+      }
+
+      if (import.meta.env.DEV) {
+        console.log('DEV: fetchPaymentsForCategory — category:', category, 'typeTitle:', typeTitle, 'statuses:', statuses);
+        console.log('DEV: payments query result count:', (data || []).length);
+      }
+
+      const payments = ((data && (data as PaymentWithRelations[])) || (fallbackData ? (fallbackData as SimplePayment[] as unknown as PaymentWithRelations[]) : []));
       // filter by category client-side because Supabase doesn't let us query joined fields directly
+      // Fetch payment types for this category (fallback to match by payment_type_id if relation missing)
+      const { data: typesForCategory } = await supabase
+        .from('payment_types')
+        .select('id, title, category')
+        .eq('category', category);
+
+      if (import.meta.env.DEV) {
+        console.log('DEV: typesForCategory:', typesForCategory);
+      }
+
+      type PaymentTypeRec = { id: string; title?: string; category?: string };
+      const typesArr = (typesForCategory || []) as PaymentTypeRec[];
+      const typeIdSet = new Set(typesArr.map((t) => t.id));
+
       let filtered = payments.filter(p => {
         const pt = Array.isArray(p.payment_types) ? p.payment_types[0] : p.payment_types;
-        return (pt?.category || 'Other') === category && !p.transaction_ref?.startsWith('WAIVED-');
+        const paymentTypeId = (p as unknown as { payment_type_id?: string }).payment_type_id;
+        // Match only if the payment_types relation category equals the selected category,
+        // or fallback to matching by payment_type_id when the relation is missing.
+        const categoryMatch = (pt?.category === category) || (paymentTypeId ? typeIdSet.has(paymentTypeId) : false);
+          if (import.meta.env.DEV) {
+          // log only a few to avoid too much spam
+          if (!pt && paymentTypeId) console.debug('no joined payment_types for payment', p.id, 'falling back to id', paymentTypeId);
+          if (pt && pt.category !== category) console.debug('joined payment_type wrong category', p.id, pt.category, 'expected', category);
+        }
+        return categoryMatch && !p.transaction_ref?.startsWith('WAIVED-');
       });
+
+      if (import.meta.env.DEV) {
+        console.log('DEV: payments filtered by category:', filtered.length, 'of', payments.length);
+        console.log('DEV: first 5 filtered (raw):', filtered.slice(0, 5));
+      }
 
       // If a specific payment type title is selected, further filter to that type (case-insensitive)
       if (typeTitle) {
@@ -172,19 +301,68 @@ export default function AdminCollectedPage() {
           return (pt?.title || '').toLowerCase() === typeTitle.toLowerCase();
         });
       }
+      // If some payments lack the `students` relation (RLS or join issue), fetch those students by id
+      type PaymentLike = PaymentWithRelations & { payment_type_id?: string; student_id?: string };
+      const missingStudentIds = Array.from(new Set(filtered
+        .map((p: PaymentLike) => p.student_id)
+        .filter((id) => id && !(filtered.find((fp: PaymentLike) => fp.student_id === id)?.students))
+      )) as string[];
 
-    setCategoryPayments(filtered);
-    // Aggregate by student for quick totals per student in this category
-      const map = new Map<string, { name: string; reg: string; total: number; count: number; id?: string }>();
-      for (const p of filtered) {
+      if (import.meta.env.DEV) {
+        console.log('DEV: missing student ids (no joined students in payments):', missingStudentIds);
+      }
+
+      if (missingStudentIds.length > 0) {
+        try {
+          const { data: fetchedStudents, error: studentsError } = await supabase
+            .from('students')
+            .select('id, full_name, reg_number, is_active')
+            .in('id', missingStudentIds as string[]);
+          if (studentsError) {
+            console.warn('Failed to fetch missing students', studentsError);
+          } else if (fetchedStudents) {
+            if (import.meta.env.DEV) {
+              console.log('DEV: fetchedStudents for missing student ids:', fetchedStudents);
+            }
+            const byId = new Map<string, { id: string; full_name?: string; reg_number?: string; is_active?: boolean }>();
+            (fetchedStudents as { id: string; full_name?: string; reg_number?: string; is_active?: boolean }[]).forEach(s => byId.set(s.id, s));
+            // attach fetched student info to payments that lack it
+            filtered = filtered.map((p: PaymentLike) => {
+              if ((!p.students || !p.students.reg_number) && p.student_id) {
+                const s = byId.get(p.student_id);
+                if (s) return { ...p, students: { full_name: s.full_name, reg_number: s.reg_number, is_active: s.is_active } } as PaymentWithRelations;
+              }
+              return p;
+            });
+          }
+        } catch (e) {
+          console.warn('Error fetching missing students', e);
+        }
+      }
+
+      // Build debug output for developer visibility — do not create a UI element for this
+      if (import.meta.env.DEV) {
+        console.debug('DEV: payments filtered for category', category, 'count', (filtered || []).length);
+        // show a small sample for inspection
+        console.debug('DEV: sample payments', (filtered || []).slice(0, 6).map(p => ({ id: p.id, student: p.students?.reg_number ?? p.student_id, status: p.status })));
+      }
+      setCategoryPayments(filtered);
+      // Aggregate by student for quick totals per student in this category
+      type LocalPayment = PaymentWithRelations & { status?: string; students?: { full_name?: string; reg_number?: string; is_active?: boolean } };
+      const map = new Map<string, { name: string; reg: string; total: number; count: number; id?: string; hasApproved?: boolean; is_active?: boolean }>();
+      for (const p of filtered as LocalPayment[]) {
         const sid = p.student_id || p.students?.reg_number || p.id;
         const name = p.students?.full_name || 'Unknown';
         const reg = p.students?.reg_number || '';
         const amt = Number(p.amount || 0);
-        if (!map.has(sid)) map.set(sid, { name, reg, total: 0, count: 0, id: sid });
+        const approved = (p.status || '').toLowerCase() === 'approved';
+        const active = !!p.students?.is_active;
+        if (!map.has(sid)) map.set(sid, { name, reg, total: 0, count: 0, id: sid, hasApproved: approved, is_active: active });
         const entry = map.get(sid)!;
         entry.total += amt;
         entry.count += 1;
+        entry.hasApproved = entry.hasApproved || approved;
+        entry.is_active = entry.is_active || active;
       }
       const totalsArr = Array.from(map.values()).sort((a, b) => b.total - a.total);
       setStudentTotals(totalsArr);
@@ -196,7 +374,7 @@ export default function AdminCollectedPage() {
     } finally {
       setCatLoading(false);
     }
-  }, [includePending]);
+  }, [includePending, includePartial]);
 
   useEffect(() => {
     if (!selectedCategory) return;
@@ -366,12 +544,12 @@ export default function AdminCollectedPage() {
         
         {/* Category Tags */}
         <GlassCard>
-          <div className="flex flex-wrap gap-3 items-center">
+          <div className="flex gap-2 overflow-x-auto sm:flex-wrap items-center -mx-2 px-2">
             {categories.map(cat => (
               <button
                 key={cat.category}
                 onClick={() => setSelectedCategory(cat.category)}
-                className={`px-3 py-1 rounded-full text-xs font-medium capitalize transition-all whitespace-nowrap flex items-center gap-2 ${selectedCategory === cat.category ? 'border' : ''}`}
+                className={`px-2 sm:px-3 py-1 rounded-full text-xs font-medium capitalize transition-all whitespace-nowrap inline-flex items-center gap-2 ${selectedCategory === cat.category ? 'border' : ''}`}
                 aria-pressed={selectedCategory === cat.category}
                 style={{
                   background: selectedCategory === cat.category ? 'linear-gradient(90deg, rgba(255,104,3,0.15), rgba(255,104,3,0.05))' : 'rgba(255,255,255,0.03)',
@@ -381,7 +559,7 @@ export default function AdminCollectedPage() {
               >
                 <span className="capitalize">{cat.category.replace(/_/g, ' ')}</span>
                 <span className="text-xs font-semibold">{formatCurrency(cat.total)}</span>
-                <span className="w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold" style={{ background: colors.statusPaid, color: 'white' }}>{cat.count || 0}</span>
+                <span className="w-5 h-5 sm:w-6 sm:h-6 rounded-full flex items-center justify-center text-xs font-bold" style={{ background: colors.statusPaid, color: 'white' }}>{cat.count || 0}</span>
               </button>
             ))}
           </div>
@@ -395,7 +573,7 @@ export default function AdminCollectedPage() {
                 <h2 className="text-xl font-bold text-white">{selectedCategory.replace(/_/g, ' ')}</h2>
                 <p className="text-sm" style={{ color: colors.textSecondary }}>Showing collected payments for this category</p>
               </div>
-                  <div className="w-full md:w-48">
+                      <div className="w-full md:w-48">
                 <input
                   type="text"
                   placeholder="Search by name, type, txref..."
@@ -407,6 +585,8 @@ export default function AdminCollectedPage() {
               </div>
             </div>
 
+                    {/* Debug removed from UI; use console logs in dev mode to inspect matching */}
+
                   {selectedTypeTitle && (
                     <div className="mb-3 flex items-center gap-3">
                       <div className="px-3 py-1 rounded-full text-sm font-medium" style={{ background: 'rgba(255,255,255,0.03)' }}>{selectedTypeTitle}</div>
@@ -415,7 +595,7 @@ export default function AdminCollectedPage() {
                   )}
 
                 <div className="flex items-center justify-between mb-4">
-                  <div className="flex items-center gap-3">
+                  <div className="flex items-center gap-4">
                     <label className="flex items-center gap-2 text-sm" style={{ color: colors.textSecondary }}>
                       <input
                         type="checkbox"
@@ -423,7 +603,23 @@ export default function AdminCollectedPage() {
                         onChange={(e) => setIncludePending(e.target.checked)}
                         className="w-4 h-4"
                       />
-                      <span>Include pending & partial</span>
+                      <span>
+                        <span className="hidden sm:inline">Include pending payments</span>
+                        <span className="sm:hidden">Pending</span>
+                      </span>
+                    </label>
+
+                    <label className="flex items-center gap-2 text-sm" style={{ color: colors.textSecondary }}>
+                      <input
+                        type="checkbox"
+                        checked={includePartial}
+                        onChange={(e) => setIncludePartial(e.target.checked)}
+                        className="w-4 h-4"
+                      />
+                      <span title="Include payments recorded with 'partial' status (installments will be counted)">
+                        <span className="hidden sm:inline">Include partial payments</span>
+                        <span className="sm:hidden">Partial</span>
+                      </span>
                     </label>
                   </div>
                   <div className="text-sm" style={{ color: colors.textSecondary }}>
@@ -431,29 +627,70 @@ export default function AdminCollectedPage() {
                   </div>
                 </div>
 
-                {/* Per-student totals (top payers) */}
-                {studentTotals.length > 0 && (
-                  <div className="mb-4">
-                    <p className="text-sm mb-2" style={{ color: colors.textSecondary }}>Top payers in this category</p>
-                    <div className="flex flex-wrap gap-2">
-                      {studentTotals.slice(0, 8).map(s => (
+                {/* Quick Filters */}
+                <div className="space-y-3 mb-3">
+                  {/* Status Filter */}
+                  <div>
+                    <p className="text-xs font-medium mb-2" style={{ color: colors.textSecondary }}>Status</p>
+                    <div className="flex gap-2 overflow-x-auto sm:flex-wrap -mx-2 px-2">
+                      {[
+                        { value: 'all' as const, label: 'All', count: studentTotals.length },
+                        { value: 'active' as const, label: 'Active', count: studentTotals.filter(s => s.is_active).length },
+                        { value: 'paid' as const, label: 'Paid', count: studentTotals.filter(s => s.hasApproved).length },
+                        { value: 'inactive' as const, label: 'Inactive', count: studentTotals.filter(s => !s.is_active).length },
+                      ].map(({ value, label, count }) => (
                         <button
-                          key={s.reg}
-                          onClick={() => setStudentFilter(prev => prev === s.reg ? null : s.reg)}
-                          className={`px-3 py-1 rounded-full text-xs font-medium transition-all flex items-center gap-2 ${studentFilter === s.reg ? 'border' : ''}`}
+                          key={value}
+                          onClick={() => {
+                            setStatusFilter(value);
+                            setCurrentPage(1);
+                          }}
+                          className="px-3 py-1.5 rounded-lg text-xs sm:text-sm font-medium transition-all"
                           style={{
-                            background: studentFilter === s.reg ? 'rgba(255,255,255,0.06)' : 'rgba(255,255,255,0.03)',
-                            borderColor: studentFilter === s.reg ? 'rgba(255,255,255,0.06)' : 'transparent'
+                            background: statusFilter === value ? `${colors.primary}30` : 'rgba(255, 255, 255, 0.05)',
+                            border: `1px solid ${statusFilter === value ? colors.primary + '60' : 'transparent'}`,
+                            color: statusFilter === value ? colors.primary : colors.textSecondary,
                           }}
                         >
-                          <span className="font-medium">{s.name}</span>
-                          <span className="text-xs" style={{ color: colors.textSecondary }}>{s.reg}</span>
-                          <span className="ml-2 px-2 py-0.5 rounded text-xs font-semibold" style={{ background: colors.statusPaid, color: 'white' }}>{formatCurrency(s.total)}</span>
+                          {label} ({count})
                         </button>
                       ))}
                     </div>
                   </div>
-                )}
+                </div>
+
+                {/* Per-student totals (top payers) */}
+                {studentTotals.length > 0 && (() => {
+                  const displayed = studentTotals.filter(s => {
+                    if (statusFilter === 'all') return true;
+                    if (statusFilter === 'active') return !!s.is_active;
+                    if (statusFilter === 'inactive') return !s.is_active;
+                    if (statusFilter === 'paid') return !!s.hasApproved;
+                    return true;
+                  });
+                  return (
+                    <div className="mb-4">
+                      <p className="text-sm mb-2" style={{ color: colors.textSecondary }}>Top payers in this category</p>
+                      <div className="flex flex-wrap gap-2">
+                        {displayed.slice(0, 8).map(s => (
+                          <button
+                            key={s.reg}
+                            onClick={() => setStudentFilter(prev => prev === s.reg ? null : s.reg)}
+                            className={`inline-flex px-3 py-1 rounded-full text-xs font-medium transition-all items-center gap-2 min-w-max ${studentFilter === s.reg ? 'border' : ''}`}
+                            style={{
+                              background: studentFilter === s.reg ? 'rgba(255,255,255,0.06)' : 'rgba(255,255,255,0.03)',
+                              borderColor: studentFilter === s.reg ? 'rgba(255,255,255,0.06)' : 'transparent'
+                            }}
+                          >
+                            <span className="font-medium">{s.name}</span>
+                            <span className="text-xs" style={{ color: colors.textSecondary }}>{s.reg}</span>
+                            <span className="ml-2 px-2 py-0.5 rounded text-xs font-semibold" style={{ background: colors.statusPaid, color: 'white' }}>{formatCurrency(s.total)}</span>
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  );
+                })()}
 
             {/* Loading / Empty */}
             {catLoading ? (
@@ -466,6 +703,8 @@ export default function AdminCollectedPage() {
               </div>
             ) : (
               <>
+                {/* Debug panel (developer only) */}
+                {/* Dev-only debug panel removed — check console logs (import.meta.env.DEV) for detailed traces */}
                 <div className="space-y-3">
                   {paginatedPayments.map((p) => (
                     <div key={p.id} className="p-3 rounded-lg transition-all hover:bg-white/5" style={{ background: 'rgba(255,255,255,0.02)' }}>
@@ -482,6 +721,21 @@ export default function AdminCollectedPage() {
                       <div className="mt-2 flex items-center justify-between">
                         <p className="text-sm" style={{ color: colors.textSecondary }}>{Array.isArray(p.payment_types) ? p.payment_types[0]?.title : p.payment_types?.title}</p>
                         <p className="text-xs text-white">{p.transaction_ref}</p>
+                      </div>
+                      <div className="flex items-center gap-2 mt-2">
+                        {/* Status badge */}
+                        {/* Status badge: approved should have white text on green background */}
+                        <span
+                          className="px-2 py-0.5 rounded-full text-xs font-semibold"
+                          style={{
+                            background: p.status === 'approved' ? colors.statusPaid : p.status === 'pending' ? 'rgba(255,165,0,0.15)' : 'rgba(59,130,246,0.12)',
+                            color: p.status === 'approved' ? 'white' : p.status === 'pending' ? 'orange' : colors.primary,
+                          }}
+                        >
+                          {p.status?.toUpperCase()}
+                        </span>
+                        {/* Payment type title if any */}
+                        <span className="text-xs" style={{ color: colors.textSecondary }}>{Array.isArray(p.payment_types) ? p.payment_types[0]?.title : p.payment_types?.title}</span>
                       </div>
                     </div>
                   ))}

@@ -1,0 +1,7 @@
+# Hashed password for '2024/274804'
+# Generated with bcryptjs (salt rounds: 10)
+# Do not commit secrets in production; this file is for local/testing purposes only.
+
+2024/274804 => $2b$10$CfcTp.uniBOLOog0XQWQLOT9.nh9U1ywuAHIrs6e7b07eQoQTCRke
+
+$2b$10$N5AYfI0Ompyxc/8xr752CuETklUiX0su2EA863ItuBqc.zDW4ELUq

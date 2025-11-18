@@ -25,6 +25,7 @@ interface Student {
   id: string;
   full_name: string;
   reg_number: string;
+  force_password_change?: boolean;
   email: string;
   phone: string;
   level: string;
@@ -176,18 +177,52 @@ export default function ManageStudentsPage() {
         .from('students')
         .update({
           full_name: selectedStudent.full_name,
+          reg_number: selectedStudent.reg_number,
           email: selectedStudent.email,
           phone: selectedStudent.phone,
           level: selectedStudent.level,
           department: selectedStudent.department,
           section: selectedStudent.section,
+          force_password_change: selectedStudent.force_password_change ?? false,
           is_active: selectedStudent.is_active,
         })
         .eq('id', selectedStudent.id);
 
-      if (error) throw error;
+      if (error) {
+        // Handle unique constraint on reg_number gracefully
+        const msg = (error.message || '').toString().toLowerCase();
+        const details = (error.details || '').toString().toLowerCase();
+        if (
+          error.code === '23505' ||
+          msg.includes('duplicate') ||
+          msg.includes('unique') ||
+          details.includes('duplicate') ||
+          details.includes('already exist') ||
+          details.includes('already exists')
+        ) {
+          showError('Registration number already exists. Choose another one.');
+          setEditLoading(false);
+          return;
+        }
+        throw error;
+      }
 
       success('Student updated successfully');
+      // If admin forced a password change, notify the student
+      try {
+        if (selectedStudent.force_password_change) {
+          await supabase.from('notifications').insert({
+            recipient_id: selectedStudent.id,
+            type: 'force_password',
+            title: 'Password Reset Required',
+            message: 'An administrator has required you to change your password. Please update it on next login.',
+            link: '/change-password',
+          });
+        }
+      } catch (e) {
+        // non-fatal
+        console.warn('Failed to create force-password notification', e);
+      }
       setShowEditModal(false);
       setSelectedStudent(null);
       fetchStudents();
@@ -952,6 +987,17 @@ export default function ManageStudentsPage() {
                 </div>
 
                 <div>
+                  <label className="block text-sm font-medium mb-2 text-white">Reg Number</label>
+                  <input
+                    type="text"
+                    value={selectedStudent.reg_number}
+                    onChange={(e) => setSelectedStudent({ ...selectedStudent, reg_number: e.target.value })}
+                    className="w-full px-4 py-2 rounded-lg text-white focus:outline-none focus:ring-2"
+                    style={{ background: 'rgba(255, 255, 255, 0.05)', border: '1px solid rgba(255, 255, 255, 0.1)' }}
+                  />
+                </div>
+
+                <div>
                   <label className="block text-sm font-medium mb-2 text-white">Email</label>
                   <input
                     type="email"
@@ -1025,6 +1071,22 @@ export default function ManageStudentsPage() {
                   >
                     Cancel
                   </button>
+                  <div className="flex items-center gap-3">
+                    <label className="flex items-center gap-2 text-sm text-white">
+                      <input
+                        type="checkbox"
+                        checked={!!selectedStudent.force_password_change}
+                        onChange={(e) => setSelectedStudent({ ...selectedStudent, force_password_change: e.target.checked })}
+                        disabled={!hasPermission('can_manage_students')}
+                        className="w-4 h-4"
+                      />
+                      <span>Force password change</span>
+                    </label>
+                    {!hasPermission('can_manage_students') && (
+                      <span className="text-xs text-yellow-300">(Requires manage-students permission)</span>
+                    )}
+                  </div>
+
                   <button
                     onClick={handleEditStudent}
                     disabled={editLoading}
