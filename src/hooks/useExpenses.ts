@@ -3,10 +3,11 @@ import type { CreateExpensePayload } from '../services/expenseService'
 import { createExpense, fetchExpenses } from '../services/expenseService'
 
 export function useExpenses() {
-  const [expenses, setExpenses] = useState<any[]>([])
+  const [expenses, setExpenses] = useState<unknown[]>([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<Error | null>(null)
 
+  
   const load = useCallback(async (limit = 50) => {
     setLoading(true)
     setError(null)

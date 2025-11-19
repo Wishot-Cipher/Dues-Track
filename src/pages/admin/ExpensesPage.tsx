@@ -1,4 +1,3 @@
-import React from 'react'
 import { motion } from 'framer-motion'
 // import navigate not needed; using history.back() for custom back button
 import GlassCard from '@/components/ui/GlassCard'
