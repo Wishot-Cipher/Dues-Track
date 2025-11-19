@@ -20,6 +20,7 @@ import WaivePaymentPage from '@/pages/admin/WaivePaymentPage';
 import ScanQRCodePage from '@/pages/admin/ScanQRCodePage';
 import ManageStudentsPage from '@/pages/admin/ManageStudentsPage';
 import AdminCollectedPage from '@/pages/admin/AdminCollectedPage';
+import ExpensesPage from '@/pages/admin/ExpensesPage';
 
 function App() {
   return (
@@ -159,6 +160,15 @@ function App() {
               element={
                 <ProtectedRoute requireAdmin>
                   <AdminCollectedPage />
+                </ProtectedRoute>
+              }
+            />
+            {/* Protected - Admin: Expenses */}
+            <Route
+              path="/admin/expenses"
+              element={
+                <ProtectedRoute requiredPermission="can_manage_students">
+                  <ExpensesPage />
                 </ProtectedRoute>
               }
             />

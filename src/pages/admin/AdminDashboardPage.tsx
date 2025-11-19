@@ -22,6 +22,7 @@ import {
   QrCode,
 } from 'lucide-react';
 import Footer from '@/components/Footer';
+// ExpenseList removed from dashboard; use dedicated Expenses page instead
 
 interface AdminStats {
   totalStudents: number;
@@ -539,6 +540,16 @@ export default function AdminDashboardPage() {
                 <span className="text-white font-medium">Manage Students</span>
               </button>
               )}
+              {hasPermission('can_manage_students') && (
+              <button
+                onClick={() => navigate('/admin/expenses')}
+                className="flex items-center gap-3 p-4 rounded-lg transition-all"
+                style={{ background: 'rgba(255, 255, 255, 0.05)' }}
+              >
+                <FileText className="w-5 h-5" style={{ color: colors.primary }} />
+                <span className="text-white font-medium">Expenses</span>
+              </button>
+              )}
               {hasPermission('can_approve_payments') && (
               <button
                 onClick={() => navigate('/admin/waive-payment')}
@@ -551,6 +562,33 @@ export default function AdminDashboardPage() {
               )}
             </div>
           </GlassCard>
+        </motion.div>
+
+        {/* Expenses - quick link + list (admin features) */}
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.85 }}
+        >
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+            <div className="lg:col-span-1">
+              <GlassCard>
+                <h3 className="text-lg font-semibold text-white mb-2">Record Expense</h3>
+                <p className="text-sm mb-4" style={{ color: colors.textSecondary }}>Record a new expense in the dedicated expenses page.</p>
+                <div className="flex">
+                  <button
+                    onClick={() => navigate('/admin/expenses')}
+                    className="flex items-center gap-2 px-4 py-2 rounded-lg font-medium text-white transition-all w-full"
+                    style={{ background: 'linear-gradient(90deg, rgba(255,104,3,1), rgba(255,160,64,1))' }}
+                  >
+                    <FileText className="w-5 h-5" />
+                    <span>Go to Expenses</span>
+                  </button>
+                </div>
+              </GlassCard>
+            </div>
+            {/* expense list removed from dashboard to keep the view focused; use /admin/expenses */}
+          </div>
         </motion.div>
       </div>
 
