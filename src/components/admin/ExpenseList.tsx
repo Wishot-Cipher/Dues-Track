@@ -1,4 +1,4 @@
-import React, { useState } from 'react'
+import { useState } from 'react'
 import GlassCard from '@/components/ui/GlassCard'
 import { colors, gradients } from '@/config/colors'
 import { useExpenses } from '@/hooks/useExpenses'
@@ -17,7 +17,8 @@ interface Expense {
 }
 
 export default function ExpenseList() {
-  const { expenses, loading, error } = useExpenses()
+  // ensure expenses is typed so TypeScript knows map will receive Expense items
+  const { expenses, loading, error } = useExpenses() as { expenses: Expense[]; loading: boolean; error?: any }
   const { hasPermission } = useAuth()
   const toast = useToast()
   const [selected, setSelected] = useState<Expense | null>(null)
@@ -33,16 +34,18 @@ export default function ExpenseList() {
     )
   }
 
+  const expenseList = expenses || []
+
   return (
     <GlassCard className="p-4">
       <div className="text-white">
         <h2 className="text-lg font-semibold mb-3">Recent Expenses</h2>
         {loading && <div style={{ color: colors.textSecondary }}>Loading...</div>}
         {error && <div className="text-red-500">Failed to load expenses</div>}
-        {!loading && expenses.length === 0 && <div className="text-sm" style={{ color: colors.textSecondary }}>No expenses recorded yet.</div>}
+        {!loading && expenseList.length === 0 && <div className="text-sm" style={{ color: colors.textSecondary }}>No expenses recorded yet.</div>}
 
       <ul className="space-y-3 mt-3">
-        {expenses.map((exp: Expense) => (
+        {expenseList.map((exp: Expense) => (
           <li key={exp.id} className="border rounded p-3" style={{ borderColor: colors.borderLight }}>
             <div className="flex justify-between items-start">
               <div>
