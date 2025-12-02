@@ -1,414 +1,398 @@
 import { useEffect, useState, useCallback } from 'react';
-// import { motion } from 'framer-motion';
+import { motion } from 'framer-motion';
 import { useNavigate } from 'react-router-dom';
 import GlassCard from '@/components/ui/GlassCard';
-import { useAuth } from '@/hooks/useAuth';
 import { supabase } from '@/config/supabase';
 import { colors } from '@/config/colors';
 import Footer from '@/components/Footer';
 import { formatCurrency, formatDate } from '@/utils/formatters';
-import { ChevronDown, ChevronUp, ArrowLeft } from 'lucide-react';
+import { ArrowLeft, Users, Wallet, TrendingUp, Filter, Search, Download, ChevronLeft, ChevronRight } from 'lucide-react';
 
-interface CategorySummary {
-  category: string;
-  total: number;
-  expenses: number;
-  net: number;
-  breakdown: { title: string; total: number }[];
-  count?: number;
-}
-
-interface _PaymentWithType {
-  amount: number;
-  transaction_ref?: string | null;
-  payment_types?: { title?: string; category?: string } | { title?: string; category?: string }[];
-  status?: string | null;
-}
-
-interface PaymentWithRelations extends _PaymentWithType {
+interface StudentPayment {
   id: string;
-  students?: { full_name?: string; reg_number?: string };
-  created_at?: string;
-  student_id?: string;
+  student_id: string;
+  student_name: string;
+  reg_number: string;
+  is_active: boolean;
+  payments: {
+    id: string;
+    amount: number;
+    category: string;
+    payment_type: string;
+    transaction_ref: string;
+    status: string;
+    created_at: string;
+  }[];
+  total_paid: number;
+  payment_count: number;
+  categories_paid: string[];
+  has_paid: boolean;
+}
+
+interface CategoryExpenses {
+  category: string;
+  total_collected: number;
+  total_expenses: number;
+  net_balance: number;
+  payment_count: number;
 }
 
 export default function AdminCollectedPage() {
   const navigate = useNavigate();
-  const { hasPermission } = useAuth();
   const [loading, setLoading] = useState(true);
-  const [categories, setCategories] = useState<CategorySummary[]>([]);
-  const [expanded, setExpanded] = useState<Record<string, boolean>>({});
-  const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
-  const [categoryPayments, setCategoryPayments] = useState<PaymentWithRelations[]>([]);
-  const [studentTotals, setStudentTotals] = useState<{ name: string; reg: string; total: number; count: number; id?: string; hasApproved?: boolean; is_active?: boolean }[]>([]);
-  const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'paid' | 'inactive'>('all');
-  const [studentFilter, setStudentFilter] = useState<string | null>(null);
-  // include pending and partial payments separately so admin can toggle them
-  const [includePending, setIncludePending] = useState(true);
-  const [includePartial, setIncludePartial] = useState(true);
-  const [selectedTypeTitle, setSelectedTypeTitle] = useState<string | null>(null);
-  const [catLoading, setCatLoading] = useState(false);
-  const [currentPage, setCurrentPage] = useState(1);
-  const itemsPerPage = 8;
+  const [studentPayments, setStudentPayments] = useState<StudentPayment[]>([]);
+  const [allStudents, setAllStudents] = useState<StudentPayment[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
-  // expensesLoading state removed — expenses are optional and not used in the UI
-  // developer-only debug removed from UI — keep only dev logs below
+  const [categoryFilter, setCategoryFilter] = useState<string>('all');
+  const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'inactive'>('all');
+  const [paymentFilter, setPaymentFilter] = useState<'all' | 'paid' | 'unpaid'>('all');
+  const [currentPage, setCurrentPage] = useState(1);
+  const itemsPerPage = 10;
 
-  const fetchCollectedByCategory = useCallback(async () => {
+  // Summary stats
+  const [totalCollected, setTotalCollected] = useState(0);
+  const [totalExpenses, setTotalExpenses] = useState(0);
+  const [netBalance, setNetBalance] = useState(0);
+  const [totalStudentsPaid, setTotalStudentsPaid] = useState(0);
+  const [totalStudentsUnpaid, setTotalStudentsUnpaid] = useState(0);
+  const [categoriesBreakdown, setCategoriesBreakdown] = useState<CategoryExpenses[]>([]);
+
+  const fetchStudentPayments = useCallback(async () => {
     try {
       setLoading(true);
 
-      // Fetch payments with chosen statuses — include pending and partial separately
-      const statuses = ['approved'];
-        if (includePending) {
-          statuses.push('pending');
-        }
-        if (includePartial) {
-          statuses.push('partial');
-        }
-      const { data: paymentsData } = await supabase
+      // Fetch ALL students first
+      const { data: studentsData, error: studentsError } = await supabase
+        .from('students')
+        .select('id, full_name, reg_number, is_active')
+        .order('full_name', { ascending: true });
+
+      if (studentsError) throw studentsError;
+
+      // Fetch all approved payments with student and payment type details
+      const { data: paymentsData, error } = await supabase
         .from('payments')
-        .select(`amount, transaction_ref, status, payment_types (title, category)`, { count: 'exact' })
-        .in('status', statuses)
+        .select(`
+          id,
+          student_id,
+          amount,
+          transaction_ref,
+          status,
+          created_at,
+          students!payments_student_id_fkey (
+            id,
+            full_name,
+            reg_number,
+            is_active
+          ),
+          payment_types (
+            id,
+            title,
+            category
+          )
+        `)
+        .in('status', ['approved', 'pending', 'partial'])
+        .not('transaction_ref', 'like', 'WAIVED-%')
         .order('created_at', { ascending: false });
 
-      if (import.meta.env.DEV) {
-        console.log('DEV: fetchCollectedByCategory — statuses:', statuses, 'payments fetched:', (paymentsData || []).length);
-        console.log('DEV: first 5 payments (raw):', (paymentsData || []).slice(0, 5));
-      }
+      if (error) throw error;
 
-      // Fetch all expenses (guard if table missing)
-      let expensesData: unknown[] = [];
-      try {
-        const { data: expensesDataRes, error: expensesError } = await supabase
-          .from('expenses')
-          .select(`amount, payment_types (category)`);
-        if (expensesError) {
-          console.warn('Expenses query error, continuing without expenses', expensesError);
-          expensesData = [];
-        } else {
-          expensesData = expensesDataRes || [];
-        }
-      } catch (e) {
-        console.warn('Expenses table missing or query failed, continuing without expenses', e);
-        expensesData = [];
-      }
+      // Fetch all expenses with better error handling
+      // Must specify which relationship to use since expenses has 2 FKs to payment_types
+      const { data: expensesData, error: expensesError } = await supabase
+        .from('expenses')
+        .select(`
+          id,
+          amount,
+          payment_type_id,
+          status,
+          title,
+          description,
+          payment_types!expenses_payment_type_id_fkey (
+            id,
+            category,
+            title
+          )
+        `)
+        .in('status', ['approved', 'pending']); // Include pending to show all spent money
 
-      // Filter out waived amounts (transaction_ref starting with WAIVED-)
-      type PTRec = { id: string; title?: string; category?: string };
-      type PaymentRec = _PaymentWithType & { payment_type_id?: string; payment_types?: PTRec | PTRec[] };
-      // Payment shapes from supabase may not be exact; cast via unknown to avoid strict overlap errors
-      const payments = (paymentsData || []) as unknown as PaymentRec[];
-      const filteredPayments = payments.filter((p) => !p.transaction_ref?.startsWith('WAIVED-'));
-
-      // Ensure we can determine a payment type/category even if the joined relation is missing
-      const paymentTypeIds = Array.from(new Set(filteredPayments.map(p => p.payment_type_id).filter(Boolean) as string[]));
-      let ptMap = new Map<string, PTRec>();
-      if (paymentTypeIds.length > 0) {
-        try {
-          const { data: ptData } = await supabase
-            .from('payment_types')
-            .select('id, title, category')
-            .in('id', paymentTypeIds);
-          const arr = (ptData || []) as PTRec[];
-          ptMap = new Map(arr.map(t => [t.id, t] as [string, PTRec]));
-        } catch (e) {
-          console.warn('Failed to fetch payment_types for category mapping', e);
-        }
+      if (expensesError) {
+        console.warn('Error fetching expenses:', expensesError);
       }
 
       const expenses = expensesData || [];
-      type ExpenseRecLocal = { payment_types?: PTRec[] | PTRec | undefined; amount?: string | number };
+      
+      if (import.meta.env.DEV) {
+        console.log('DEV: Fetched expenses:', expenses.length, expenses);
+      }
 
-      const map = new Map<string, CategorySummary>();
+      // Initialize all students (including those who haven't paid)
+      const studentMap = new Map<string, StudentPayment>();
+      
+      studentsData?.forEach((student) => {
+        studentMap.set(student.id, {
+          id: student.id,
+          student_id: student.id,
+          student_name: student.full_name || 'Unknown',
+          reg_number: student.reg_number || '',
+          is_active: student.is_active || false,
+          payments: [],
+          total_paid: 0,
+          payment_count: 0,
+          categories_paid: [],
+          has_paid: false,
+        });
+      });
 
-      // Aggregate payments by category
-      for (const p of filteredPayments) {
-        const ptRel = Array.isArray(p.payment_types) ? p.payment_types[0] : p.payment_types;
-        const pt = ptRel || (p.payment_type_id ? ptMap.get(p.payment_type_id) : undefined);
-        const category = pt?.category || 'Other';
-        const title = pt?.title || 'Unknown';
-        const amount = Number(p.amount || 0);
+      interface PaymentData {
+        id: string;
+        student_id: string;
+        amount: number;
+        transaction_ref: string;
+        status: string;
+        created_at: string;
+        students: {
+          id: string;
+          full_name: string;
+          reg_number: string;
+          is_active: boolean;
+        }[] | {
+          id: string;
+          full_name: string;
+          reg_number: string;
+          is_active: boolean;
+        } | null;
+        payment_types: {
+          id: string;
+          title: string;
+          category: string;
+        }[] | {
+          id: string;
+          title: string;
+          category: string;
+        } | null;
+      }
 
-        if (!map.has(category)) {
-          map.set(category, { category, total: 0, expenses: 0, net: 0, breakdown: [] });
+      paymentsData?.forEach((payment: PaymentData) => {
+        const student = Array.isArray(payment.students) ? payment.students[0] : payment.students;
+        const paymentType = Array.isArray(payment.payment_types) ? payment.payment_types[0] : payment.payment_types;
+        
+        if (!student) return;
+
+        const studentId = student.id;
+        const category = paymentType?.category || 'Other';
+        const paymentTypeName = paymentType?.title || 'Unknown';
+
+        if (studentMap.has(studentId)) {
+          const studentData = studentMap.get(studentId)!;
+          studentData.has_paid = true;
+          studentData.payments.push({
+            id: payment.id,
+            amount: Number(payment.amount || 0),
+            category,
+            payment_type: paymentTypeName,
+            transaction_ref: payment.transaction_ref || '',
+            status: payment.status || 'pending',
+            created_at: payment.created_at,
+          });
+          studentData.total_paid += Number(payment.amount || 0);
+          studentData.payment_count += 1;
+          
+          if (!studentData.categories_paid.includes(category)) {
+            studentData.categories_paid.push(category);
+          }
         }
-        const entry = map.get(category)!;
-        entry.total += amount;
-        entry.count = (entry.count || 0) + 1;
+      });
 
-        // breakdown by title
-        const byTitle = entry.breakdown.find(b => b.title === title);
-        if (byTitle) byTitle.total += amount;
-        else entry.breakdown.push({ title, total: amount });
+      const studentsArray = Array.from(studentMap.values());
+      const paidStudents = studentsArray.filter(s => s.has_paid).sort((a, b) => b.total_paid - a.total_paid);
+      const unpaidStudents = studentsArray.filter(s => !s.has_paid).sort((a, b) => a.student_name.localeCompare(b.student_name));
+      
+      setAllStudents(studentsArray);
+      setStudentPayments(paidStudents);
+
+      // Calculate summary stats
+      const totalCollectedAmount = paidStudents.reduce((sum, s) => sum + s.total_paid, 0);
+      setTotalCollected(totalCollectedAmount);
+      setTotalStudentsPaid(paidStudents.length);
+      setTotalStudentsUnpaid(unpaidStudents.length);
+
+      // Calculate total expenses
+      const totalExpensesAmount = expenses.reduce((sum, expense: { amount?: number | string }) => {
+        const amount = Number(expense.amount || 0);
+        return sum + amount;
+      }, 0);
+      setTotalExpenses(totalExpensesAmount);
+      setNetBalance(totalCollectedAmount - totalExpensesAmount);
+
+      if (import.meta.env.DEV) {
+        console.log('DEV: Total collected:', totalCollectedAmount);
+        console.log('DEV: Total expenses:', totalExpensesAmount);
+        console.log('DEV: Net balance:', totalCollectedAmount - totalExpensesAmount);
       }
 
-      // Aggregate expenses by category
-      const expensesArr = (expenses as ExpenseRecLocal[]);
-      for (const e of expensesArr) {
-        const pt = Array.isArray(e.payment_types) ? e.payment_types[0] : e.payment_types;
-        const category = pt?.category || 'Other';
-        const amount = Number(e.amount || 0);
+      // Category breakdown with expenses
+      const categoryMap = new Map<string, CategoryExpenses>();
+      
+      // Add collected amounts
+      paidStudents.forEach(student => {
+        student.payments.forEach(payment => {
+          if (!categoryMap.has(payment.category)) {
+            categoryMap.set(payment.category, {
+              category: payment.category,
+              total_collected: 0,
+              total_expenses: 0,
+              net_balance: 0,
+              payment_count: 0,
+            });
+          }
+          const cat = categoryMap.get(payment.category)!;
+          cat.total_collected += payment.amount;
+          cat.payment_count += 1;
+        });
+      });
 
-        if (!map.has(category)) {
-          map.set(category, { category, total: 0, expenses: 0, net: 0, breakdown: [] });
+      // Add expenses to category breakdown
+      interface ExpenseRecord {
+        id?: string;
+        amount?: number | string;
+        payment_type_id?: string;
+        payment_types?: { id?: string; category?: string; title?: string }[] | { id?: string; category?: string; title?: string } | null;
+      }
+
+      // Fetch payment types for expenses that don't have the relation
+      const expensePaymentTypeIds = expenses
+        .filter((e: ExpenseRecord) => e.payment_type_id && !e.payment_types)
+        .map((e: ExpenseRecord) => e.payment_type_id)
+        .filter(Boolean) as string[];
+
+      const paymentTypesMap = new Map<string, { category: string; title: string }>();
+      if (expensePaymentTypeIds.length > 0) {
+        const { data: paymentTypesData } = await supabase
+          .from('payment_types')
+          .select('id, category, title')
+          .in('id', expensePaymentTypeIds);
+        
+        if (paymentTypesData) {
+          paymentTypesData.forEach(pt => {
+            paymentTypesMap.set(pt.id, { category: pt.category, title: pt.title });
+          });
         }
-        const entry = map.get(category)!;
-        entry.expenses += amount;
       }
 
-      // Calculate net for each category
-      for (const entry of map.values()) {
-        entry.net = entry.total - entry.expenses;
+      expenses.forEach((expense: ExpenseRecord) => {
+        const pt = Array.isArray(expense.payment_types) ? expense.payment_types[0] : expense.payment_types;
+        let category = pt?.category || 'Other';
+        
+        // Fallback to payment_type_id lookup if relation is missing
+        if (!category || category === 'Other') {
+          if (expense.payment_type_id && paymentTypesMap.has(expense.payment_type_id)) {
+            category = paymentTypesMap.get(expense.payment_type_id)!.category;
+          }
+        }
+        
+        const amount = Number(expense.amount || 0);
+
+        if (!categoryMap.has(category)) {
+          categoryMap.set(category, {
+            category,
+            total_collected: 0,
+            total_expenses: 0,
+            net_balance: 0,
+            payment_count: 0,
+          });
+        }
+        const cat = categoryMap.get(category)!;
+        cat.total_expenses += amount;
+      });
+
+      if (import.meta.env.DEV) {
+        console.log('DEV: Category breakdown with expenses:', Array.from(categoryMap.values()));
       }
 
-      // Convert map into array and sort by total
-      const arr = Array.from(map.values()).sort((a, b) => b.total - a.total);
-      setCategories(arr);
-      // initialize tags to allow quick selection
-      if (arr.length > 0) setSelectedCategory(arr[0].category);
+      // Calculate net balance for each category
+      categoryMap.forEach(cat => {
+        cat.net_balance = cat.total_collected - cat.total_expenses;
+      });
+
+      const categoriesArray = Array.from(categoryMap.values())
+        .sort((a, b) => b.total_collected - a.total_collected);
+      setCategoriesBreakdown(categoriesArray);
+
     } catch (error) {
-      console.error('Error fetching collected by category:', error);
+      console.error('Error fetching student payments:', error);
     } finally {
       setLoading(false);
     }
-  }, [includePending, includePartial]);
-
-  useEffect(() => {
-    void fetchCollectedByCategory();
-  }, [fetchCollectedByCategory]);
-
-  const fetchExpensesForCategory = useCallback(async (category: string) => {
-    try {
-      // PostgREST (used by Supabase) can return 400 for certain relation filters.
-      // Fetch the expenses with the `payment_types` relation and handle errors
-      // from the Supabase client gracefully.
-      const { data, error } = await supabase
-        .from('expenses')
-        .select(`*, payment_types (title, category)`)
-        .order('expense_date', { ascending: false });
-
-      if (error) {
-        // If the table doesn't exist or the request was bad, log and continue.
-        console.warn('Expenses query error, returning empty list for category:', error);
-        return;
-      }
-
-      const allExpenses = data || [];
-      type ExpenseRec = { payment_types?: { title?: string; category?: string }[] | { title?: string; category?: string } };
-      const filtered = (allExpenses as ExpenseRec[]).filter((e) => {
-        const pt = Array.isArray(e.payment_types) ? e.payment_types[0] : e.payment_types;
-        return (pt?.category || 'Other') === category;
-      });
-
-      // Note: we no longer store filtered expenses in component state because
-      // the component does not read that state; callers can extend this function
-      // to return the filtered data if needed.
-      return filtered;
-    } catch (error) {
-      console.error('Error fetching expenses for category:', error);
-      return [];
-    } finally {
-      // no cleanup required here; include a no-op to avoid an empty block
-      void 0;
-    }
   }, []);
-  const fetchPaymentsForCategory = useCallback(async (category: string, typeTitle?: string | null) => {
-    try {
-      setCatLoading(true);
-      const statuses = ['approved'];
-      if (includePending) statuses.push('pending');
-      if (includePartial) statuses.push('partial');
-      // Disambiguate the `students` relation — use the FK relation alias so PostgREST
-      // does not complain when multiple student relations exist on payments.
-      const { data, error } = await supabase
-        .from('payments')
-        .select(`*, students!payments_student_id_fkey (full_name, reg_number, is_active), payment_types (title, category), student_id, status`)
-        .in('status', statuses)
-        .order('created_at', { ascending: false });
-
-        if (import.meta.env.DEV) {
-            console.log('DEV: payments query returned', (data || []).length, 'rows; error:', error);
-            if (error) console.warn('payments query error', error);
-          // show the first payment so we can inspect the joined student field name
-          if ((data || []).length > 0) console.log('DEV: payment with joined students keys', Object.keys((data || [])[0]));
-        }
-
-      // Fallback: when joins cause RLS or other issues the above may return 0 rows.
-      // Try a minimal query (no joins) to detect RLS/hide behavior.
-      type SimplePayment = { id: string; student_id?: string; payment_type_id?: string; amount?: number; transaction_ref?: string; status?: string };
-      let fallbackData: SimplePayment[] | null = null;
-      if ((!data || (data as unknown as SimplePayment[]).length === 0) && !error) {
-        try {
-          const { data: simple, error: simpleError } = await supabase
-            .from('payments')
-            .select('id, student_id, payment_type_id, amount, transaction_ref, status')
-            .in('status', statuses)
-            .order('created_at', { ascending: false });
-          fallbackData = simple || null;
-          if (import.meta.env.DEV) {
-            console.log('DEV: fallback payments (no joins) returned', (fallbackData || []).length, 'rows; error:', simpleError);
-          }
-        } catch (e) {
-          console.warn('DEV: fallback minimal payments query failed', e);
-        }
-      }
-
-      if (import.meta.env.DEV) {
-        console.log('DEV: fetchPaymentsForCategory — category:', category, 'typeTitle:', typeTitle, 'statuses:', statuses);
-        console.log('DEV: payments query result count:', (data || []).length);
-      }
-
-      const payments = ((data && (data as PaymentWithRelations[])) || (fallbackData ? (fallbackData as SimplePayment[] as unknown as PaymentWithRelations[]) : []));
-      // filter by category client-side because Supabase doesn't let us query joined fields directly
-      // Fetch payment types for this category (fallback to match by payment_type_id if relation missing)
-      const { data: typesForCategory } = await supabase
-        .from('payment_types')
-        .select('id, title, category')
-        .eq('category', category);
-
-      if (import.meta.env.DEV) {
-        console.log('DEV: typesForCategory:', typesForCategory);
-      }
-
-      type PaymentTypeRec = { id: string; title?: string; category?: string };
-      const typesArr = (typesForCategory || []) as PaymentTypeRec[];
-      const typeIdSet = new Set(typesArr.map((t) => t.id));
-
-      let filtered = payments.filter(p => {
-        const pt = Array.isArray(p.payment_types) ? p.payment_types[0] : p.payment_types;
-        const paymentTypeId = (p as unknown as { payment_type_id?: string }).payment_type_id;
-        // Match only if the payment_types relation category equals the selected category,
-        // or fallback to matching by payment_type_id when the relation is missing.
-        const categoryMatch = (pt?.category === category) || (paymentTypeId ? typeIdSet.has(paymentTypeId) : false);
-          if (import.meta.env.DEV) {
-          // log only a few to avoid too much spam
-          if (!pt && paymentTypeId) console.debug('no joined payment_types for payment', p.id, 'falling back to id', paymentTypeId);
-          if (pt && pt.category !== category) console.debug('joined payment_type wrong category', p.id, pt.category, 'expected', category);
-        }
-        return categoryMatch && !p.transaction_ref?.startsWith('WAIVED-');
-      });
-
-      if (import.meta.env.DEV) {
-        console.log('DEV: payments filtered by category:', filtered.length, 'of', payments.length);
-        console.log('DEV: first 5 filtered (raw):', filtered.slice(0, 5));
-      }
-
-      // If a specific payment type title is selected, further filter to that type (case-insensitive)
-      if (typeTitle) {
-        filtered = filtered.filter(p => {
-          const pt = Array.isArray(p.payment_types) ? p.payment_types[0] : p.payment_types;
-          return (pt?.title || '').toLowerCase() === typeTitle.toLowerCase();
-        });
-      }
-      // If some payments lack the `students` relation (RLS or join issue), fetch those students by id
-      type PaymentLike = PaymentWithRelations & { payment_type_id?: string; student_id?: string };
-      const missingStudentIds = Array.from(new Set(filtered
-        .map((p: PaymentLike) => p.student_id)
-        .filter((id) => id && !(filtered.find((fp: PaymentLike) => fp.student_id === id)?.students))
-      )) as string[];
-
-      if (import.meta.env.DEV) {
-        console.log('DEV: missing student ids (no joined students in payments):', missingStudentIds);
-      }
-
-      if (missingStudentIds.length > 0) {
-        try {
-          const { data: fetchedStudents, error: studentsError } = await supabase
-            .from('students')
-            .select('id, full_name, reg_number, is_active')
-            .in('id', missingStudentIds as string[]);
-          if (studentsError) {
-            console.warn('Failed to fetch missing students', studentsError);
-          } else if (fetchedStudents) {
-            if (import.meta.env.DEV) {
-              console.log('DEV: fetchedStudents for missing student ids:', fetchedStudents);
-            }
-            const byId = new Map<string, { id: string; full_name?: string; reg_number?: string; is_active?: boolean }>();
-            (fetchedStudents as { id: string; full_name?: string; reg_number?: string; is_active?: boolean }[]).forEach(s => byId.set(s.id, s));
-            // attach fetched student info to payments that lack it
-            filtered = filtered.map((p: PaymentLike) => {
-              if ((!p.students || !p.students.reg_number) && p.student_id) {
-                const s = byId.get(p.student_id);
-                if (s) return { ...p, students: { full_name: s.full_name, reg_number: s.reg_number, is_active: s.is_active } } as PaymentWithRelations;
-              }
-              return p;
-            });
-          }
-        } catch (e) {
-          console.warn('Error fetching missing students', e);
-        }
-      }
-
-      // Build debug output for developer visibility — do not create a UI element for this
-      if (import.meta.env.DEV) {
-        console.debug('DEV: payments filtered for category', category, 'count', (filtered || []).length);
-        // show a small sample for inspection
-        console.debug('DEV: sample payments', (filtered || []).slice(0, 6).map(p => ({ id: p.id, student: p.students?.reg_number ?? p.student_id, status: p.status })));
-      }
-      setCategoryPayments(filtered);
-      // Aggregate by student for quick totals per student in this category
-      type LocalPayment = PaymentWithRelations & { status?: string; students?: { full_name?: string; reg_number?: string; is_active?: boolean } };
-      const map = new Map<string, { name: string; reg: string; total: number; count: number; id?: string; hasApproved?: boolean; is_active?: boolean }>();
-      for (const p of filtered as LocalPayment[]) {
-        const sid = p.student_id || p.students?.reg_number || p.id;
-        const name = p.students?.full_name || 'Unknown';
-        const reg = p.students?.reg_number || '';
-        const amt = Number(p.amount || 0);
-        const approved = (p.status || '').toLowerCase() === 'approved';
-        const active = !!p.students?.is_active;
-        if (!map.has(sid)) map.set(sid, { name, reg, total: 0, count: 0, id: sid, hasApproved: approved, is_active: active });
-        const entry = map.get(sid)!;
-        entry.total += amt;
-        entry.count += 1;
-        entry.hasApproved = entry.hasApproved || approved;
-        entry.is_active = entry.is_active || active;
-      }
-      const totalsArr = Array.from(map.values()).sort((a, b) => b.total - a.total);
-      setStudentTotals(totalsArr);
-      setStudentFilter(null);
-      setCurrentPage(1);
-    } catch (err) {
-      console.error('Error fetching payments for category', err);
-      setCategoryPayments([]);
-    } finally {
-      setCatLoading(false);
-    }
-  }, [includePending, includePartial]);
 
   useEffect(() => {
-    if (!selectedCategory) return;
-    // re-fetch payments when either category or selected payment-type title changes
-    void fetchPaymentsForCategory(selectedCategory, selectedTypeTitle);
-    void fetchExpensesForCategory(selectedCategory);
-  }, [selectedCategory, selectedTypeTitle, fetchPaymentsForCategory, fetchExpensesForCategory]);
+    fetchStudentPayments();
+  }, [fetchStudentPayments]);
 
-  // Filter and Paginate Category Payments
-  const filteredPayments = categoryPayments.filter(p => {
-    if (studentFilter) {
-      const reg = p.students?.reg_number || '';
-      if (reg !== studentFilter) return false;
+  // Filter students
+  const studentsToFilter = paymentFilter === 'unpaid' 
+    ? allStudents.filter(s => !s.has_paid)
+    : paymentFilter === 'paid'
+    ? allStudents.filter(s => s.has_paid)
+    : allStudents;
+
+  const filteredStudents = studentsToFilter.filter(student => {
+    // Search filter
+    if (searchTerm) {
+      const search = searchTerm.toLowerCase();
+      if (
+        !student.student_name.toLowerCase().includes(search) &&
+        !student.reg_number.toLowerCase().includes(search)
+      ) {
+        return false;
+      }
     }
-    if (!searchTerm) return true;
-    const name = p.students?.full_name || '';
-    const typeTitle = Array.isArray(p.payment_types) ? p.payment_types[0]?.title : p.payment_types?.title;
-    return (
-      name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      typeTitle?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      (p.transaction_ref || '').toLowerCase().includes(searchTerm.toLowerCase())
-    );
+
+    // Category filter
+    if (categoryFilter !== 'all' && !student.categories_paid.includes(categoryFilter)) {
+      return false;
+    }
+
+    // Status filter
+    if (statusFilter === 'active' && !student.is_active) return false;
+    if (statusFilter === 'inactive' && student.is_active) return false;
+
+    return true;
   });
 
-  const totalPages = Math.max(1, Math.ceil(filteredPayments.length / itemsPerPage));
-  const startIndex = (currentPage - 1) * itemsPerPage;
-  const endIndex = startIndex + itemsPerPage;
-  const paginatedPayments = filteredPayments.slice(startIndex, endIndex);
+  // Pagination
+  const totalPages = Math.ceil(filteredStudents.length / itemsPerPage);
+  const paginatedStudents = filteredStudents.slice(
+    (currentPage - 1) * itemsPerPage,
+    currentPage * itemsPerPage
+  );
+
+  // Export to CSV
+  const exportToCSV = () => {
+    const headers = ['Student Name', 'Reg Number', 'Status', 'Total Paid', 'Payments', 'Categories'];
+    const rows = filteredStudents.map(s => [
+      s.student_name,
+      s.reg_number,
+      s.is_active ? 'Active' : 'Inactive',
+      s.total_paid,
+      s.payment_count,
+      s.categories_paid.join('; '),
+    ]);
+
+    const csv = [headers, ...rows].map(row => row.join(',')).join('\n');
+    const blob = new Blob([csv], { type: 'text/csv' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `student-payments-${new Date().toISOString().split('T')[0]}.csv`;
+    a.click();
+  };
 
   return (
     <div className="min-h-screen py-6 px-4" style={{
-        background: 'radial-gradient(ellipse at top, #1A0E09 0%, #0F0703 100%)',
-      }}
-    >
+      background: 'radial-gradient(ellipse at top, #1A0E09 0%, #0F0703 100%)',
+    }}>
       {/* Background Grid Pattern */}
       <div
         className="absolute inset-0 opacity-20 pointer-events-none"
@@ -424,12 +408,12 @@ export default function AdminCollectedPage() {
       {/* Animated Gradient Orbs */}
       <div className="fixed inset-0 overflow-hidden pointer-events-none">
         <div
-          className="absolute w-[500px] h-[500px] rounded-full blur-[120px] opacity-30 animate-pulse"
+          className="absolute w-[500px] h-[500px] rounded-full blur-[120px] opacity-30"
           style={{
             background: `radial-gradient(circle, ${colors.primary} 0%, transparent 70%)`,
             top: '-10%',
             right: '-5%',
-            animationDuration: '4s',
+            animation: 'pulse 4s ease-in-out infinite',
           }}
         />
         <div
@@ -441,334 +425,522 @@ export default function AdminCollectedPage() {
             animation: 'pulse 6s ease-in-out infinite',
           }}
         />
-        
-        {/* ECE Logo Background - Creative Element */}
-        <div className="hidden lg:block absolute right-0 top-1/2 -translate-y-1/2 w-[600px] h-[600px] opacity-[0.08] pointer-events-none">
-          <img 
-            src="/Ece picture.jpg" 
-            alt="ECE Background"
-            className="w-full h-full object-contain"
-            style={{
-              filter: 'grayscale(0.5) brightness(0.8)',
-              mixBlendMode: 'soft-light',
-            }}
-          />
-        </div>
       </div>
-      <div className="max-w-5xl mx-auto relative z-10 space-y-6">
-        <div className="flex items-center gap-4">
-          <button
-            onClick={() => navigate("/admin/dashboard")}
-                  className="flex items-center justify-center sm:justify-start gap-2 mb-4 px-3 py-2 rounded-lg transition-colors w-auto outline outline-orange-500 "
-                  style={{ color: colors.textSecondary }}
-                  onMouseEnter={(e) =>
-                    (e.currentTarget.style.color = colors.primary)
-                  }
-                  onMouseLeave={(e) =>
-                    (e.currentTarget.style.color = colors.textSecondary)
-                  }
-                >
-            <ArrowLeft className="w-4 h-4" />
-            Back
-          </button>
-          <h1 className="text-2xl font-bold text-white">Collected by Category</h1>
-        </div>
 
-        <GlassCard>
-          <p className="text-sm mb-4" style={{ color: colors.textSecondary }}>
-            A quick summary of amounts collected by payment category. Click a category to view a breakdown of payment types within it.
-            Partial payments are included by default so contributors who paid in instalments show up.
-          </p>
-
-          {/* Permission hint: RLS may hide rows if your admin record lacks global flags */}
-          {!(hasPermission('can_view_analytics') || hasPermission('can_manage_students')) && (
-            <div className="mb-4 p-3 rounded-lg" style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.04)' }}>
-              <p className="text-sm" style={{ color: colors.textSecondary }}>
-                Note: This view only displays approved payments and only the rows you have permission to see. If you expect to see more students/payments, ensure your admin record has <strong>can_view_analytics</strong> or <strong>can_manage_students</strong> enabled.
+      <div className="max-w-7xl mx-auto relative z-10 space-y-6">
+        {/* Header */}
+        <motion.div
+          initial={{ opacity: 0, y: -20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.5 }}
+        >
+          <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3 sm:gap-4 mb-4 sm:mb-6">
+            <button
+              onClick={() => navigate("/admin/dashboard")}
+              className="flex items-center gap-2 px-3 sm:px-4 py-2 rounded-lg transition-all hover:scale-105"
+              style={{
+                background: 'rgba(255,255,255,0.05)',
+                border: `1px solid ${colors.primary}40`,
+                color: colors.textSecondary
+              }}
+            >
+              <ArrowLeft className="w-4 h-4" />
+              <span>Back</span>
+            </button>
+            <div className="flex-1">
+              <h1 className="text-xl sm:text-2xl lg:text-3xl font-bold text-white">Payment Collection Overview</h1>
+              <p className="text-xs sm:text-sm mt-1" style={{ color: colors.textSecondary }}>
+                Detailed breakdown of student payments across all categories
               </p>
             </div>
-          )}
+            <button
+              onClick={exportToCSV}
+              className="flex items-center gap-2 px-3 sm:px-4 py-2 rounded-lg transition-all hover:scale-105 text-sm"
+              style={{
+                background: `linear-gradient(135deg, ${colors.primary}30, ${colors.primary}10)`,
+                border: `1px solid ${colors.primary}60`,
+                color: 'white'
+              }}
+            >
+              <Download className="w-4 h-4" />
+              <span className="hidden sm:inline">Export CSV</span>
+            </button>
+          </div>
 
-          {loading ? (
-            <div className="flex items-center justify-center py-12">
-              <div className="animate-spin rounded-full h-12 w-12 border-4 border-t-transparent" style={{ borderColor: colors.primary, borderTopColor: 'transparent' }} />
-            </div>
-          ) : categories.length === 0 ? (
-            <div className="text-center py-8">
-              <p style={{ color: colors.textSecondary }}>No payments collected yet</p>
-            </div>
-          ) : (
-            <div className="space-y-3">
-              {categories.map(cat => (
-                <div key={cat.category} className="rounded-lg overflow-hidden">
-                  <div className="flex items-center justify-between p-4 cursor-pointer" style={{ background: 'rgba(255,255,255,0.03)' }} onClick={() => setExpanded(prev => ({ ...prev, [cat.category]: !prev[cat.category] }))}>
-                    <div>
-                      <p className="text-sm" style={{ color: colors.textSecondary }}>{cat.category.replace(/_/g, ' ')}</p>
-                      <div className="flex gap-4 text-sm">
-                        <span className="text-green-400">Collected: {formatCurrency(cat.total)}</span>
-                        <span className="text-red-400">Expenses: {formatCurrency(cat.expenses)}</span>
-                        <span className="text-blue-400 font-semibold">Net: {formatCurrency(cat.net)}</span>
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <p className="text-sm font-medium" style={{ color: colors.textSecondary }}>{cat.breakdown.length} types</p>
-                      {expanded[cat.category] ? <ChevronUp className="w-5 h-5" /> : <ChevronDown className="w-5 h-5" />}
-                    </div>
-                  </div>
-
-                  {expanded[cat.category] && (
-                    <div className="p-3 bg-[#0B0B0C] border-t" style={{ borderColor: 'rgba(255,255,255,0.03)' }}>
-                      <div className="space-y-2">
-                        {cat.breakdown.map(b => (
-                          <button
-                            key={b.title}
-                            onClick={() => {
-                              setSelectedCategory(cat.category);
-                              setSelectedTypeTitle(b.title);
-                            }}
-                            className={`w-full text-left flex items-center justify-between p-3 rounded-lg hover:bg-white/5 ${selectedTypeTitle === b.title ? 'outline outline-orange-500' : ''}`}
-                            style={{ background: 'rgba(255,255,255,0.01)' }}
-                          >
-                            <p className="text-sm text-white">{b.title}</p>
-                            <p className="text-sm font-semibold text-white">{formatCurrency(b.total)}</p>
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-                  )}
+          {/* Summary Stats Cards */}
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 sm:gap-4 mb-6">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.9 }}
+              animate={{ opacity: 1, scale: 1 }}
+              transition={{ delay: 0.1 }}
+            >
+              <GlassCard className="relative overflow-hidden">
+                <div className="absolute top-0 right-0 w-16 h-16 sm:w-20 sm:h-20 opacity-10">
+                  <Wallet className="w-full h-full" style={{ color: colors.statusPaid }} />
                 </div>
+                <div className="relative z-10">
+                  <p className="text-[10px] sm:text-xs mb-1" style={{ color: colors.textSecondary }}>Collected</p>
+                  <p className="text-lg sm:text-2xl font-bold text-white">{formatCurrency(totalCollected)}</p>
+                  <p className="text-[10px] sm:text-xs mt-1" style={{ color: colors.accentMint }}>
+                    {studentPayments.reduce((sum, s) => sum + s.payment_count, 0)} pays
+                  </p>
+                </div>
+              </GlassCard>
+            </motion.div>
+
+            <motion.div
+              initial={{ opacity: 0, scale: 0.9 }}
+              animate={{ opacity: 1, scale: 1 }}
+              transition={{ delay: 0.15 }}
+            >
+              <GlassCard className="relative overflow-hidden">
+                <div className="absolute top-0 right-0 w-16 h-16 sm:w-20 sm:h-20 opacity-10">
+                  <TrendingUp className="w-full h-full" style={{ color: colors.statusFailed }} />
+                </div>
+                <div className="relative z-10">
+                  <p className="text-[10px] sm:text-xs mb-1" style={{ color: colors.textSecondary }}>Expenses</p>
+                  <p className="text-lg sm:text-2xl font-bold" style={{ color: totalExpenses > 0 ? colors.statusFailed : colors.textSecondary }}>
+                    {formatCurrency(totalExpenses)}
+                  </p>
+                  <p className="text-[10px] sm:text-xs mt-1" style={{ color: colors.textSecondary }}>
+                    {totalExpenses > 0 ? 'Approved' : 'None yet'}
+                  </p>
+                </div>
+              </GlassCard>
+            </motion.div>
+
+            <motion.div
+              initial={{ opacity: 0, scale: 0.9 }}
+              animate={{ opacity: 1, scale: 1 }}
+              transition={{ delay: 0.2 }}
+            >
+              <GlassCard className="relative overflow-hidden">
+                <div className="absolute top-0 right-0 w-16 h-16 sm:w-20 sm:h-20 opacity-10">
+                  <Wallet className="w-full h-full" style={{ color: netBalance >= 0 ? colors.statusPaid : colors.statusFailed }} />
+                </div>
+                <div className="relative z-10">
+                  <p className="text-[10px] sm:text-xs mb-1" style={{ color: colors.textSecondary }}>Net</p>
+                  <p className="text-lg sm:text-2xl font-bold" style={{ color: netBalance >= 0 ? colors.statusPaid : colors.statusFailed }}>
+                    {formatCurrency(netBalance)}
+                  </p>
+                  <p className="text-[10px] sm:text-xs mt-1" style={{ color: colors.textSecondary }}>
+                    Balance
+                  </p>
+                </div>
+              </GlassCard>
+            </motion.div>
+
+            <motion.div
+              initial={{ opacity: 0, scale: 0.9 }}
+              animate={{ opacity: 1, scale: 1 }}
+              transition={{ delay: 0.25 }}
+            >
+              <GlassCard className="relative overflow-hidden">
+                <div className="absolute top-0 right-0 w-16 h-16 sm:w-20 sm:h-20 opacity-10">
+                  <Users className="w-full h-full" style={{ color: colors.statusPaid }} />
+                </div>
+                <div className="relative z-10">
+                  <p className="text-[10px] sm:text-xs mb-1" style={{ color: colors.textSecondary }}>Paid</p>
+                  <p className="text-lg sm:text-2xl font-bold text-white">{totalStudentsPaid}</p>
+                  <p className="text-[10px] sm:text-xs mt-1" style={{ color: colors.statusPaid }}>
+                    Students
+                  </p>
+                </div>
+              </GlassCard>
+            </motion.div>
+
+            <motion.div
+              initial={{ opacity: 0, scale: 0.9 }}
+              animate={{ opacity: 1, scale: 1 }}
+              transition={{ delay: 0.3 }}
+            >
+              <GlassCard className="relative overflow-hidden">
+                <div className="absolute top-0 right-0 w-16 h-16 sm:w-20 sm:h-20 opacity-10">
+                  <Users className="w-full h-full" style={{ color: colors.statusFailed }} />
+                </div>
+                <div className="relative z-10">
+                  <p className="text-[10px] sm:text-xs mb-1" style={{ color: colors.textSecondary }}>Unpaid</p>
+                  <p className="text-lg sm:text-2xl font-bold" style={{ color: colors.statusFailed }}>{totalStudentsUnpaid}</p>
+                  <p className="text-[10px] sm:text-xs mt-1" style={{ color: colors.textSecondary }}>
+                    Students
+                  </p>
+                </div>
+              </GlassCard>
+            </motion.div>
+          </div>
+        </motion.div>
+
+        {/* Category Breakdown */}
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.4 }}
+        >
+          <GlassCard>
+            <div className="flex items-center gap-2 mb-4">
+              <TrendingUp className="w-5 h-5" style={{ color: colors.primary }} />
+              <h2 className="text-xl font-bold text-white">Category Breakdown</h2>
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
+              {categoriesBreakdown.map((cat, index) => (
+                <motion.button
+                  key={cat.category}
+                  initial={{ opacity: 0, x: -20 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  transition={{ delay: 0.5 + index * 0.05 }}
+                  onClick={() => setCategoryFilter(cat.category)}
+                  className={`p-3 sm:p-4 rounded-lg text-left transition-all hover:scale-[1.02] hover:shadow-lg ${
+                    categoryFilter === cat.category ? 'ring-2 shadow-xl' : ''
+                  }`}
+                  style={{
+                    background: categoryFilter === cat.category
+                      ? `linear-gradient(135deg, ${colors.primary}30, ${colors.primary}10)`
+                      : 'rgba(255,255,255,0.03)',
+                    borderWidth: '1px',
+                    borderStyle: 'solid',
+                    borderColor: categoryFilter === cat.category ? colors.primary : 'rgba(255,255,255,0.1)',
+                  }}
+                >
+                  <p className="text-xs sm:text-sm font-medium capitalize" style={{ color: colors.textSecondary }}>
+                    {cat.category.replace(/_/g, ' ')}
+                  </p>
+                  <p className="text-lg sm:text-xl font-bold text-white mt-1">{formatCurrency(cat.total_collected)}</p>
+                  {cat.total_expenses > 0 || cat.total_collected > 0 ? (
+                    <div className="text-[10px] sm:text-xs mt-1 space-y-0.5">
+                      {cat.total_expenses > 0 && (
+                        <p style={{ color: colors.statusFailed }}>-{formatCurrency(cat.total_expenses)} spent</p>
+                      )}
+                      <p className="font-semibold" style={{ color: cat.net_balance >= 0 ? colors.statusPaid : colors.statusFailed }}>
+                        = {formatCurrency(cat.net_balance)} net
+                      </p>
+                    </div>
+                  ) : (
+                    <p className="text-[10px] sm:text-xs mt-1" style={{ color: colors.textSecondary }}>
+                      No activity
+                    </p>
+                  )}
+                </motion.button>
               ))}
             </div>
-          )}
-        </GlassCard>
-        
-        {/* Category Tags */}
-        <GlassCard>
-          <div className="flex gap-2 overflow-x-auto sm:flex-wrap items-center -mx-2 px-2">
-            {categories.map(cat => (
-              <button
-                key={cat.category}
-                onClick={() => setSelectedCategory(cat.category)}
-                className={`px-2 sm:px-3 py-1 rounded-full text-xs font-medium capitalize transition-all whitespace-nowrap inline-flex items-center gap-2 ${selectedCategory === cat.category ? 'border' : ''}`}
-                aria-pressed={selectedCategory === cat.category}
-                style={{
-                  background: selectedCategory === cat.category ? 'linear-gradient(90deg, rgba(255,104,3,0.15), rgba(255,104,3,0.05))' : 'rgba(255,255,255,0.03)',
-                  borderColor: selectedCategory === cat.category ? 'rgba(255,255,255,0.06)' : 'transparent',
-                  color: selectedCategory === cat.category ? 'white' : 'inherit'
-                }}
-              >
-                <span className="capitalize">{cat.category.replace(/_/g, ' ')}</span>
-                <span className="text-xs font-semibold">{formatCurrency(cat.total)}</span>
-                <span className="w-5 h-5 sm:w-6 sm:h-6 rounded-full flex items-center justify-center text-xs font-bold" style={{ background: colors.statusPaid, color: 'white' }}>{cat.count || 0}</span>
-              </button>
-            ))}
-          </div>
-        </GlassCard>
+          </GlassCard>
+        </motion.div>
 
-        {/* Payments for selected category */}
-        {selectedCategory && (
+        {/* Filters & Search */}
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.6 }}
+        >
           <GlassCard>
-            <div className="flex items-center justify-between mb-3">
-              <div>
-                <h2 className="text-xl font-bold text-white">{selectedCategory.replace(/_/g, ' ')}</h2>
-                <p className="text-sm" style={{ color: colors.textSecondary }}>Showing collected payments for this category</p>
-              </div>
-                      <div className="w-full md:w-48">
+            <div className="flex flex-col gap-4">
+              {/* Search */}
+              <div className="flex-1 relative">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4" style={{ color: colors.textSecondary }} />
                 <input
                   type="text"
-                  placeholder="Search by name, type, txref..."
+                  placeholder="Search by student name or reg number..."
                   value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
-                  className="w-full rounded-lg pl-3 pr-3 py-2 text-sm text-white"
-                  style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.04)' }}
+                  onChange={(e) => {
+                    setSearchTerm(e.target.value);
+                    setCurrentPage(1);
+                  }}
+                  className="w-full pl-10 pr-4 py-2.5 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:ring-2 transition-all"
+                  style={{
+                    background: 'rgba(255,255,255,0.05)',
+                    borderWidth: '1px',
+                    borderStyle: 'solid',
+                    borderColor: 'rgba(255,255,255,0.1)',
+                  }}
                 />
+              </div>
+
+              {/* Payment Filter */}
+              <div className="flex flex-wrap items-center gap-2">
+                <div className="flex items-center gap-1 text-xs sm:text-sm" style={{ color: colors.textSecondary }}>
+                  <Filter className="w-3 h-3 sm:w-4 sm:h-4" />
+                  <span className="hidden sm:inline">Payment:</span>
+                </div>
+                {(['all', 'paid', 'unpaid'] as const).map((filter) => (
+                  <button
+                    key={filter}
+                    onClick={() => {
+                      setPaymentFilter(filter);
+                      setCurrentPage(1);
+                    }}
+                    className={`px-3 sm:px-4 py-1.5 sm:py-2 rounded-lg text-xs sm:text-sm font-medium transition-all hover:shadow-md ${
+                      paymentFilter === filter ? 'scale-105 shadow-lg' : 'hover:scale-[1.02]'
+                    }`}
+                    style={{
+                      background: paymentFilter === filter
+                        ? `linear-gradient(135deg, ${colors.primary}40, ${colors.primary}20)`
+                        : 'rgba(255,255,255,0.05)',
+                      borderWidth: '1px',
+                      borderStyle: 'solid',
+                      borderColor: paymentFilter === filter ? colors.primary : 'rgba(255,255,255,0.1)',
+                      color: paymentFilter === filter ? 'white' : colors.textSecondary,
+                    }}
+                  >
+                    {filter === 'all' ? 'All' : filter === 'paid' ? 'Paid' : 'Not Paid'}
+                    {filter === 'paid' && ` (${totalStudentsPaid})`}
+                    {filter === 'unpaid' && ` (${totalStudentsUnpaid})`}
+                  </button>
+                ))}
               </div>
             </div>
 
-                    {/* Debug removed from UI; use console logs in dev mode to inspect matching */}
-
-                  {selectedTypeTitle && (
-                    <div className="mb-3 flex items-center gap-3">
-                      <div className="px-3 py-1 rounded-full text-sm font-medium" style={{ background: 'rgba(255,255,255,0.03)' }}>{selectedTypeTitle}</div>
-                      <button onClick={() => setSelectedTypeTitle(null)} className="text-sm underline" style={{ color: colors.primary }}>Clear type filter</button>
-                    </div>
-                  )}
-
-                <div className="flex items-center justify-between mb-4">
-                  <div className="flex items-center gap-4">
-                    <label className="flex items-center gap-2 text-sm" style={{ color: colors.textSecondary }}>
-                      <input
-                        type="checkbox"
-                        checked={includePending}
-                        onChange={(e) => setIncludePending(e.target.checked)}
-                        className="w-4 h-4"
-                      />
-                      <span>
-                        <span className="hidden sm:inline">Include pending payments</span>
-                        <span className="sm:hidden">Pending</span>
-                      </span>
-                    </label>
-
-                    <label className="flex items-center gap-2 text-sm" style={{ color: colors.textSecondary }}>
-                      <input
-                        type="checkbox"
-                        checked={includePartial}
-                        onChange={(e) => setIncludePartial(e.target.checked)}
-                        className="w-4 h-4"
-                      />
-                      <span title="Include payments recorded with 'partial' status (installments will be counted)">
-                        <span className="hidden sm:inline">Include partial payments</span>
-                        <span className="sm:hidden">Partial</span>
-                      </span>
-                    </label>
-                  </div>
-                  <div className="text-sm" style={{ color: colors.textSecondary }}>
-                    {studentTotals.length} students • {filteredPayments.length} payments
-                  </div>
-                </div>
-
-                {/* Quick Filters */}
-                <div className="space-y-3 mb-3">
-                  {/* Status Filter */}
-                  <div>
-                    <p className="text-xs font-medium mb-2" style={{ color: colors.textSecondary }}>Status</p>
-                    <div className="flex gap-2 overflow-x-auto sm:flex-wrap -mx-2 px-2">
-                      {[
-                        { value: 'all' as const, label: 'All', count: studentTotals.length },
-                        { value: 'active' as const, label: 'Active', count: studentTotals.filter(s => s.is_active).length },
-                        { value: 'paid' as const, label: 'Paid', count: studentTotals.filter(s => s.hasApproved).length },
-                        { value: 'inactive' as const, label: 'Inactive', count: studentTotals.filter(s => !s.is_active).length },
-                      ].map(({ value, label, count }) => (
-                        <button
-                          key={value}
-                          onClick={() => {
-                            setStatusFilter(value);
-                            setCurrentPage(1);
-                          }}
-                          className="px-3 py-1.5 rounded-lg text-xs sm:text-sm font-medium transition-all"
-                          style={{
-                            background: statusFilter === value ? `${colors.primary}30` : 'rgba(255, 255, 255, 0.05)',
-                            border: `1px solid ${statusFilter === value ? colors.primary + '60' : 'transparent'}`,
-                            color: statusFilter === value ? colors.primary : colors.textSecondary,
-                          }}
-                        >
-                          {label} ({count})
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                </div>
-
-                {/* Per-student totals (top payers) */}
-                {studentTotals.length > 0 && (() => {
-                  const displayed = studentTotals.filter(s => {
-                    if (statusFilter === 'all') return true;
-                    if (statusFilter === 'active') return !!s.is_active;
-                    if (statusFilter === 'inactive') return !s.is_active;
-                    if (statusFilter === 'paid') return !!s.hasApproved;
-                    return true;
-                  });
-                  return (
-                    <div className="mb-4">
-                      <p className="text-sm mb-2" style={{ color: colors.textSecondary }}>Top payers in this category</p>
-                      <div className="flex flex-wrap gap-2">
-                        {displayed.slice(0, 8).map(s => (
-                          <button
-                            key={s.reg}
-                            onClick={() => setStudentFilter(prev => prev === s.reg ? null : s.reg)}
-                            className={`inline-flex px-3 py-1 rounded-full text-xs font-medium transition-all items-center gap-2 min-w-max ${studentFilter === s.reg ? 'border' : ''}`}
-                            style={{
-                              background: studentFilter === s.reg ? 'rgba(255,255,255,0.06)' : 'rgba(255,255,255,0.03)',
-                              borderColor: studentFilter === s.reg ? 'rgba(255,255,255,0.06)' : 'transparent'
-                            }}
-                          >
-                            <span className="font-medium">{s.name}</span>
-                            <span className="text-xs" style={{ color: colors.textSecondary }}>{s.reg}</span>
-                            <span className="ml-2 px-2 py-0.5 rounded text-xs font-semibold" style={{ background: colors.statusPaid, color: 'white' }}>{formatCurrency(s.total)}</span>
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-                  );
-                })()}
-
-            {/* Loading / Empty */}
-            {catLoading ? (
-              <div className="flex items-center justify-center py-8">
-                <div className="animate-spin rounded-full h-10 w-10 border-4 border-t-transparent" style={{ borderColor: colors.primary, borderTopColor: 'transparent' }} />
+            {/* Activity Status Filter */}
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="text-xs sm:text-sm" style={{ color: colors.textSecondary }}>Activity:</span>
+              <div className="flex flex-wrap gap-2">
+                {(['all', 'active', 'inactive'] as const).map((status) => (
+                  <button
+                    key={status}
+                    onClick={() => {
+                      setStatusFilter(status);
+                      setCurrentPage(1);
+                    }}
+                    className={`px-3 sm:px-4 py-1.5 sm:py-2 rounded-lg text-xs sm:text-sm font-medium transition-all hover:shadow-md ${
+                      statusFilter === status ? 'scale-105 shadow-lg' : 'hover:scale-[1.02]'
+                    }`}
+                    style={{
+                      background: statusFilter === status
+                        ? `linear-gradient(135deg, ${colors.primary}40, ${colors.primary}20)`
+                        : 'rgba(255,255,255,0.05)',
+                      borderWidth: '1px',
+                      borderStyle: 'solid',
+                      borderColor: statusFilter === status ? colors.primary : 'rgba(255,255,255,0.1)',
+                      color: statusFilter === status ? 'white' : colors.textSecondary,
+                    }}
+                  >
+                    {status === 'all' ? 'All' : status.charAt(0).toUpperCase() + status.slice(1)}
+                  </button>
+                ))}
               </div>
-            ) : paginatedPayments.length === 0 ? (
-              <div className="text-center py-8">
-                <p style={{ color: colors.textSecondary }}>No payments found for this category</p>
+            </div>
+
+            {/* Category filter pills */}
+            {categoryFilter !== 'all' && (
+              <div className="mt-4 flex items-center gap-2">
+                <span className="text-sm" style={{ color: colors.textSecondary }}>Filtered by:</span>
+                <button
+                  onClick={() => setCategoryFilter('all')}
+                  className="px-3 py-1 rounded-full text-sm font-medium flex items-center gap-2 transition-all hover:scale-105"
+                  style={{
+                    background: `linear-gradient(135deg, ${colors.primary}30, ${colors.primary}10)`,
+                    border: `1px solid ${colors.primary}60`,
+                    color: 'white',
+                  }}
+                >
+                  <span className="capitalize">{categoryFilter.replace(/_/g, ' ')}</span>
+                  <span className="text-xs">✕</span>
+                </button>
               </div>
-            ) : (
-              <>
-                {/* Debug panel (developer only) */}
-                {/* Dev-only debug panel removed — check console logs (import.meta.env.DEV) for detailed traces */}
-                <div className="space-y-3">
-                  {paginatedPayments.map((p) => (
-                    <div key={p.id} className="p-3 rounded-lg transition-all hover:bg-white/5" style={{ background: 'rgba(255,255,255,0.02)' }}>
-                      <div className="flex items-center justify-between">
-                        <div>
-                          <p className="font-medium text-white">{p.students?.full_name}</p>
-                          <p className="text-xs" style={{ color: colors.textSecondary }}>{p.students?.reg_number}</p>
+            )}
+
+            <div className="mt-4 text-sm" style={{ color: colors.textSecondary }}>
+              Showing {filteredStudents.length} of {allStudents.length} students
+            </div>
+          </GlassCard>
+        </motion.div>
+
+        {/* Student Payment List */}
+        {loading ? (
+          <div className="flex items-center justify-center py-20">
+            <div
+              className="animate-spin rounded-full h-16 w-16 border-4 border-t-transparent"
+              style={{ borderColor: colors.primary, borderTopColor: 'transparent' }}
+            />
+          </div>
+        ) : paginatedStudents.length === 0 ? (
+          <GlassCard>
+            <div className="text-center py-12">
+              <Users className="w-16 h-16 mx-auto mb-4 opacity-30" style={{ color: colors.textSecondary }} />
+              <p className="text-lg font-medium" style={{ color: colors.textSecondary }}>
+                No students found
+              </p>
+              <p className="text-sm mt-2" style={{ color: colors.textSecondary }}>
+                Try adjusting your filters or search query
+              </p>
+            </div>
+          </GlassCard>
+        ) : (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            transition={{ delay: 0.7 }}
+            className="space-y-3"
+          >
+            {paginatedStudents.map((student, index) => (
+              <motion.div
+                key={student.id}
+                initial={{ opacity: 0, x: -20 }}
+                animate={{ opacity: 1, x: 0 }}
+                transition={{ delay: 0.7 + index * 0.02 }}
+              >
+                <GlassCard className="hover:scale-[1.01] transition-all">
+                  <div className="flex flex-col gap-3 sm:gap-4">
+                    {/* Student Info */}
+                    <div className="flex-1">
+                      <div className="flex items-center gap-2 sm:gap-3">
+                        <div className="w-8 h-8 sm:w-10 sm:h-10 rounded-full flex items-center justify-center text-white text-sm sm:text-base font-bold"
+                          style={{ background: `linear-gradient(135deg, ${colors.primary}, ${colors.accentMint})` }}>
+                          {student.student_name.charAt(0).toUpperCase()}
                         </div>
-                        <div className="text-right">
-                          <p className="text-sm font-semibold text-white">{formatCurrency(p.amount)}</p>
-                          <p className="text-xs" style={{ color: colors.textSecondary }}>{formatDate(p.created_at, 'short')}</p>
+                        <div className="flex-1 min-w-0">
+                          <p className="font-semibold text-sm sm:text-base text-white truncate">{student.student_name}</p>
+                          <p className="text-xs sm:text-sm" style={{ color: colors.textSecondary }}>{student.reg_number}</p>
                         </div>
-                      </div>
-                      <div className="mt-2 flex items-center justify-between">
-                        <p className="text-sm" style={{ color: colors.textSecondary }}>{Array.isArray(p.payment_types) ? p.payment_types[0]?.title : p.payment_types?.title}</p>
-                        <p className="text-xs text-white">{p.transaction_ref}</p>
-                      </div>
-                      <div className="flex items-center gap-2 mt-2">
-                        {/* Status badge */}
-                        {/* Status badge: approved should have white text on green background */}
                         <span
                           className="px-2 py-0.5 rounded-full text-xs font-semibold"
                           style={{
-                            background: p.status === 'approved' ? colors.statusPaid : p.status === 'pending' ? 'rgba(255,165,0,0.15)' : 'rgba(59,130,246,0.12)',
-                            color: p.status === 'approved' ? 'white' : p.status === 'pending' ? 'orange' : colors.primary,
+                            background: student.is_active ? colors.statusPaid : colors.statusFailed,
+                            color: 'white',
                           }}
                         >
-                          {p.status?.toUpperCase()}
+                          {student.is_active ? 'Active' : 'Inactive'}
                         </span>
-                        {/* Payment type title if any */}
-                        <span className="text-xs" style={{ color: colors.textSecondary }}>{Array.isArray(p.payment_types) ? p.payment_types[0]?.title : p.payment_types?.title}</span>
                       </div>
                     </div>
-                  ))}
-                </div>
 
-                {/* Pagination Controls */}
-                {totalPages > 1 && (
-                  <div className="mt-4 flex items-center justify-between">
-                    <div className="text-sm" style={{ color: colors.textSecondary }}>
-                      Showing {startIndex + 1} - {Math.min(endIndex, filteredPayments.length)} of {filteredPayments.length} payments
-                    </div>
-                    <div className="flex gap-2">
-                      <button
-                        onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
-                        className="px-3 py-2 rounded-lg"
-                        disabled={currentPage === 1}
-                        style={{ background: currentPage === 1 ? 'rgba(255,255,255,0.04)' : 'rgba(255,255,255,0.03)' }}
-                      >Prev</button>
-                      <div className="px-3 py-2 rounded-lg" style={{ background: 'rgba(255,255,255,0.03)' }}>{currentPage} / {totalPages}</div>
-                      <button
-                        onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
-                        className="px-3 py-2 rounded-lg"
-                        disabled={currentPage === totalPages}
-                        style={{ background: currentPage === totalPages ? 'rgba(255,255,255,0.04)' : 'rgba(255,255,255,0.03)' }}
-                      >Next</button>
+                    {/* Payment Summary */}
+                    <div className="grid grid-cols-3 gap-3 sm:gap-6 mt-2 sm:mt-0">
+                      <div className="text-center">
+                        <p className="text-[10px] sm:text-sm" style={{ color: colors.textSecondary }}>Total Paid</p>
+                        <p className="text-sm sm:text-xl font-bold text-white">{formatCurrency(student.total_paid)}</p>
+                      </div>
+                      <div className="text-center">
+                        <p className="text-[10px] sm:text-sm" style={{ color: colors.textSecondary }}>Payments</p>
+                        <p className="text-sm sm:text-xl font-bold" style={{ color: colors.accentMint }}>{student.payment_count}</p>
+                      </div>
+                      <div className="text-center">
+                        <p className="text-[10px] sm:text-sm" style={{ color: colors.textSecondary }}>Categories</p>
+                        <p className="text-sm sm:text-xl font-bold" style={{ color: colors.primary }}>{student.categories_paid.length}</p>
+                      </div>
                     </div>
                   </div>
-                )}
-              </>
-            )}
-          </GlassCard>
+
+                  {/* Categories Paid */}
+                  {student.categories_paid.length > 0 ? (
+                    <div className="mt-4 flex flex-wrap gap-2">
+                      {student.categories_paid.map((cat) => (
+                        <span
+                          key={cat}
+                          className="px-3 py-1 rounded-full text-xs font-medium capitalize"
+                          style={{
+                            background: 'rgba(255,255,255,0.05)',
+                            border: '1px solid rgba(255,255,255,0.1)',
+                            color: colors.textSecondary,
+                          }}
+                        >
+                          {cat.replace(/_/g, ' ')}
+                        </span>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="mt-4 p-3 rounded-lg text-center" style={{ background: 'rgba(255,100,100,0.1)', border: '1px solid rgba(255,100,100,0.2)' }}>
+                      <p className="text-sm font-medium" style={{ color: colors.statusFailed }}>
+                        No payments recorded yet
+                      </p>
+                    </div>
+                  )}
+
+                  {/* Payment Details */}
+                  {student.has_paid && (
+                    <div className="mt-4 space-y-2">
+                      <p className="text-xs font-semibold uppercase tracking-wide" style={{ color: colors.textSecondary }}>
+                        Payment History
+                      </p>
+                      <div className="space-y-1.5">
+                        {student.payments.slice(0, 3).map((payment) => (
+                          <div
+                            key={payment.id}
+                            className="flex items-center justify-between p-2 rounded-lg"
+                            style={{ background: 'rgba(255,255,255,0.02)' }}
+                          >
+                            <div className="flex-1">
+                              <p className="text-sm font-medium text-white">{payment.payment_type}</p>
+                              <p className="text-xs" style={{ color: colors.textSecondary }}>
+                                {formatDate(payment.created_at, 'short')} • {payment.transaction_ref}
+                              </p>
+                            </div>
+                            <div className="text-right">
+                              <p className="text-sm font-semibold text-white">{formatCurrency(payment.amount)}</p>
+                              <span
+                                className="text-xs px-2 py-0.5 rounded-full"
+                                style={{
+                                  background: payment.status === 'approved'
+                                    ? colors.statusPaid
+                                    : payment.status === 'pending'
+                                    ? 'rgba(255,165,0,0.2)'
+                                    : 'rgba(59,130,246,0.2)',
+                                  color: payment.status === 'approved' ? 'white' : colors.primary,
+                                }}
+                              >
+                                {payment.status.toUpperCase()}
+                              </span>
+                            </div>
+                          </div>
+                        ))}
+                        {student.payments.length > 3 && (
+                          <p className="text-xs text-center py-1" style={{ color: colors.textSecondary }}>
+                            + {student.payments.length - 3} more payment{student.payments.length - 3 !== 1 ? 's' : ''}
+                          </p>
+                        )}
+                      </div>
+                    </div>
+                  )}
+                </GlassCard>
+              </motion.div>
+            ))}
+          </motion.div>
+        )}
+
+        {/* Pagination */}
+        {totalPages > 1 && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            transition={{ delay: 0.8 }}
+          >
+            <GlassCard>
+              <div className="flex items-center justify-between">
+                <p className="text-sm" style={{ color: colors.textSecondary }}>
+                  Page {currentPage} of {totalPages}
+                </p>
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+                    disabled={currentPage === 1}
+                    className="px-4 py-2 rounded-lg flex items-center gap-2 transition-all disabled:opacity-50 disabled:cursor-not-allowed hover:scale-105"
+                    style={{
+                      background: currentPage === 1 ? 'rgba(255,255,255,0.03)' : `linear-gradient(135deg, ${colors.primary}30, ${colors.primary}10)`,
+                      border: `1px solid ${currentPage === 1 ? 'transparent' : colors.primary}`,
+                      color: currentPage === 1 ? colors.textSecondary : 'white',
+                    }}
+                  >
+                    <ChevronLeft className="w-4 h-4" />
+                    <span>Previous</span>
+                  </button>
+                  <button
+                    onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
+                    disabled={currentPage === totalPages}
+                    className="px-4 py-2 rounded-lg flex items-center gap-2 transition-all disabled:opacity-50 disabled:cursor-not-allowed hover:scale-105"
+                    style={{
+                      background: currentPage === totalPages ? 'rgba(255,255,255,0.03)' : `linear-gradient(135deg, ${colors.primary}30, ${colors.primary}10)`,
+                      border: `1px solid ${currentPage === totalPages ? 'transparent' : colors.primary}`,
+                      color: currentPage === totalPages ? colors.textSecondary : 'white',
+                    }}
+                  >
+                    <span>Next</span>
+                    <ChevronRight className="w-4 h-4" />
+                  </button>
+                </div>
+              </div>
+            </GlassCard>
+          </motion.div>
         )}
       </div>
+
       <Footer />
     </div>
   );

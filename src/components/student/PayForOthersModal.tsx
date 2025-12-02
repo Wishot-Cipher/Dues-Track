@@ -31,7 +31,8 @@ interface PayForOthersModalProps {
   paymentTypeName: string;
   amount: number;
   currentStudentId: string;
-  onProceed: (selectedStudents: Student[], totalAmount: number) => void;
+  currentUserHasPaid: boolean;
+  onProceed: (selectedStudents: Student[], totalAmount: number, includeSelf: boolean) => void;
 }
 
 export default function PayForOthersModal({
@@ -40,11 +41,12 @@ export default function PayForOthersModal({
   paymentTypeId,
   paymentTypeName,
   amount,
-  currentStudentId,
+  currentUserHasPaid,
   onProceed
 }: PayForOthersModalProps) {
   const [students, setStudents] = useState<Student[]>([]);
   const [selectedStudents, setSelectedStudents] = useState<Student[]>([]);
+  const [includeSelf, setIncludeSelf] = useState(!currentUserHasPaid);
   const [searchTerm, setSearchTerm] = useState('');
   const [loading, setLoading] = useState(false);
   const { error: showError } = useToast();
@@ -59,11 +61,10 @@ export default function PayForOthersModal({
     try {
       setLoading(true);
 
-      // Get students who haven't paid for this payment type
+      // Get all students (including current user)
       const { data: allStudents, error: studentsError } = await supabase
         .from('students')
         .select('id, full_name, reg_number, level')
-        .neq('id', currentStudentId)
         .order('full_name');
 
       if (studentsError) throw studentsError;
@@ -111,14 +112,18 @@ export default function PayForOthersModal({
     student.reg_number.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
-  const totalAmount = selectedStudents.length * amount;
+  const totalAmount = (selectedStudents.length + (includeSelf && !currentUserHasPaid ? 1 : 0)) * amount;
 
   const handleProceed = () => {
-    if (selectedStudents.length === 0) {
-      showError('Please select at least one student');
+    if (selectedStudents.length === 0 && !includeSelf) {
+      showError('Please select at least one student or include yourself');
       return;
     }
-    onProceed(selectedStudents, totalAmount);
+    if (selectedStudents.length === 0 && includeSelf && currentUserHasPaid) {
+      showError('You have already paid. Please select other students.');
+      return;
+    }
+    onProceed(selectedStudents, totalAmount, includeSelf && !currentUserHasPaid);
   };
 
   if (!isOpen) return null;
@@ -176,6 +181,32 @@ export default function PayForOthersModal({
                   <div className="space-y-4">
                     <div>
                       <h3 className="text-lg font-bold text-white mb-3">Select Students</h3>
+                      
+                      {/* Include Self Checkbox */}
+                      {!currentUserHasPaid && (
+                        <div className="mb-4 p-3 rounded-lg" style={{ background: 'rgba(255, 255, 255, 0.05)', border: `1px solid ${includeSelf ? colors.primary : 'rgba(255, 255, 255, 0.1)'}` }}>
+                          <label className="flex items-center gap-3 cursor-pointer">
+                            <input
+                              type="checkbox"
+                              checked={includeSelf}
+                              onChange={(e) => setIncludeSelf(e.target.checked)}
+                              className="w-5 h-5 rounded"
+                              style={{ accentColor: colors.primary }}
+                            />
+                            <div className="flex-1">
+                              <p className="font-medium text-white">Include myself in this payment</p>
+                              <p className="text-xs mt-0.5" style={{ color: colors.textSecondary }}>
+                                Pay for yourself along with selected students
+                              </p>
+                            </div>
+                            {includeSelf && (
+                              <span className="text-sm font-medium" style={{ color: colors.primary }}>
+                                +{formatCurrency(amount)}
+                              </span>
+                            )}
+                          </label>
+                        </div>
+                      )}
                       
                       {/* Search */}
                       <div className="relative mb-4">
@@ -307,6 +338,20 @@ export default function PayForOthersModal({
                           ))}
                         </div>
 
+                        {/* Include Self Indicator */}
+                        {includeSelf && !currentUserHasPaid && (
+                          <div
+                            className="p-3 rounded-lg flex items-center gap-2"
+                            style={{ background: `${colors.primary}20`, border: `1px solid ${colors.primary}` }}
+                          >
+                            <CheckCircle className="w-5 h-5" style={{ color: colors.primary }} />
+                            <div className="flex-1">
+                              <p className="font-medium text-white text-sm">You are included</p>
+                              <p className="text-xs" style={{ color: colors.textSecondary }}>+{formatCurrency(amount)}</p>
+                            </div>
+                          </div>
+                        )}
+
                         {/* Total Summary */}
                         <div
                           className="p-4 rounded-lg"
@@ -314,7 +359,7 @@ export default function PayForOthersModal({
                         >
                           <div className="flex items-center justify-between mb-2">
                             <span className="text-white font-medium">Total Students:</span>
-                            <span className="text-white font-bold">{selectedStudents.length}</span>
+                            <span className="text-white font-bold">{selectedStudents.length + (includeSelf && !currentUserHasPaid ? 1 : 0)}</span>
                           </div>
                           <div className="flex items-center justify-between">
                             <span className="text-white font-medium">Total Amount:</span>
@@ -333,7 +378,7 @@ export default function PayForOthersModal({
                           style={{ background: 'rgba(255, 255, 255, 0.05)' }}
                         >
                           <p style={{ color: colors.textSecondary }}>
-                            {selectedStudents.length} student{selectedStudents.length !== 1 ? 's' : ''} × {formatCurrency(amount)} = {formatCurrency(totalAmount)}
+                            {selectedStudents.length + (includeSelf && !currentUserHasPaid ? 1 : 0)} student{(selectedStudents.length + (includeSelf && !currentUserHasPaid ? 1 : 0)) !== 1 ? 's' : ''} × {formatCurrency(amount)} = {formatCurrency(totalAmount)}
                           </p>
                         </div>
                       </>

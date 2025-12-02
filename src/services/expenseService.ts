@@ -1,15 +1,54 @@
 import { supabase, STORAGE_BUCKETS, getPublicUrl } from '../config/supabase'
 import type { PostgrestError } from '@supabase/supabase-js'
 
+export interface Expense {
+  id: string
+  payment_type_id: string | null
+  title: string
+  description: string | null
+  category: string | null
+  category_id: string | null
+  funded_by: string | null
+  amount: number
+  expense_date: string
+  recorded_by: string | null
+  receipt_url: string | null
+  status: 'pending' | 'approved' | 'rejected'
+  approved_by: string | null
+  approved_at: string | null
+  rejection_reason: string | null
+  created_at: string
+  updated_at: string | null
+}
+
+export interface ExpenseCategory {
+  id: string
+  name: string
+  description: string | null
+  icon: string | null
+  color: string | null
+  is_active: boolean
+  created_at: string
+  created_by: string | null
+}
+
 export interface CreateExpensePayload {
   payment_type_id?: string
   title: string
   description?: string
   category?: string
+  category_id?: string
+  funded_by?: string
   amount: number
   expense_date?: string
   recorded_by?: string
   receiptFile?: File | null
+}
+
+export interface ApproveExpensePayload {
+  expense_id: string
+  approved: boolean
+  reason?: string
 }
 
 export async function uploadExpenseReceipt(file: File, key: string) {
@@ -154,10 +193,13 @@ export async function createExpense(payload: CreateExpensePayload) {
       title: string
       description: string | null
       category: string | null
+      category_id: string | null
+      funded_by: string | null
       amount: number
       expense_date: string
       recorded_by: string | null
       receipt_url: string | null
+      status: string
     }
 
     const insertPayload: ExpenseInsert = {
@@ -165,10 +207,13 @@ export async function createExpense(payload: CreateExpensePayload) {
       title: payload.title,
       description: payload.description ?? null,
       category: payload.category ?? null,
+      category_id: payload.category_id ?? null,
+      funded_by: payload.funded_by ?? null,
       amount: payload.amount,
       expense_date: payload.expense_date ?? new Date().toISOString(),
       recorded_by: payload.recorded_by ?? null,
       receipt_url,
+      status: 'pending', // New expenses start as pending
     }
 
     const { data, error } = await supabase.from('expenses').insert([insertPayload]).select().single()
@@ -181,8 +226,105 @@ export async function createExpense(payload: CreateExpensePayload) {
   }
 }
 
-export async function fetchExpenses(limit = 50) {
-  const { data, error } = await supabase.from('expenses').select('*').order('expense_date', { ascending: false }).limit(limit)
+// Fetch expenses with optional status filter
+export async function fetchExpenses(limit = 50, status?: 'pending' | 'approved' | 'rejected') {
+  let query = supabase
+    .from('expenses')
+    .select(`
+      *,
+      category:expense_categories(id, name, icon, color)
+    `)
+    .order('expense_date', { ascending: false })
+    .limit(limit)
+
+  if (status) {
+    query = query.eq('status', status)
+  }
+
+  const { data, error } = await query
   if (error) throw error
   return data
+}
+
+// Fetch expense categories
+export async function fetchExpenseCategories(): Promise<ExpenseCategory[]> {
+  const { data, error } = await supabase
+    .from('expense_categories')
+    .select('*')
+    .eq('is_active', true)
+    .order('name')
+
+  if (error) throw error
+  return data || []
+}
+
+// Approve or reject an expense
+export async function approveExpense(payload: ApproveExpensePayload & { admin_id: string }) {
+  const { data, error } = await supabase.rpc('approve_expense', {
+    p_expense_id: payload.expense_id,
+    p_approved: payload.approved,
+    p_admin_id: payload.admin_id,
+    p_reason: payload.reason || null,
+  })
+
+  if (error) throw error
+  return data
+}
+
+// Update expense with audit trail
+export async function updateExpense(
+  expenseId: string,
+  updates: {
+    description: string
+    amount: number
+    category_id: string | null
+    funded_by: string | null
+    reason: string
+  }
+) {
+  const { data, error } = await supabase.rpc('update_expense_with_audit', {
+    p_expense_id: expenseId,
+    p_description: updates.description,
+    p_amount: updates.amount,
+    p_category_id: updates.category_id,
+    p_funded_by: updates.funded_by,
+    p_reason: updates.reason,
+  })
+
+  if (error) throw error
+  return data
+}
+
+// Get approved expenses summary (for student transparency)
+export async function getApprovedExpensesSummary(startDate?: string, endDate?: string) {
+  const { data, error } = await supabase.rpc('get_approved_expenses_summary', {
+    p_start_date: startDate || null,
+    p_end_date: endDate || null,
+  })
+
+  if (error) throw error
+  return data?.[0] || { total_spent: 0, total_count: 0, by_category: [], by_month: [], recent_expenses: [] }
+}
+
+// Get budget health
+export async function getBudgetHealth() {
+  const { data, error } = await supabase.rpc('get_budget_health')
+
+  if (error) throw error
+  return data || []
+}
+
+// Get expense audit log
+export async function getExpenseAuditLog(expenseId: string) {
+  const { data, error } = await supabase
+    .from('expense_audit_log')
+    .select(`
+      *,
+      admin:admins!expense_audit_log_performed_by_fkey(id, name)
+    `)
+    .eq('expense_id', expenseId)
+    .order('created_at', { ascending: false })
+
+  if (error) throw error
+  return data || []
 }

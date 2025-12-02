@@ -1,9 +1,9 @@
 import { useState, useEffect, useCallback } from 'react'
-import type { CreateExpensePayload } from '../services/expenseService'
+import type { CreateExpensePayload, Expense } from '../services/expenseService'
 import { createExpense, fetchExpenses } from '../services/expenseService'
 
-export function useExpenses() {
-  const [expenses, setExpenses] = useState<unknown[]>([])
+export function useExpenses(status?: 'pending' | 'approved' | 'rejected') {
+  const [expenses, setExpenses] = useState<Expense[]>([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<Error | null>(null)
 
@@ -12,14 +12,14 @@ export function useExpenses() {
     setLoading(true)
     setError(null)
     try {
-      const data = await fetchExpenses(limit)
+      const data = await fetchExpenses(limit, status)
       setExpenses(data ?? [])
     } catch (err) {
       setError(err as Error)
     } finally {
       setLoading(false)
     }
-  }, [])
+  }, [status])
 
   useEffect(() => {
     load()

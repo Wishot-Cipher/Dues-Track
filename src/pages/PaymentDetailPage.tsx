@@ -207,31 +207,33 @@ export default function PaymentDetailPage() {
         return;
       }
 
-      // Always include yourself, plus any selected students
-      const students =
-        selectedStudents.length > 0
-          ? [
-              {
-                id: user.id,
-                full_name: user.full_name,
-                reg_number: user.reg_number,
-                level: user.level,
-              },
-              ...selectedStudents,
-            ]
-          : [
-              {
-                id: user.id,
-                full_name: user.full_name,
-                reg_number: user.reg_number,
-                level: user.level,
-              },
-            ];
+      // Build list of students based on selectedStudents and whether they're paying for themselves
+      const students: Student[] = [];
+      
+      // Add selected other students
+      if (selectedStudents.length > 0) {
+        students.push(...selectedStudents);
+      }
+      
+      // Add current user only if they haven't paid yet and are included
+      if (!isFullyPaid) {
+        students.push({
+          id: user.id,
+          full_name: user.full_name,
+          reg_number: user.reg_number,
+          level: user.level,
+        });
+      }
+
+      if (students.length === 0) {
+        toast.error("No students to pay for");
+        return;
+      }
 
       for (const student of students) {
         let receiptUrl = "";
 
-        // Upload receipt only for bank_transfer and pos
+        // Upload receipt for bank_transfer and pos (not cash)
         if (selectedMethod !== "cash" && receiptFile) {
           const fileExt = receiptFile.name.split(".").pop();
           const fileName = `${student.id}_${Date.now()}_${Math.random()
@@ -270,6 +272,7 @@ export default function PaymentDetailPage() {
             notes: notes.trim() || null,
             status: "pending",
             payment_method: selectedMethod,
+            paid_by: student.id !== user.id ? user.id : null, // Track who paid on behalf of others
           })
           .select()
           .single();
@@ -1164,6 +1167,7 @@ export default function PaymentDetailPage() {
         paymentTypeName={paymentType.title}
         amount={paymentType.amount}
         currentStudentId={user?.id || ""}
+        currentUserHasPaid={isFullyPaid}
         onProceed={(students) => {
           setSelectedStudents(students);
           setShowPayForOthers(false);

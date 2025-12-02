@@ -1,13 +1,15 @@
 import { motion } from 'framer-motion'
-// import navigate not needed; using history.back() for custom back button
 import GlassCard from '@/components/ui/GlassCard'
 import { colors } from '@/config/colors'
 import RecordExpense from '@/components/admin/RecordExpense'
 import ExpenseList from '@/components/admin/ExpenseList'
+import ExpenseApprovalQueue from '@/components/admin/ExpenseApprovalQueue'
 import Footer from '@/components/Footer'
 import { ArrowLeft } from 'lucide-react'
+import { useAuth } from '@/hooks/useAuth'
 
 export default function ExpensesPage() {
+  const { hasPermission } = useAuth()
 
   return (
     <div className="min-h-screen py-6 px-4 relative overflow-hidden" style={{ background: 'radial-gradient(ellipse at top, #1A0E09 0%, #0F0703 100%)' }}>
@@ -82,6 +84,13 @@ export default function ExpensesPage() {
             </div>
           </div>
         </motion.div>
+
+        {/* Approval Queue for Senior Admins */}
+        {hasPermission('can_manage_students') && (
+          <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2 }}>
+            <ExpenseApprovalQueue />
+          </motion.div>
+        )}
       </div>
       <Footer />
     </div>
