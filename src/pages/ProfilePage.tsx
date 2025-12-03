@@ -1,6 +1,6 @@
 /* eslint-disable @typescript-eslint/no-unused-vars */
 import { useState, useEffect } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion} from 'framer-motion';
 import { 
   User, 
   Mail, 
@@ -362,7 +362,7 @@ export default function ProfilePage() {
                 >
                   <div className="flex items-start gap-3">
                     <div
-                      className="w-10 h-10 rounded-lg flex items-center justify-center flex-shrink-0"
+                      className="w-10 h-10 rounded-lg flex items-center justify-center shrink-0"
                       style={{ background: `${colors.primary}15` }}
                     >
                       <Hash size={18} style={{ color: colors.primary }} />
@@ -413,7 +413,7 @@ export default function ProfilePage() {
                   >
                     <div className="flex items-start gap-3">
                       <div
-                        className="w-10 h-10 rounded-lg flex items-center justify-center flex-shrink-0"
+                        className="w-10 h-10 rounded-lg flex items-center justify-center shrink-0"
                         style={{ background: `${colors.accentMint}15` }}
                       >
                         <User size={18} style={{ color: colors.accentMint }} />
@@ -458,7 +458,7 @@ export default function ProfilePage() {
                   >
                     <div className="flex items-start gap-3">
                       <div
-                        className="w-10 h-10 rounded-lg flex items-center justify-center flex-shrink-0"
+                        className="w-10 h-10 rounded-lg flex items-center justify-center shrink-0"
                         style={{ background: `${colors.statusPaid}15` }}
                       >
                         <Mail size={18} style={{ color: colors.statusPaid }} />
@@ -503,7 +503,7 @@ export default function ProfilePage() {
                   >
                     <div className="flex items-start gap-3">
                       <div
-                        className="w-10 h-10 rounded-lg flex items-center justify-center flex-shrink-0"
+                        className="w-10 h-10 rounded-lg flex items-center justify-center shrink-0"
                         style={{ background: `${colors.warning}15` }}
                       >
                         <Phone size={18} style={{ color: colors.warning }} />
@@ -640,7 +640,7 @@ export default function ProfilePage() {
                   initial={{ opacity: 0 }}
                   animate={{ opacity: 1 }}
                 >
-                  <AlertCircle size={16} className="text-blue-400 flex-shrink-0 mt-0.5" />
+                  <AlertCircle size={16} className="text-blue-400 shrink-0 mt-0.5" />
                   <p className="text-xs text-blue-400">
                     You can update your full name, email, phone number, and section. 
                     Your registration number, level, and join date cannot be changed.

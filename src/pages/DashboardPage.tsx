@@ -154,7 +154,6 @@ export default function DashboardPage() {
     };
 
     fetchDashboardData();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user?.id, refreshKey]);
 
   const handleLogout = async () => {
