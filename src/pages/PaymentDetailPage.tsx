@@ -1174,7 +1174,7 @@ export default function PaymentDetailPage() {
         amount={paymentType.amount}
         currentStudentId={user?.id || ""}
         currentUserHasPaid={isFullyPaid}
-        onProceed={(students, _totalAmount, includeSelfFlag) => {
+        onProceed={(students, _, includeSelfFlag) => {
           setSelectedStudents(students);
           setIncludeSelf(includeSelfFlag);
           setShowPayForOthers(false);
