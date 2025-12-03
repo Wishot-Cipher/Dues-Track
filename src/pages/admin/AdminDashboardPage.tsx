@@ -22,6 +22,8 @@ import {
   QrCode,
 } from 'lucide-react';
 import Footer from '@/components/Footer';
+import StudentFeatureSettings from '@/components/admin/StudentFeatureSettings';
+import ExpenseVisibilitySettings from '@/components/admin/ExpenseVisibilitySettings';
 // ExpenseList removed from dashboard; use dedicated Expenses page instead
 
 interface AdminStats {
@@ -53,6 +55,10 @@ interface RecentPayment {
 export default function AdminDashboardPage() {
   const navigate = useNavigate();
   const { hasPermission } = useAuth();
+  
+  // Debug: Check permissions
+  // Debug logs removed for production security
+  
   const [loading, setLoading] = useState(true);
   const [showReceiptModal, setShowReceiptModal] = useState(false);
   const [selectedPayment, setSelectedPayment] = useState<RecentPayment | null>(null);
@@ -564,11 +570,25 @@ export default function AdminDashboardPage() {
           </GlassCard>
         </motion.div>
 
+        {/* Student Feature Controls */}
+        {hasPermission('can_manage_students') && (
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.85 }}
+          >
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+              <StudentFeatureSettings />
+              <ExpenseVisibilitySettings />
+            </div>
+          </motion.div>
+        )}
+
         {/* Expenses - quick link + list (admin features) */}
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.85 }}
+          transition={{ delay: 0.9 }}
         >
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
             <div className="lg:col-span-1">

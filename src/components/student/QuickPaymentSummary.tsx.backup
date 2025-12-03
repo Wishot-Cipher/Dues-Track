@@ -1,0 +1,394 @@
+import { useState } from 'react'
+import { motion } from 'framer-motion'
+import { Download, FileText, Printer, Share2, CheckCircle, Clock, XCircle } from 'lucide-react'
+import { colors, gradients } from '@/config/colors'
+import { supabase } from '@/config/supabase'
+import { useAuth } from '@/hooks/useAuth'
+
+export default function QuickPaymentSummary() {
+  const { user } = useAuth()
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  async function generatePaymentSummary() {
+    if (!user) return
+
+    try {
+      setLoading(true)
+      setError(null)
+
+      // Use student info from authenticated user
+      const student = {
+        full_name: user.full_name,
+        email: user.email || undefined,
+        phone_number: user.phone || undefined,
+        department: user.department,
+        level: user.level
+      }
+
+      if (!student.full_name) {
+        throw new Error('Student information not found')
+      }
+
+      // Fetch all payments
+      const { data: payments } = await supabase
+        .from('payments')
+        .select('*, payment_type:payment_types(name, amount), admin:admins(full_name)')
+        .eq('student_id', user.id)
+        .order('created_at', { ascending: false })
+
+      if (!payments || payments.length === 0) {
+        setError('No payment records found')
+        setLoading(false)
+        return
+      }
+
+      // Generate CSV
+      const csvContent = generateCSV(student, payments)
+      downloadCSV(csvContent, `Payment_Summary_${student.full_name.replace(/\s+/g, '_')}_${new Date().toISOString().split('T')[0]}.csv`)
+
+    } catch (err) {
+      console.error('Failed to generate summary:', err)
+      setError(err instanceof Error ? err.message : 'Failed to generate summary')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  function generateCSV(student: { full_name: string; email?: string; phone_number?: string; department?: string; level?: string }, payments: Array<{ created_at: string; status: string; amount: number; transaction_ref?: string; notes?: string; payment_type?: { name: string }; admin?: { full_name: string } }>) {
+    const lines: string[] = []
+
+    // Header Section
+    lines.push('PAYMENT SUMMARY REPORT')
+    lines.push('Generated: ' + new Date().toLocaleString())
+    lines.push('')
+    
+    // Student Information
+    lines.push('STUDENT INFORMATION')
+    lines.push(`Name,${student.full_name}`)
+    lines.push(`Email,${student.email || 'N/A'}`)
+    lines.push(`Phone,${student.phone_number || 'N/A'}`)
+    lines.push(`Department,${student.department || 'N/A'}`)
+    lines.push(`Level,${student.level || 'N/A'}`)
+    lines.push('')
+
+    // Summary Statistics
+    const totalPaid = payments.filter(p => p.status === 'approved').reduce((sum, p) => sum + Number(p.amount), 0)
+    const totalPending = payments.filter(p => p.status === 'pending').reduce((sum, p) => sum + Number(p.amount), 0)
+    const totalRejected = payments.filter(p => p.status === 'rejected').reduce((sum, p) => sum + Number(p.amount), 0)
+    
+    const approvedCount = payments.filter(p => p.status === 'approved').length
+    const pendingCount = payments.filter(p => p.status === 'pending').length
+    const rejectedCount = payments.filter(p => p.status === 'rejected').length
+
+    lines.push('SUMMARY STATISTICS')
+    lines.push(`Total Payments Made,${payments.length}`)
+    lines.push(`Approved Payments,${approvedCount} (₦${totalPaid.toLocaleString()})`)
+    lines.push(`Pending Payments,${pendingCount} (₦${totalPending.toLocaleString()})`)
+    lines.push(`Rejected Payments,${rejectedCount} (₦${totalRejected.toLocaleString()})`)
+    lines.push(`Total Amount Paid,₦${totalPaid.toLocaleString()}`)
+    lines.push('')
+
+    // Payment Breakdown by Type
+    const paymentsByType = payments.reduce((acc, p) => {
+      if (p.status === 'approved') {
+        const typeName = p.payment_type?.name || 'Unknown'
+        if (!acc[typeName]) acc[typeName] = 0
+        acc[typeName] += Number(p.amount)
+      }
+      return acc
+    }, {} as Record<string, number>)
+
+    if (Object.keys(paymentsByType).length > 0) {
+      lines.push('PAYMENT BREAKDOWN BY TYPE')
+      Object.entries(paymentsByType).forEach(([type, amount]) => {
+        lines.push(`${type},₦${amount.toLocaleString()}`)
+      })
+      lines.push('')
+    }
+
+    // Detailed Payment History
+    lines.push('DETAILED PAYMENT HISTORY')
+    lines.push('Date,Payment Type,Amount,Transaction Ref,Status,Verified By,Notes')
+    
+    payments.forEach(payment => {
+      const date = new Date(payment.created_at).toLocaleDateString()
+      const type = payment.payment_type?.name || 'Unknown'
+      const amount = `₦${Number(payment.amount).toLocaleString()}`
+      const ref = payment.transaction_ref || 'N/A'
+      const status = payment.status.toUpperCase()
+      const verifiedBy = payment.admin?.full_name || 'N/A'
+      const notes = (payment.notes || 'N/A').replace(/,/g, ';') // Escape commas in notes
+
+      lines.push(`${date},${type},${amount},${ref},${status},${verifiedBy},"${notes}"`)
+    })
+
+    lines.push('')
+    lines.push('END OF REPORT')
+    lines.push('This is an official record generated from the Class Dues Tracker system')
+
+    return lines.join('\n')
+  }
+
+  function downloadCSV(content: string, filename: string) {
+    const blob = new Blob([content], { type: 'text/csv;charset=utf-8;' })
+    const link = document.createElement('a')
+    const url = URL.createObjectURL(blob)
+    
+    link.setAttribute('href', url)
+    link.setAttribute('download', filename)
+    link.style.visibility = 'hidden'
+    
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
+    
+    URL.revokeObjectURL(url)
+  }
+
+  async function printSummary() {
+    if (!user) return
+
+    try {
+      setLoading(true)
+      setError(null)
+
+      // Use student info from authenticated user
+      const student = {
+        full_name: user.full_name,
+        email: user.email || undefined,
+        phone_number: user.phone || undefined,
+        department: user.department,
+        level: user.level
+      }
+
+      const { data: payments } = await supabase
+        .from('payments')
+        .select('*, payment_type:payment_types(name, amount), admin:admins(full_name)')
+        .eq('student_id', user.id)
+        .order('created_at', { ascending: false })
+
+      if (!student || !payments) return
+
+      // Generate printable HTML
+      const printWindow = window.open('', '_blank')
+      if (!printWindow) {
+        setError('Please allow popups to print')
+        return
+      }
+
+      const totalPaid = payments.filter(p => p.status === 'approved').reduce((sum, p) => sum + Number(p.amount), 0)
+      const approvedCount = payments.filter(p => p.status === 'approved').length
+
+      printWindow.document.write(`
+        <!DOCTYPE html>
+        <html>
+        <head>
+          <title>Payment Summary - ${student.full_name}</title>
+          <style>
+            body { font-family: Arial, sans-serif; padding: 40px; color: #333; }
+            h1 { color: #6366f1; border-bottom: 3px solid #6366f1; padding-bottom: 10px; }
+            h2 { color: #4f46e5; margin-top: 30px; }
+            .info-grid { display: grid; grid-template-columns: 150px 1fr; gap: 10px; margin: 20px 0; }
+            .info-label { font-weight: bold; }
+            table { width: 100%; border-collapse: collapse; margin: 20px 0; }
+            th { background: #6366f1; color: white; padding: 12px; text-align: left; }
+            td { padding: 10px; border-bottom: 1px solid #ddd; }
+            .status-approved { color: #22c55e; font-weight: bold; }
+            .status-pending { color: #f59e0b; font-weight: bold; }
+            .status-rejected { color: #ef4444; font-weight: bold; }
+            .summary-box { background: #f8fafc; padding: 15px; border-radius: 8px; margin: 20px 0; }
+            @media print {
+              body { padding: 20px; }
+              .no-print { display: none; }
+            }
+          </style>
+        </head>
+        <body>
+          <h1>Payment Summary Report</h1>
+          <p><strong>Generated:</strong> ${new Date().toLocaleString()}</p>
+
+          <h2>Student Information</h2>
+          <div class="info-grid">
+            <div class="info-label">Name:</div>
+            <div>${student.full_name}</div>
+            <div class="info-label">Email:</div>
+            <div>${student.email || 'N/A'}</div>
+            <div class="info-label">Phone:</div>
+            <div>${student.phone_number || 'N/A'}</div>
+            <div class="info-label">Department:</div>
+            <div>${student.department || 'N/A'}</div>
+            <div class="info-label">Level:</div>
+            <div>${student.level || 'N/A'}</div>
+          </div>
+
+          <h2>Summary</h2>
+          <div class="summary-box">
+            <p><strong>Total Payments:</strong> ${payments.length}</p>
+            <p><strong>Approved Payments:</strong> ${approvedCount}</p>
+            <p><strong>Total Amount Paid:</strong> ₦${totalPaid.toLocaleString()}</p>
+          </div>
+
+          <h2>Payment History</h2>
+          <table>
+            <thead>
+              <tr>
+                <th>Date</th>
+                <th>Payment Type</th>
+                <th>Amount</th>
+                <th>Transaction Ref</th>
+                <th>Status</th>
+                <th>Verified By</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${payments.map(p => `
+                <tr>
+                  <td>${new Date(p.created_at).toLocaleDateString()}</td>
+                  <td>${p.payment_type?.name || 'Unknown'}</td>
+                  <td>₦${Number(p.amount).toLocaleString()}</td>
+                  <td>${p.transaction_ref || 'N/A'}</td>
+                  <td class="status-${p.status}">${p.status.toUpperCase()}</td>
+                  <td>${p.admin?.full_name || 'Pending'}</td>
+                </tr>
+              `).join('')}
+            </tbody>
+          </table>
+
+          <p style="margin-top: 40px; font-size: 12px; color: #666;">
+            This is an official record generated from the Class Dues Tracker system.
+          </p>
+
+          <button class="no-print" onclick="window.print()" style="
+            background: #6366f1; 
+            color: white; 
+            padding: 12px 24px; 
+            border: none; 
+            border-radius: 8px; 
+            cursor: pointer;
+            font-size: 16px;
+            margin-top: 20px;
+          ">Print This Document</button>
+        </body>
+        </html>
+      `)
+      printWindow.document.close()
+
+    } catch (err) {
+      console.error('Failed to print summary:', err)
+      setError(err instanceof Error ? err.message : 'Failed to print summary')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  return (
+    <div className="p-6 rounded-xl border" style={{ 
+      background: 'linear-gradient(135deg, rgba(99, 102, 241, 0.1) 0%, rgba(168, 85, 247, 0.1) 100%)',
+      borderColor: colors.borderLight 
+    }}>
+      {/* Header */}
+      <div className="flex items-center gap-3 mb-4">
+        <div className="w-10 h-10 rounded-lg flex items-center justify-center" style={{ background: gradients.primary }}>
+          <FileText className="w-5 h-5 text-white" />
+        </div>
+        <div>
+          <h3 className="text-lg font-bold text-white">Payment Summary</h3>
+          <p className="text-xs" style={{ color: colors.textSecondary }}>
+            Export or print your payment records
+          </p>
+        </div>
+      </div>
+
+      {/* Error Message */}
+      {error && (
+        <motion.div
+          initial={{ opacity: 0, y: -10 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="mb-4 p-3 rounded-lg flex items-start gap-2"
+          style={{ background: 'rgba(239, 68, 68, 0.1)', border: '1px solid rgba(239, 68, 68, 0.2)' }}
+        >
+          <XCircle className="w-4 h-4 text-red-400 shrink-0 mt-0.5" />
+          <p className="text-sm text-red-400">{error}</p>
+        </motion.div>
+      )}
+
+      {/* Info Box */}
+      <div className="mb-4 p-3 rounded-lg" style={{ background: 'rgba(255,255,255,0.05)' }}>
+        <p className="text-sm text-white mb-2 font-medium">What's included:</p>
+        <ul className="space-y-1 text-xs" style={{ color: colors.textSecondary }}>
+          <li className="flex items-center gap-2">
+            <CheckCircle className="w-3 h-3 text-green-400" />
+            Personal information and contact details
+          </li>
+          <li className="flex items-center gap-2">
+            <CheckCircle className="w-3 h-3 text-green-400" />
+            Complete payment history with dates
+          </li>
+          <li className="flex items-center gap-2">
+            <CheckCircle className="w-3 h-3 text-green-400" />
+            Summary statistics and breakdowns
+          </li>
+          <li className="flex items-center gap-2">
+            <CheckCircle className="w-3 h-3 text-green-400" />
+            Transaction references and status
+          </li>
+        </ul>
+      </div>
+
+      {/* Action Buttons */}
+      <div className="grid grid-cols-2 gap-3">
+        <motion.button
+          whileHover={{ scale: 1.02 }}
+          whileTap={{ scale: 0.98 }}
+          onClick={generatePaymentSummary}
+          disabled={loading}
+          className="p-3 rounded-lg font-medium flex items-center justify-center gap-2 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+          style={{ 
+            background: gradients.primary,
+            color: 'white'
+          }}
+        >
+          {loading ? (
+            <>
+              <Clock className="w-4 h-4 animate-spin" />
+              <span className="text-sm">Generating...</span>
+            </>
+          ) : (
+            <>
+              <Download className="w-4 h-4" />
+              <span className="text-sm">Download CSV</span>
+            </>
+          )}
+        </motion.button>
+
+        <motion.button
+          whileHover={{ scale: 1.02 }}
+          whileTap={{ scale: 0.98 }}
+          onClick={printSummary}
+          disabled={loading}
+          className="p-3 rounded-lg font-medium flex items-center justify-center gap-2 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+          style={{ 
+            background: 'rgba(255,255,255,0.1)',
+            color: 'white',
+            border: '1px solid rgba(255,255,255,0.2)'
+          }}
+        >
+          <Printer className="w-4 h-4" />
+          <span className="text-sm">Print</span>
+        </motion.button>
+      </div>
+
+      {/* Share Tip */}
+      <div className="mt-4 p-3 rounded-lg flex items-start gap-2" style={{ background: 'rgba(59, 130, 246, 0.1)', border: '1px solid rgba(59, 130, 246, 0.2)' }}>
+        <Share2 className="w-4 h-4 text-blue-400 shrink-0 mt-0.5" />
+        <div>
+          <p className="text-xs font-medium text-blue-400">Share with parents</p>
+          <p className="text-xs mt-0.5" style={{ color: colors.textSecondary }}>
+            Download and send to your parents as proof of payment
+          </p>
+        </div>
+      </div>
+    </div>
+  )
+}

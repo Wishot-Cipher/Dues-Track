@@ -25,9 +25,16 @@ import type { Payment, PaymentType, PaymentStats } from '@/types';
 import { StatCard } from '@/components/dashboard/StatCard';
 import { NotificationCenter } from '@/components/NotificationCenter';
 import Footer from '@/components/Footer';
+import ExpenseTransparencyDashboard from '@/components/student/ExpenseTransparencyDashboard';
+import AchievementSystem from '@/components/student/AchievementSystem';
+import SmartDeadlineReminders from '@/components/student/SmartDeadlineReminders';
+import ClassProgressVisualization from '@/components/student/ClassProgressVisualization';
+import QuickPaymentSummary from '@/components/student/QuickPaymentSummary';
+import { useStudentFeatures } from '@/hooks/useStudentFeatures';
 
 export default function DashboardPage() {
   const { user, logout, hasPermission } = useAuth();
+  const { features, loading: featuresLoading } = useStudentFeatures();
   const navigate = useNavigate();
   const location = useLocation();
   const [showProfileMenu, setShowProfileMenu] = useState(false);
@@ -69,12 +76,7 @@ export default function DashboardPage() {
       try {
         setLoading(true);
         
-        // Log current user for debugging
-        console.log('🔍 Fetching data for student:', {
-          id: user.id,
-          name: user.full_name,
-          reg_number: user.reg_number
-        });
+        // Debug logs removed for production security
         
         const [statsData, paymentTypesData, paymentsData] = await Promise.all([
           paymentService.getStudentPaymentStats(user.id),
@@ -82,17 +84,7 @@ export default function DashboardPage() {
           paymentService.getStudentPayments(user.id),
         ]);
 
-        // Log fetched data for verification
-        console.log('📊 Student Stats:', statsData);
-        console.log('💰 Payment Types for student:', paymentTypesData.length);
-        console.log('📝 Payments made by student:', paymentsData);
-        console.log('🔍 Payment details:', paymentsData.map(p => ({
-          payment_type_id: p.payment_type_id,
-          student_id: p.student_id,
-          amount: p.amount,
-          status: p.status,
-          is_mine: p.student_id === user.id
-        })));
+        // Debug logs removed for production security
 
         setStats(statsData);
         
@@ -151,11 +143,7 @@ export default function DashboardPage() {
           return statusOrder[a.status] - statusOrder[b.status];
         });
         
-        console.log('✅ Final sorted payments:', sortedCombined.map(p => ({
-          title: p.paymentType.title,
-          status: p.status,
-          amountPaid: p.amountPaid
-        })));
+        // Debug logs removed for production security
         
         setActivePayments(sortedCombined);
       } catch (error) {
@@ -180,7 +168,7 @@ export default function DashboardPage() {
 
   return (
     <div 
-      className="min-h-screen relative overflow-hidden"
+      className="min-h-screen relative overflow-x-hidden"
       style={{
         background: 'radial-gradient(ellipse at top, #1A0E09 0%, #0F0703 100%)',
       }}
@@ -510,7 +498,7 @@ export default function DashboardPage() {
         </div>
 
         {/* My Payments Section - 2/3 + 1/3 Layout */}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 sm:gap-6">
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 sm:gap-6 mb-6 sm:mb-8">
           {/* Right Side - Unpaid Dues (1/3 width) - FIRST ON MOBILE, RIGHT ON DESKTOP */}
           <motion.div
             initial={{ opacity: 0, x: 20 }}
@@ -849,6 +837,37 @@ export default function DashboardPage() {
             </GlassCard>
           </motion.div>
         </div>
+
+        {/* Student Professional Features Section */}
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.9 }}
+          className="space-y-6 mb-6 sm:mb-8"
+        >
+          {/* Student Features - Controlled by Admin Settings */}
+          {!featuresLoading && (
+            <>
+              {/* Deadline Reminders - Full Width */}
+              {features.deadlineReminders && <SmartDeadlineReminders />}
+
+              {/* Two Column Layout */}
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6">
+                {/* Left Column */}
+                <div className="space-y-4 sm:space-y-6">
+                  {features.classProgress && <ClassProgressVisualization />}
+                  {features.paymentSummary && <QuickPaymentSummary />}
+                </div>
+
+                {/* Right Column */}
+                <div className="space-y-4 sm:space-y-6">
+                  {features.expenseTransparency && <ExpenseTransparencyDashboard />}
+                  {features.achievements && <AchievementSystem />}
+                </div>
+              </div>
+            </>
+          )}
+        </motion.div>
       </div>
 
   {/* Floating Action Button - Admin/Finsec/Class Rep */}

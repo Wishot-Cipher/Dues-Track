@@ -114,7 +114,7 @@ export default function AdminCollectedPage() {
             title
           )
         `)
-        .in('status', ['approved', 'pending']); // Include pending to show all spent money
+        .eq('status', 'approved'); // Only count approved expenses in net balance
 
       if (expensesError) {
         console.warn('Error fetching expenses:', expensesError);
@@ -123,7 +123,7 @@ export default function AdminCollectedPage() {
       const expenses = expensesData || [];
       
       if (import.meta.env.DEV) {
-        console.log('DEV: Fetched expenses:', expenses.length, expenses);
+        // Debug logs removed for production security
       }
 
       // Initialize all students (including those who haven't paid)
@@ -226,9 +226,7 @@ export default function AdminCollectedPage() {
       setNetBalance(totalCollectedAmount - totalExpensesAmount);
 
       if (import.meta.env.DEV) {
-        console.log('DEV: Total collected:', totalCollectedAmount);
-        console.log('DEV: Total expenses:', totalExpensesAmount);
-        console.log('DEV: Net balance:', totalCollectedAmount - totalExpensesAmount);
+        // Debug logs removed for production security
       }
 
       // Category breakdown with expenses
@@ -307,7 +305,7 @@ export default function AdminCollectedPage() {
       });
 
       if (import.meta.env.DEV) {
-        console.log('DEV: Category breakdown with expenses:', Array.from(categoryMap.values()));
+        // Debug logs removed for production security
       }
 
       // Calculate net balance for each category
@@ -781,17 +779,17 @@ export default function AdminCollectedPage() {
                   <div className="flex flex-col gap-3 sm:gap-4">
                     {/* Student Info */}
                     <div className="flex-1">
-                      <div className="flex items-center gap-2 sm:gap-3">
-                        <div className="w-8 h-8 sm:w-10 sm:h-10 rounded-full flex items-center justify-center text-white text-sm sm:text-base font-bold"
+                      <div className="flex items-start gap-2">
+                        <div className="w-8 h-8 sm:w-10 sm:h-10 rounded-full flex items-center justify-center text-white text-sm sm:text-base font-bold shrink-0"
                           style={{ background: `linear-gradient(135deg, ${colors.primary}, ${colors.accentMint})` }}>
                           {student.student_name.charAt(0).toUpperCase()}
                         </div>
                         <div className="flex-1 min-w-0">
-                          <p className="font-semibold text-sm sm:text-base text-white truncate">{student.student_name}</p>
-                          <p className="text-xs sm:text-sm" style={{ color: colors.textSecondary }}>{student.reg_number}</p>
+                          <p className="font-semibold text-sm sm:text-base text-white wrap-break-word">{student.student_name}</p>
+                          <p className="text-xs sm:text-sm truncate" style={{ color: colors.textSecondary }} title={student.reg_number}>{student.reg_number}</p>
                         </div>
                         <span
-                          className="px-2 py-0.5 rounded-full text-xs font-semibold"
+                          className="px-2 py-0.5 rounded-full text-xs font-semibold whitespace-nowrap shrink-0"
                           style={{
                             background: student.is_active ? colors.statusPaid : colors.statusFailed,
                             color: 'white',

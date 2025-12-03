@@ -23,6 +23,9 @@ interface QRCodeGeneratorProps {
   paymentTypeId: string;
   paymentTypeName: string;
   amount: number;
+  totalStudents?: number;
+  selectedStudents?: Array<{ id: string; full_name: string; reg_number: string }>;
+  includeSelf?: boolean;
   onBack: () => void;
 }
 
@@ -33,6 +36,9 @@ export default function QRCodeGenerator({
   paymentTypeId,
   paymentTypeName,
   amount,
+  totalStudents = 1,
+  selectedStudents = [],
+  includeSelf = true,
 }: QRCodeGeneratorProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [qrDataUrl, setQrDataUrl] = useState<string>("");
@@ -43,15 +49,36 @@ export default function QRCodeGenerator({
     const generateQRCode = async () => {
       if (canvasRef.current) {
         try {
-          // Generate QR Code Data with timestamp
+          // Generate QR Code Data with timestamp and multiple students support
+          const studentsData = [];
+          
+          if (includeSelf) {
+            studentsData.push({
+              id: studentId,
+              name: studentName,
+              regNumber: studentRegNumber,
+            });
+          }
+          
+          selectedStudents.forEach(s => {
+            studentsData.push({
+              id: s.id,
+              name: s.full_name,
+              regNumber: s.reg_number,
+            });
+          });
+          
           const qrData = JSON.stringify({
             type: "CASH_PAYMENT",
-            studentId,
-            studentName,
-            studentRegNumber,
+            paidBy: studentId,
+            paidByName: studentName,
+            paidByRegNumber: studentRegNumber,
+            students: studentsData,
+            totalStudents,
             paymentTypeId,
             paymentTypeName,
-            amount,
+            totalAmount: amount,
+            amountPerStudent: totalStudents > 0 ? amount / totalStudents : amount,
             timestamp: qrTimestamp,
             paymentMethod: "cash",
           });
@@ -84,6 +111,9 @@ export default function QRCodeGenerator({
     paymentTypeId,
     paymentTypeName,
     amount,
+    totalStudents,
+    selectedStudents,
+    includeSelf,
     qrTimestamp,
   ]);
 
@@ -144,7 +174,7 @@ export default function QRCodeGenerator({
                   className="text-sm mb-1"
                   style={{ color: colors.textSecondary }}
                 >
-                  Student Name
+                  Paid By
                 </p>
                 <div className="flex items-center gap-2">
                   <User className="w-4 h-4" style={{ color: colors.primary }} />
@@ -177,7 +207,7 @@ export default function QRCodeGenerator({
                   className="text-sm mb-1"
                   style={{ color: colors.textSecondary }}
                 >
-                  Amount
+                  Total Amount
                 </p>
                 <div className="flex items-center gap-2">
                   <DollarSign
@@ -192,7 +222,50 @@ export default function QRCodeGenerator({
                   </p>
                 </div>
               </div>
+              
+              {totalStudents > 1 && (
+                <>
+                  <div>
+                    <p
+                      className="text-sm mb-1"
+                      style={{ color: colors.textSecondary }}
+                    >
+                      Total Students
+                    </p>
+                    <p className="font-medium text-white">{totalStudents}</p>
+                  </div>
+                  
+                  <div>
+                    <p
+                      className="text-sm mb-1"
+                      style={{ color: colors.textSecondary }}
+                    >
+                      Per Student
+                    </p>
+                    <p className="font-medium text-white">
+                      {formatCurrency(amount / totalStudents)}
+                    </p>
+                  </div>
+                </>
+              )}
             </div>
+            
+            {/* List of students being paid for */}
+            {totalStudents > 1 && (
+              <div className="mt-4 pt-4 border-t" style={{ borderColor: 'rgba(255,255,255,0.1)' }}>
+                <p className="text-sm font-medium mb-2" style={{ color: colors.textSecondary }}>
+                  Students ({totalStudents}):
+                </p>
+                <ul className="text-sm space-y-1">
+                  {includeSelf && <li className="text-white">• {studentName} ({studentRegNumber})</li>}
+                  {selectedStudents.map(s => (
+                    <li key={s.id} className="text-white">
+                      • {s.full_name} ({s.reg_number})
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
           </div>
         </GlassCard>
       </motion.div>

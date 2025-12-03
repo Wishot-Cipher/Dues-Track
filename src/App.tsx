@@ -4,6 +4,7 @@ import { ToastProvider } from '@/components/ui/ToastProvider';
 import ProtectedRoute from '@/components/auth/ProtectedRoute';
 import OfflineIndicator from '@/components/OfflineIndicator';
 import InstallPWA from '@/components/InstallPWA';
+import UpdateNotification from '@/components/UpdateNotification';
 
 // Pages
 import LoginPage from '@/pages/LoginPage';
@@ -29,6 +30,7 @@ function App() {
         <AuthProvider>
           <OfflineIndicator />
           <InstallPWA />
+          <UpdateNotification />
           <Routes>
             {/* Public Routes */}
             <Route path="/login" element={<LoginPage />} />

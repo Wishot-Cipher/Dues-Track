@@ -178,7 +178,7 @@ class PaymentService {
 
       if (!student) return [];
 
-      console.log('Student level:', student.level);
+      // Debug logs removed for production security
 
       // Get ALL active payment types first (easier filtering)
       // Temporarily remove deadline filter to see all payment types
@@ -228,7 +228,7 @@ class PaymentService {
         }
       }
 
-      console.log('Final filtered types (unpaid):', filteredTypes);
+      // Debug logs removed for production security
       return filteredTypes;
     } catch (error) {
       console.error('Error fetching upcoming payment types:', error);

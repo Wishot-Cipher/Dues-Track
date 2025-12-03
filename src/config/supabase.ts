@@ -28,6 +28,20 @@ export const STORAGE_BUCKETS = {
 
 // Helper to get public URL for uploaded files
 export const getPublicUrl = (bucket: string, path: string) => {
-  const { data } = supabase.storage.from(bucket).getPublicUrl(path)
+  // Remove any existing full URLs or bucket paths from the path
+  let cleanPath = path
+    .replace(/^https?:\/\/[^/]+\/storage\/v1\/object\/public\/[^/]+\//, '')
+    .replace(/^.*\/expense-receipts\//, '')
+    .replace(/^.*\/receipts\//, '')
+    .replace(/^.*\/profile-images\//, '')
+  
+  // Decode any URL encoding
+  try {
+    cleanPath = decodeURIComponent(cleanPath)
+  } catch (e) {
+    console.warn('Failed to decode path:', e)
+  }
+  
+  const { data } = supabase.storage.from(bucket).getPublicUrl(cleanPath)
   return data.publicUrl
 }

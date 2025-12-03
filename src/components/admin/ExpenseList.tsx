@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useMemo } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import GlassCard from '@/components/ui/GlassCard'
 import { colors, gradients } from '@/config/colors'
@@ -6,8 +6,10 @@ import { useExpenses } from '@/hooks/useExpenses'
 import { useAuth } from '@/hooks/useAuth'
 import { getPublicUrl } from '@/config/supabase'
 import type { Expense } from '@/services/expenseService'
-import { CheckCircle, Clock, XCircle, Calendar, Tag, FileText, X, Download, Eye, User } from 'lucide-react'
+import { CheckCircle, Clock, XCircle, Calendar, Tag, FileText, X, Download, Eye, User, ChevronLeft, ChevronRight } from 'lucide-react'
 import * as LucideIcons from 'lucide-react'
+
+const ITEMS_PER_PAGE = 10
 
 // Helper to render category icon
 function CategoryIcon({ iconName, className = 'w-5 h-5' }: { iconName: string | null; className?: string }) {
@@ -64,6 +66,84 @@ export default function ExpenseList() {
   const { expenses, loading, error } = useExpenses()
   const { hasPermission } = useAuth()
   const [selected, setSelected] = useState<Expense | null>(null)
+  const [imageModal, setImageModal] = useState<string | null>(null)
+  const [currentPage, setCurrentPage] = useState(1)
+
+  // Sort expenses by newest first (created_at or expense_date)
+  const sortedExpenses = useMemo(() => {
+    return [...expenses].sort((a, b) => {
+      const dateA = new Date(a.expense_date || a.created_at).getTime()
+      const dateB = new Date(b.expense_date || b.created_at).getTime()
+      return dateB - dateA // Newest first
+    })
+  }, [expenses])
+
+  // Pagination
+  const totalPages = Math.ceil(sortedExpenses.length / ITEMS_PER_PAGE)
+  const paginatedExpenses = useMemo(() => {
+    const startIndex = (currentPage - 1) * ITEMS_PER_PAGE
+    const endIndex = startIndex + ITEMS_PER_PAGE
+    return sortedExpenses.slice(startIndex, endIndex)
+  }, [sortedExpenses, currentPage])
+
+  // Reset to page 1 when expenses change
+  useMemo(() => {
+    if (currentPage > totalPages && totalPages > 0) {
+      setCurrentPage(1)
+    }
+  }, [totalPages, currentPage])
+
+  function exportToCSV() {
+    // Create detailed CSV with proper formatting
+    const csvRows = []
+    
+    // Add title and metadata
+    csvRows.push('EXPENSE REPORT')
+    csvRows.push(`Generated on: ${new Date().toLocaleString()}`)
+    csvRows.push('') // Empty line
+    
+    // Add headers
+    csvRows.push('Date,Title,Description,Category,Funded By,Amount (₦),Status,Recorded By,Approved/Rejected By,Notes')
+    
+    // Add data rows - use sortedExpenses to maintain newest first order
+    sortedExpenses.forEach(exp => {
+      const date = new Date(exp.expense_date || exp.created_at).toLocaleDateString()
+      const title = (exp.title || '').replace(/"/g, '""')
+      const description = (exp.description || 'N/A').replace(/"/g, '""')
+      const category = ((exp as unknown as { category?: { name?: string } }).category?.name || exp.category || 'N/A').replace(/"/g, '""')
+      const fundedBy = ((exp as unknown as { payment_types?: { title?: string } }).payment_types?.title || 'N/A').replace(/"/g, '""')
+      const amount = exp.amount || 0
+      const status = exp.status?.toUpperCase() || 'PENDING'
+      const recordedBy = ((exp as unknown as { admins?: { full_name?: string } }).admins?.full_name || 'N/A').replace(/"/g, '""')
+      const approvedBy = ((exp as unknown as { approved_by?: { full_name?: string } }).approved_by?.full_name || 'N/A').replace(/"/g, '""')
+      const notes = (exp.rejection_reason || '').replace(/"/g, '""')
+      
+      csvRows.push(`"${date}","${title}","${description}","${category}","${fundedBy}",${amount},"${status}","${recordedBy}","${approvedBy}","${notes}"`)
+    })
+    
+    // Add summary at the bottom
+    csvRows.push('') // Empty line
+    csvRows.push('SUMMARY')
+    const approvedExpenses = sortedExpenses.filter(e => e.status === 'approved')
+    const totalApproved = approvedExpenses.reduce((sum, e) => sum + (e.amount || 0), 0)
+    const pendingExpenses = sortedExpenses.filter(e => e.status === 'pending')
+    const totalPending = pendingExpenses.reduce((sum, e) => sum + (e.amount || 0), 0)
+    const rejectedExpenses = sortedExpenses.filter(e => e.status === 'rejected')
+    
+    csvRows.push(`Total Expenses,${sortedExpenses.length}`)
+    csvRows.push(`Approved Expenses,${approvedExpenses.length},"₦${totalApproved.toLocaleString()}"`)
+    csvRows.push(`Pending Expenses,${pendingExpenses.length},"₦${totalPending.toLocaleString()}"`)
+    csvRows.push(`Rejected Expenses,${rejectedExpenses.length}`)
+    
+    const csvContent = csvRows.join('\n')
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' })
+    const url = window.URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `expense-report-${new Date().toISOString().split('T')[0]}.csv`
+    a.click()
+    window.URL.revokeObjectURL(url)
+  }
 
   if (!hasPermission('can_manage_students') && !hasPermission('can_approve_payments')) {
     return (
@@ -88,15 +168,24 @@ export default function ExpenseList() {
           <div>
             <h2 className="text-xl font-bold text-white">Recent Expenses</h2>
             <p className="text-sm mt-1" style={{ color: colors.textSecondary }}>
-              {expenses.length} expense{expenses.length !== 1 ? 's' : ''} recorded
+              {sortedExpenses.length} expense{sortedExpenses.length !== 1 ? 's' : ''} recorded • Showing {paginatedExpenses.length} of {sortedExpenses.length}
             </p>
           </div>
-          {expenses.length > 0 && (
+          {sortedExpenses.length > 0 && (
             <div className="flex items-center gap-2">
+              <button
+                onClick={exportToCSV}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg transition-all hover:bg-white/10"
+                style={{ background: 'rgba(255,255,255,0.05)', border: `1px solid ${colors.borderLight}` }}
+                title="Export to CSV"
+              >
+                <Download className="w-4 h-4" style={{ color: colors.accentMint }} />
+                <span className="text-xs font-medium" style={{ color: colors.textPrimary }}>Export</span>
+              </button>
               <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg" style={{ background: 'rgba(255,255,255,0.05)' }}>
                 <FileText className="w-4 h-4" style={{ color: colors.textSecondary }} />
                 <span className="text-xs font-medium" style={{ color: colors.textSecondary }}>
-                  Total: ₦{expenses.reduce((sum, exp) => sum + (exp.amount || 0), 0).toLocaleString()}
+                  Approved: ₦{sortedExpenses.filter(exp => exp.status === 'approved').reduce((sum, exp) => sum + (exp.amount || 0), 0).toLocaleString()}
                 </span>
               </div>
             </div>
@@ -117,7 +206,7 @@ export default function ExpenseList() {
           </div>
         )}
 
-        {!loading && expenses.length === 0 && (
+        {!loading && sortedExpenses.length === 0 && (
           <div className="text-center py-12">
             <div className="w-20 h-20 rounded-full mx-auto mb-4 flex items-center justify-center" style={{ background: `${colors.primary}10` }}>
               <FileText className="w-10 h-10" style={{ color: colors.primary }} />
@@ -129,96 +218,180 @@ export default function ExpenseList() {
           </div>
         )}
 
-        {!loading && expenses.length > 0 && (
-          <div className="space-y-3">
-            {expenses.map((exp, index) => {
-              const categoryData = (exp as unknown as Record<string, unknown>).category as { name?: string; icon?: string; color?: string } | undefined
-              const categoryName = categoryData?.name || (exp.category as string) || 'Uncategorized'
-              const categoryIcon = categoryData?.icon || '📦'
-              const categoryColor = categoryData?.color || colors.primary
-              const expStatus = exp.status as 'pending' | 'approved' | 'rejected'
-              
-              return (
-                <motion.div
-                  key={exp.id}
-                  initial={{ opacity: 0, y: 20 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ delay: index * 0.05 }}
-                  className="group border rounded-xl p-5 hover:border-orange-500/50 transition-all cursor-pointer"
-                  style={{ 
-                    borderColor: colors.borderLight, 
-                    background: 'linear-gradient(135deg, rgba(255,255,255,0.03) 0%, rgba(255,255,255,0.01) 100%)',
-                    backdropFilter: 'blur(10px)'
-                  }}
-                  onClick={() => setSelected(exp)}
-                >
-                  <div className="flex items-start justify-between gap-4">
-                    <div className="flex-1 min-w-0">
-                      {/* Title and Status */}
-                      <div className="flex items-start gap-3 mb-3">
-                        <div className="flex-1">
-                          <h3 className="font-semibold text-white text-base mb-1.5 group-hover:text-orange-400 transition-colors">
-                            {exp.title}
-                          </h3>
-                          <div className="flex items-center gap-2 flex-wrap">
-                            <StatusBadge status={expStatus} />
+        {!loading && paginatedExpenses.length > 0 && (
+          <>
+            <div className="space-y-3">
+              {paginatedExpenses.map((exp, index) => {
+                const categoryData = (exp as unknown as Record<string, unknown>).category as { name?: string; icon?: string; color?: string } | undefined
+                const categoryName = categoryData?.name || (exp.category as string) || 'Uncategorized'
+                const categoryIcon = categoryData?.icon || '📦'
+                const categoryColor = categoryData?.color || colors.primary
+                const expStatus = exp.status as 'pending' | 'approved' | 'rejected'
+                
+                return (
+                  <motion.div
+                    key={exp.id}
+                    initial={{ opacity: 0, y: 20 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: index * 0.05 }}
+                    className="group border rounded-xl p-5 hover:border-orange-500/50 transition-all cursor-pointer"
+                    style={{ 
+                      borderColor: colors.borderLight, 
+                      background: 'linear-gradient(135deg, rgba(255,255,255,0.03) 0%, rgba(255,255,255,0.01) 100%)',
+                      backdropFilter: 'blur(10px)'
+                    }}
+                    onClick={() => {
+                      if (hasPermission('can_manage_students') || exp.status === 'approved') {
+                        setSelected(exp)
+                      }
+                    }}
+                  >
+                    <div className="flex items-start justify-between gap-4">
+                      <div className="flex-1 min-w-0">
+                        {/* Title and Status */}
+                        <div className="flex items-start gap-3 mb-3">
+                          <div className="flex-1">
+                            <h3 className="font-semibold text-white text-base mb-1.5 group-hover:text-orange-400 transition-colors">
+                              {exp.title}
+                            </h3>
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <StatusBadge status={expStatus} />
+                            </div>
                           </div>
                         </div>
-                      </div>
 
-                      {/* Metadata */}
-                      <div className="flex items-center gap-4 flex-wrap text-sm" style={{ color: colors.textSecondary }}>
-                        <div className="flex items-center gap-1.5">
-                          <Tag className="w-4 h-4" style={{ color: categoryColor }} />
-                          <span>{categoryIcon} {categoryName}</span>
-                        </div>
-                        <div className="flex items-center gap-1.5">
-                          <Calendar className="w-4 h-4" />
-                          <span>{exp.expense_date ? new Date(exp.expense_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : '—'}</span>
-                        </div>
-                        {exp.receipt_url && (
-                          <div className="flex items-center gap-1.5 text-orange-400">
-                            <FileText className="w-4 h-4" />
-                            <span>Receipt attached</span>
+                        {/* Metadata */}
+                        <div className="flex items-center gap-4 flex-wrap text-sm" style={{ color: colors.textSecondary }}>
+                          <div className="flex items-center gap-1.5">
+                            <Tag className="w-4 h-4" style={{ color: categoryColor }} />
+                            <span>{categoryIcon} {categoryName}</span>
                           </div>
+                          <div className="flex items-center gap-1.5">
+                            <Calendar className="w-4 h-4" />
+                            <span>{exp.expense_date ? new Date(exp.expense_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : '—'}</span>
+                          </div>
+                          {exp.receipt_url && (
+                            <div className="flex items-center gap-1.5 text-orange-400">
+                              <FileText className="w-4 h-4" />
+                              <span>Receipt attached</span>
+                            </div>
+                          )}
+                        </div>
+
+                        {/* Description Preview */}
+                        {exp.description && (
+                          <p className="mt-3 text-sm line-clamp-1" style={{ color: colors.textSecondary }}>
+                            {exp.description}
+                          </p>
                         )}
                       </div>
 
-                      {/* Description Preview */}
-                      {exp.description && (
-                        <p className="mt-3 text-sm line-clamp-1" style={{ color: colors.textSecondary }}>
-                          {exp.description}
-                        </p>
-                      )}
-                    </div>
-
-                    {/* Amount */}
-                    <div className="text-right">
-                      <div className="font-bold text-2xl mb-1" style={{ 
-                        background: gradients.primary,
-                        WebkitBackgroundClip: 'text',
-                        WebkitTextFillColor: 'transparent',
-                        backgroundClip: 'text'
-                      }}>
-                        ₦{Number(exp.amount || 0).toLocaleString()}
+                      {/* Amount */}
+                      <div className="text-right">
+                        <div className="font-bold text-2xl mb-1" style={{ 
+                          background: gradients.primary,
+                          WebkitBackgroundClip: 'text',
+                          WebkitTextFillColor: 'transparent',
+                          backgroundClip: 'text'
+                        }}>
+                          ₦{Number(exp.amount || 0).toLocaleString()}
+                        </div>
+                        {(hasPermission('can_manage_students') || expStatus === 'approved') && (
+                          <button
+                            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all opacity-0 group-hover:opacity-100"
+                            style={{ background: 'rgba(255,104,3,0.1)', color: colors.primary }}
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              setSelected(exp)
+                            }}
+                          >
+                            <Eye className="w-3.5 h-3.5" />
+                            View Details
+                          </button>
+                        )}
                       </div>
+                    </div>
+                  </motion.div>
+                )
+              })}
+            </div>
+
+            {/* Pagination Controls */}
+            {totalPages > 1 && (
+              <motion.div
+                className="mt-6 flex items-center justify-center gap-2"
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                transition={{ delay: 0.3 }}
+              >
+                <button
+                  onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
+                  disabled={currentPage === 1}
+                  className="flex items-center gap-2 px-4 py-2 rounded-lg font-medium transition-all disabled:opacity-30 disabled:cursor-not-allowed"
+                  style={{ 
+                    background: currentPage === 1 ? 'rgba(255,255,255,0.03)' : 'rgba(255,104,3,0.1)',
+                    border: `1px solid ${currentPage === 1 ? colors.borderLight : colors.primary}`,
+                    color: currentPage === 1 ? colors.textSecondary : colors.primary
+                  }}
+                >
+                  <ChevronLeft className="w-4 h-4" />
+                  <span className="hidden sm:inline">Previous</span>
+                </button>
+
+                <div className="flex items-center gap-1">
+                  {Array.from({ length: totalPages }, (_, i) => i + 1).map((page) => {
+                    // Show first page, last page, current page, and pages around current
+                    const showPage = page === 1 || 
+                                    page === totalPages || 
+                                    (page >= currentPage - 1 && page <= currentPage + 1)
+                    
+                    // Show ellipsis
+                    const showEllipsisBefore = page === currentPage - 2 && currentPage > 3
+                    const showEllipsisAfter = page === currentPage + 2 && currentPage < totalPages - 2
+
+                    if (showEllipsisBefore || showEllipsisAfter) {
+                      return (
+                        <span key={page} className="px-2 text-sm" style={{ color: colors.textSecondary }}>
+                          ...
+                        </span>
+                      )
+                    }
+
+                    if (!showPage) return null
+
+                    return (
                       <button
-                        className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all opacity-0 group-hover:opacity-100"
-                        style={{ background: 'rgba(255,104,3,0.1)', color: colors.primary }}
-                        onClick={(e) => {
-                          e.stopPropagation()
-                          setSelected(exp)
+                        key={page}
+                        onClick={() => setCurrentPage(page)}
+                        className="w-10 h-10 rounded-lg font-medium transition-all"
+                        style={{
+                          background: currentPage === page ? gradients.primary : 'rgba(255,255,255,0.05)',
+                          border: `1px solid ${currentPage === page ? colors.primary : colors.borderLight}`,
+                          color: currentPage === page ? 'white' : colors.textSecondary
                         }}
                       >
-                        <Eye className="w-3.5 h-3.5" />
-                        View Details
+                        {page}
                       </button>
-                    </div>
-                  </div>
-                </motion.div>
-              )
-            })}
-          </div>
+                    )
+                  })}
+                </div>
+
+                <button
+                  onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
+                  disabled={currentPage === totalPages}
+                  className="flex items-center gap-2 px-4 py-2 rounded-lg font-medium transition-all disabled:opacity-30 disabled:cursor-not-allowed"
+                  style={{ 
+                    background: currentPage === totalPages ? 'rgba(255,255,255,0.03)' : 'rgba(255,104,3,0.1)',
+                    border: `1px solid ${currentPage === totalPages ? colors.borderLight : colors.primary}`,
+                    color: currentPage === totalPages ? colors.textSecondary : colors.primary
+                  }}
+                >
+                  <span className="hidden sm:inline">Next</span>
+                  <ChevronRight className="w-4 h-4" />
+                </button>
+              </motion.div>
+            )}
+          </>
         )}
       </GlassCard>
 
@@ -379,7 +552,7 @@ export default function ExpenseList() {
                 )}
 
                 {/* Receipt */}
-                {selected.receipt_url && (
+                {selected.receipt_url && (hasPermission('can_manage_students') || selected.status === 'approved') && (
                   <div>
                     <label className="text-xs font-semibold uppercase tracking-wider mb-3 block" style={{ color: colors.textSecondary }}>
                       Receipt
@@ -415,23 +588,32 @@ export default function ExpenseList() {
                           </a>
                         </div>
                       ) : (
-                        <div className="rounded-xl overflow-hidden border max-h-[400px] overflow-y-auto" style={{ borderColor: colors.borderLight, background: 'rgba(0,0,0,0.3)' }}>
-                          <img 
-                            src={receiptUrl} 
-                            alt="expense receipt" 
-                            className="w-full h-auto object-contain"
-                            style={{ maxHeight: '400px' }}
-                            onError={(e) => {
-                              console.error('Failed to load receipt image:', receiptUrl)
-                              const target = e.target as HTMLImageElement
-                              target.style.display = 'none'
-                              const errorDiv = document.createElement('div')
-                              errorDiv.className = 'p-8 text-center'
-                              errorDiv.style.color = colors.textSecondary
-                              errorDiv.innerHTML = `<p>❌ Failed to load receipt image</p><p class="text-xs mt-2">${receiptUrl}</p>`
-                              target.parentElement?.appendChild(errorDiv)
-                            }}
-                          />
+                        <div>
+                          <div 
+                            className="rounded-xl overflow-hidden border cursor-pointer transition-all hover:border-orange-500"
+                            style={{ borderColor: colors.borderLight, background: 'rgba(0,0,0,0.3)' }}
+                            onClick={() => setImageModal(receiptUrl)}
+                          >
+                            <img 
+                              src={receiptUrl} 
+                              alt="expense receipt" 
+                              className="w-full h-auto object-contain"
+                              style={{ maxHeight: '400px' }}
+                              onError={(e) => {
+                                console.error('Failed to load receipt image:', receiptUrl)
+                                const target = e.target as HTMLImageElement
+                                target.style.display = 'none'
+                                const errorDiv = document.createElement('div')
+                                errorDiv.className = 'p-8 text-center'
+                                errorDiv.style.color = colors.textSecondary
+                                errorDiv.innerHTML = `<p>❌ Failed to load receipt image</p><p class="text-xs mt-2">${receiptUrl}</p>`
+                                target.parentElement?.appendChild(errorDiv)
+                              }}
+                            />
+                          </div>
+                          <p className="text-xs mt-2 text-center" style={{ color: colors.textSecondary }}>
+                            👆 Click image to view full size
+                          </p>
                         </div>
                       )
                     })()}
@@ -442,6 +624,32 @@ export default function ExpenseList() {
           </motion.div>
         )}
       </AnimatePresence>
+
+      {/* Image Modal */}
+      {imageModal && (
+        <motion.div
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
+          className="fixed inset-0 z-50 flex items-center justify-center p-4"
+          style={{ background: 'rgba(0, 0, 0, 0.9)' }}
+          onClick={() => setImageModal(null)}
+        >
+          <button
+            onClick={() => setImageModal(null)}
+            className="absolute top-4 right-4 w-10 h-10 rounded-full flex items-center justify-center transition-all hover:bg-white/20"
+            style={{ background: 'rgba(255, 255, 255, 0.1)' }}
+          >
+            <X className="w-6 h-6 text-white" />
+          </button>
+          <img
+            src={imageModal}
+            alt="Receipt Full View"
+            className="max-w-full max-h-[90vh] object-contain rounded-lg"
+            onClick={(e) => e.stopPropagation()}
+          />
+        </motion.div>
+      )}
     </>
   )
 }

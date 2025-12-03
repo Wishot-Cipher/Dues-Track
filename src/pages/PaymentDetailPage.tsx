@@ -87,6 +87,7 @@ export default function PaymentDetailPage() {
   );
   const [showPayForOthers, setShowPayForOthers] = useState(false);
   const [selectedStudents, setSelectedStudents] = useState<Student[]>([]);
+  const [includeSelf, setIncludeSelf] = useState(false);
 
   // Form state
   const [paymentOption, setPaymentOption] = useState<"full" | "partial">(
@@ -215,8 +216,9 @@ export default function PaymentDetailPage() {
         students.push(...selectedStudents);
       }
       
-      // Add current user only if they haven't paid yet and are included
-      if (!isFullyPaid) {
+      // Add current user only if includeSelf is true (from Pay for Others modal)
+      // OR if they're paying for themselves only (no selectedStudents)
+      if (includeSelf || (selectedStudents.length === 0 && !isFullyPaid)) {
         students.push({
           id: user.id,
           full_name: user.full_name,
@@ -293,7 +295,7 @@ export default function PaymentDetailPage() {
 
       const message =
         selectedStudents.length > 0
-          ? `Payment submitted for ${selectedStudents.length + 1} student(s)!`
+          ? `Payment submitted for ${selectedStudents.length + (includeSelf ? 1 : 0)} student(s)!`
           : "Payment submitted successfully!";
 
       toast.success(message + " Awaiting approval.");
@@ -787,7 +789,10 @@ export default function PaymentDetailPage() {
                     studentRegNumber={user.reg_number}
                     paymentTypeId={id!}
                     paymentTypeName={paymentType.title}
-                    amount={paymentOption === "full" ? remainingAmount : amount}
+                    amount={(paymentOption === "full" ? remainingAmount : amount) * (selectedStudents.length + (includeSelf ? 1 : 0))}
+                    totalStudents={selectedStudents.length + (includeSelf ? 1 : 0)}
+                    selectedStudents={selectedStudents}
+                    includeSelf={includeSelf}
                     onBack={() => setStep("method")}
                   />
                 </motion.div>
@@ -890,7 +895,8 @@ export default function PaymentDetailPage() {
                     )}
 
                     {/* Payment Options - Full or Partial */}
-                    {paymentType.allow_partial && remainingAmount > 0 && (
+                    {/* Disable partial payment when paying for others */}
+                    {paymentType.allow_partial && remainingAmount > 0 && selectedStudents.length === 0 && (
                       <GlassCard>
                         <h3 className="text-lg font-bold text-white mb-4">
                           Payment Amount
@@ -1098,14 +1104,14 @@ export default function PaymentDetailPage() {
                               }}
                             >
                               <p className="font-bold text-white mb-2">
-                                Paying for {selectedStudents.length + 1}{" "}
+                                Paying for {selectedStudents.length + (includeSelf ? 1 : 0)}{" "}
                                 student(s):
                               </p>
                               <ul
                                 className="text-sm space-y-1"
                                 style={{ color: colors.textSecondary }}
                               >
-                                <li>• You</li>
+                                {includeSelf && <li>• You</li>}
                                 {selectedStudents.map((s) => (
                                   <li key={s.id}>
                                     • {s.full_name} ({s.reg_number})
@@ -1118,7 +1124,7 @@ export default function PaymentDetailPage() {
                               >
                                 Total:{" "}
                                 {formatCurrency(
-                                  (selectedStudents.length + 1) *
+                                  (selectedStudents.length + (includeSelf ? 1 : 0)) *
                                     (paymentOption === "full"
                                       ? remainingAmount
                                       : amount)
@@ -1143,7 +1149,7 @@ export default function PaymentDetailPage() {
                               `Submit Payment${
                                 selectedStudents.length > 0
                                   ? ` for ${
-                                      selectedStudents.length + 1
+                                      selectedStudents.length + (includeSelf ? 1 : 0)
                                     } Student(s)`
                                   : ""
                               }`
@@ -1168,8 +1174,9 @@ export default function PaymentDetailPage() {
         amount={paymentType.amount}
         currentStudentId={user?.id || ""}
         currentUserHasPaid={isFullyPaid}
-        onProceed={(students) => {
+        onProceed={(students, totalAmount, includeSelfFlag) => {
           setSelectedStudents(students);
+          setIncludeSelf(includeSelfFlag);
           setShowPayForOthers(false);
           setStep("method");
         }}

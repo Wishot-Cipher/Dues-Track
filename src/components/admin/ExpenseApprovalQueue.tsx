@@ -1,7 +1,8 @@
 /* eslint-disable @typescript-eslint/no-unused-vars */
-import React, { useState, useEffect } from 'react'
+import { useState, useEffect } from 'react'
 import GlassCard from '@/components/ui/GlassCard'
 import CustomButton from '@/components/ui/CustomButton'
+import ConfirmDialog from '@/components/ui/ConfirmDialog'
 import { colors } from '@/config/colors'
 import { useAuth } from '@/hooks/useAuth'
 import { useToast } from '@/hooks/useToast'
@@ -16,9 +17,19 @@ export default function ExpenseApprovalQueue() {
   const [selectedExpense, setSelectedExpense] = useState<Expense | null>(null)
   const [approvalLoading, setApprovalLoading] = useState(false)
   const [rejectionReason, setRejectionReason] = useState('')
+  const [balanceMap, setBalanceMap] = useState<Map<string, number>>(new Map())
+  const [imageModal, setImageModal] = useState<string | null>(null)
+  const [confirmDialog, setConfirmDialog] = useState<{
+    isOpen: boolean
+    title: string
+    message: string
+    type: 'info' | 'warning' | 'danger' | 'success'
+    onConfirm: () => void
+  }>({ isOpen: false, title: '', message: '', type: 'info', onConfirm: () => {} })
 
   useEffect(() => {
     loadPendingExpenses()
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   async function loadPendingExpenses() {
@@ -26,6 +37,9 @@ export default function ExpenseApprovalQueue() {
       setLoading(true)
       const data = await fetchExpenses(100, 'pending')
       setPendingExpenses(data || [])
+      
+      // Fetch available balances for all payment types
+      await fetchAvailableBalances()
     } catch (err) {
       showError('Failed to load pending expenses')
     } finally {
@@ -33,23 +47,114 @@ export default function ExpenseApprovalQueue() {
     }
   }
 
-  async function handleApprove(expenseId: string) {
+  async function fetchAvailableBalances() {
     try {
-      setApprovalLoading(true)
-      const adminId = user?.admins?.[0]?.id
-      if (!adminId) {
-        showError('Admin ID not found')
-        return
-      }
-      await approveExpense({ expense_id: expenseId, approved: true, admin_id: adminId })
-      success('Expense approved successfully')
-      setPendingExpenses(prev => prev.filter(e => e.id !== expenseId))
-      setSelectedExpense(null)
+      const { supabase } = await import('@/config/supabase')
+      
+      // Get payments by payment type
+      const { data: paymentsData } = await supabase
+        .from('payments')
+        .select('amount, payment_type_id')
+        .eq('status', 'approved')
+        .not('transaction_ref', 'like', 'WAIVED-%')
+      
+      // Get approved expenses by funded_by
+      const { data: expensesData } = await supabase
+        .from('expenses')
+        .select('amount, funded_by')
+        .eq('status', 'approved')
+      
+      const balances = new Map<string, number>()
+      
+      // Calculate collected per payment type
+      paymentsData?.forEach(p => {
+        if (p.payment_type_id) {
+          balances.set(p.payment_type_id, (balances.get(p.payment_type_id) || 0) + Number(p.amount))
+        }
+      })
+      
+      // Subtract expenses
+      expensesData?.forEach(e => {
+        if (e.funded_by) {
+          balances.set(e.funded_by, (balances.get(e.funded_by) || 0) - Number(e.amount))
+        }
+      })
+      
+      setBalanceMap(balances)
     } catch (err) {
-      showError('Failed to approve expense')
-    } finally {
-      setApprovalLoading(false)
+      console.error('Failed to fetch balances:', err)
     }
+  }
+
+  async function handleApprove(expenseId: string) {
+    const expense = pendingExpenses.find(e => e.id === expenseId)
+    if (!expense) return
+
+    // Get current balance for this payment type
+    const currentBalance = balanceMap.get(expense.funded_by || '') || 0
+    const balanceAfterApproval = currentBalance - (expense.amount || 0)
+    const LOW_BALANCE_THRESHOLD = 15000
+
+    // Function to actually approve the expense
+    const performApproval = async () => {
+      try {
+        setApprovalLoading(true)
+        const adminId = user?.admins?.[0]?.id
+        if (!adminId) {
+          showError('Admin ID not found')
+          return
+        }
+        await approveExpense({ expense_id: expenseId, approved: true, admin_id: adminId })
+        success('Expense approved successfully')
+        setPendingExpenses(prev => prev.filter(e => e.id !== expenseId))
+        setSelectedExpense(null)
+        // Refresh balances
+        await fetchAvailableBalances()
+      } catch (err) {
+        showError('Failed to approve expense')
+      } finally {
+        setApprovalLoading(false)
+      }
+    }
+
+    // Check for negative balance
+    if (balanceAfterApproval < 0) {
+      const negativeMessage = `🚫 CRITICAL: Negative Balance!\n\nApproving this expense will result in a NEGATIVE balance of ₦${balanceAfterApproval.toLocaleString()}.\n\nThis means you'll be overspending. Are you absolutely sure?`
+      
+      setConfirmDialog({
+        isOpen: true,
+        title: 'Critical: Negative Balance',
+        message: negativeMessage,
+        type: 'danger',
+        onConfirm: performApproval
+      })
+      return
+    }
+
+    // Check for low balance warning
+    if (balanceAfterApproval < LOW_BALANCE_THRESHOLD && balanceAfterApproval >= 0) {
+      const warningMessage = `⚠️ WARNING: Low Balance Alert!\n\nApproving this expense will bring the balance down to ₦${balanceAfterApproval.toLocaleString()}, which is below ₦${LOW_BALANCE_THRESHOLD.toLocaleString()}.\n\nDo you still want to proceed?`
+      
+      setConfirmDialog({
+        isOpen: true,
+        title: 'Low Balance Warning',
+        message: warningMessage,
+        type: 'warning',
+        onConfirm: performApproval
+      })
+      return
+    }
+
+    // Standard confirmation
+    const confirmMessage = `Are you sure you want to approve this expense?\n\nExpense: ${expense.title}\nAmount: ₦${(expense.amount || 0).toLocaleString()}\nCurrent Balance: ₦${currentBalance.toLocaleString()}\nBalance After: ₦${balanceAfterApproval.toLocaleString()}`
+    
+    setConfirmDialog({
+      isOpen: true,
+      title: 'Approve Expense',
+      message: confirmMessage,
+      type: 'info',
+      onConfirm: performApproval
+    })
   }
 
   async function handleReject(expenseId: string) {
@@ -75,7 +180,6 @@ export default function ExpenseApprovalQueue() {
       setPendingExpenses(prev => prev.filter(e => e.id !== expenseId))
       setSelectedExpense(null)
       setRejectionReason('')
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
     } catch (err) {
       showError('Failed to reject expense')
     } finally {
@@ -193,16 +297,43 @@ export default function ExpenseApprovalQueue() {
                         >
                           ✗ Reject
                         </CustomButton>
-                        {expense.receipt_url && (
-                          <a
-                            href={getPublicUrl('expense-receipts', expense.receipt_url)}
-                            target="_blank"
-                            rel="noreferrer"
+                        {expense.receipt_url ? (
+                          <button
+                            onClick={() => {
+                              if (expense.receipt_url) {
+                                console.log('Receipt URL from DB:', expense.receipt_url)
+                                // Clean the path - remove any existing full URLs or bucket paths
+                                let receiptPath = expense.receipt_url
+                                
+                                // If it's already a full URL, extract just the filename
+                                if (receiptPath.includes('expense-receipts/')) {
+                                  receiptPath = receiptPath.split('expense-receipts/').pop() || receiptPath
+                                } else if (receiptPath.includes('/storage/v1/object/public/')) {
+                                  receiptPath = receiptPath.split('/').pop() || receiptPath
+                                }
+                                
+                                // Decode any URL encoding (handles %20, %2520, etc.)
+                                try {
+                                  receiptPath = decodeURIComponent(receiptPath)
+                                } catch (e) {
+                                  console.warn('Failed to decode path:', e)
+                                }
+                                
+                                console.log('Cleaned receipt path:', receiptPath)
+                                const fullUrl = getPublicUrl('expense-receipts', receiptPath)
+                                console.log('Full URL:', fullUrl)
+                                setImageModal(fullUrl)
+                              }
+                            }}
                             className="px-4 py-2 rounded-lg transition-all hover:bg-white/10 text-sm"
                             style={{ border: `1px solid ${colors.borderLight}` }}
                           >
                             📄 View Receipt
-                          </a>
+                          </button>
+                        ) : (
+                          <span className="px-4 py-2 text-xs" style={{ color: colors.textSecondary }}>
+                            No receipt uploaded
+                          </span>
                         )}
                       </div>
                     </div>
@@ -259,6 +390,45 @@ export default function ExpenseApprovalQueue() {
                 </div>
               </GlassCard>
             </div>
+          </div>
+        )}
+
+        {/* Confirmation Dialog */}
+        <ConfirmDialog
+          isOpen={confirmDialog.isOpen}
+          onClose={() => setConfirmDialog({ ...confirmDialog, isOpen: false })}
+          onConfirm={confirmDialog.onConfirm}
+          title={confirmDialog.title}
+          message={confirmDialog.message}
+          type={confirmDialog.type}
+          confirmText="Yes, Approve"
+          cancelText="Cancel"
+        />
+
+        {/* Image Modal */}
+        {imageModal && (
+          <div 
+            className="fixed inset-0 z-200 flex items-center justify-center bg-black/90 p-4"
+            onClick={() => setImageModal(null)}
+          >
+            <button
+              onClick={() => setImageModal(null)}
+              className="absolute top-4 right-4 text-white bg-black/50 hover:bg-black/70 rounded-full p-2 transition-colors"
+            >
+              <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+            <img
+              src={imageModal}
+              alt="Receipt"
+              className="max-w-full max-h-full object-contain rounded-lg"
+              onClick={(e) => e.stopPropagation()}
+              onError={(e) => {
+                console.error('Failed to load image:', imageModal)
+                e.currentTarget.src = 'data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/2000/svg" width="200" height="200"%3E%3Ctext x="50%25" y="50%25" font-size="16" text-anchor="middle" fill="white"%3EImage not found%3C/text%3E%3C/svg%3E'
+              }}
+            />
           </div>
         )}
       </div>
