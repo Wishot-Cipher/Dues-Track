@@ -1,6 +1,7 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider } from '@/hooks/useAuth';
 import { ToastProvider } from '@/components/ui/ToastProvider';
+import { SettingsProvider } from '@/contexts/SettingsContext';
 import ProtectedRoute from '@/components/auth/ProtectedRoute';
 import OfflineIndicator from '@/components/OfflineIndicator';
 import InstallPWA from '@/components/InstallPWA';
@@ -12,6 +13,7 @@ import ChangePasswordPage from '@/pages/ChangePasswordPage';
 import CompleteProfilePage from '@/pages/CompleteProfilePage';
 import DashboardPage from '@/pages/DashboardPage';
 import ProfilePage from '@/pages/ProfilePage';
+import SettingsPage from '@/pages/student/SettingsPage';
 import AdminDashboardPage from '@/pages/admin/AdminDashboardPage';
 import CreatePaymentTypePage from '@/pages/admin/CreatePaymentTypePage';
 import PaymentDetailPage from '@/pages/PaymentDetailPage';
@@ -27,13 +29,14 @@ function App() {
   return (
     <BrowserRouter>
       <ToastProvider>
-        <AuthProvider>
-          <OfflineIndicator />
-          <InstallPWA />
-          <UpdateNotification />
-          <Routes>
-            {/* Public Routes */}
-            <Route path="/login" element={<LoginPage />} />
+        <SettingsProvider>
+          <AuthProvider>
+            <OfflineIndicator />
+            <InstallPWA />
+            <UpdateNotification />
+            <Routes>
+              {/* Public Routes */}
+              <Route path="/login" element={<LoginPage />} />
 
             {/* Protected - Password Change (First Priority) */}
             <Route
@@ -91,6 +94,16 @@ function App() {
               element={
                 <ProtectedRoute>
                   <PaymentHistoryPage />
+                </ProtectedRoute>
+              }
+            />
+
+            {/* Protected - Settings */}
+            <Route
+              path="/settings"
+              element={
+                <ProtectedRoute>
+                  <SettingsPage />
                 </ProtectedRoute>
               }
             />
@@ -177,7 +190,8 @@ function App() {
             <Route path="/" element={<Navigate to="/dashboard" replace />} />
             <Route path="*" element={<Navigate to="/dashboard" replace />} />
           </Routes>
-        </AuthProvider>
+          </AuthProvider>
+        </SettingsProvider>
       </ToastProvider>
     </BrowserRouter>
   );

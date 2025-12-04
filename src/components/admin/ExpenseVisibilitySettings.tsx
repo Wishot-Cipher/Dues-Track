@@ -20,9 +20,7 @@ export default function ExpenseVisibilitySettings() {
   async function loadSettings() {
     try {
       setLoading(true)
-      console.log('Loading expense visibility settings...')
       const data = await expenseVisibilityService.getAllSettings()
-      console.log('Loaded expense visibility settings:', data)
       setSettings(data)
     } catch (error) {
       console.error('Failed to load expense visibility settings:', error)

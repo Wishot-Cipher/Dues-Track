@@ -22,7 +22,24 @@ import {
 import { Html5QrcodeScanner, Html5QrcodeScanType } from "html5-qrcode";
 import Footer from "@/components/Footer";
 
-interface QRData {
+// New multi-student QR format
+interface NewQRData {
+  type: string;
+  paidBy: string;
+  paidByName: string;
+  paidByRegNumber: string;
+  students: Array<{ id: string; name: string; regNumber: string }>;
+  totalStudents: number;
+  paymentTypeId: string;
+  paymentTypeName: string;
+  totalAmount: number;
+  amountPerStudent: number;
+  timestamp: number;
+  paymentMethod: string;
+}
+
+// Legacy single-student QR format (for backwards compatibility)
+interface LegacyQRData {
   type: string;
   studentId: string;
   studentName: string;
@@ -30,6 +47,22 @@ interface QRData {
   paymentTypeId: string;
   paymentTypeName: string;
   amount: number;
+  timestamp: number;
+  paymentMethod: string;
+}
+
+// Normalized format for internal use
+interface QRData {
+  type: string;
+  paidBy: string;
+  paidByName: string;
+  paidByRegNumber: string;
+  students: Array<{ id: string; name: string; regNumber: string }>;
+  totalStudents: number;
+  paymentTypeId: string;
+  paymentTypeName: string;
+  totalAmount: number;
+  amountPerStudent: number;
   timestamp: number;
   paymentMethod: string;
 }
@@ -60,12 +93,44 @@ export default function ScanQRCodePage() {
 
   const onScanSuccess = async (decodedText: string) => {
     try {
-      // Parse QR Code data
-      const data: QRData = JSON.parse(decodedText);
+      // Parse QR Code data (supports both old and new format)
+      const rawData = JSON.parse(decodedText);
 
       // Validate QR code type
-      if (data.type !== "CASH_PAYMENT") {
+      if (rawData.type !== "CASH_PAYMENT") {
         toast.error("Invalid QR code format");
+        return;
+      }
+
+      // Normalize to new format (support legacy QR codes)
+      let data: QRData;
+      
+      if (rawData.paidBy && rawData.students) {
+        // New multi-student format
+        data = rawData as NewQRData;
+      } else if (rawData.studentId) {
+        // Legacy single-student format - convert to new format
+        const legacyData = rawData as LegacyQRData;
+        data = {
+          type: legacyData.type,
+          paidBy: legacyData.studentId,
+          paidByName: legacyData.studentName,
+          paidByRegNumber: legacyData.studentRegNumber,
+          students: [{
+            id: legacyData.studentId,
+            name: legacyData.studentName,
+            regNumber: legacyData.studentRegNumber,
+          }],
+          totalStudents: 1,
+          paymentTypeId: legacyData.paymentTypeId,
+          paymentTypeName: legacyData.paymentTypeName,
+          totalAmount: legacyData.amount,
+          amountPerStudent: legacyData.amount,
+          timestamp: legacyData.timestamp,
+          paymentMethod: legacyData.paymentMethod,
+        };
+      } else {
+        toast.error("Invalid QR code data structure");
         return;
       }
 
@@ -77,20 +142,26 @@ export default function ScanQRCodePage() {
         return;
       }
 
+      // Validate that we have at least one student to process
+      if (!data.students || data.students.length === 0) {
+        toast.error("No students found in QR code");
+        return;
+      }
+
       // Stop scanner
       if (scanner) {
         await scanner.clear();
       }
 
-      // Fetch student details
-      const { data: studentData, error: studentError } = await supabase
+      // Fetch payer details (the person who generated the QR)
+      const { data: payerData, error: payerError } = await supabase
         .from("students")
         .select("id, full_name, reg_number")
-        .eq("id", data.studentId)
+        .eq("id", data.paidBy)
         .single();
 
-      if (studentError || !studentData) {
-        toast.error("Student not found");
+      if (payerError || !payerData) {
+        toast.error("Payer not found");
         return;
       }
 
@@ -106,26 +177,37 @@ export default function ScanQRCodePage() {
         return;
       }
 
-      // Check if student already paid
-      const { data: existingPayments } = await supabase
-        .from("payments")
-        .select("status, amount")
-        .eq("student_id", data.studentId)
-        .eq("payment_type_id", data.paymentTypeId);
+      // Check if any student already fully paid
+      const alreadyPaidStudents: string[] = [];
+      for (const student of data.students) {
+        const { data: existingPayments } = await supabase
+          .from("payments")
+          .select("status, amount")
+          .eq("student_id", student.id)
+          .eq("payment_type_id", data.paymentTypeId);
 
-      const totalPaid =
-        existingPayments
-          ?.filter((p) => p.status === "approved")
-          .reduce((sum, p) => sum + p.amount, 0) || 0;
+        const totalPaid =
+          existingPayments
+            ?.filter((p) => p.status === "approved")
+            .reduce((sum, p) => sum + p.amount, 0) || 0;
 
-      if (totalPaid >= paymentTypeData.amount) {
-        toast.error("Student has already paid for this payment type");
+        if (totalPaid >= paymentTypeData.amount) {
+          alreadyPaidStudents.push(student.name);
+        }
+      }
+
+      if (alreadyPaidStudents.length === data.students.length) {
+        toast.error("All students have already paid for this payment type");
         return;
+      }
+
+      if (alreadyPaidStudents.length > 0) {
+        toast.error(`Warning: ${alreadyPaidStudents.join(", ")} already paid`);
       }
 
       // Set data for confirmation
       setQrData(data);
-      setStudent(studentData);
+      setStudent(payerData);
       setPaymentType(paymentTypeData);
       setScanning(false);
     } catch (error) {
@@ -182,54 +264,86 @@ export default function ScanQRCodePage() {
 
     setConfirming(true);
     try {
-      // Generate transaction reference
-      const transactionRef = `CASH-${student.reg_number}-${Date.now()}`;
+      const baseTimestamp = Date.now();
+      const successfulPayments: string[] = [];
+      const failedPayments: string[] = [];
 
-      // Create payment record
-      const paymentResponse = await supabase
-        .from("payments")
-        .insert({
-          student_id: qrData.studentId,
-          payment_type_id: qrData.paymentTypeId,
-          amount: qrData.amount,
-          payment_method: "cash",
-          transaction_ref: transactionRef,
-          status: "approved", // Auto-approve cash payments
-          approved_by: user.id,
-          approved_at: new Date().toISOString(),
-          notes: `Cash payment verified via QR code scan by ${user.email}`,
-          // receipts are optional for cash flow in UI, but DB requires a non-null value for now
-          receipt_url: "",
-        })
-        .select()
-        .single();
+      // Process payment for each student in the QR code
+      for (let i = 0; i < qrData.students.length; i++) {
+        const studentToPay = qrData.students[i];
+        
+        // Check if student already fully paid (skip if so)
+        const { data: existingPayments } = await supabase
+          .from("payments")
+          .select("status, amount")
+          .eq("student_id", studentToPay.id)
+          .eq("payment_type_id", qrData.paymentTypeId);
 
-      if (paymentResponse?.error) {
-        console.error("Supabase payment insert error:", paymentResponse.error);
-        throw paymentResponse.error;
+        const totalPaid =
+          existingPayments
+            ?.filter((p) => p.status === "approved")
+            .reduce((sum, p) => sum + p.amount, 0) || 0;
+
+        if (totalPaid >= paymentType.amount) {
+          // Student already fully paid, skip
+          continue;
+        }
+
+        // Generate unique transaction reference for each payment
+        const transactionRef = `CASH-${studentToPay.regNumber}-${baseTimestamp}-${i}`;
+
+        // Create payment record for this student
+        const paymentResponse = await supabase
+          .from("payments")
+          .insert({
+            student_id: studentToPay.id,
+            payment_type_id: qrData.paymentTypeId,
+            amount: qrData.amountPerStudent,
+            payment_method: "cash",
+            transaction_ref: transactionRef,
+            status: "approved", // Auto-approve cash payments
+            approved_by: user.id,
+            approved_at: new Date().toISOString(),
+            notes: qrData.totalStudents > 1 
+              ? `Cash payment (paid by ${qrData.paidByName}) verified via QR code scan by ${user.email}`
+              : `Cash payment verified via QR code scan by ${user.email}`,
+            paid_by: studentToPay.id !== qrData.paidBy ? qrData.paidBy : null, // Track who paid on behalf
+            receipt_url: "",
+          })
+          .select()
+          .single();
+
+        if (paymentResponse?.error) {
+          console.error("Supabase payment insert error:", paymentResponse.error);
+          failedPayments.push(studentToPay.name);
+          continue;
+        }
+
+        successfulPayments.push(studentToPay.name);
+
+        // Send notification to student
+        await supabase.from("notifications").insert({
+          recipient_id: studentToPay.id,
+          type: "payment_approved",
+          title: `Cash Payment Received - ${qrData.paymentTypeName}`,
+          message: qrData.totalStudents > 1
+            ? `Your cash payment of ${formatCurrency(qrData.amountPerStudent)} has been received and approved.\n\nPaid by: ${qrData.paidByName}\nTransaction Ref: ${transactionRef}\n\nThank you!`
+            : `Your cash payment of ${formatCurrency(qrData.amountPerStudent)} has been received and approved.\n\nTransaction Ref: ${transactionRef}\n\nThank you for your payment!`,
+          link: "/payments",
+        });
       }
 
-      // Send notification to student
-      const notifResponse = await supabase.from("notifications").insert({
-        recipient_id: qrData.studentId,
-        type: "payment_approved",
-        title: `Cash Payment Received - ${qrData.paymentTypeName}`,
-        message: `Your cash payment of ${formatCurrency(
-          qrData.amount
-        )} has been received and approved.\n\nTransaction Ref: ${transactionRef}\n\nThank you for your payment!`,
-        link: "/payments",
-      });
-
-      if (notifResponse?.error) {
-        console.error(
-          "Supabase notification insert error:",
-          notifResponse.error
-        );
-        // don't block success for notification failures, but show a warning
-        toast.error("Payment saved but failed to send notification.");
+      // Show appropriate success/error message
+      if (successfulPayments.length > 0 && failedPayments.length === 0) {
+        const message = successfulPayments.length === 1
+          ? `Payment confirmed for ${successfulPayments[0]}!`
+          : `Payment confirmed for ${successfulPayments.length} students!`;
+        toast.success(message);
+      } else if (successfulPayments.length > 0 && failedPayments.length > 0) {
+        toast.success(`Payment confirmed for ${successfulPayments.length} students, but failed for ${failedPayments.length}`);
+      } else {
+        throw new Error("No payments were processed successfully");
       }
-
-      toast.success(`Payment confirmed for ${student.full_name}!`);
 
       // Reset and restart scanner
       setTimeout(() => {
@@ -484,11 +598,11 @@ export default function ScanQRCodePage() {
                           className="text-xs font-medium"
                           style={{ color: colors.textSecondary }}
                         >
-                          Student Name
+                          {qrData.totalStudents > 1 ? "Paid By" : "Student Name"}
                         </p>
                       </div>
                       <p className="text-lg font-bold text-white">
-                        {student.full_name}
+                        {qrData.paidByName}
                       </p>
                     </div>
 
@@ -509,7 +623,7 @@ export default function ScanQRCodePage() {
                         </p>
                       </div>
                       <p className="text-lg font-bold text-white">
-                        {student.reg_number}
+                        {qrData.paidByRegNumber}
                       </p>
                     </div>
 
@@ -547,17 +661,85 @@ export default function ScanQRCodePage() {
                           className="text-xs font-medium"
                           style={{ color: colors.textSecondary }}
                         >
-                          Amount
+                          Total Amount
                         </p>
                       </div>
                       <p
                         className="text-2xl font-bold"
                         style={{ color: colors.accentMint }}
                       >
-                        {formatCurrency(qrData.amount)}
+                        {formatCurrency(qrData.totalAmount)}
                       </p>
                     </div>
+                    
+                    {qrData.totalStudents > 1 && (
+                      <>
+                        <div
+                          className="p-4 rounded-xl"
+                          style={{ background: "rgba(255,255,255,0.05)" }}
+                        >
+                          <div className="flex items-center gap-2 mb-2">
+                            <User
+                              className="w-4 h-4"
+                              style={{ color: colors.primary }}
+                            />
+                            <p
+                              className="text-xs font-medium"
+                              style={{ color: colors.textSecondary }}
+                            >
+                              Total Students
+                            </p>
+                          </div>
+                          <p className="text-lg font-bold text-white">
+                            {qrData.totalStudents}
+                          </p>
+                        </div>
+
+                        <div
+                          className="p-4 rounded-xl"
+                          style={{ background: "rgba(255,255,255,0.05)" }}
+                        >
+                          <div className="flex items-center gap-2 mb-2">
+                            <DollarSign
+                              className="w-4 h-4"
+                              style={{ color: colors.accentMint }}
+                            />
+                            <p
+                              className="text-xs font-medium"
+                              style={{ color: colors.textSecondary }}
+                            >
+                              Per Student
+                            </p>
+                          </div>
+                          <p className="text-lg font-bold" style={{ color: colors.accentMint }}>
+                            {formatCurrency(qrData.amountPerStudent)}
+                          </p>
+                        </div>
+                      </>
+                    )}
                   </div>
+                  
+                  {/* List of students being paid for (multi-student only) */}
+                  {qrData.totalStudents > 1 && (
+                    <div
+                      className="p-4 rounded-xl"
+                      style={{ background: "rgba(255,255,255,0.05)" }}
+                    >
+                      <p
+                        className="text-xs font-medium mb-2"
+                        style={{ color: colors.textSecondary }}
+                      >
+                        Students ({qrData.students.length}):
+                      </p>
+                      <ul className="text-sm space-y-1">
+                        {qrData.students.map((s, i) => (
+                          <li key={i} className="text-white">
+                            • {s.name} ({s.regNumber})
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
 
                   {/* Warning */}
                   <div
@@ -577,7 +759,7 @@ export default function ScanQRCodePage() {
                         style={{ color: colors.textSecondary }}
                       >
                         Make sure you have received the exact amount in cash (
-                        {formatCurrency(qrData.amount)}) from the student before
+                        {formatCurrency(qrData.totalAmount)}) from {qrData.paidByName} before
                         confirming.
                       </p>
                     </div>

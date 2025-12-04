@@ -66,8 +66,6 @@ export default function RecordExpense() {
           fetchExpenseCategories(),
           fetchPaymentTypes()
         ])
-        console.log('📦 Loaded categories:', cats)
-        console.log('💰 Loaded payment types:', types)
         setCategories(cats)
         setPaymentTypes(types)
         // Don't set defaults - let user choose explicitly
@@ -117,12 +115,6 @@ export default function RecordExpense() {
         `)
         .eq('status', 'approved')
       
-      console.log('💰 Payments data:', paymentsData?.length, 'payments')
-      console.log('💸 Expenses data:', expensesData?.length, 'expenses')
-      if (expensesData && expensesData.length > 0) {
-        console.log('💸 Sample expense:', expensesData[0])
-      }
-      
       // Calculate category-specific balances
       const paymentTypeMap = new Map<string, { collected: number; spent: number; available: number }>()
       
@@ -162,13 +154,6 @@ export default function RecordExpense() {
       paymentTypeMap.forEach((value) => {
         value.available = value.collected - value.spent
       })
-      
-      console.log('📊 Payment Type Balances:', Array.from(paymentTypeMap.entries()).map(([id, data]) => ({
-        id,
-        collected: data.collected,
-        spent: data.spent,
-        available: data.available
-      })))
       
       setPaymentTypeBalances(paymentTypeMap)
       

@@ -6,6 +6,8 @@ import { useToast } from '@/hooks/useToast';
 import { useNavigate } from 'react-router-dom';
 import { colors, gradients } from '@/config/colors';
 import GlassCard from '@/components/ui/GlassCard';
+import PageWrapper from '@/components/ui/PageWrapper';
+import { PaymentCardSkeleton } from '@/components/ui/Skeleton';
 import { formatCurrency, formatDate } from '@/utils/formatters';
 import { 
   Clock, 
@@ -18,7 +20,15 @@ import {
   AlertCircle,
   ArrowLeft,
   DollarSign,
-  Sparkles
+  Sparkles,
+  TrendingUp,
+  Filter,
+  Receipt,
+  Eye,
+  ChevronLeft,
+  ChevronRight,
+  ChevronsLeft,
+  ChevronsRight
 } from 'lucide-react';
 import Footer from '@/components/Footer';
 
@@ -188,58 +198,9 @@ export default function PaymentHistoryPage() {
   };
 
   return (
-    <div className="min-h-screen relative overflow-x-hidden"  style={{
-        background: 'radial-gradient(ellipse at top, #1A0E09 0%, #0F0703 100%)',
-      }}
-    >
-      {/* Background Grid Pattern */}
-      <div
-        className="absolute inset-0 opacity-20 pointer-events-none"
-        style={{
-          backgroundImage: `
-            linear-gradient(${colors.primary}40 1px, transparent 1px),
-            linear-gradient(90deg, ${colors.primary}40 1px, transparent 1px)
-          `,
-          backgroundSize: '50px 50px',
-        }}
-      />
-
-      {/* Animated Gradient Orbs */}
-      <div className="fixed inset-0 overflow-hidden pointer-events-none">
-        <div
-          className="absolute w-[500px] h-[500px] rounded-full blur-[120px] opacity-30 animate-pulse"
-          style={{
-            background: `radial-gradient(circle, ${colors.primary} 0%, transparent 70%)`,
-            top: '-10%',
-            right: '-5%',
-            animationDuration: '4s',
-          }}
-        />
-        <div
-          className="absolute w-[400px] h-[400px] rounded-full blur-[100px] opacity-20"
-          style={{
-            background: `radial-gradient(circle, ${colors.accentMint} 0%, transparent 70%)`,
-            bottom: '-5%',
-            left: '-5%',
-            animation: 'pulse 6s ease-in-out infinite',
-          }}
-        />
-        
-        {/* ECE Logo Background - Creative Element */}
-        <div className="hidden lg:block absolute right-0 top-1/2 -translate-y-1/2 w-[600px] h-[600px] opacity-[0.08] pointer-events-none">
-          <img 
-            src="/Ece picture.jpg" 
-            alt="ECE Background"
-            className="w-full h-full object-contain"
-            style={{
-              filter: 'grayscale(0.5) brightness(0.8)',
-              mixBlendMode: 'soft-light',
-            }}
-          />
-        </div>
-      </div>
+    <PageWrapper noPadding>
       
-      {/* Main Content Container - CENTERED */}
+      {/* Main Content Container */}
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
         <div className="space-y-5 sm:space-y-6 relative z-10">
         {/* Header */}
@@ -247,181 +208,211 @@ export default function PaymentHistoryPage() {
           initial={{ opacity: 0, y: -20 }}
           animate={{ opacity: 1, y: 0 }}
         >
-          <button
+          <motion.button
             onClick={() => navigate('/dashboard')}
-            className="flex items-center justify-center sm:justify-start gap-2 mb-4 px-3 py-2 rounded-lg transition-colors w-auto outline outline-orange-500 "
-            style={{ color: colors.textSecondary }}
-            onMouseEnter={(e) => (e.currentTarget.style.color = colors.primary)}
-            onMouseLeave={(e) => (e.currentTarget.style.color = colors.textSecondary)}
+            className="flex items-center gap-2 mb-5 px-3 py-2 rounded-xl transition-all"
+            style={{ 
+              color: colors.textSecondary,
+              background: 'rgba(255, 107, 53, 0.08)',
+              border: `1px solid ${colors.primary}30`
+            }}
+            whileHover={{ scale: 1.02, background: 'rgba(255, 107, 53, 0.15)' }}
+            whileTap={{ scale: 0.98 }}
           >
-            <ArrowLeft size={20} />
-            <span className="font-medium">Back to Dashboard</span>
-          </button>
+            <ArrowLeft size={18} style={{ color: colors.primary }} />
+            <span className="font-medium text-sm" style={{ color: colors.primary }}>Back to Dashboard</span>
+          </motion.button>
           
-          <GlassCard>
-            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-              <div>
-                <h1 className="text-2xl sm:text-3xl font-bold text-white mb-2">Payment History</h1>
-                <p style={{ color: colors.textSecondary }}>Track all your submitted payments</p>
-              </div>
-              <FileText size={40} style={{ color: colors.primary }} className="hidden sm:block" />
+          {/* Hero Header */}
+          <div 
+            className="rounded-2xl p-6 sm:p-8 relative overflow-hidden"
+            style={{ 
+              background: 'linear-gradient(135deg, rgba(255, 107, 53, 0.15) 0%, rgba(15, 7, 3, 0.9) 100%)',
+              border: '1px solid rgba(255, 107, 53, 0.2)'
+            }}
+          >
+            {/* Background decoration */}
+            <div className="absolute top-0 right-0 w-64 h-64 opacity-10 pointer-events-none">
+              <Receipt className="w-full h-full" style={{ color: colors.primary }} />
             </div>
-          </GlassCard>
+            
+            <div className="relative flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+              <div>
+                <div className="flex items-center gap-3 mb-2">
+                  <div 
+                    className="w-12 h-12 rounded-xl flex items-center justify-center"
+                    style={{ background: gradients.primary }}
+                  >
+                    <FileText className="w-6 h-6 text-white" />
+                  </div>
+                  <div>
+                    <h1 className="text-2xl sm:text-3xl font-bold text-white">Payment History</h1>
+                    <p className="text-sm" style={{ color: colors.textSecondary }}>
+                      Track and manage your payment records
+                    </p>
+                  </div>
+                </div>
+              </div>
+              
+              {/* Quick stat */}
+              <div 
+                className="flex items-center gap-3 px-4 py-3 rounded-xl"
+                style={{ background: 'rgba(255, 255, 255, 0.05)', border: '1px solid rgba(255, 255, 255, 0.1)' }}
+              >
+                <TrendingUp className="w-5 h-5" style={{ color: colors.statusPaid }} />
+                <div>
+                  <p className="text-xs" style={{ color: colors.textSecondary }}>Total Paid</p>
+                  <p className="text-lg font-bold text-white">{formatCurrency(stats.totalAmount)}</p>
+                </div>
+              </div>
+            </div>
+          </div>
         </motion.div>
 
-        {/* Stats Cards */}
-        <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-5 gap-3 sm:gap-4 md:gap-5">
-          <motion.div
-            initial={{ opacity: 0, scale: 0.9 }}
-            animate={{ opacity: 1, scale: 1 }}
-            transition={{ delay: 0.1 }}
-          >
-            <GlassCard>
-              <div className="flex items-center justify-between">
+        {/* Stats Cards - Redesigned */}
+        <motion.div 
+          className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4"
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.1 }}
+        >
+          {[
+            { label: 'Total', value: stats.total, icon: FileText, color: colors.primary },
+            { label: 'Pending', value: stats.pending, icon: Clock, color: colors.warning },
+            { label: 'Approved', value: stats.approved, icon: CheckCircle, color: colors.statusPaid },
+            { label: 'Waived', value: stats.waived, icon: Sparkles, color: colors.accentMint },
+          ].map((stat, index) => (
+            <motion.div
+              key={stat.label}
+              initial={{ opacity: 0, scale: 0.9 }}
+              animate={{ opacity: 1, scale: 1 }}
+              transition={{ delay: 0.1 + index * 0.05 }}
+              whileHover={{ scale: 1.02, y: -2 }}
+              className="rounded-xl p-4 relative overflow-hidden group cursor-default"
+              style={{ 
+                background: `linear-gradient(135deg, ${stat.color}10 0%, rgba(15, 7, 3, 0.8) 100%)`,
+                border: `1px solid ${stat.color}20`
+              }}
+            >
+              {/* Hover glow */}
+              <div 
+                className="absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity duration-300"
+                style={{ background: `radial-gradient(circle at center, ${stat.color}10 0%, transparent 70%)` }}
+              />
+              
+              <div className="relative flex items-center justify-between">
                 <div>
-                  <p className="text-sm" style={{ color: colors.textSecondary }}>Total Payments</p>
-                  <p className="text-2xl sm:text-3xl font-bold text-white mt-1">{stats.total}</p>
+                  <p className="text-xs font-medium mb-1" style={{ color: colors.textSecondary }}>{stat.label}</p>
+                  <p className="text-2xl sm:text-3xl font-bold" style={{ color: stat.color }}>{stat.value}</p>
                 </div>
-                <FileText className="w-8 h-8 sm:w-10 sm:h-10" style={{ color: colors.primary }} />
-              </div>
-            </GlassCard>
-          </motion.div>
-
-          <motion.div
-            initial={{ opacity: 0, scale: 0.9 }}
-            animate={{ opacity: 1, scale: 1 }}
-            transition={{ delay: 0.2 }}
-          >
-            <GlassCard>
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm" style={{ color: colors.textSecondary }}>Pending Review</p>
-                  <p className="text-2xl sm:text-3xl font-bold mt-1" style={{ color: colors.warning }}>{stats.pending}</p>
+                <div 
+                  className="w-10 h-10 rounded-lg flex items-center justify-center"
+                  style={{ background: `${stat.color}15` }}
+                >
+                  <stat.icon className="w-5 h-5" style={{ color: stat.color }} />
                 </div>
-                <Clock className="w-8 h-8 sm:w-10 sm:h-10" style={{ color: colors.warning }} />
               </div>
-            </GlassCard>
-          </motion.div>
+            </motion.div>
+          ))}
+        </motion.div>
 
-          <motion.div
-            initial={{ opacity: 0, scale: 0.9 }}
-            animate={{ opacity: 1, scale: 1 }}
-            transition={{ delay: 0.3 }}
-          >
-            <GlassCard>
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm" style={{ color: colors.textSecondary }}>Approved</p>
-                  <p className="text-2xl sm:text-3xl font-bold mt-1" style={{ color: colors.statusPaid }}>{stats.approved}</p>
-                </div>
-                <CheckCircle className="w-8 h-8 sm:w-10 sm:h-10" style={{ color: colors.statusPaid }} />
-              </div>
-            </GlassCard>
-          </motion.div>
-
-          <motion.div
-            initial={{ opacity: 0, scale: 0.9 }}
-            animate={{ opacity: 1, scale: 1 }}
-            transition={{ delay: 0.35 }}
-          >
-            <GlassCard>
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm" style={{ color: colors.textSecondary }}>Waived</p>
-                  <p className="text-2xl sm:text-3xl font-bold mt-1" style={{ color: colors.accentMint }}>{stats.waived}</p>
-                </div>
-                <Sparkles className="w-8 h-8 sm:w-10 sm:h-10" style={{ color: colors.accentMint }} />
-              </div>
-            </GlassCard>
-          </motion.div>
-
-          <motion.div
-            initial={{ opacity: 0, scale: 0.9 }}
-            animate={{ opacity: 1, scale: 1 }}
-            transition={{ delay: 0.4 }}
-          >
-            <GlassCard>
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm" style={{ color: colors.textSecondary }}>Total Paid</p>
-                  <p className="text-xl sm:text-2xl font-bold text-white mt-1">
-                    {formatCurrency(stats.totalAmount)}
-                  </p>
-                </div>
-                <DollarSign className="w-8 h-8 sm:w-10 sm:h-10" style={{ color: colors.statusPaid }} />
-              </div>
-            </GlassCard>
-          </motion.div>
-        </div>
-
-        {/* Filters */}
+        {/* Search & Filters - Redesigned */}
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.5 }}
+          transition={{ delay: 0.2 }}
+          className="rounded-xl p-4"
+          style={{ 
+            background: 'rgba(255, 255, 255, 0.02)',
+            border: '1px solid rgba(255, 255, 255, 0.08)'
+          }}
         >
-          <GlassCard>
-            <div className="flex flex-col sm:flex-row gap-4 min-w-0">
-              {/* Search */}
-              <div className="flex-1 min-w-0">
-                <div className="relative">
-                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5" style={{ color: colors.textSecondary }} />
-                  <input
-                    type="text"
-                    placeholder="Search by payment type or reference..."
-                    value={searchTerm}
-                    onChange={(e) => setSearchTerm(e.target.value)}
-                    className="w-full rounded-lg pl-10 pr-4 py-3 text-white placeholder-gray-400 focus:outline-none focus:ring-2"
-                    style={{ 
-                      background: 'rgba(255, 255, 255, 0.05)', 
-                      border: '1px solid rgba(255, 255, 255, 0.1)'
-                    }}
-                  />
-                </div>
-              </div>
+          <div className="flex flex-col lg:flex-row gap-4">
+            {/* Search */}
+            <div className="flex-1 relative">
+              <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5" style={{ color: colors.textSecondary }} />
+              <input
+                type="text"
+                placeholder="Search by payment type or reference..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="w-full rounded-xl pl-12 pr-4 py-3.5 text-white placeholder-gray-500 focus:outline-none transition-all"
+                style={{ 
+                  background: 'rgba(255, 255, 255, 0.05)', 
+                  border: '1px solid rgba(255, 255, 255, 0.1)'
+                }}
+              />
+            </div>
 
-              {/* Status Filter */}
-              <div className="flex flex-wrap gap-2 shrink-0">
-                {(['all', 'pending', 'approved', 'rejected'] as const).map((status) => (
-                  <button
+            {/* Filter Pills */}
+            <div className="flex items-center gap-2 flex-wrap">
+              <div className="flex items-center gap-1.5 mr-2">
+                <Filter className="w-4 h-4" style={{ color: colors.textSecondary }} />
+                <span className="text-xs font-medium" style={{ color: colors.textSecondary }}>Filter:</span>
+              </div>
+              {(['all', 'pending', 'approved', 'rejected'] as const).map((status) => {
+                const isActive = filter === status;
+                const statusColors: Record<string, string> = {
+                  all: colors.primary,
+                  pending: colors.warning,
+                  approved: colors.statusPaid,
+                  rejected: colors.statusUnpaid
+                };
+                return (
+                  <motion.button
                     key={status}
                     onClick={() => setFilter(status)}
-                    className="px-4 py-3 rounded-lg font-medium transition-all whitespace-nowrap"
+                    className="px-4 py-2 rounded-lg text-sm font-medium transition-all"
                     style={{
-                      background: filter === status ? gradients.primary : 'rgba(255, 255, 255, 0.05)',
-                      color: filter === status ? 'white' : colors.textSecondary
+                      background: isActive ? `${statusColors[status]}20` : 'rgba(255, 255, 255, 0.03)',
+                      border: `1px solid ${isActive ? statusColors[status] + '50' : 'rgba(255, 255, 255, 0.08)'}`,
+                      color: isActive ? statusColors[status] : colors.textSecondary
                     }}
+                    whileHover={{ scale: 1.02 }}
+                    whileTap={{ scale: 0.98 }}
                   >
                     {status.charAt(0).toUpperCase() + status.slice(1)}
-                  </button>
-                ))}
-              </div>
+                    {status !== 'all' && (
+                      <span className="ml-1.5 text-xs opacity-70">
+                        ({status === 'pending' ? stats.pending : status === 'approved' ? stats.approved : stats.rejected})
+                      </span>
+                    )}
+                  </motion.button>
+                );
+              })}
             </div>
-          </GlassCard>
+          </div>
         </motion.div>
 
         {/* Payments List */}
         {loading ? (
-          <div className="flex items-center justify-center py-12">
-            <div className="animate-spin rounded-full h-12 w-12 border-4 border-t-transparent" 
-                 style={{ borderColor: colors.primary, borderTopColor: 'transparent' }} />
+          <div className="space-y-4">
+            {[1, 2, 3].map((i) => (
+              <PaymentCardSkeleton key={i} />
+            ))}
           </div>
         ) : filteredPayments.length === 0 ? (
           <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
+            initial={{ opacity: 0, scale: 0.95 }}
+            animate={{ opacity: 1, scale: 1 }}
+            className="rounded-2xl p-12 text-center"
+            style={{ 
+              background: 'rgba(255, 255, 255, 0.02)',
+              border: '1px solid rgba(255, 255, 255, 0.08)'
+            }}
           >
-            <GlassCard>
-              <div className="text-center py-12">
-                <AlertCircle className="w-16 h-16 mx-auto mb-4" style={{ color: colors.textSecondary }} />
-                <p className="text-xl text-white mb-2">No payments found</p>
-                <p style={{ color: colors.textSecondary }}>
-                  {filter !== 'all'
-                    ? `You have no ${filter} payments`
-                    : 'You haven\'t made any payments yet'}
-                </p>
-              </div>
-            </GlassCard>
+            <div 
+              className="w-20 h-20 mx-auto mb-4 rounded-2xl flex items-center justify-center"
+              style={{ background: 'rgba(255, 255, 255, 0.05)' }}
+            >
+              <AlertCircle className="w-10 h-10" style={{ color: colors.textSecondary }} />
+            </div>
+            <p className="text-xl font-semibold text-white mb-2">No payments found</p>
+            <p style={{ color: colors.textSecondary }}>
+              {filter !== 'all'
+                ? `You have no ${filter} payments`
+                : 'You haven\'t made any payments yet'}
+            </p>
           </motion.div>
         ) : (
           <>
@@ -436,249 +427,261 @@ export default function PaymentHistoryPage() {
                     initial={{ opacity: 0, y: 20 }}
                     animate={{ opacity: 1, y: 0 }}
                     exit={{ opacity: 0, y: -20 }}
-                    transition={{ delay: index * 0.05 }}
-                    whileHover={{ scale: 1.01, y: -4 }}
-                    className="relative group"
+                    transition={{ delay: index * 0.03 }}
+                    className="group"
                   >
-                    {/* Gradient border effect on hover */}
-                    <div className="absolute inset-0 rounded-xl opacity-0 group-hover:opacity-100 transition-opacity duration-300"
-                         style={{ 
-                           background: `linear-gradient(135deg, ${statusBadge.color}40, transparent)`,
-                           filter: 'blur(8px)',
-                           zIndex: -1
-                         }} 
-                    />
-                    <GlassCard className="overflow-hidden transition-all duration-300 group-hover:shadow-xl">
-                      <div className="flex flex-col lg:flex-row gap-4 lg:gap-6">
-                        {/* Payment Info */}
-                        <div className="flex-1 space-y-3 sm:space-y-4 min-w-0">
-                          <div className="flex flex-col gap-2 sm:gap-3">
-                            <div className="min-w-0">
-                              <h3 className="text-base sm:text-lg lg:text-xl font-semibold text-white mb-1 wrap-break-word">
-                                {payment.payment_types.title}
-                              </h3>
-                              <p className="text-xs sm:text-sm capitalize" style={{ color: colors.textSecondary }}>
-                                {payment.payment_types.category.replace('_', ' ')}
-                              </p>
-                            </div>
-                            <div className="flex items-center gap-1.5 sm:gap-2 flex-wrap">
-                              {getStatusIcon(payment.status)}
+                    <div 
+                      className="rounded-xl overflow-hidden transition-all duration-300 hover:shadow-xl"
+                      style={{ 
+                        background: 'rgba(255, 255, 255, 0.02)',
+                        border: `1px solid ${statusBadge.border}`,
+                      }}
+                    >
+                      {/* Status indicator bar */}
+                      <div className="h-1" style={{ background: statusBadge.color }} />
+                      
+                      <div className="p-4 sm:p-5">
+                        <div className="flex flex-col lg:flex-row gap-4 lg:gap-6">
+                          {/* Left: Payment Info */}
+                          <div className="flex-1 min-w-0">
+                            {/* Header row */}
+                            <div className="flex items-start justify-between gap-3 mb-4">
+                              <div className="flex items-center gap-3 min-w-0">
+                                <div 
+                                  className="w-11 h-11 rounded-xl flex items-center justify-center shrink-0"
+                                  style={{ background: `${statusBadge.color}15` }}
+                                >
+                                  {getStatusIcon(payment.status)}
+                                </div>
+                                <div className="min-w-0">
+                                  <h3 className="text-base sm:text-lg font-semibold text-white truncate">
+                                    {payment.payment_types.title}
+                                  </h3>
+                                  <p className="text-xs capitalize" style={{ color: colors.textSecondary }}>
+                                    {payment.payment_types.category.replace('_', ' ')}
+                                  </p>
+                                </div>
+                              </div>
+                              
+                              {/* Status badge */}
                               <motion.span
-                                animate={payment.status === 'pending' ? { scale: [1, 1.05, 1] } : {}}
+                                animate={payment.status === 'pending' ? { opacity: [1, 0.7, 1] } : {}}
                                 transition={{ duration: 2, repeat: Infinity }}
-                                className="px-2 sm:px-3 py-1 rounded-full text-xs font-medium border whitespace-nowrap"
+                                className="px-3 py-1.5 rounded-lg text-xs font-semibold shrink-0"
                                 style={{ 
                                   background: statusBadge.bg,
-                                  borderColor: statusBadge.border,
-                                  color: statusBadge.color
+                                  color: statusBadge.color,
+                                  border: `1px solid ${statusBadge.border}`
                                 }}
                               >
                                 {statusBadge.label}
                               </motion.span>
-                              {isWaived && (
-                                <motion.span 
-                                  initial={{ scale: 0 }}
-                                  animate={{ scale: 1 }}
-                                  className="text-xs px-2 py-1 rounded-full whitespace-nowrap" 
-                                  style={{
-                                    background: 'rgba(6, 182, 212, 0.1)',
-                                    color: colors.accentMint
-                                  }}
-                                >
-                                  ✅ Waived
-                                </motion.span>
-                              )}
                             </div>
-                          </div>
 
-                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
-                            <div className="p-2.5 sm:p-3 rounded-lg" style={{ background: 'rgba(255, 255, 255, 0.05)' }}>
-                              <p className="text-xs mb-1" style={{ color: colors.textSecondary }}>
-                                {isWaived ? 'Waived Amount' : 'Amount'}
-                              </p>
-                              <p className="text-base sm:text-lg font-semibold" style={{ 
-                                color: isWaived ? colors.accentMint : 'white',
-                                textDecoration: isWaived ? 'line-through' : 'none'
-                              }}>
-                                {formatCurrency(payment.amount)}
-                              </p>
-                              {isWaived && (
-                                <p className="text-xs mt-1" style={{ color: colors.accentMint }}>
-                                  Waived by admin
+                            {/* Details grid */}
+                            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                              <div className="p-3 rounded-lg" style={{ background: 'rgba(255, 255, 255, 0.03)' }}>
+                                <p className="text-[11px] font-medium mb-1 uppercase tracking-wide" style={{ color: colors.textSecondary }}>
+                                  Amount
                                 </p>
+                                <p className="text-base font-bold" style={{ 
+                                  color: isWaived ? colors.accentMint : 'white',
+                                  textDecoration: isWaived ? 'line-through' : 'none'
+                                }}>
+                                  {formatCurrency(payment.amount)}
+                                </p>
+                              </div>
+                              
+                              <div className="p-3 rounded-lg" style={{ background: 'rgba(255, 255, 255, 0.03)' }}>
+                                <p className="text-[11px] font-medium mb-1 uppercase tracking-wide" style={{ color: colors.textSecondary }}>
+                                  Reference
+                                </p>
+                                <p className="text-xs font-mono text-white truncate">
+                                  {payment.transaction_ref.slice(0, 12)}...
+                                </p>
+                              </div>
+                              
+                              <div className="p-3 rounded-lg" style={{ background: 'rgba(255, 255, 255, 0.03)' }}>
+                                <p className="text-[11px] font-medium mb-1 uppercase tracking-wide" style={{ color: colors.textSecondary }}>
+                                  Submitted
+                                </p>
+                                <div className="flex items-center gap-1.5 text-white text-xs">
+                                  <Calendar className="w-3.5 h-3.5" style={{ color: colors.textSecondary }} />
+                                  <span>{formatDate(payment.created_at, 'short')}</span>
+                                </div>
+                              </div>
+                              
+                              {payment.approved_at && (
+                                <div className="p-3 rounded-lg" style={{ background: 'rgba(255, 255, 255, 0.03)' }}>
+                                  <p className="text-[11px] font-medium mb-1 uppercase tracking-wide" style={{ color: colors.textSecondary }}>
+                                    {isWaived ? 'Waived' : 'Approved'}
+                                  </p>
+                                  <div className="flex items-center gap-1.5 text-xs" style={{ color: colors.statusPaid }}>
+                                    <CheckCircle className="w-3.5 h-3.5" />
+                                    <span>{formatDate(payment.approved_at, 'short')}</span>
+                                  </div>
+                                </div>
                               )}
                             </div>
-                            <div className="p-2.5 sm:p-3 rounded-lg min-w-0" style={{ background: 'rgba(255, 255, 255, 0.05)' }}>
-                              <p className="text-xs mb-1" style={{ color: colors.textSecondary }}>Transaction Ref</p>
-                              <p className="text-xs sm:text-sm font-mono text-white truncate">
-                                {payment.transaction_ref}
-                              </p>
-                            </div>
-                            <div className="p-2.5 sm:p-3 rounded-lg" style={{ background: 'rgba(255, 255, 255, 0.05)' }}>
-                              <p className="text-xs mb-1" style={{ color: colors.textSecondary }}>Submitted On</p>
-                              <div className="flex items-center gap-2 text-white text-xs sm:text-sm">
-                                <Calendar className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
-                                <span>{formatDate(payment.created_at, 'short')}</span>
-                              </div>
-                            </div>
-                            {payment.approved_at && (
-                              <div className="p-2.5 sm:p-3 rounded-lg" style={{ background: 'rgba(255, 255, 255, 0.05)' }}>
-                                <p className="text-xs mb-1" style={{ color: colors.textSecondary }}>Approved On</p>
-                                <div className="flex items-center gap-2 text-xs sm:text-sm" style={{ color: colors.statusPaid }}>
-                                  <CheckCircle className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
-                                  <span>{formatDate(payment.approved_at, 'short')}</span>
+
+                            {/* Rejection reason */}
+                            {payment.rejection_reason && (
+                              <div 
+                                className="mt-3 p-3 rounded-lg flex items-start gap-2"
+                                style={{ background: `${colors.statusUnpaid}10`, border: `1px solid ${colors.statusUnpaid}30` }}
+                              >
+                                <XCircle className="w-4 h-4 shrink-0 mt-0.5" style={{ color: colors.statusUnpaid }} />
+                                <div>
+                                  <p className="text-xs font-medium mb-0.5" style={{ color: colors.statusUnpaid }}>Rejection Reason</p>
+                                  <p className="text-xs" style={{ color: colors.statusUnpaid }}>{payment.rejection_reason}</p>
                                 </div>
                               </div>
                             )}
                           </div>
 
-                          {payment.notes && (
-                            <div className="p-2.5 sm:p-3 rounded-lg" style={{ background: 'rgba(255, 255, 255, 0.05)' }}>
-                              <p className="text-xs mb-1" style={{ color: colors.textSecondary }}>Your Notes</p>
-                              <p className="text-white text-xs sm:text-sm">{payment.notes}</p>
-                            </div>
-                          )}
-
-                          {payment.rejection_reason && (
-                            <div className="p-3 sm:p-4 rounded-lg" style={{ background: `${colors.statusUnpaid}10`, border: `1px solid ${colors.statusUnpaid}40` }}>
-                              <div className="flex items-start gap-2">
-                                <XCircle className="w-4 h-4 sm:w-5 sm:h-5 shrink-0 mt-0.5" style={{ color: colors.statusUnpaid }} />
-                                <div className="min-w-0">
-                                  <p className="text-xs sm:text-sm font-medium mb-1" style={{ color: colors.statusUnpaid }}>
-                                    Rejection Reason
-                                  </p>
-                                  <p className="text-xs sm:text-sm" style={{ color: colors.statusUnpaid }}>{payment.rejection_reason}</p>
-                                </div>
-                              </div>
-                            </div>
-                          )}
-                        </div>
-
-                        {/* Actions */}
-                        <div className="flex flex-row lg:flex-col gap-2 lg:gap-3 lg:w-48">
-                          <a
-                            href={payment.receipt_url}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="flex-1 lg:flex-auto flex items-center justify-center gap-2 px-3 sm:px-4 py-2 sm:py-3 rounded-lg font-medium transition-all text-sm hover:scale-105 hover:shadow-lg"
-                            style={{ 
-                              background: `${colors.primary}20`,
-                              border: `1px solid ${colors.primary}40`,
-                              color: colors.primary
-                            }}
-                          >
-                            <FileText className="w-4 h-4 sm:w-5 sm:h-5" />
-                            <span>View</span>
-                          </a>
-                          <a
-                            href={payment.receipt_url}
-                            download
-                            className="flex-1 lg:flex-auto flex items-center justify-center gap-2 px-3 sm:px-4 py-2 sm:py-3 rounded-lg font-medium text-white transition-all text-sm hover:scale-105 hover:shadow-lg hover:bg-white/10"
-                            style={{ background: 'rgba(255, 255, 255, 0.05)', border: '1px solid rgba(255, 255, 255, 0.1)' }}
-                          >
-                            <Download className="w-4 h-4 sm:w-5 sm:h-5" />
-                            <span>Download</span>
-                          </a>
+                          {/* Right: Actions */}
+                          <div className="flex flex-row lg:flex-col gap-2 lg:w-36 shrink-0">
+                            <motion.a
+                              href={payment.receipt_url}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="flex-1 lg:flex-auto flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg font-medium text-sm transition-all"
+                              style={{ 
+                                background: `${colors.primary}15`,
+                                border: `1px solid ${colors.primary}30`,
+                                color: colors.primary
+                              }}
+                              whileHover={{ scale: 1.02, background: `${colors.primary}25` }}
+                              whileTap={{ scale: 0.98 }}
+                            >
+                              <Eye className="w-4 h-4" />
+                              <span>View</span>
+                            </motion.a>
+                            <motion.a
+                              href={payment.receipt_url}
+                              download
+                              className="flex-1 lg:flex-auto flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg font-medium text-sm transition-all"
+                              style={{ 
+                                background: 'rgba(255, 255, 255, 0.03)', 
+                                border: '1px solid rgba(255, 255, 255, 0.1)',
+                                color: colors.textSecondary
+                              }}
+                              whileHover={{ scale: 1.02, background: 'rgba(255, 255, 255, 0.08)' }}
+                              whileTap={{ scale: 0.98 }}
+                            >
+                              <Download className="w-4 h-4" />
+                              <span>Download</span>
+                            </motion.a>
+                          </div>
                         </div>
                       </div>
-                    </GlassCard>
+                    </div>
                   </motion.div>
                 );
               })}
             </AnimatePresence>
           </div>
 
-          {/* Pagination Controls */}
+          {/* Pagination - Redesigned */}
           {totalPages > 1 && (
             <motion.div
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
-              className="mt-6"
+              className="mt-6 rounded-xl p-4 flex flex-wrap items-center justify-between gap-4"
+              style={{ 
+                background: 'rgba(255, 255, 255, 0.02)',
+                border: '1px solid rgba(255, 255, 255, 0.08)'
+              }}
             >
-              <GlassCard>
-                <div className="flex flex-wrap items-center justify-between gap-4">
-                  {/* Page Info */}
-                  <div className="text-sm" style={{ color: colors.textSecondary }}>
-                    Showing {startIndex + 1} - {Math.min(endIndex, filteredPayments.length)} of {filteredPayments.length} payments
-                  </div>
+              {/* Page Info */}
+              <div className="text-sm" style={{ color: colors.textSecondary }}>
+                Showing <span className="font-semibold text-white">{startIndex + 1}-{Math.min(endIndex, filteredPayments.length)}</span> of <span className="font-semibold text-white">{filteredPayments.length}</span>
+              </div>
 
-                  {/* Page Numbers */}
-                  <div className="flex flex-wrap items-center gap-2">
-                    {/* Previous Button */}
-                    <button
-                      onClick={() => {
-                        setCurrentPage(prev => Math.max(1, prev - 1));
-                        scrollToTop();
-                      }}
-                      disabled={currentPage === 1}
-                      className="px-3 sm:px-4 py-2 rounded-lg font-medium transition-all disabled:opacity-50 disabled:cursor-not-allowed"
-                      style={{
-                        background: currentPage === 1 ? 'rgba(255, 255, 255, 0.05)' : gradients.primary,
-                        color: currentPage === 1 ? colors.textSecondary : 'white'
-                      }}
-                    >
-                      <span className="hidden sm:inline">Previous</span>
-                      <span className="sm:hidden">Prev</span>
-                    </button>
+              {/* Pagination Controls */}
+              <div className="flex items-center gap-1">
+                {/* First Page */}
+                <motion.button
+                  onClick={() => { setCurrentPage(1); scrollToTop(); }}
+                  disabled={currentPage === 1}
+                  className="p-2 rounded-lg transition-all disabled:opacity-30 disabled:cursor-not-allowed"
+                  style={{ background: 'rgba(255, 255, 255, 0.05)' }}
+                  whileHover={{ background: 'rgba(255, 255, 255, 0.1)' }}
+                  whileTap={{ scale: 0.95 }}
+                >
+                  <ChevronsLeft className="w-4 h-4" style={{ color: colors.textSecondary }} />
+                </motion.button>
+                
+                {/* Previous */}
+                <motion.button
+                  onClick={() => { setCurrentPage(prev => Math.max(1, prev - 1)); scrollToTop(); }}
+                  disabled={currentPage === 1}
+                  className="p-2 rounded-lg transition-all disabled:opacity-30 disabled:cursor-not-allowed"
+                  style={{ background: 'rgba(255, 255, 255, 0.05)' }}
+                  whileHover={{ background: 'rgba(255, 255, 255, 0.1)' }}
+                  whileTap={{ scale: 0.95 }}
+                >
+                  <ChevronLeft className="w-4 h-4" style={{ color: colors.textSecondary }} />
+                </motion.button>
 
-                    {/* Page Numbers */}
-                    <div className="hidden sm:flex items-center gap-2">
-                      {Array.from({ length: Math.min(totalPages, 5) }, (_, i) => {
-                        let pageNumber;
-                        if (totalPages <= 5) {
-                          pageNumber = i + 1;
-                        } else if (currentPage <= 3) {
-                          pageNumber = i + 1;
-                        } else if (currentPage >= totalPages - 2) {
-                          pageNumber = totalPages - 4 + i;
-                        } else {
-                          pageNumber = currentPage - 2 + i;
-                        }
+                {/* Page Numbers */}
+                <div className="flex items-center gap-1 mx-2">
+                  {Array.from({ length: Math.min(totalPages, 5) }, (_, i) => {
+                    let pageNumber;
+                    if (totalPages <= 5) {
+                      pageNumber = i + 1;
+                    } else if (currentPage <= 3) {
+                      pageNumber = i + 1;
+                    } else if (currentPage >= totalPages - 2) {
+                      pageNumber = totalPages - 4 + i;
+                    } else {
+                      pageNumber = currentPage - 2 + i;
+                    }
 
-                        return (
-                          <button
-                            key={i}
-                            onClick={() => {
-                              setCurrentPage(pageNumber);
-                              scrollToTop();
-                            }}
-                            className="w-10 h-10 rounded-lg font-medium transition-all"
-                            style={{
-                              background: currentPage === pageNumber ? gradients.primary : 'rgba(255, 255, 255, 0.05)',
-                              color: currentPage === pageNumber ? 'white' : colors.textSecondary
-                            }}
-                          >
-                            {pageNumber}
-                          </button>
-                        );
-                      })}
-                    </div>
-
-                    {/* Mobile: Current Page Indicator */}
-                    <div className="sm:hidden px-4 py-2 rounded-lg" style={{ background: 'rgba(255, 255, 255, 0.05)' }}>
-                      <span className="text-white font-medium">{currentPage}</span>
-                      <span className="mx-1" style={{ color: colors.textSecondary }}>/</span>
-                      <span style={{ color: colors.textSecondary }}>{totalPages}</span>
-                    </div>
-
-                    {/* Next Button */}
-                    <button
-                      onClick={() => {
-                        setCurrentPage(prev => Math.min(totalPages, prev + 1));
-                        scrollToTop();
-                      }}
-                      disabled={currentPage === totalPages}
-                      className="px-3 sm:px-4 py-2 rounded-lg font-medium transition-all disabled:opacity-50 disabled:cursor-not-allowed"
-                      style={{
-                        background: currentPage === totalPages ? 'rgba(255, 255, 255, 0.05)' : gradients.primary,
-                        color: currentPage === totalPages ? colors.textSecondary : 'white'
-                      }}
-                    >
-                      Next
-                    </button>
-                  </div>
+                    const isActive = currentPage === pageNumber;
+                    return (
+                      <motion.button
+                        key={i}
+                        onClick={() => { setCurrentPage(pageNumber); scrollToTop(); }}
+                        className="w-9 h-9 rounded-lg font-medium text-sm transition-all"
+                        style={{
+                          background: isActive ? gradients.primary : 'rgba(255, 255, 255, 0.05)',
+                          color: isActive ? 'white' : colors.textSecondary,
+                          boxShadow: isActive ? `0 4px 12px ${colors.primary}40` : 'none'
+                        }}
+                        whileHover={!isActive ? { background: 'rgba(255, 255, 255, 0.1)' } : {}}
+                        whileTap={{ scale: 0.95 }}
+                      >
+                        {pageNumber}
+                      </motion.button>
+                    );
+                  })}
                 </div>
-              </GlassCard>
+
+                {/* Next */}
+                <motion.button
+                  onClick={() => { setCurrentPage(prev => Math.min(totalPages, prev + 1)); scrollToTop(); }}
+                  disabled={currentPage === totalPages}
+                  className="p-2 rounded-lg transition-all disabled:opacity-30 disabled:cursor-not-allowed"
+                  style={{ background: 'rgba(255, 255, 255, 0.05)' }}
+                  whileHover={{ background: 'rgba(255, 255, 255, 0.1)' }}
+                  whileTap={{ scale: 0.95 }}
+                >
+                  <ChevronRight className="w-4 h-4" style={{ color: colors.textSecondary }} />
+                </motion.button>
+                
+                {/* Last Page */}
+                <motion.button
+                  onClick={() => { setCurrentPage(totalPages); scrollToTop(); }}
+                  disabled={currentPage === totalPages}
+                  className="p-2 rounded-lg transition-all disabled:opacity-30 disabled:cursor-not-allowed"
+                  style={{ background: 'rgba(255, 255, 255, 0.05)' }}
+                  whileHover={{ background: 'rgba(255, 255, 255, 0.1)' }}
+                  whileTap={{ scale: 0.95 }}
+                >
+                  <ChevronsRight className="w-4 h-4" style={{ color: colors.textSecondary }} />
+                </motion.button>
+              </div>
             </motion.div>
           )}
           </>
@@ -686,6 +689,6 @@ export default function PaymentHistoryPage() {
         </div>
       </div>
       <Footer />
-    </div>
+    </PageWrapper>
   );
 }

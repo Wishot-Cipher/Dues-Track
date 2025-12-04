@@ -301,7 +301,6 @@ export default function ExpenseApprovalQueue() {
                           <button
                             onClick={() => {
                               if (expense.receipt_url) {
-                                console.log('Receipt URL from DB:', expense.receipt_url)
                                 // Clean the path - remove any existing full URLs or bucket paths
                                 let receiptPath = expense.receipt_url
                                 
@@ -316,12 +315,10 @@ export default function ExpenseApprovalQueue() {
                                 try {
                                   receiptPath = decodeURIComponent(receiptPath)
                                 } catch (e) {
-                                  console.warn('Failed to decode path:', e)
+                                  // Silently handle decode errors
                                 }
                                 
-                                console.log('Cleaned receipt path:', receiptPath)
                                 const fullUrl = getPublicUrl('expense-receipts', receiptPath)
-                                console.log('Full URL:', fullUrl)
                                 setImageModal(fullUrl)
                               }
                             }}

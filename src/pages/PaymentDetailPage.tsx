@@ -27,6 +27,8 @@ import PayForOthersModal from "@/components/student/PayForOthersModal";
 import Footer from "@/components/Footer";
 import notificationService from "@/services/notificationService";
 import FileUploader from "@/components/ui/FileUploader";
+import { SuccessCelebration } from "@/components/ui/Confetti";
+import PageWrapper from "@/components/ui/PageWrapper";
 
 type PaymentMethod = "bank_transfer" | "cash" | "pos";
 
@@ -97,6 +99,10 @@ export default function PaymentDetailPage() {
   const [receiptFile, setReceiptFile] = useState<File | null>(null);
   const [transactionRef, setTransactionRef] = useState("");
   const [notes, setNotes] = useState("");
+
+  // Success celebration state
+  const [showCelebration, setShowCelebration] = useState(false);
+  const [celebrationMessage, setCelebrationMessage] = useState("");
 
   // Calculate payment status
   const totalPaid = existingPayments
@@ -298,8 +304,9 @@ export default function PaymentDetailPage() {
           ? `Payment submitted for ${selectedStudents.length + (includeSelf ? 1 : 0)} student(s)!`
           : "Payment submitted successfully!";
 
-      toast.success(message + " Awaiting approval.");
-      navigate("/dashboard", { state: { refresh: true }, replace: true });
+      // Show celebration with confetti
+      setCelebrationMessage(message);
+      setShowCelebration(true);
     } catch (error: unknown) {
       console.error("Error submitting payment:", error);
 
@@ -365,58 +372,18 @@ export default function PaymentDetailPage() {
     );
   }
   return (
-    <div
-      className="min-h-screen py-2 sm:py-6 overflow-x-hidden"
-      style={{
-        background: "radial-gradient(ellipse at top, #1A0E09 0%, #0F0703 100%)",
-      }}
-    >
-      {/* Background Grid Pattern */}
-      <div
-        className="absolute inset-0 opacity-20 pointer-events-none"
-        style={{
-          backgroundImage: `
-            linear-gradient(${colors.primary}40 1px, transparent 1px),
-            linear-gradient(90deg, ${colors.primary}40 1px, transparent 1px)
-          `,
-          backgroundSize: "50px 50px",
+    <PageWrapper noPadding className="py-2 sm:py-6">
+      {/* Success Celebration Modal */}
+      <SuccessCelebration
+        isVisible={showCelebration}
+        title="Payment Submitted! 🎉"
+        subtitle={celebrationMessage + " Awaiting approval."}
+        onClose={() => {
+          setShowCelebration(false);
+          navigate("/dashboard", { state: { refresh: true }, replace: true });
         }}
+        autoCloseDuration={4000}
       />
-
-      {/* Animated Gradient Orbs */}
-      <div className="fixed inset-0 overflow-hidden pointer-events-none">
-        <div
-          className="absolute w-[500px] h-[500px] rounded-full blur-[120px] opacity-30 animate-pulse"
-          style={{
-            background: `radial-gradient(circle, ${colors.primary} 0%, transparent 70%)`,
-            top: "-10%",
-            right: "-5%",
-            animationDuration: "4s",
-          }}
-        />
-        <div
-          className="absolute w-[400px] h-[400px] rounded-full blur-[100px] opacity-20"
-          style={{
-            background: `radial-gradient(circle, ${colors.accentMint} 0%, transparent 70%)`,
-            bottom: "-5%",
-            left: "-5%",
-            animation: "pulse 6s ease-in-out infinite",
-          }}
-        />
-
-        {/* ECE Logo Background - Creative Element */}
-        <div className="hidden lg:block absolute right-0 top-1/2 -translate-y-1/2 w-[600px] h-[600px] opacity-[0.08] pointer-events-none">
-          <img
-            src="/Ece picture.jpg"
-            alt="ECE Background"
-            className="w-full h-full object-contain"
-            style={{
-              filter: "grayscale(0.5) brightness(0.8)",
-              mixBlendMode: "soft-light",
-            }}
-          />
-        </div>
-      </div>
 
       {/* Main Container - FIXED */}
       <div className="w-full max-w-4xl mx-auto px-2 sm:px-6 lg:px-8 overflow-x-hidden">
@@ -778,25 +745,34 @@ export default function PaymentDetailPage() {
                 </motion.div>
               )}
 
-              {step === "qr" && selectedMethod === "cash" && user && (
-                <motion.div
-                  initial={{ opacity: 0, y: 20 }}
-                  animate={{ opacity: 1, y: 0 }}
-                >
-                  <QRCodeGenerator
-                    studentId={user.id}
-                    studentName={user.full_name}
-                    studentRegNumber={user.reg_number}
-                    paymentTypeId={id!}
-                    paymentTypeName={paymentType.title}
-                    amount={(paymentOption === "full" ? remainingAmount : amount) * (selectedStudents.length + (includeSelf ? 1 : 0))}
-                    totalStudents={selectedStudents.length + (includeSelf ? 1 : 0)}
-                    selectedStudents={selectedStudents}
-                    includeSelf={includeSelf}
-                    onBack={() => setStep("method")}
-                  />
-                </motion.div>
-              )}
+              {step === "qr" && selectedMethod === "cash" && user && (() => {
+                // Calculate total students: if no students selected and not includeSelf, default to 1 (paying for self only)
+                const totalStudentCount = selectedStudents.length + (includeSelf ? 1 : 0);
+                const effectiveStudentCount = totalStudentCount > 0 ? totalStudentCount : 1;
+                const baseAmount = paymentOption === "full" ? remainingAmount : amount;
+                const totalAmount = baseAmount * effectiveStudentCount;
+                const isSoloPayment = selectedStudents.length === 0 && !includeSelf;
+                
+                return (
+                  <motion.div
+                    initial={{ opacity: 0, y: 20 }}
+                    animate={{ opacity: 1, y: 0 }}
+                  >
+                    <QRCodeGenerator
+                      studentId={user.id}
+                      studentName={user.full_name}
+                      studentRegNumber={user.reg_number}
+                      paymentTypeId={id!}
+                      paymentTypeName={paymentType.title}
+                      amount={totalAmount}
+                      totalStudents={effectiveStudentCount}
+                      selectedStudents={selectedStudents}
+                      includeSelf={isSoloPayment ? true : includeSelf}
+                      onBack={() => setStep("method")}
+                    />
+                  </motion.div>
+                );
+              })()}
 
               {step === "upload" &&
                 (selectedMethod === "bank_transfer" ||
@@ -1182,6 +1158,6 @@ export default function PaymentDetailPage() {
         }}
       />
       <Footer />
-    </div>
+    </PageWrapper>
   );
 }

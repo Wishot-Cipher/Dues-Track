@@ -53,9 +53,20 @@
     <!-- Performance -->
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="dns-prefetch" href="https://fonts.googleapis.com" />
+    
+    <!-- Prevent white flash - set background immediately -->
+    <style>
+      html, body, #root {
+        background-color: #0F0703 !important;
+        min-height: 100vh;
+        min-height: 100dvh;
+        margin: 0;
+        padding: 0;
+      }
+    </style>
   </head>
-  <body>
-    <div id="root"></div>
+  <body style="background-color: #0F0703;">
+    <div id="root" style="background-color: #0F0703; min-height: 100vh; min-height: 100dvh;"></div>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>

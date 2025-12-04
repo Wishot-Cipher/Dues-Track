@@ -31,10 +31,14 @@ import SmartDeadlineReminders from '@/components/student/SmartDeadlineReminders'
 import ClassProgressVisualization from '@/components/student/ClassProgressVisualization';
 import QuickPaymentSummary from '@/components/student/QuickPaymentSummary';
 import { useStudentFeatures } from '@/hooks/useStudentFeatures';
+import { StatCardSkeleton, PaymentCardSkeleton } from '@/components/ui/Skeleton';
+import EmptyState, { AllPaidState } from '@/components/ui/EmptyState';
+import { useSettings } from '@/contexts/SettingsContext';
 
 export default function DashboardPage() {
   const { user, logout, hasPermission } = useAuth();
   const { features, loading: featuresLoading } = useStudentFeatures();
+  const { settings } = useSettings();
   const navigate = useNavigate();
   const location = useLocation();
   const [showProfileMenu, setShowProfileMenu] = useState(false);
@@ -170,6 +174,7 @@ export default function DashboardPage() {
       className="min-h-screen relative overflow-x-hidden"
       style={{
         background: 'radial-gradient(ellipse at top, #1A0E09 0%, #0F0703 100%)',
+        minHeight: '100dvh',
       }}
     >
       {/* Background Grid Pattern */}
@@ -313,7 +318,7 @@ export default function DashboardPage() {
                       )}
 
                       <button
-                        onClick={() => {/* Navigate to settings */}}
+                        onClick={() => navigate('/settings')}
                         className="w-full flex items-center gap-3 px-3 py-2 rounded-lg transition-colors text-left"
                         style={{ color: colors.textPrimary }}
                         onMouseEnter={(e) => e.currentTarget.style.background = 'rgba(255, 255, 255, 0.1)'}
@@ -420,7 +425,7 @@ export default function DashboardPage() {
               )}
 
               <button
-                onClick={() => setShowMobileMenu(false)}
+                onClick={() => { navigate('/settings'); setShowMobileMenu(false); }}
                 className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg transition-colors text-left"
                 style={{ color: colors.textPrimary }}
                 onMouseEnter={(e) => e.currentTarget.style.background = 'rgba(255, 255, 255, 0.1)'}
@@ -466,34 +471,53 @@ export default function DashboardPage() {
 
         {/* Stats Grid */}
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4 lg:gap-6 mb-6 sm:mb-8">
-          <StatCard
-            title="Total Paid"
-            value={formatCurrency(stats.totalPaid)}
-            icon={DollarSign}
-            iconColor={colors.statusPaid}
-            delay={0.3}
-          />
-          <StatCard
-            title="Outstanding"
-            value={formatCurrency(stats.totalDue)}
-            icon={AlertCircle}
-            iconColor={colors.warning}
-            delay={0.4}
-          />
-          <StatCard
-            title="Pending Review"
-            value={stats.pendingPayments}
-            icon={Calendar}
-            iconColor={colors.accentMint}
-            delay={0.5}
-          />
-          <StatCard
-            title="Payments Made"
-            value={stats.paymentsMade}
-            icon={CheckCircle}
-            iconColor={colors.primary}
-            delay={0.6}
-          />
+          {loading ? (
+            <>
+              {[1, 2, 3, 4].map((i) => (
+                <motion.div
+                  key={i}
+                  initial={{ opacity: 0, y: 20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: 0.1 * i }}
+                >
+                  <StatCardSkeleton />
+                </motion.div>
+              ))}
+            </>
+          ) : (
+            <>
+              <StatCard
+                title="Total Paid"
+                value={settings.appearance.showBalance ? formatCurrency(stats.totalPaid) : '••••••'}
+                icon={DollarSign}
+                iconColor={colors.statusPaid}
+                delay={0.3}
+                isCurrency
+              />
+              <StatCard
+                title="Outstanding"
+                value={settings.appearance.showBalance ? formatCurrency(stats.totalDue) : '••••••'}
+                icon={AlertCircle}
+                iconColor={colors.warning}
+                delay={0.4}
+                isCurrency
+              />
+              <StatCard
+                title="Pending Review"
+                value={stats.pendingPayments}
+                icon={Calendar}
+                iconColor={colors.accentMint}
+                delay={0.5}
+              />
+              <StatCard
+                title="Payments Made"
+                value={stats.paymentsMade}
+                icon={CheckCircle}
+                iconColor={colors.primary}
+                delay={0.6}
+              />
+            </>
+          )}
         </div>
 
         {/* My Payments Section - 2/3 + 1/3 Layout */}
@@ -511,19 +535,13 @@ export default function DashboardPage() {
               </h3>
               
               {loading ? (
-                <div className="text-center py-8">
-                  <div className="animate-spin w-6 h-6 border-4 border-t-transparent rounded-full mx-auto mb-3" 
-                       style={{ borderColor: colors.primary, borderTopColor: 'transparent' }} />
-                  <p className="text-xs" style={{ color: colors.textSecondary }}>Loading...</p>
+                <div className="space-y-3">
+                  {[1, 2].map((i) => (
+                    <PaymentCardSkeleton key={i} />
+                  ))}
                 </div>
               ) : activePayments.filter(p => p.status === 'not_paid').length === 0 ? (
-                <div className="text-center py-8">
-                  <CheckCircle size={48} className="mx-auto mb-3" style={{ color: colors.statusPaid }} />
-                  <p className="text-sm font-medium" style={{ color: colors.statusPaid }}>All Caught Up!</p>
-                  <p className="text-xs mt-2" style={{ color: colors.textSecondary }}>
-                    You have no outstanding payments
-                  </p>
-                </div>
+                <AllPaidState />
               ) : (
                 <div className="space-y-3">
                   {activePayments
@@ -648,19 +666,18 @@ export default function DashboardPage() {
               </div>
 
               {loading ? (
-                <div className="text-center py-12">
-                  <div className="animate-spin w-8 h-8 border-4 border-t-transparent rounded-full mx-auto mb-3" 
-                       style={{ borderColor: colors.primary, borderTopColor: 'transparent' }} />
-                  <p className="text-sm" style={{ color: colors.textSecondary }}>Loading payments...</p>
+                <div className="space-y-3">
+                  {[1, 2, 3].map((i) => (
+                    <PaymentCardSkeleton key={i} />
+                  ))}
                 </div>
               ) : activePayments.filter(p => p.status !== 'not_paid').length === 0 ? (
-                <div className="text-center py-12">
-                  <Wallet size={48} className="mx-auto mb-3 opacity-20" style={{ color: colors.textSecondary }} />
-                  <p className="text-sm" style={{ color: colors.textSecondary }}>No payments submitted yet</p>
-                  <p className="text-xs mt-2" style={{ color: colors.textSecondary }}>
-                    Check "Unpaid Dues" to make your first payment
-                  </p>
-                </div>
+                <EmptyState
+                  illustration="payments"
+                  title="No payments yet"
+                  description="Check 'Unpaid Dues' to make your first payment"
+                  size="sm"
+                />
               ) : (
                 <div className="space-y-3">
                   {activePayments

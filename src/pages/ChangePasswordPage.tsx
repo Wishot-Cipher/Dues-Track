@@ -6,6 +6,7 @@ import Input from "@/components/ui/Input";
 import { useAuth } from "@/hooks/useAuth";
 import { useNavigate } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
+import PageWrapper from "@/components/ui/PageWrapper";
 
 export default function ChangePasswordPage() {
   const [currentPassword, setCurrentPassword] = useState("");
@@ -105,58 +106,7 @@ export default function ChangePasswordPage() {
   const strengthLabels = ["Weak", "Fair", "Good", "Strong"];
 
   return (
-    <div
-      className="min-h-screen w-full flex items-center justify-center p-4 sm:p-6 lg:p-8"
-      style={{ background: "#0A0604" }}
-    >
-      {/* Grid Pattern Overlay */}
-      <div
-        className="fixed inset-0 opacity-[0.03]"
-        style={{
-          backgroundImage: `
-            linear-gradient(${colors.primary}40 1px, transparent 1px),
-            linear-gradient(90deg, ${colors.primary}40 1px, transparent 1px)
-          `,
-          backgroundSize: "50px 50px",
-        }}
-      />
-
-      {/* Animated Gradient Orbs */}
-      {/* Animated Gradient Orbs */}
-      <div className="fixed inset-0 overflow-hidden pointer-events-none">
-        <div
-          className="absolute w-[500px] h-[500px] rounded-full blur-[120px] opacity-30 animate-pulse"
-          style={{
-            background: `radial-gradient(circle, ${colors.primary} 0%, transparent 70%)`,
-            top: "-10%",
-            right: "-5%",
-            animationDuration: "4s",
-          }}
-        />
-        <div
-          className="absolute w-[400px] h-[400px] rounded-full blur-[100px] opacity-20"
-          style={{
-            background: `radial-gradient(circle, ${colors.accentMint} 0%, transparent 70%)`,
-            bottom: "-5%",
-            left: "-5%",
-            animation: "pulse 6s ease-in-out infinite",
-          }}
-        />
-
-        {/* ECE Logo Background - Creative Element */}
-        <div className="hidden lg:block absolute right-0 top-1/2 -translate-y-1/2 w-[600px] h-[600px] opacity-[0.08] pointer-events-none">
-          <img
-            src="/Ece picture.jpg"
-            alt="ECE Background"
-            className="w-full h-full object-contain"
-            style={{
-              filter: "grayscale(0.5) brightness(0.8)",
-              mixBlendMode: "soft-light",
-            }}
-          />
-        </div>
-      </div>
-
+    <PageWrapper centered noPadding className="p-4 sm:p-6 lg:p-8">
       {/* Main Content Container */}
       <motion.div
         className="relative w-full max-w-6xl grid lg:grid-cols-2 gap-8 items-center"
@@ -552,6 +502,6 @@ export default function ChangePasswordPage() {
           animation: shake 0.5s ease-in-out;
         }
       `}</style>
-    </div>
+    </PageWrapper>
   );
 }

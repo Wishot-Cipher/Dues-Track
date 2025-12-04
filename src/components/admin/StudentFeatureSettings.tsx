@@ -19,9 +19,7 @@ export default function StudentFeatureSettings() {
   async function loadSettings() {
     try {
       setLoading(true)
-      console.log('Loading student feature settings...')
       const data = await studentFeatureService.getAllFeatureSettings()
-      console.log('Loaded student feature settings:', data)
       setSettings(data)
     } catch (error) {
       console.error('Failed to load settings:', error)

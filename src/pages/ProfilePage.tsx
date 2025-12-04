@@ -28,12 +28,15 @@ import Input from '@/components/ui/Input';
 import CustomButton from '@/components/ui/CustomButton';
 import { formatCurrency, formatDate } from '@/utils/formatters';
 import paymentService from '@/services/paymentService';
+import PageWrapper from '@/components/ui/PageWrapper';
+import { ProfileSkeleton } from '@/components/ui/Skeleton';
 
 export default function ProfilePage() {
-  const { user, updateProfile } = useAuth();
+  const { user, updateProfile, loading: authLoading } = useAuth();
   const navigate = useNavigate();
   const [isEditing, setIsEditing] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [pageLoading, setPageLoading] = useState(true);
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const [paymentSummary, setPaymentSummary] = useState({
     totalPaid: 0,
@@ -55,10 +58,13 @@ export default function ProfilePage() {
       if (!user?.id) return;
 
       try {
+        setPageLoading(true);
         const summary = await paymentService.getPaymentSummary(user.id);
         setPaymentSummary(summary);
       } catch (error) {
         // Error handling without console log
+      } finally {
+        setPageLoading(false);
       }
     };
 
@@ -90,47 +96,32 @@ export default function ProfilePage() {
     setIsEditing(false);
   };
 
+  // Show skeleton while loading
+  if (authLoading || (!user && pageLoading)) {
+    return (
+      <PageWrapper noPadding>
+        <div className="relative max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-4 sm:py-6 lg:py-8">
+          {/* Header Skeleton */}
+          <div className="mb-6 sm:mb-8">
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-4">
+              <div className="flex items-center gap-3 sm:gap-4">
+                <div className="w-10 h-10 rounded-lg animate-pulse" style={{ background: 'rgba(255, 255, 255, 0.1)' }} />
+                <div>
+                  <div className="h-8 w-32 rounded-lg animate-pulse mb-2" style={{ background: 'rgba(255, 255, 255, 0.1)' }} />
+                  <div className="h-4 w-64 rounded-lg animate-pulse" style={{ background: 'rgba(255, 255, 255, 0.05)' }} />
+                </div>
+              </div>
+              <div className="h-10 w-32 rounded-lg animate-pulse" style={{ background: 'rgba(255, 255, 255, 0.1)' }} />
+            </div>
+          </div>
+          <ProfileSkeleton />
+        </div>
+      </PageWrapper>
+    );
+  }
+
   return (
-    <div 
-      className="min-h-screen relative overflow-hidden"
-      style={{
-        background: 'radial-gradient(ellipse at top, #1A0E09 0%, #0F0703 100%)',
-      }}
-    >
-      {/* Background Grid Pattern */}
-      <div
-        className="absolute inset-0 opacity-20 pointer-events-none"
-        style={{
-          backgroundImage: `
-            linear-gradient(${colors.primary}40 1px, transparent 1px),
-            linear-gradient(90deg, ${colors.primary}40 1px, transparent 1px)
-          `,
-          backgroundSize: '50px 50px',
-        }}
-      />
-
-      {/* Animated Gradient Orbs */}
-      <div className="fixed inset-0 overflow-hidden pointer-events-none">
-        <div
-          className="absolute w-[500px] h-[500px] rounded-full blur-[120px] opacity-30 animate-pulse"
-          style={{
-            background: `radial-gradient(circle, ${colors.primary} 0%, transparent 70%)`,
-            top: '-10%',
-            right: '-5%',
-            animationDuration: '4s',
-          }}
-        />
-        <div
-          className="absolute w-[400px] h-[400px] rounded-full blur-[100px] opacity-20"
-          style={{
-            background: `radial-gradient(circle, ${colors.accentMint} 0%, transparent 70%)`,
-            bottom: '-5%',
-            left: '-5%',
-            animation: 'pulse 6s ease-in-out infinite',
-          }}
-        />
-      </div>
-
+    <PageWrapper noPadding>
       {/* Main Content */}
       <div className="relative max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-4 sm:py-6 lg:py-8">
         {/* Header */}
@@ -709,6 +700,6 @@ export default function ProfilePage() {
         </div>
       </div>
       <Footer />
-    </div>
+    </PageWrapper>
   );
 }

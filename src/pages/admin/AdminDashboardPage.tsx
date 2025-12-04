@@ -6,6 +6,7 @@ import { supabase } from '@/config/supabase';
 import { colors, gradients } from '@/config/colors';
 import GlassCard from '@/components/ui/GlassCard';
 import { formatCurrency } from '@/utils/formatters';
+import { AdminDashboardSkeleton } from '@/components/ui/Skeleton';
 import {
   Users,
   Clock,
@@ -292,10 +293,7 @@ export default function AdminDashboardPage() {
 
         {/* Stats Grid */}
         {loading ? (
-          <div className="flex items-center justify-center py-12">
-            <div className="animate-spin rounded-full h-12 w-12 border-4 border-t-transparent" 
-                 style={{ borderColor: colors.primary, borderTopColor: 'transparent' }} />
-          </div>
+          <AdminDashboardSkeleton />
         ) : (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
             {/* Total Students */}

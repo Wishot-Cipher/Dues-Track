@@ -114,27 +114,27 @@ export const authService = {
    */
   async updateProfile(studentId: string, profileData: ProfileUpdateData): Promise<Student> {
     try {
-      const { email, phone, section, reg_number } = profileData;
+      const { email, phone, section, full_name } = profileData as ProfileUpdateData & { full_name?: string };
       
-      const { data, error } = await supabase
-        .from('students')
-        .update({
-          email,
-          phone,
-          section,
-          ...(reg_number && { reg_number }), // Only update if provided
-          updated_at: new Date().toISOString(),
-        })
-        .eq('id', studentId)
-        .select()
-        .single();
+      // Use RPC function to bypass RLS (since we use custom auth, not Supabase Auth)
+      const { data, error } = await supabase.rpc('update_student_profile', {
+        p_student_id: studentId,
+        p_full_name: full_name || null,
+        p_email: email || null,
+        p_phone: phone || null,
+        p_section: section || null,
+      });
 
       if (error) throw error;
 
-      // Update stored session with new data
-      this.saveSession(data as Student);
+      // RPC returns an array, get the first element
+      const updated = Array.isArray(data) && data.length > 0 ? data[0] : null;
+      if (!updated) throw new Error('Failed to update profile');
 
-      return data as Student;
+      // Update stored session with new data
+      this.saveSession(updated as Student);
+
+      return updated as Student;
     } catch (error) {
       console.error('Update profile error:', error);
       throw error;
