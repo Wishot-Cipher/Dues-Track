@@ -5,7 +5,6 @@ import { supabase } from '@/config/supabase';
 import { useToast } from '@/hooks/useToast';
 import { useNavigate } from 'react-router-dom';
 import { colors, gradients } from '@/config/colors';
-import GlassCard from '@/components/ui/GlassCard';
 import PageWrapper from '@/components/ui/PageWrapper';
 import { PaymentCardSkeleton } from '@/components/ui/Skeleton';
 import { formatCurrency, formatDate } from '@/utils/formatters';
@@ -19,7 +18,6 @@ import {
   Calendar,
   AlertCircle,
   ArrowLeft,
-  DollarSign,
   Sparkles,
   TrendingUp,
   Filter,

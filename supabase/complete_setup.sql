@@ -485,7 +485,7 @@ BEGIN
         'Payment Approved! ✅',
         'Your payment has been approved and confirmed.',
         'payment_approved',
-        '/payments/' || NEW.id
+        '/payment/' || NEW.id
       );
     ELSIF NEW.status = 'rejected' THEN
       PERFORM send_notification(
@@ -493,7 +493,7 @@ BEGIN
         'Payment Rejected ❌',
         'Your payment was rejected. Reason: ' || COALESCE(NEW.rejection_reason, 'Not specified'),
         'payment_rejected',
-        '/payments/' || NEW.id
+        '/payment/' || NEW.id
       );
     END IF;
   END IF;

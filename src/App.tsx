@@ -24,6 +24,7 @@ import ScanQRCodePage from '@/pages/admin/ScanQRCodePage';
 import ManageStudentsPage from '@/pages/admin/ManageStudentsPage';
 import AdminCollectedPage from '@/pages/admin/AdminCollectedPage';
 import ExpensesPage from '@/pages/admin/ExpensesPage';
+import NotFoundPage from '@/pages/NotFoundPage';
 
 function App() {
   return (
@@ -188,7 +189,7 @@ function App() {
               }
             />
             <Route path="/" element={<Navigate to="/dashboard" replace />} />
-            <Route path="*" element={<Navigate to="/dashboard" replace />} />
+            <Route path="*" element={<NotFoundPage />} />
           </Routes>
           </AuthProvider>
         </SettingsProvider>

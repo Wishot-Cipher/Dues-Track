@@ -385,10 +385,37 @@ export const NotificationCenter = () => {
                             if (!notification.is_read) {
                               await markAsRead(notification.id);
                             }
-                            if (notification.link) {
-                              navigate(notification.link);
-                              setShowPanel(false);
+                            
+                            // Handle navigation based on notification type
+                            let targetLink = notification.link;
+                            
+                            // Fix legacy links from database triggers that use /payments/{id} instead of /payment/{id}
+                            if (targetLink && targetLink.startsWith('/payments/') && !targetLink.includes('/payments/history')) {
+                              // Extract the payment ID and convert to correct route
+                              const paymentId = targetLink.replace('/payments/', '');
+                              targetLink = `/payment/${paymentId}`;
                             }
+                            
+                            // If no link provided, determine based on notification type
+                            if (!targetLink) {
+                              if (notification.type === 'payment_approved' || notification.type === 'payment_rejected') {
+                                // Try to get payment ID from metadata
+                                if (notification.metadata?.payment_id) {
+                                  targetLink = `/payment/${notification.metadata.payment_id}`;
+                                } else {
+                                  // Fallback to payments history
+                                  targetLink = '/payments';
+                                }
+                              } else if (notification.type === 'payment_waived') {
+                                targetLink = '/payments';
+                              } else {
+                                // Default to dashboard
+                                targetLink = '/dashboard';
+                              }
+                            }
+                            
+                            navigate(targetLink);
+                            setShowPanel(false);
                           } catch (err) {
                             console.error('Error on notification click:', err);
                           }

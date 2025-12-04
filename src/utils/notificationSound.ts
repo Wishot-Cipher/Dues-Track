@@ -5,7 +5,6 @@
 
 class NotificationSound {
   private audioContext: AudioContext | null = null;
-  private isInitialized = false;
 
   constructor() {
     // Don't create AudioContext in constructor - wait for user interaction
@@ -29,7 +28,6 @@ class NotificationSound {
         this.audioContext.resume();
       }
 
-      this.isInitialized = true;
       return this.audioContext;
     } catch {
       return null;

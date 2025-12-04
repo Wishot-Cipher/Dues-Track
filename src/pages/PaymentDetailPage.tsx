@@ -343,36 +343,49 @@ export default function PaymentDetailPage() {
   if (!paymentType) {
     return (
       <div
-        className="min-h-screen flex items-center justify-center"
-        style={{ background: gradients.darkBackground }}
+        className="min-h-screen flex items-center justify-center p-6"
+        style={{ background: 'radial-gradient(ellipse at top, #1A0E09 0%, #0F0703 100%)' }}
       >
-        <GlassCard>
-          <div className="text-center p-8">
-            <AlertCircle
-              className="w-16 h-16 mx-auto mb-4"
-              style={{ color: colors.statusUnpaid }}
-            />
-            <h2 className="text-2xl font-bold text-white mb-2">
-              Payment Type Not Found
-            </h2>
-            <button
-              onClick={() => navigate("/dashboard")}
-              className="flex items-center justify-center gap-2 mb-4 px-4 py-2 rounded-lg transition-colors w-full sm:w-auto"
-              style={{
-                color: colors.textPrimary,
-                background: "rgba(255, 255, 255, 0.05)",
-              }}
-            >
-              <ArrowLeft size={20} />
-              <span className="font-medium">Back to Dashboard</span>
-            </button>
-          </div>
-        </GlassCard>
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="text-center max-w-md"
+        >
+          <motion.div
+            initial={{ scale: 0.8 }}
+            animate={{ scale: 1 }}
+            transition={{ type: 'spring', damping: 15 }}
+            className="w-20 h-20 mx-auto mb-6 rounded-2xl flex items-center justify-center"
+            style={{ background: `${colors.statusUnpaid}15`, border: `1px solid ${colors.statusUnpaid}30` }}
+          >
+            <AlertCircle className="w-10 h-10" style={{ color: colors.statusUnpaid }} />
+          </motion.div>
+          <h2 className="text-2xl font-bold text-white mb-3">
+            Payment Not Found
+          </h2>
+          <p className="text-sm mb-6" style={{ color: colors.textSecondary }}>
+            This payment type may have been removed or the link is invalid. Please check your dashboard for available payments.
+          </p>
+          <motion.button
+            onClick={() => navigate("/dashboard")}
+            className="px-6 py-3 rounded-xl font-semibold flex items-center justify-center gap-2 mx-auto transition-all"
+            style={{
+              background: gradients.primary,
+              color: 'white',
+              boxShadow: `0 4px 20px ${colors.primary}40`,
+            }}
+            whileHover={{ scale: 1.02 }}
+            whileTap={{ scale: 0.98 }}
+          >
+            <ArrowLeft size={20} />
+            Back to Dashboard
+          </motion.button>
+        </motion.div>
       </div>
     );
   }
   return (
-    <PageWrapper noPadding className="py-2 sm:py-6">
+    <PageWrapper noPadding className="py-2 sm:py-6" style={{ background: '#0A0705' }}>
       {/* Success Celebration Modal */}
       <SuccessCelebration
         isVisible={showCelebration}
@@ -385,7 +398,7 @@ export default function PaymentDetailPage() {
         autoCloseDuration={4000}
       />
 
-      {/* Main Container - FIXED */}
+      {/* Main Container */}
       <div className="w-full max-w-4xl mx-auto px-2 sm:px-6 lg:px-8 overflow-x-hidden">
 
         <div className="w-full space-y-6 relative z-10">
