@@ -7,6 +7,7 @@ import { formatCurrency } from '@/utils/formatters';
 import { colors, gradients } from '@/config/colors';
 import { useNavigate } from 'react-router-dom';
 import { useSettings } from '@/contexts/SettingsContext';
+import { notificationSound } from '@/utils/notificationSound';
 
 interface Notification {
   id: string;
@@ -78,6 +79,9 @@ export const NotificationCenter = () => {
     if (user?.id) {
       fetchNotifications();
       
+      // Pre-initialize audio context for notifications
+      void notificationSound.forceInit();
+      
       // Subscribe to new notifications
       const channel = supabase
         .channel('notifications')
@@ -90,6 +94,8 @@ export const NotificationCenter = () => {
             filter: `recipient_id=eq.${user.id}`,
           },
           (payload) => {
+            console.log('🔔 New notification received:', payload.new);
+            
             // Play sound for new notification (respects user settings)
             const notification = payload.new as Notification;
             if (notification.type === 'payment_approved') {
@@ -244,7 +250,7 @@ export const NotificationCenter = () => {
               initial={{ scale: 0 }}
               animate={{ scale: 1 }}
               exit={{ scale: 0 }}
-              className="absolute -top-1 -right-1 min-w-[20px] h-5 px-1.5 rounded-full flex items-center justify-center text-[11px] font-bold text-white"
+              className="absolute -top-1 -right-1 min-w-5 h-5 px-1.5 rounded-full flex items-center justify-center text-[11px] font-bold text-white"
               style={{ background: gradients.primary, boxShadow: `0 2px 8px ${colors.primary}50` }}
             >
               {unreadCount > 9 ? '9+' : unreadCount}

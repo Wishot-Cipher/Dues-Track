@@ -13,6 +13,9 @@ import {
   Building2,
   RefreshCw,
   Info,
+  Sparkles,
+  TrendingUp,
+  Banknote,
 } from "lucide-react";
 import { supabase } from "@/config/supabase";
 import { useAuth } from "@/hooks/useAuth";
@@ -423,147 +426,210 @@ export default function PaymentDetailPage() {
             </button>
           </motion.div>
 
-          {/* Payment Type Info */}
+          {/* Payment Type Info - Enhanced */}
           <motion.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.1 }}
           >
-            <GlassCard>
-              <div className="flex flex-col sm:flex-row items-center sm:items-start gap-4 w-full">
-                <div
-                  className="w-16 h-16 sm:w-16 sm:h-16 rounded-2xl flex items-center justify-center text-3xl shrink-0"
-                  style={{ background: `${paymentType.color}20` }}
-                >
-                  {paymentType.icon}
-                </div>
-                <div className="flex-1 text-center sm:text-left">
-                  <h1 className=" text-lg sm:text-3xl font-bold text-white mb-2">
-                    {paymentType.title}
-                  </h1>
-                  <p
-                    className="text-sm sm:text-base mb-3"
-                    style={{ color: colors.textSecondary }}
+            <div 
+              className="rounded-2xl overflow-hidden"
+              style={{ 
+                background: 'linear-gradient(135deg, rgba(255, 107, 53, 0.08) 0%, rgba(255, 107, 53, 0.02) 100%)',
+                border: `1px solid ${colors.primary}20`,
+              }}
+            >
+              {/* Header with gradient accent */}
+              <div 
+                className="p-5 sm:p-6"
+                style={{ 
+                  background: `linear-gradient(135deg, ${colors.primary}15 0%, transparent 100%)`,
+                  borderBottom: `1px solid ${colors.primary}15`
+                }}
+              >
+                <div className="flex flex-col sm:flex-row items-center sm:items-start gap-4 w-full">
+                  <motion.div
+                    className="w-18 h-18 sm:w-20 sm:h-20 rounded-2xl flex items-center justify-center text-4xl shrink-0 relative"
+                    style={{ 
+                      background: `linear-gradient(135deg, ${paymentType.color}30 0%, ${paymentType.color}10 100%)`,
+                      border: `1px solid ${paymentType.color}40`,
+                      boxShadow: `0 8px 32px ${paymentType.color}20`
+                    }}
+                    whileHover={{ scale: 1.05, rotate: 5 }}
                   >
-                    {paymentType.description}
-                  </p>
-                  <div className="flex flex-wrap items-center justify-center sm:justify-start gap-4">
-                    <div className="flex items-center gap-2">
-                      <span
-                        className="text-xl font-bold"
-                        style={{ color: colors.primary }}
-                      >
-                        ₦
-                      </span>
-                      <span className="text-lg sm:text-xl font-bold text-white">
-                        {formatCurrency(paymentType.amount)}
-                      </span>
+                    {paymentType.icon}
+                    <div 
+                      className="absolute -bottom-1 -right-1 w-6 h-6 rounded-full flex items-center justify-center"
+                      style={{ background: gradients.primary }}
+                    >
+                      <Sparkles className="w-3.5 h-3.5 text-white" />
                     </div>
-                    <div className="flex items-center gap-2">
-                      <Calendar
-                        className="w-5 h-5"
-                        style={{ color: colors.warning }}
-                      />
-                      <span
-                        className="text-sm sm:text-base"
-                        style={{ color: colors.textSecondary }}
+                  </motion.div>
+                  <div className="flex-1 text-center sm:text-left">
+                    <div className="flex items-center justify-center sm:justify-start gap-2 mb-2">
+                      <h1 className="text-xl sm:text-3xl font-bold text-white">
+                        {paymentType.title}
+                      </h1>
+                      {paymentType.allow_partial && (
+                        <span 
+                          className="px-2 py-0.5 rounded-full text-[10px] font-semibold"
+                          style={{ background: `${colors.accentMint}20`, color: colors.accentMint }}
+                        >
+                          PARTIAL OK
+                        </span>
+                      )}
+                    </div>
+                    <p
+                      className="text-sm sm:text-base mb-4"
+                      style={{ color: colors.textSecondary }}
+                    >
+                      {paymentType.description}
+                    </p>
+                    <div className="flex flex-wrap items-center justify-center sm:justify-start gap-3">
+                      <div 
+                        className="flex items-center gap-2 px-3 py-2 rounded-xl"
+                        style={{ background: `${colors.primary}15`, border: `1px solid ${colors.primary}30` }}
                       >
-                        Due: {formatDate(paymentType.deadline, "long")}
-                      </span>
+                        <Banknote className="w-4 h-4" style={{ color: colors.primary }} />
+                        <span className="text-lg sm:text-xl font-bold" style={{ color: colors.primary }}>
+                          {formatCurrency(paymentType.amount)}
+                        </span>
+                      </div>
+                      <div 
+                        className="flex items-center gap-2 px-3 py-2 rounded-xl"
+                        style={{ background: `${colors.warning}15`, border: `1px solid ${colors.warning}30` }}
+                      >
+                        <Calendar className="w-4 h-4" style={{ color: colors.warning }} />
+                        <span className="text-sm font-medium" style={{ color: colors.warning }}>
+                          Due: {formatDate(paymentType.deadline, "long")}
+                        </span>
+                      </div>
                     </div>
                   </div>
                 </div>
               </div>
-            </GlassCard>
+            </div>
           </motion.div>
 
-          {/* Payment Status Summary */}
+          {/* Payment Status Summary - Enhanced */}
           {(totalPaid > 0 || existingPayments.length > 0) && (
             <motion.div
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: 0.2 }}
             >
-              <GlassCard className="w-full">
-                <h3 className="text-lg font-bold text-white mb-4 text-center sm:text-left">
-                  Payment Status
-                </h3>
+              <div 
+                className="rounded-2xl overflow-hidden"
+                style={{ 
+                  background: 'rgba(255, 255, 255, 0.02)',
+                  border: '1px solid rgba(255, 255, 255, 0.08)',
+                }}
+              >
+                <div 
+                  className="px-5 py-4 flex items-center gap-3"
+                  style={{ borderBottom: '1px solid rgba(255, 255, 255, 0.05)' }}
+                >
+                  <div 
+                    className="w-10 h-10 rounded-xl flex items-center justify-center"
+                    style={{ background: `${colors.accentMint}15` }}
+                  >
+                    <TrendingUp className="w-5 h-5" style={{ color: colors.accentMint }} />
+                  </div>
+                  <div>
+                    <h3 className="text-base font-bold text-white">Payment Progress</h3>
+                    <p className="text-xs" style={{ color: colors.textSecondary }}>Track your payment status</p>
+                  </div>
+                </div>
 
-                <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 sm:gap-4 mb-4">
-                  <div
-                    className="text-center sm:text-left p-3 rounded-lg"
-                    style={{ background: "rgba(255, 255, 255, 0.03)" }}
-                  >
-                    <p
-                      className="text-xs sm:text-sm mb-1"
-                      style={{ color: colors.textSecondary }}
-                    >
-                      Total Amount
-                    </p>
-                    <p className="text-lg sm:text-xl font-bold text-white">
-                      {formatCurrency(paymentTypeAmount)}
-                    </p>
-                  </div>
-                  <div
-                    className="text-center sm:text-left p-3 rounded-lg"
-                    style={{ background: "rgba(255, 255, 255, 0.03)" }}
-                  >
-                    <p
-                      className="text-xs sm:text-sm mb-1"
-                      style={{ color: colors.textSecondary }}
-                    >
-                      Paid So Far
-                    </p>
-                    <p
-                      className="text-lg sm:text-xl font-bold"
-                      style={{ color: colors.statusPaid }}
-                    >
-                      {formatCurrency(totalPaid)}
-                    </p>
-                  </div>
-                  <div
-                    className="text-center sm:text-left p-3 rounded-lg col-span-2 sm:col-span-1"
-                    style={{ background: "rgba(255, 255, 255, 0.03)" }}
-                  >
-                    <p
-                      className="text-xs sm:text-sm mb-1"
-                      style={{ color: colors.textSecondary }}
-                    >
-                      Remaining
-                    </p>
-                    <p
-                      className="text-lg sm:text-xl font-bold"
-                      style={{
-                        color: isFullyPaid
-                          ? colors.statusPaid
-                          : colors.statusUnpaid,
+                <div className="p-5">
+                  <div className="grid grid-cols-3 gap-3 mb-5">
+                    <motion.div
+                      className="text-center p-4 rounded-xl relative overflow-hidden"
+                      style={{ 
+                        background: `linear-gradient(135deg, ${colors.primary}10 0%, ${colors.primary}05 100%)`,
+                        border: `1px solid ${colors.primary}20`
                       }}
+                      whileHover={{ scale: 1.02 }}
                     >
-                      {formatCurrency(Math.max(0, remainingAmount))}
-                    </p>
+                      <div className="absolute top-0 left-0 right-0 h-1" style={{ background: gradients.primary }} />
+                      <p className="text-[10px] sm:text-xs mb-1 font-medium" style={{ color: colors.textSecondary }}>
+                        TOTAL
+                      </p>
+                      <p className="text-base sm:text-xl font-bold text-white">
+                        {formatCurrency(paymentTypeAmount)}
+                      </p>
+                    </motion.div>
+                    <motion.div
+                      className="text-center p-4 rounded-xl relative overflow-hidden"
+                      style={{ 
+                        background: `linear-gradient(135deg, ${colors.statusPaid}10 0%, ${colors.statusPaid}05 100%)`,
+                        border: `1px solid ${colors.statusPaid}20`
+                      }}
+                      whileHover={{ scale: 1.02 }}
+                    >
+                      <div className="absolute top-0 left-0 right-0 h-1" style={{ background: colors.statusPaid }} />
+                      <p className="text-[10px] sm:text-xs mb-1 font-medium" style={{ color: colors.textSecondary }}>
+                        PAID
+                      </p>
+                      <p className="text-base sm:text-xl font-bold" style={{ color: colors.statusPaid }}>
+                        {formatCurrency(totalPaid)}
+                      </p>
+                    </motion.div>
+                    <motion.div
+                      className="text-center p-4 rounded-xl relative overflow-hidden"
+                      style={{ 
+                        background: `linear-gradient(135deg, ${isFullyPaid ? colors.statusPaid : colors.warning}10 0%, ${isFullyPaid ? colors.statusPaid : colors.warning}05 100%)`,
+                        border: `1px solid ${isFullyPaid ? colors.statusPaid : colors.warning}20`
+                      }}
+                      whileHover={{ scale: 1.02 }}
+                    >
+                      <div className="absolute top-0 left-0 right-0 h-1" style={{ background: isFullyPaid ? colors.statusPaid : colors.warning }} />
+                      <p className="text-[10px] sm:text-xs mb-1 font-medium" style={{ color: colors.textSecondary }}>
+                        REMAINING
+                      </p>
+                      <p className="text-base sm:text-xl font-bold" style={{ color: isFullyPaid ? colors.statusPaid : colors.warning }}>
+                        {formatCurrency(Math.max(0, remainingAmount))}
+                      </p>
+                    </motion.div>
+                  </div>
+
+                  {/* Enhanced Progress Bar */}
+                  <div className="relative">
+                    <div 
+                      className="w-full h-4 rounded-full overflow-hidden"
+                      style={{ background: "rgba(255, 255, 255, 0.1)" }}
+                    >
+                      <motion.div
+                        initial={{ width: 0 }}
+                        animate={{ width: `${Math.min(100, progressPercentage)}%` }}
+                        transition={{ duration: 1, delay: 0.5, ease: "easeOut" }}
+                        className="h-full rounded-full relative"
+                        style={{ background: gradients.primary }}
+                      >
+                        {/* Shimmer effect */}
+                        <div 
+                          className="absolute inset-0 opacity-50"
+                          style={{ 
+                            background: 'linear-gradient(90deg, transparent 0%, rgba(255,255,255,0.3) 50%, transparent 100%)',
+                            animation: 'shimmer 2s infinite'
+                          }} 
+                        />
+                      </motion.div>
+                    </div>
+                    <div className="flex justify-between items-center mt-2">
+                      <p className="text-xs font-medium" style={{ color: colors.textSecondary }}>
+                        {progressPercentage.toFixed(0)}% Complete
+                      </p>
+                      {isFullyPaid && (
+                        <div className="flex items-center gap-1.5 text-xs font-semibold" style={{ color: colors.statusPaid }}>
+                          <CheckCircle className="w-4 h-4" />
+                          Fully Paid
+                        </div>
+                      )}
+                    </div>
                   </div>
                 </div>
-
-                {/* Progress Bar */}
-                <div
-                  className="w-full h-3 rounded-full overflow-hidden"
-                  style={{ background: "rgba(255, 255, 255, 0.1)" }}
-                >
-                  <motion.div
-                    initial={{ width: 0 }}
-                    animate={{ width: `${Math.min(100, progressPercentage)}%` }}
-                    transition={{ duration: 1, delay: 0.5 }}
-                    className="h-full rounded-full"
-                    style={{ background: gradients.primary }}
-                  />
-                </div>
-                <p
-                  className="text-sm mt-2 text-center"
-                  style={{ color: colors.textSecondary }}
-                >
-                  {progressPercentage.toFixed(1)}% Complete
-                </p>
-              </GlassCard>
+              </div>
             </motion.div>
           )}
 

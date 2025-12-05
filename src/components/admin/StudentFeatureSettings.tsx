@@ -1,9 +1,11 @@
 import { useState, useEffect } from 'react'
-import { motion } from 'framer-motion'
-import { Settings, Eye, EyeOff, Save, RefreshCw } from 'lucide-react'
+import { motion, AnimatePresence } from 'framer-motion'
+import { Settings, Eye, EyeOff, Save, RefreshCw, ChevronDown, ChevronUp } from 'lucide-react'
 import { colors, gradients } from '@/config/colors'
 import { useAuth } from '@/hooks/useAuth'
 import studentFeatureService, { type StudentFeatureSetting } from '@/services/studentFeatureService'
+
+const INITIAL_VISIBLE_COUNT = 3;
 
 export default function StudentFeatureSettings() {
   const { user } = useAuth()
@@ -11,6 +13,7 @@ export default function StudentFeatureSettings() {
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null)
+  const [showAll, setShowAll] = useState(false)
 
   useEffect(() => {
     loadSettings()
@@ -156,60 +159,90 @@ export default function StudentFeatureSettings() {
 
       {/* Settings List */}
       <div className="space-y-3">
-        {settings.map((setting, index) => (
-          <motion.div
-            key={setting.feature_key}
-            initial={{ opacity: 0, x: -20 }}
-            animate={{ opacity: 1, x: 0 }}
-            transition={{ delay: index * 0.05 }}
-            className="p-4 rounded-xl border transition-all"
-            style={{
-              background: setting.is_enabled ? 'rgba(34, 197, 94, 0.05)' : 'rgba(255,255,255,0.03)',
-              borderColor: setting.is_enabled ? 'rgba(34, 197, 94, 0.2)' : colors.borderLight
+        <AnimatePresence>
+          {(showAll ? settings : settings.slice(0, INITIAL_VISIBLE_COUNT)).map((setting, index) => (
+            <motion.div
+              key={setting.feature_key}
+              initial={{ opacity: 0, x: -20 }}
+              animate={{ opacity: 1, x: 0 }}
+              exit={{ opacity: 0, height: 0 }}
+              transition={{ delay: index * 0.05 }}
+              className="p-4 rounded-xl border transition-all"
+              style={{
+                background: setting.is_enabled ? 'rgba(34, 197, 94, 0.05)' : 'rgba(255,255,255,0.03)',
+                borderColor: setting.is_enabled ? 'rgba(34, 197, 94, 0.2)' : colors.borderLight
+              }}
+            >
+              <div className="flex items-start justify-between gap-4">
+                <div className="flex-1">
+                  <div className="flex items-center gap-2 mb-1">
+                    <h4 className="font-semibold text-white">{setting.display_name}</h4>
+                    <div
+                      className="px-2 py-0.5 rounded-full text-xs font-medium"
+                      style={{
+                        background: setting.is_enabled ? 'rgba(34, 197, 94, 0.2)' : 'rgba(255, 68, 68, 0.2)',
+                        color: setting.is_enabled ? '#22c55e' : '#ef4444'
+                      }}
+                    >
+                      {setting.is_enabled ? 'Visible' : 'Hidden'}
+                    </div>
+                  </div>
+                  {setting.description && (
+                    <p className="text-sm" style={{ color: colors.textSecondary }}>
+                      {setting.description}
+                    </p>
+                  )}
+                </div>
+
+                {/* Toggle Button */}
+                <motion.button
+                  whileHover={{ scale: 1.05 }}
+                  whileTap={{ scale: 0.95 }}
+                  onClick={() => handleToggle(setting.feature_key, setting.is_enabled)}
+                  className="p-2.5 rounded-lg transition-all"
+                  style={{
+                    background: setting.is_enabled ? 'rgba(34, 197, 94, 0.2)' : 'rgba(255, 68, 68, 0.2)',
+                    border: `2px solid ${setting.is_enabled ? '#22c55e' : '#ef4444'}`
+                  }}
+                  title={setting.is_enabled ? 'Hide from students' : 'Show to students'}
+                >
+                  {setting.is_enabled ? (
+                    <Eye className="w-5 h-5 text-green-400" />
+                  ) : (
+                    <EyeOff className="w-5 h-5 text-red-400" />
+                  )}
+                </motion.button>
+              </div>
+            </motion.div>
+          ))}
+        </AnimatePresence>
+        
+        {/* Show More/Less Button */}
+        {settings.length > INITIAL_VISIBLE_COUNT && (
+          <motion.button
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            onClick={() => setShowAll(!showAll)}
+            className="w-full py-3 rounded-xl text-sm font-medium flex items-center justify-center gap-2 transition-all"
+            style={{ 
+              background: 'rgba(255, 255, 255, 0.05)',
+              border: `1px solid ${colors.borderLight}`,
+              color: colors.primary
             }}
           >
-            <div className="flex items-start justify-between gap-4">
-              <div className="flex-1">
-                <div className="flex items-center gap-2 mb-1">
-                  <h4 className="font-semibold text-white">{setting.display_name}</h4>
-                  <div
-                    className="px-2 py-0.5 rounded-full text-xs font-medium"
-                    style={{
-                      background: setting.is_enabled ? 'rgba(34, 197, 94, 0.2)' : 'rgba(255, 68, 68, 0.2)',
-                      color: setting.is_enabled ? '#22c55e' : '#ef4444'
-                    }}
-                  >
-                    {setting.is_enabled ? 'Visible' : 'Hidden'}
-                  </div>
-                </div>
-                {setting.description && (
-                  <p className="text-sm" style={{ color: colors.textSecondary }}>
-                    {setting.description}
-                  </p>
-                )}
-              </div>
-
-              {/* Toggle Button */}
-              <motion.button
-                whileHover={{ scale: 1.05 }}
-                whileTap={{ scale: 0.95 }}
-                onClick={() => handleToggle(setting.feature_key, setting.is_enabled)}
-                className="p-2.5 rounded-lg transition-all"
-                style={{
-                  background: setting.is_enabled ? 'rgba(34, 197, 94, 0.2)' : 'rgba(255, 68, 68, 0.2)',
-                  border: `2px solid ${setting.is_enabled ? '#22c55e' : '#ef4444'}`
-                }}
-                title={setting.is_enabled ? 'Hide from students' : 'Show to students'}
-              >
-                {setting.is_enabled ? (
-                  <Eye className="w-5 h-5 text-green-400" />
-                ) : (
-                  <EyeOff className="w-5 h-5 text-red-400" />
-                )}
-              </motion.button>
-            </div>
-          </motion.div>
-        ))}
+            {showAll ? (
+              <>
+                <ChevronUp className="w-4 h-4" />
+                Show Less
+              </>
+            ) : (
+              <>
+                <ChevronDown className="w-4 h-4" />
+                Show {settings.length - INITIAL_VISIBLE_COUNT} More Settings
+              </>
+            )}
+          </motion.button>
+        )}
       </div>
 
       {/* Info Box */}

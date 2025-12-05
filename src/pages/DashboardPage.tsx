@@ -560,59 +560,94 @@ export default function DashboardPage() {
                       return (
                         <motion.div
                           key={paymentType.id}
-                          className="p-3 rounded-xl border transition-all"
+                          className="relative rounded-2xl overflow-hidden transition-all cursor-pointer group"
                           style={{ 
-                            background: 'rgba(255, 255, 255, 0.03)',
-                            borderColor: isOverdue ? `${colors.statusUnpaid}50` : `${colors.statusUnpaid}30`
+                            background: 'linear-gradient(135deg, rgba(255, 68, 68, 0.08) 0%, rgba(255, 68, 68, 0.02) 100%)',
+                            border: isOverdue ? `1px solid ${colors.statusUnpaid}40` : '1px solid rgba(255, 68, 68, 0.2)',
                           }}
                           initial={{ opacity: 0, y: 10 }}
                           animate={{ opacity: 1, y: 0 }}
                           transition={{ delay: 0.1 * index }}
+                          whileHover={{ scale: 1.02, y: -2 }}
+                          onClick={() => navigate(`/payment/${paymentType.id}`)}
                         >
-                          <div className="flex items-center gap-2 mb-2">
-                            <div className="text-xl">
-                              {paymentType.icon || 
-                               (paymentType.category === 'semester_dues' ? '🎓' : 
-                                paymentType.category === 'books' ? '📚' : 
-                                paymentType.category === 'events' ? '🎉' :
-                                paymentType.category === 'projects' ? '📊' : '💰')}
-                            </div>
-                            <div className="flex-1 min-w-0">
-                              <p className="font-semibold text-white text-sm truncate">{paymentType.title}</p>
-                              <p className="text-xs" style={{ color: isOverdue ? colors.statusUnpaid : colors.textSecondary }}>
-                                {isOverdue ? '⚠️ Overdue' : `Due: ${formatDate(paymentType.deadline, 'short')}`}
-                              </p>
-                            </div>
-                          </div>
-                          
-                          <div className="flex items-center justify-between mb-2">
-                            <span className="text-base font-bold text-white">{formatCurrency(paymentType.amount)}</span>
+                          {/* Overdue badge */}
+                          {isOverdue && (
                             <div 
-                              className="px-2 py-0.5 rounded-full text-xs font-medium"
+                              className="absolute top-0 right-0 px-2 py-1 text-[10px] font-bold uppercase"
                               style={{ 
-                                background: `${colors.statusUnpaid}20`,
-                                color: colors.statusUnpaid
+                                background: colors.statusUnpaid, 
+                                color: 'white',
+                                borderBottomLeftRadius: '8px'
                               }}
                             >
-                              NOT PAID
+                              ⚠️ Overdue
                             </div>
-                          </div>
+                          )}
+                          
+                          <div className="p-4">
+                            <div className="flex items-center gap-3 mb-3">
+                              <motion.div 
+                                className="w-12 h-12 rounded-xl flex items-center justify-center text-2xl shrink-0"
+                                style={{ 
+                                  background: `${paymentType.color || colors.statusUnpaid}15`,
+                                  border: `1px solid ${paymentType.color || colors.statusUnpaid}30`
+                                }}
+                                whileHover={{ rotate: 10 }}
+                              >
+                                {paymentType.icon || 
+                                 (paymentType.category === 'semester_dues' ? '🎓' : 
+                                  paymentType.category === 'books' ? '📚' : 
+                                  paymentType.category === 'events' ? '🎉' :
+                                  paymentType.category === 'projects' ? '📊' : '💰')}
+                              </motion.div>
+                              <div className="flex-1 min-w-0">
+                                <p className="font-bold text-white text-sm truncate">{paymentType.title}</p>
+                                <div className="flex items-center gap-2 mt-0.5">
+                                  <Calendar className="w-3 h-3" style={{ color: isOverdue ? colors.statusUnpaid : colors.textSecondary }} />
+                                  <p className="text-xs" style={{ color: isOverdue ? colors.statusUnpaid : colors.textSecondary }}>
+                                    {formatDate(paymentType.deadline, 'short')}
+                                  </p>
+                                </div>
+                              </div>
+                            </div>
+                            
+                            <div className="flex items-center justify-between mb-3">
+                              <div>
+                                <p className="text-[10px] uppercase tracking-wider" style={{ color: colors.textSecondary }}>Amount Due</p>
+                                <span className="text-xl font-bold text-white">{formatCurrency(paymentType.amount)}</span>
+                              </div>
+                              <div 
+                                className="px-3 py-1.5 rounded-full text-xs font-bold flex items-center gap-1.5"
+                                style={{ 
+                                  background: `${colors.statusUnpaid}15`,
+                                  color: colors.statusUnpaid,
+                                  border: `1px solid ${colors.statusUnpaid}30`
+                                }}
+                              >
+                                <div className="w-1.5 h-1.5 rounded-full animate-pulse" style={{ background: colors.statusUnpaid }} />
+                                UNPAID
+                              </div>
+                            </div>
 
-                          <button
-                            className="w-full py-2 px-3 rounded-lg font-medium text-xs transition-all"
-                            style={{
-                              background: `linear-gradient(135deg, ${colors.primary}, ${colors.accentMint})`,
-                              color: 'white'
-                            }}
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              navigate(`/payment/${paymentType.id}`);
-                            }}
-                            onMouseEnter={(e) => e.currentTarget.style.transform = 'scale(1.02)'}
-                            onMouseLeave={(e) => e.currentTarget.style.transform = 'scale(1)'}
-                          >
-                            💰 PAY NOW
-                          </button>
+                            <motion.button
+                              className="w-full py-2.5 px-4 rounded-xl font-semibold text-sm transition-all flex items-center justify-center gap-2 group-hover:shadow-lg"
+                              style={{
+                                background: gradients.primary,
+                                color: 'white',
+                                boxShadow: `0 4px 15px ${colors.primary}30`
+                              }}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                navigate(`/payment/${paymentType.id}`);
+                              }}
+                              whileHover={{ scale: 1.02 }}
+                              whileTap={{ scale: 0.98 }}
+                            >
+                              <DollarSign className="w-4 h-4" />
+                              Pay Now
+                            </motion.button>
+                          </div>
                         </motion.div>
                       );
                     })}
@@ -685,165 +720,240 @@ export default function DashboardPage() {
                     .map((item, index) => {
                       const { paymentType, status, amountPaid, progress } = item;
                       
+                      // Get status styling
+                      const getStatusConfig = () => {
+                        switch(status) {
+                          case 'paid':
+                            return { 
+                              color: colors.statusPaid, 
+                              bg: `linear-gradient(135deg, ${colors.statusPaid}10 0%, ${colors.statusPaid}05 100%)`,
+                              border: `${colors.statusPaid}25`,
+                              label: 'PAID',
+                              icon: '✅'
+                            };
+                          case 'waived':
+                            return { 
+                              color: colors.accentMint, 
+                              bg: `linear-gradient(135deg, ${colors.accentMint}10 0%, ${colors.accentMint}05 100%)`,
+                              border: `${colors.accentMint}25`,
+                              label: 'WAIVED',
+                              icon: '✨'
+                            };
+                          case 'partial':
+                            return { 
+                              color: colors.warning, 
+                              bg: `linear-gradient(135deg, ${colors.warning}10 0%, ${colors.warning}05 100%)`,
+                              border: `${colors.warning}25`,
+                              label: `${Math.round(progress)}%`,
+                              icon: '🟠'
+                            };
+                          case 'pending':
+                            return { 
+                              color: colors.accentMint, 
+                              bg: `linear-gradient(135deg, ${colors.accentMint}08 0%, transparent 100%)`,
+                              border: `${colors.accentMint}20`,
+                              label: 'PENDING',
+                              icon: '⏳'
+                            };
+                          default:
+                            return { 
+                              color: colors.textSecondary, 
+                              bg: 'rgba(255,255,255,0.03)',
+                              border: 'rgba(255,255,255,0.1)',
+                              label: 'UNKNOWN',
+                              icon: '❓'
+                            };
+                        }
+                      };
+                      
+                      const statusConfig = getStatusConfig();
+                      
                       return (
                         <motion.div
                           key={paymentType.id}
-                          className="p-4 rounded-xl border transition-all"
+                          className="relative rounded-2xl overflow-hidden transition-all cursor-pointer group"
                           style={{ 
-                            background: 'rgba(255, 255, 255, 0.03)',
-                            borderColor: status === 'paid' ? `${colors.statusPaid}30` : 
-                                        status === 'waived' ? `${colors.accentMint}30` :
-                                        status === 'partial' ? `${colors.warning}30` :
-                                        status === 'pending' ? `${colors.accentMint}30` :
-                                        'rgba(255, 255, 255, 0.1)'
+                            background: statusConfig.bg,
+                            border: `1px solid ${statusConfig.border}`,
                           }}
                           initial={{ opacity: 0, y: 10 }}
                           animate={{ opacity: 1, y: 0 }}
                           transition={{ delay: 0.1 * index }}
+                          whileHover={{ scale: 1.01 }}
+                          onClick={() => navigate(`/payment/${paymentType.id}`)}
                         >
-                          <div className="flex items-start justify-between gap-3">
-                            {/* Left: Icon and Info */}
-                            <div className="flex items-center gap-3 flex-1 min-w-0">
-                              <div className="text-2xl shrink-0">
-                                {paymentType.icon || 
-                                 (paymentType.category === 'semester_dues' ? '🎓' : 
-                                  paymentType.category === 'books' ? '📚' : 
-                                  paymentType.category === 'events' ? '🎉' :
-                                  paymentType.category === 'projects' ? '📊' : '💰')}
-                              </div>
-                              <div className="flex-1 min-w-0">
-                                <h4 className="font-semibold text-white text-sm sm:text-base truncate">
-                                  {paymentType.title}
-                                </h4>
-                                <p className="text-xs" style={{ color: colors.textSecondary }}>
-                                  {paymentType.category.replace('_', ' ')} • Due: {formatDate(paymentType.deadline, 'short')}
-                                </p>
-                                {status === 'partial' && (
-                                  <div className="mt-2">
-                                    <div className="h-2 rounded-full overflow-hidden" style={{ background: 'rgba(255, 255, 255, 0.1)' }}>
-                                      <div 
-                                        className="h-full transition-all duration-300" 
-                                        style={{ 
-                                          width: `${progress}%`,
-                                          background: `linear-gradient(90deg, ${colors.warning}, ${colors.accentMint})`
-                                        }} 
-                                      />
-                                    </div>
-                                    <p className="text-xs mt-1" style={{ color: colors.textSecondary }}>
-                                      {formatCurrency(amountPaid)} / {formatCurrency(paymentType.amount)}
-                                    </p>
+                          {/* Top accent bar */}
+                          <div 
+                            className="absolute top-0 left-0 right-0 h-1"
+                            style={{ background: statusConfig.color }}
+                          />
+                          
+                          <div className="p-4 pt-5">
+                            <div className="flex items-start justify-between gap-3">
+                              {/* Left: Icon and Info */}
+                              <div className="flex items-center gap-3 flex-1 min-w-0">
+                                <motion.div 
+                                  className="w-12 h-12 rounded-xl flex items-center justify-center text-2xl shrink-0"
+                                  style={{ 
+                                    background: `${paymentType.color || statusConfig.color}15`,
+                                    border: `1px solid ${paymentType.color || statusConfig.color}30`
+                                  }}
+                                  whileHover={{ rotate: 5 }}
+                                >
+                                  {paymentType.icon || 
+                                   (paymentType.category === 'semester_dues' ? '🎓' : 
+                                    paymentType.category === 'books' ? '📚' : 
+                                    paymentType.category === 'events' ? '🎉' :
+                                    paymentType.category === 'projects' ? '📊' : '💰')}
+                                </motion.div>
+                                <div className="flex-1 min-w-0">
+                                  <h4 className="font-bold text-white text-sm sm:text-base truncate">
+                                    {paymentType.title}
+                                  </h4>
+                                  <div className="flex items-center gap-2 mt-0.5">
+                                    <span 
+                                      className="text-[10px] px-2 py-0.5 rounded-full font-medium"
+                                      style={{ 
+                                        background: 'rgba(255,255,255,0.08)',
+                                        color: colors.textSecondary
+                                      }}
+                                    >
+                                      {paymentType.category.replace('_', ' ')}
+                                    </span>
+                                    <span className="text-xs" style={{ color: colors.textSecondary }}>
+                                      • {formatDate(paymentType.deadline, 'short')}
+                                    </span>
                                   </div>
+                                </div>
+                              </div>
+
+                              {/* Right: Status Badge */}
+                              <div 
+                                className="px-3 py-1.5 rounded-full text-xs font-bold flex items-center gap-1.5 shrink-0"
+                                style={{ 
+                                  background: `${statusConfig.color}15`,
+                                  color: statusConfig.color,
+                                  border: `1px solid ${statusConfig.color}30`
+                                }}
+                              >
+                                <span>{statusConfig.icon}</span>
+                                <span>{statusConfig.label}</span>
+                              </div>
+                            </div>
+
+                            {/* Progress bar for partial payments */}
+                            {status === 'partial' && (
+                              <div className="mt-3">
+                                <div className="flex items-center justify-between text-xs mb-1.5">
+                                  <span style={{ color: colors.textSecondary }}>Progress</span>
+                                  <span className="font-semibold" style={{ color: colors.warning }}>
+                                    {formatCurrency(amountPaid)} / {formatCurrency(paymentType.amount)}
+                                  </span>
+                                </div>
+                                <div 
+                                  className="h-2.5 rounded-full overflow-hidden"
+                                  style={{ background: 'rgba(255, 255, 255, 0.1)' }}
+                                >
+                                  <motion.div 
+                                    className="h-full rounded-full relative"
+                                    style={{ 
+                                      background: `linear-gradient(90deg, ${colors.warning}, ${colors.accentMint})`,
+                                    }}
+                                    initial={{ width: 0 }}
+                                    animate={{ width: `${progress}%` }}
+                                    transition={{ duration: 0.8, ease: "easeOut" }}
+                                  >
+                                    <div 
+                                      className="absolute inset-0"
+                                      style={{ 
+                                        background: 'linear-gradient(90deg, transparent 0%, rgba(255,255,255,0.3) 50%, transparent 100%)',
+                                        animation: 'shimmer 2s infinite'
+                                      }}
+                                    />
+                                  </motion.div>
+                                </div>
+                              </div>
+                            )}
+
+                            {/* Amount and Actions */}
+                            <div className="mt-3 flex items-center justify-between">
+                              <div>
+                                {status === 'waived' ? (
+                                  <p className="text-sm" style={{ color: colors.accentMint }}>
+                                    No payment required
+                                  </p>
+                                ) : (
+                                  <>
+                                    <p className="text-[10px] uppercase tracking-wider" style={{ color: colors.textSecondary }}>
+                                      {status === 'paid' ? 'Amount Paid' : 'Total Amount'}
+                                    </p>
+                                    <span className="text-lg font-bold text-white">
+                                      {formatCurrency(status === 'paid' ? amountPaid || paymentType.amount : paymentType.amount)}
+                                    </span>
+                                  </>
+                                )}
+                              </div>
+                              
+                              {/* Action buttons based on status */}
+                              <div className="flex gap-2">
+                                {status === 'partial' && (
+                                  <motion.button
+                                    className="px-4 py-2 rounded-xl font-semibold text-xs transition-all flex items-center gap-1.5"
+                                    style={{
+                                      background: gradients.primary,
+                                      color: 'white',
+                                      boxShadow: `0 4px 12px ${colors.primary}25`
+                                    }}
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      navigate(`/payment/${paymentType.id}`);
+                                    }}
+                                    whileHover={{ scale: 1.02 }}
+                                    whileTap={{ scale: 0.98 }}
+                                  >
+                                    <DollarSign className="w-3.5 h-3.5" />
+                                    Complete
+                                  </motion.button>
+                                )}
+                                {status === 'pending' && (
+                                  <motion.button
+                                    className="px-4 py-2 rounded-xl font-semibold text-xs transition-all flex items-center gap-1.5"
+                                    style={{
+                                      background: 'rgba(255,255,255,0.08)',
+                                      color: colors.textPrimary,
+                                      border: '1px solid rgba(255,255,255,0.1)'
+                                    }}
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      navigate('/payments');
+                                    }}
+                                    whileHover={{ background: 'rgba(255,255,255,0.12)' }}
+                                    whileTap={{ scale: 0.98 }}
+                                  >
+                                    <AlertCircle className="w-3.5 h-3.5" />
+                                    View Status
+                                  </motion.button>
+                                )}
+                                {(status === 'paid' || status === 'waived') && (
+                                  <motion.button
+                                    className="px-4 py-2 rounded-xl font-semibold text-xs transition-all flex items-center gap-1.5"
+                                    style={{
+                                      background: 'rgba(255,255,255,0.08)',
+                                      color: colors.textPrimary,
+                                      border: '1px solid rgba(255,255,255,0.1)'
+                                    }}
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      navigate(`/payment/${paymentType.id}`);
+                                    }}
+                                    whileHover={{ background: 'rgba(255,255,255,0.12)' }}
+                                    whileTap={{ scale: 0.98 }}
+                                  >
+                                    View Details
+                                  </motion.button>
                                 )}
                               </div>
                             </div>
-
-                            {/* Right: Status and Action */}
-                            <div className="flex flex-col items-end gap-2 shrink-0">
-                              <div 
-                                className="px-3 py-1 rounded-full text-xs font-medium whitespace-nowrap"
-                                style={{ 
-                                  background: status === 'paid' ? `${colors.statusPaid}20` :
-                                             status === 'waived' ? `${colors.accentMint}20` :
-                                             status === 'partial' ? `${colors.warning}20` :
-                                             `${colors.accentMint}20`,
-                                  color: status === 'paid' ? colors.statusPaid :
-                                         status === 'waived' ? colors.accentMint :
-                                         status === 'partial' ? colors.warning :
-                                         colors.accentMint
-                                }}
-                              >
-                                {status === 'paid' ? '✅ PAID' :
-                                 status === 'waived' ? '✨ WAIVED' :
-                                 status === 'partial' ? `🟠 ${Math.round(progress)}%` :
-                                 '🟡 PENDING'}
-                              </div>
-                              {status === 'waived' ? (
-                                <span className="text-xs" style={{ color: colors.accentMint }}>
-                                  No payment required
-                                </span>
-                              ) : (
-                                <span className="text-sm font-bold text-white">
-                                  {formatCurrency(paymentType.amount)}
-                                </span>
-                              )}
-                            </div>
-                          </div>
-
-                          {/* Action Buttons */}
-                          <div className="mt-3 flex gap-2">
-                            {status === 'waived' && (
-                              <div className="w-full py-2 px-3 rounded-lg text-xs text-center" style={{ background: `${colors.accentMint}10`, color: colors.accentMint }}>
-                                ✅ Payment waived by admin
-                              </div>
-                            )}
-                            {status === 'paid' && (
-                              <>
-                                <button
-                                  className="flex-1 py-2 px-3 rounded-lg font-medium text-xs transition-all"
-                                  style={{
-                                    background: 'rgba(255, 255, 255, 0.1)',
-                                    color: 'white'
-                                  }}
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    // Download receipt logic
-                                  }}
-                                  onMouseEnter={(e) => e.currentTarget.style.background = 'rgba(255, 255, 255, 0.15)'}
-                                  onMouseLeave={(e) => e.currentTarget.style.background = 'rgba(255, 255, 255, 0.1)'}
-                                >
-                                  📥 Download Receipt
-                                </button>
-                                <button
-                                  className="flex-1 py-2 px-3 rounded-lg font-medium text-xs transition-all"
-                                  style={{
-                                    background: 'rgba(255, 255, 255, 0.1)',
-                                    color: 'white'
-                                  }}
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    navigate(`/payment/${paymentType.id}`);
-                                  }}
-                                  onMouseEnter={(e) => e.currentTarget.style.background = 'rgba(255, 255, 255, 0.15)'}
-                                  onMouseLeave={(e) => e.currentTarget.style.background = 'rgba(255, 255, 255, 0.1)'}
-                                >
-                                  👁️ View Details
-                                </button>
-                              </>
-                            )}
-                            {status === 'pending' && (
-                              <button
-                                className="w-full py-2 px-3 rounded-lg font-medium text-xs transition-all"
-                                style={{
-                                  background: 'rgba(255, 255, 255, 0.1)',
-                                  color: 'white'
-                                }}
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  navigate('/payments');
-                                }}
-                                onMouseEnter={(e) => e.currentTarget.style.background = 'rgba(255, 255, 255, 0.15)'}
-                                onMouseLeave={(e) => e.currentTarget.style.background = 'rgba(255, 255, 255, 0.1)'}
-                              >
-                                👁️ View Status
-                              </button>
-                            )}
-                            {status === 'partial' && (
-                              <button
-                                className="w-full py-2 px-3 rounded-lg font-medium text-xs transition-all"
-                                style={{
-                                  background: `linear-gradient(135deg, ${colors.primary}, ${colors.accentMint})`,
-                                  color: 'white'
-                                }}
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  navigate(`/payment/${paymentType.id}`);
-                                }}
-                                onMouseEnter={(e) => e.currentTarget.style.transform = 'scale(1.02)'}
-                                onMouseLeave={(e) => e.currentTarget.style.transform = 'scale(1)'}
-                              >
-                                💰 Complete Payment
-                              </button>
-                            )}
                           </div>
                         </motion.div>
                       );

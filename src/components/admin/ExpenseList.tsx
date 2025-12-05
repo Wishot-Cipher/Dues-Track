@@ -163,29 +163,53 @@ export default function ExpenseList() {
 
   return (
     <>
-      <GlassCard className="p-6">
-        <div className="flex items-center justify-between mb-6">
-          <div>
-            <h2 className="text-xl font-bold text-white">Recent Expenses</h2>
-            <p className="text-sm mt-1" style={{ color: colors.textSecondary }}>
-              {sortedExpenses.length} expense{sortedExpenses.length !== 1 ? 's' : ''} recorded • Showing {paginatedExpenses.length} of {sortedExpenses.length}
-            </p>
+      <GlassCard className="p-6 relative overflow-hidden">
+        {/* Decorative Top Border */}
+        <div 
+          className="absolute top-0 left-0 w-full h-1"
+          style={{ background: `linear-gradient(90deg, ${colors.primary}, ${colors.accentMint}, transparent)` }}
+        />
+        
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
+          <div className="flex items-center gap-3">
+            <div 
+              className="w-12 h-12 rounded-xl flex items-center justify-center shrink-0"
+              style={{ 
+                background: `linear-gradient(135deg, ${colors.primary}30, ${colors.primary}10)`,
+                border: `1px solid ${colors.primary}40`
+              }}
+            >
+              <FileText className="w-6 h-6" style={{ color: colors.primary }} />
+            </div>
+            <div>
+              <h2 className="text-xl font-bold text-white">Recent Expenses</h2>
+              <p className="text-xs sm:text-sm" style={{ color: colors.textSecondary }}>
+                {sortedExpenses.length} expense{sortedExpenses.length !== 1 ? 's' : ''} recorded
+              </p>
+            </div>
           </div>
           {sortedExpenses.length > 0 && (
-            <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center gap-2">
               <button
                 onClick={exportToCSV}
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg transition-all hover:bg-white/10"
-                style={{ background: 'rgba(255,255,255,0.05)', border: `1px solid ${colors.borderLight}` }}
+                className="flex items-center gap-1.5 px-4 py-2 rounded-xl transition-all hover:scale-105"
+                style={{ 
+                  background: `linear-gradient(135deg, ${colors.accentMint}20, ${colors.accentMint}10)`,
+                  border: `1px solid ${colors.accentMint}40`,
+                  color: colors.accentMint
+                }}
                 title="Export to CSV"
               >
-                <Download className="w-4 h-4" style={{ color: colors.accentMint }} />
-                <span className="text-xs font-medium" style={{ color: colors.textPrimary }}>Export</span>
+                <Download className="w-4 h-4" />
+                <span className="text-sm font-medium">Export</span>
               </button>
-              <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg" style={{ background: 'rgba(255,255,255,0.05)' }}>
-                <FileText className="w-4 h-4" style={{ color: colors.textSecondary }} />
-                <span className="text-xs font-medium" style={{ color: colors.textSecondary }}>
-                  Approved: ₦{sortedExpenses.filter(exp => exp.status === 'approved').reduce((sum, exp) => sum + (exp.amount || 0), 0).toLocaleString()}
+              <div className="flex items-center gap-2 px-4 py-2 rounded-xl" style={{ 
+                background: `${colors.statusPaid}10`, 
+                border: `1px solid ${colors.statusPaid}20` 
+              }}>
+                <CheckCircle className="w-4 h-4" style={{ color: colors.statusPaid }} />
+                <span className="text-sm font-medium" style={{ color: colors.statusPaid }}>
+                  ₦{sortedExpenses.filter(exp => exp.status === 'approved').reduce((sum, exp) => sum + (exp.amount || 0), 0).toLocaleString()}
                 </span>
               </div>
             </div>
@@ -402,7 +426,7 @@ export default function ExpenseList() {
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4"
+            className="fixed inset-0 z-50 flex items-start justify-center bg-black/70 backdrop-blur-sm p-4 overflow-y-auto"
             onClick={() => setSelected(null)}
           >
             <motion.div
@@ -410,19 +434,23 @@ export default function ExpenseList() {
               animate={{ scale: 1, opacity: 1 }}
               exit={{ scale: 0.9, opacity: 0 }}
               transition={{ type: 'spring', damping: 20 }}
-              className="max-w-3xl w-full"
+              className="max-w-3xl w-full my-8"
               onClick={(e) => e.stopPropagation()}
             >
-              <GlassCard className="p-8 max-h-[90vh] overflow-y-auto">
+              <GlassCard className="p-6 sm:p-8">
                 {/* Header */}
-                <div className="flex items-start justify-between mb-8 sticky top-0 bg-inherit pb-4 border-b" style={{ borderColor: colors.borderLight }}>
-                  <div className="flex-1">
-                    <h2 className="text-2xl font-bold text-white mb-3">{selected.title}</h2>
+                <div className="relative flex items-start justify-between mb-6 pb-4 border-b" style={{ borderColor: colors.borderLight }}>
+                  <div 
+                    className="absolute top-0 left-0 w-full h-1 -mt-6 sm:-mt-8"
+                    style={{ background: `linear-gradient(90deg, ${colors.primary}, ${colors.accentMint}, transparent)` }}
+                  />
+                  <div className="flex-1 pr-10">
+                    <h2 className="text-xl sm:text-2xl font-bold text-white mb-3 wrap-break-word">{selected.title}</h2>
                     <StatusBadge status={selected.status as 'pending' | 'approved' | 'rejected'} />
                   </div>
                   <button
                     onClick={() => setSelected(null)}
-                    className="p-2 rounded-lg transition-all hover:bg-white/10"
+                    className="absolute top-0 right-0 p-2 rounded-lg transition-all hover:bg-white/10"
                     style={{ color: colors.textSecondary }}
                   >
                     <X className="w-5 h-5" />

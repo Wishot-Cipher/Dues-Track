@@ -3,7 +3,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/config/supabase";
-import { colors, gradients } from "@/config/colors";
+import { colors } from "@/config/colors";
 import GlassCard from "@/components/ui/GlassCard";
 import { useToast } from "@/hooks/useToast";
 import { formatCurrency } from "@/utils/formatters";
@@ -18,8 +18,10 @@ import {
   AlertTriangle,
   Loader2,
   ScanLine,
+  Sparkles,
+  Shield,
 } from "lucide-react";
-import { Html5QrcodeScanner, Html5QrcodeScanType } from "html5-qrcode";
+import { Html5QrcodeScanner, Html5QrcodeScanType, Html5QrcodeSupportedFormats } from "html5-qrcode";
 import Footer from "@/components/Footer";
 
 // New multi-student QR format
@@ -78,6 +80,27 @@ interface PaymentType {
   title: string;
   amount: number;
 }
+
+// Scanner configuration for optimal QR scanning
+const getScannerConfig = () => ({
+  fps: 15,
+  qrbox: { width: 280, height: 280 },
+  supportedScanTypes: [Html5QrcodeScanType.SCAN_TYPE_CAMERA],
+  aspectRatio: 1.0,
+  showTorchButtonIfSupported: true,
+  showZoomSliderIfSupported: true,
+  defaultZoomValueIfSupported: 1.5,
+  formatsToSupport: [Html5QrcodeSupportedFormats.QR_CODE],
+  experimentalFeatures: {
+    useBarCodeDetectorIfSupported: true
+  },
+  rememberLastUsedCamera: true,
+  videoConstraints: {
+    facingMode: "environment",
+    width: { min: 640, ideal: 1280, max: 1920 },
+    height: { min: 480, ideal: 720, max: 1080 }
+  }
+});
 
 export default function ScanQRCodePage() {
   const navigate = useNavigate();
@@ -222,16 +245,10 @@ export default function ScanQRCodePage() {
   };
 
   useEffect(() => {
-    // Initialize QR Scanner
+    // Initialize QR Scanner with improved settings for better scanning
     const qrScanner = new Html5QrcodeScanner(
       "qr-reader",
-      {
-        fps: 10,
-        qrbox: { width: 250, height: 250 },
-        supportedScanTypes: [Html5QrcodeScanType.SCAN_TYPE_CAMERA],
-        aspectRatio: 1.0,
-        showTorchButtonIfSupported: true,
-      },
+      getScannerConfig(),
       false
     );
 
@@ -352,16 +369,10 @@ export default function ScanQRCodePage() {
         setPaymentType(null);
         setScanning(true);
 
-        // Reinitialize scanner
+        // Reinitialize scanner with optimal config
         const newScanner = new Html5QrcodeScanner(
           "qr-reader",
-          {
-            fps: 10,
-            qrbox: { width: 250, height: 250 },
-            supportedScanTypes: [Html5QrcodeScanType.SCAN_TYPE_CAMERA],
-            aspectRatio: 1.0,
-            showTorchButtonIfSupported: true,
-          },
+          getScannerConfig(),
           false
         );
         newScanner.render(onScanSuccess, onScanError);
@@ -387,16 +398,10 @@ export default function ScanQRCodePage() {
     setPaymentType(null);
     setScanning(true);
 
-    // Restart scanner
+    // Restart scanner with optimal config
     const newScanner = new Html5QrcodeScanner(
       "qr-reader",
-      {
-        fps: 10,
-        qrbox: { width: 250, height: 250 },
-        supportedScanTypes: [Html5QrcodeScanType.SCAN_TYPE_CAMERA],
-        aspectRatio: 1.0,
-        showTorchButtonIfSupported: true,
-      },
+      getScannerConfig(),
       false
     );
     newScanner.render(onScanSuccess, onScanError);
@@ -458,41 +463,90 @@ export default function ScanQRCodePage() {
       </div>
 
       <div className="max-w-4xl mx-auto relative z-10">
-        {/* Header */}
+        {/* Enhanced Header */}
         <motion.div
           initial={{ opacity: 0, y: -20 }}
           animate={{ opacity: 1, y: 0 }}
           className="mb-8"
         >
-          <button
-            onClick={() => navigate("/admin/dashboard")}
-            className="flex items-center justify-center sm:justify-start gap-2 mb-4 px-3 py-2 rounded-lg transition-colors w-auto outline outline-orange-500 "
-            style={{ color: colors.textSecondary }}
-            onMouseEnter={(e) => (e.currentTarget.style.color = colors.primary)}
-            onMouseLeave={(e) =>
-              (e.currentTarget.style.color = colors.textSecondary)
-            }
-          >
-            <ArrowLeft className="w-5 h-5" />
-            <span className="font-medium">Back to Dashboard</span>
-          </button>
+          <GlassCard className="relative overflow-hidden">
+            {/* Decorative Elements */}
+            <div className="absolute top-0 right-0 w-48 h-48 opacity-5 pointer-events-none">
+              <QrCode className="w-full h-full" style={{ color: colors.accentMint }} />
+            </div>
+            <div 
+              className="absolute top-0 left-0 w-full h-1"
+              style={{ background: `linear-gradient(90deg, ${colors.accentMint}, ${colors.primary}, transparent)` }}
+            />
 
-          <div className="flex items-center gap-4 mb-4">
-            <div
-              className="w-16 h-16 rounded-2xl flex items-center justify-center"
-              style={{ background: gradients.mint }}
-            >
-              <QrCode className="w-8 h-8 text-white" />
+            <div className="relative z-10">
+              <motion.button
+                whileHover={{ x: -4 }}
+                onClick={() => navigate("/admin/dashboard")}
+                className="flex items-center gap-2 mb-4 px-4 py-2 rounded-xl transition-all"
+                style={{ 
+                  background: `${colors.primary}15`,
+                  border: `1px solid ${colors.primary}30`,
+                  color: colors.primary 
+                }}
+              >
+                <ArrowLeft className="w-4 h-4" />
+                <span className="font-medium">Back to Dashboard</span>
+              </motion.button>
+
+              <div className="flex flex-col sm:flex-row items-center gap-4">
+                <motion.div
+                  initial={{ scale: 0.9 }}
+                  animate={{ scale: 1 }}
+                  className="w-16 h-16 rounded-2xl flex items-center justify-center relative shrink-0"
+                  style={{ 
+                    background: `linear-gradient(135deg, ${colors.accentMint}30, ${colors.accentMint}10)`,
+                    border: `1px solid ${colors.accentMint}40`,
+                    boxShadow: `0 4px 20px ${colors.accentMint}30`
+                  }}
+                >
+                  <QrCode className="w-8 h-8" style={{ color: colors.accentMint }} />
+                  <Sparkles className="w-4 h-4 absolute -top-1 -right-1" style={{ color: colors.primary }} />
+                </motion.div>
+                <div className="text-center sm:text-left">
+                  <motion.div 
+                    initial={{ opacity: 0, scale: 0.9 }}
+                    animate={{ opacity: 1, scale: 1 }}
+                    transition={{ delay: 0.1 }}
+                    className="inline-flex items-center gap-2 px-3 py-1 rounded-full text-xs font-semibold mb-2"
+                    style={{ 
+                      background: `linear-gradient(135deg, ${colors.accentMint}30, ${colors.accentMint}10)`,
+                      border: `1px solid ${colors.accentMint}40`,
+                      color: colors.accentMint,
+                    }}
+                  >
+                    <Shield className="w-3 h-3" />
+                    CASH VERIFICATION
+                  </motion.div>
+                  <h1 className="text-2xl sm:text-3xl font-bold text-white">
+                    Scan QR Code
+                  </h1>
+                  <p style={{ color: colors.textSecondary }}>
+                    Scan student QR codes to verify and approve cash payments
+                  </p>
+                </div>
+              </div>
+
+              {/* Quick Status */}
+              <div className="flex items-center justify-center gap-4 mt-6">
+                <div className="flex items-center gap-2 px-4 py-2 rounded-xl"
+                     style={{ background: `${colors.statusPaid}15`, border: `1px solid ${colors.statusPaid}30` }}>
+                  <div className="w-2 h-2 rounded-full animate-pulse" style={{ background: colors.statusPaid }} />
+                  <span className="text-sm font-medium" style={{ color: colors.statusPaid }}>Scanner Active</span>
+                </div>
+                <div className="flex items-center gap-2 px-4 py-2 rounded-xl"
+                     style={{ background: 'rgba(255, 255, 255, 0.05)', border: '1px solid rgba(255, 255, 255, 0.1)' }}>
+                  <Camera className="w-4 h-4" style={{ color: colors.textSecondary }} />
+                  <span className="text-sm" style={{ color: colors.textSecondary }}>Camera Ready</span>
+                </div>
+              </div>
             </div>
-            <div>
-              <h1 className="text-3xl sm:text-4xl font-bold text-white mb-1">
-                Scan QR Code
-              </h1>
-              <p style={{ color: colors.textSecondary }}>
-                Scan student QR codes to verify cash payments
-              </p>
-            </div>
-          </div>
+          </GlassCard>
         </motion.div>
 
         <AnimatePresence mode="wait">
@@ -503,19 +557,23 @@ export default function ScanQRCodePage() {
               animate={{ opacity: 1, scale: 1 }}
               exit={{ opacity: 0, scale: 0.95 }}
             >
-              <GlassCard>
+              <GlassCard className="relative overflow-hidden">
+                <div 
+                  className="absolute top-0 left-0 w-full h-1"
+                  style={{ background: `linear-gradient(90deg, ${colors.accentMint}, ${colors.primary}, transparent)` }}
+                />
                 <div className="text-center mb-6">
-                  <div className="flex items-center justify-center mb-4">
-                    <div
-                      className="w-16 h-16 rounded-full flex items-center justify-center animate-pulse"
-                      style={{ background: `${colors.primary}20` }}
-                    >
-                      <Camera
-                        className="w-8 h-8"
-                        style={{ color: colors.primary }}
-                      />
-                    </div>
-                  </div>
+                  <motion.div 
+                    animate={{ scale: [1, 1.1, 1] }}
+                    transition={{ duration: 2, repeat: Infinity }}
+                    className="w-20 h-20 mx-auto rounded-full flex items-center justify-center mb-4"
+                    style={{ background: `linear-gradient(135deg, ${colors.accentMint}20, ${colors.primary}20)` }}
+                  >
+                    <Camera
+                      className="w-10 h-10"
+                      style={{ color: colors.accentMint }}
+                    />
+                  </motion.div>
                   <h2 className="text-2xl font-bold text-white mb-2">
                     Position QR Code in View
                   </h2>
@@ -528,31 +586,49 @@ export default function ScanQRCodePage() {
                 <div id="qr-reader" className="rounded-xl overflow-hidden" />
 
                 {/* Instructions */}
-                <div
+                <motion.div
+                  initial={{ opacity: 0, y: 10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: 0.3 }}
                   className="mt-6 p-4 rounded-xl"
-                  style={{ background: `${colors.primary}10` }}
+                  style={{ background: `linear-gradient(135deg, ${colors.primary}10, ${colors.accentMint}05)`, border: `1px solid ${colors.primary}20` }}
                 >
                   <div className="flex items-start gap-3">
-                    <ScanLine
-                      className="w-5 h-5 shrink-0 mt-0.5"
-                      style={{ color: colors.primary }}
-                    />
+                    <div className="w-10 h-10 rounded-xl flex items-center justify-center shrink-0"
+                         style={{ background: `${colors.primary}15` }}>
+                      <ScanLine
+                        className="w-5 h-5"
+                        style={{ color: colors.primary }}
+                      />
+                    </div>
                     <div className="flex-1">
-                      <p className="font-medium text-white mb-1">
+                      <p className="font-semibold text-white mb-2">
                         Scanning Tips
                       </p>
                       <ul
-                        className="text-sm space-y-1"
+                        className="text-sm space-y-1.5"
                         style={{ color: colors.textSecondary }}
                       >
-                        <li>• Ensure good lighting</li>
-                        <li>• Hold phone steady</li>
-                        <li>• Keep QR code centered</li>
-                        <li>• Wait for automatic scan</li>
+                        <li className="flex items-center gap-2">
+                          <span className="w-1.5 h-1.5 rounded-full" style={{ background: colors.accentMint }} />
+                          Ensure good lighting
+                        </li>
+                        <li className="flex items-center gap-2">
+                          <span className="w-1.5 h-1.5 rounded-full" style={{ background: colors.accentMint }} />
+                          Hold phone steady
+                        </li>
+                        <li className="flex items-center gap-2">
+                          <span className="w-1.5 h-1.5 rounded-full" style={{ background: colors.accentMint }} />
+                          Keep QR code centered
+                        </li>
+                        <li className="flex items-center gap-2">
+                          <span className="w-1.5 h-1.5 rounded-full" style={{ background: colors.accentMint }} />
+                          Wait for automatic scan
+                        </li>
                       </ul>
                     </div>
                   </div>
-                </div>
+                </motion.div>
               </GlassCard>
             </motion.div>
           )}
@@ -564,243 +640,296 @@ export default function ScanQRCodePage() {
               animate={{ opacity: 1, scale: 1 }}
               exit={{ opacity: 0, scale: 0.95 }}
             >
-              <GlassCard>
-                <div className="text-center mb-6">
-                  <div className="flex items-center justify-center mb-4">
-                    <div
-                      className="w-20 h-20 rounded-full flex items-center justify-center"
-                      style={{ background: gradients.mint }}
+              <GlassCard className="relative overflow-hidden">
+                {/* Gradient Header */}
+                <div 
+                  className="absolute top-0 left-0 w-full h-24"
+                  style={{ 
+                    background: `linear-gradient(135deg, ${colors.statusPaid}20 0%, ${colors.accentMint}20 50%, transparent 100%)`,
+                  }}
+                />
+                <div 
+                  className="absolute top-0 left-0 w-full h-1"
+                  style={{ background: `linear-gradient(90deg, ${colors.statusPaid}, ${colors.accentMint})` }}
+                />
+
+                <div className="relative z-10">
+                  <div className="text-center mb-6">
+                    <motion.div 
+                      initial={{ scale: 0 }}
+                      animate={{ scale: 1 }}
+                      transition={{ type: "spring", bounce: 0.5 }}
+                      className="w-20 h-20 mx-auto rounded-full flex items-center justify-center mb-4"
+                      style={{ 
+                        background: `linear-gradient(135deg, ${colors.statusPaid}, ${colors.accentMint})`,
+                        boxShadow: `0 4px 20px ${colors.statusPaid}40`
+                      }}
                     >
                       <CheckCircle2 className="w-10 h-10 text-white" />
-                    </div>
+                    </motion.div>
+                    <h2 className="text-2xl font-bold text-white mb-2">
+                      QR Code Scanned Successfully
+                    </h2>
+                    <p style={{ color: colors.textSecondary }}>
+                      Verify the details below before confirming
+                    </p>
                   </div>
-                  <h2 className="text-2xl font-bold text-white mb-2">
-                    QR Code Scanned Successfully
-                  </h2>
-                  <p style={{ color: colors.textSecondary }}>
-                    Verify the details below before confirming
-                  </p>
-                </div>
 
-                {/* Payment Details */}
-                <div className="space-y-4 mb-6">
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                    <div
-                      className="p-4 rounded-xl"
-                      style={{ background: "rgba(255,255,255,0.05)" }}
-                    >
-                      <div className="flex items-center gap-2 mb-2">
-                        <User
-                          className="w-4 h-4"
-                          style={{ color: colors.primary }}
-                        />
-                        <p
-                          className="text-xs font-medium"
-                          style={{ color: colors.textSecondary }}
-                        >
-                          {qrData.totalStudents > 1 ? "Paid By" : "Student Name"}
-                        </p>
-                      </div>
-                      <p className="text-lg font-bold text-white">
-                        {qrData.paidByName}
-                      </p>
-                    </div>
-
-                    <div
-                      className="p-4 rounded-xl"
-                      style={{ background: "rgba(255,255,255,0.05)" }}
-                    >
-                      <div className="flex items-center gap-2 mb-2">
-                        <User
-                          className="w-4 h-4"
-                          style={{ color: colors.primary }}
-                        />
-                        <p
-                          className="text-xs font-medium"
-                          style={{ color: colors.textSecondary }}
-                        >
-                          Reg Number
-                        </p>
-                      </div>
-                      <p className="text-lg font-bold text-white">
-                        {qrData.paidByRegNumber}
-                      </p>
-                    </div>
-
-                    <div
-                      className="p-4 rounded-xl"
-                      style={{ background: "rgba(255,255,255,0.05)" }}
-                    >
-                      <div className="flex items-center gap-2 mb-2">
-                        <FileText
-                          className="w-4 h-4"
-                          style={{ color: colors.accentMint }}
-                        />
-                        <p
-                          className="text-xs font-medium"
-                          style={{ color: colors.textSecondary }}
-                        >
-                          Payment Type
-                        </p>
-                      </div>
-                      <p className="text-lg font-bold text-white">
-                        {paymentType.title}
-                      </p>
-                    </div>
-
-                    <div
-                      className="p-4 rounded-xl"
-                      style={{ background: "rgba(255,255,255,0.05)" }}
-                    >
-                      <div className="flex items-center gap-2 mb-2">
-                        <DollarSign
-                          className="w-4 h-4"
-                          style={{ color: colors.accentMint }}
-                        />
-                        <p
-                          className="text-xs font-medium"
-                          style={{ color: colors.textSecondary }}
-                        >
-                          Total Amount
-                        </p>
-                      </div>
-                      <p
-                        className="text-2xl font-bold"
-                        style={{ color: colors.accentMint }}
+                  {/* Payment Details */}
+                  <div className="space-y-4 mb-6">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                      <motion.div
+                        initial={{ opacity: 0, x: -20 }}
+                        animate={{ opacity: 1, x: 0 }}
+                        transition={{ delay: 0.1 }}
+                        className="p-4 rounded-xl"
+                        style={{ background: "rgba(255,255,255,0.05)", border: '1px solid rgba(255,255,255,0.08)' }}
                       >
-                        {formatCurrency(qrData.totalAmount)}
-                      </p>
+                        <div className="flex items-center gap-2 mb-2">
+                          <User
+                            className="w-4 h-4"
+                            style={{ color: colors.primary }}
+                          />
+                          <p
+                            className="text-xs font-medium"
+                            style={{ color: colors.textSecondary }}
+                          >
+                            {qrData.totalStudents > 1 ? "Paid By" : "Student Name"}
+                          </p>
+                        </div>
+                        <p className="text-lg font-bold text-white">
+                          {qrData.paidByName}
+                        </p>
+                      </motion.div>
+
+                      <motion.div
+                        initial={{ opacity: 0, x: 20 }}
+                        animate={{ opacity: 1, x: 0 }}
+                        transition={{ delay: 0.15 }}
+                        className="p-4 rounded-xl"
+                        style={{ background: "rgba(255,255,255,0.05)", border: '1px solid rgba(255,255,255,0.08)' }}
+                      >
+                        <div className="flex items-center gap-2 mb-2">
+                          <User
+                            className="w-4 h-4"
+                            style={{ color: colors.primary }}
+                          />
+                          <p
+                            className="text-xs font-medium"
+                            style={{ color: colors.textSecondary }}
+                          >
+                            Reg Number
+                          </p>
+                        </div>
+                        <p className="text-lg font-bold text-white">
+                          {qrData.paidByRegNumber}
+                        </p>
+                      </motion.div>
+
+                      <motion.div
+                        initial={{ opacity: 0, x: -20 }}
+                        animate={{ opacity: 1, x: 0 }}
+                        transition={{ delay: 0.2 }}
+                        className="p-4 rounded-xl"
+                        style={{ background: "rgba(255,255,255,0.05)", border: '1px solid rgba(255,255,255,0.08)' }}
+                      >
+                        <div className="flex items-center gap-2 mb-2">
+                          <FileText
+                            className="w-4 h-4"
+                            style={{ color: colors.accentMint }}
+                          />
+                          <p
+                            className="text-xs font-medium"
+                            style={{ color: colors.textSecondary }}
+                          >
+                            Payment Type
+                          </p>
+                        </div>
+                        <p className="text-lg font-bold text-white">
+                          {paymentType.title}
+                        </p>
+                      </motion.div>
+
+                      <motion.div
+                        initial={{ opacity: 0, x: 20 }}
+                        animate={{ opacity: 1, x: 0 }}
+                        transition={{ delay: 0.25 }}
+                        className="p-4 rounded-xl"
+                        style={{ background: `${colors.accentMint}10`, border: `1px solid ${colors.accentMint}20` }}
+                      >
+                        <div className="flex items-center gap-2 mb-2">
+                          <DollarSign
+                            className="w-4 h-4"
+                            style={{ color: colors.accentMint }}
+                          />
+                          <p
+                            className="text-xs font-medium"
+                            style={{ color: colors.textSecondary }}
+                          >
+                            Total Amount
+                          </p>
+                        </div>
+                        <p
+                          className="text-2xl font-bold"
+                          style={{ color: colors.accentMint }}
+                        >
+                          {formatCurrency(qrData.totalAmount)}
+                        </p>
+                      </motion.div>
+                      
+                      {qrData.totalStudents > 1 && (
+                        <>
+                          <motion.div
+                            initial={{ opacity: 0, y: 20 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            transition={{ delay: 0.3 }}
+                            className="p-4 rounded-xl"
+                            style={{ background: "rgba(255,255,255,0.05)", border: '1px solid rgba(255,255,255,0.08)' }}
+                          >
+                            <div className="flex items-center gap-2 mb-2">
+                              <User
+                                className="w-4 h-4"
+                                style={{ color: colors.primary }}
+                              />
+                              <p
+                                className="text-xs font-medium"
+                                style={{ color: colors.textSecondary }}
+                              >
+                                Total Students
+                              </p>
+                            </div>
+                            <p className="text-lg font-bold text-white">
+                              {qrData.totalStudents}
+                            </p>
+                          </motion.div>
+
+                          <motion.div
+                            initial={{ opacity: 0, y: 20 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            transition={{ delay: 0.35 }}
+                            className="p-4 rounded-xl"
+                            style={{ background: "rgba(255,255,255,0.05)", border: '1px solid rgba(255,255,255,0.08)' }}
+                          >
+                            <div className="flex items-center gap-2 mb-2">
+                              <DollarSign
+                                className="w-4 h-4"
+                                style={{ color: colors.accentMint }}
+                              />
+                              <p
+                                className="text-xs font-medium"
+                                style={{ color: colors.textSecondary }}
+                              >
+                                Per Student
+                              </p>
+                            </div>
+                            <p className="text-lg font-bold" style={{ color: colors.accentMint }}>
+                              {formatCurrency(qrData.amountPerStudent)}
+                            </p>
+                          </motion.div>
+                        </>
+                      )}
                     </div>
                     
+                    {/* List of students being paid for (multi-student only) */}
                     {qrData.totalStudents > 1 && (
-                      <>
-                        <div
-                          className="p-4 rounded-xl"
-                          style={{ background: "rgba(255,255,255,0.05)" }}
+                      <motion.div
+                        initial={{ opacity: 0, y: 20 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        transition={{ delay: 0.4 }}
+                        className="p-4 rounded-xl"
+                        style={{ background: "rgba(255,255,255,0.05)", border: '1px solid rgba(255,255,255,0.08)' }}
+                      >
+                        <p
+                          className="text-xs font-semibold mb-3 uppercase tracking-wide"
+                          style={{ color: colors.textSecondary }}
                         >
-                          <div className="flex items-center gap-2 mb-2">
-                            <User
-                              className="w-4 h-4"
-                              style={{ color: colors.primary }}
-                            />
-                            <p
-                              className="text-xs font-medium"
-                              style={{ color: colors.textSecondary }}
-                            >
-                              Total Students
-                            </p>
-                          </div>
-                          <p className="text-lg font-bold text-white">
-                            {qrData.totalStudents}
-                          </p>
+                          Students ({qrData.students.length}):
+                        </p>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                          {qrData.students.map((s, i) => (
+                            <div key={i} className="flex items-center gap-2 text-sm p-2 rounded-lg"
+                                 style={{ background: 'rgba(255,255,255,0.03)' }}>
+                              <CheckCircle2 className="w-4 h-4" style={{ color: colors.statusPaid }} />
+                              <span className="text-white font-medium">{s.name}</span>
+                              <span style={{ color: colors.textSecondary }}>({s.regNumber})</span>
+                            </div>
+                          ))}
                         </div>
-
-                        <div
-                          className="p-4 rounded-xl"
-                          style={{ background: "rgba(255,255,255,0.05)" }}
-                        >
-                          <div className="flex items-center gap-2 mb-2">
-                            <DollarSign
-                              className="w-4 h-4"
-                              style={{ color: colors.accentMint }}
-                            />
-                            <p
-                              className="text-xs font-medium"
-                              style={{ color: colors.textSecondary }}
-                            >
-                              Per Student
-                            </p>
-                          </div>
-                          <p className="text-lg font-bold" style={{ color: colors.accentMint }}>
-                            {formatCurrency(qrData.amountPerStudent)}
-                          </p>
-                        </div>
-                      </>
+                      </motion.div>
                     )}
-                  </div>
-                  
-                  {/* List of students being paid for (multi-student only) */}
-                  {qrData.totalStudents > 1 && (
-                    <div
-                      className="p-4 rounded-xl"
-                      style={{ background: "rgba(255,255,255,0.05)" }}
+
+                    {/* Warning */}
+                    <motion.div
+                      initial={{ opacity: 0, y: 20 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      transition={{ delay: 0.45 }}
+                      className="flex items-start gap-3 p-4 rounded-xl"
+                      style={{ background: `${colors.warning}10`, border: `1px solid ${colors.warning}30` }}
                     >
-                      <p
-                        className="text-xs font-medium mb-2"
-                        style={{ color: colors.textSecondary }}
-                      >
-                        Students ({qrData.students.length}):
-                      </p>
-                      <ul className="text-sm space-y-1">
-                        {qrData.students.map((s, i) => (
-                          <li key={i} className="text-white">
-                            • {s.name} ({s.regNumber})
-                          </li>
-                        ))}
-                      </ul>
-                    </div>
-                  )}
-
-                  {/* Warning */}
-                  <div
-                    className="flex items-start gap-3 p-4 rounded-xl"
-                    style={{ background: `${colors.warning}15` }}
-                  >
-                    <AlertTriangle
-                      className="w-5 h-5 shrink-0 mt-0.5"
-                      style={{ color: colors.warning }}
-                    />
-                    <div className="flex-1">
-                      <p className="font-medium text-white mb-1">
-                        Verify Cash Received
-                      </p>
-                      <p
-                        className="text-sm"
-                        style={{ color: colors.textSecondary }}
-                      >
-                        Make sure you have received the exact amount in cash (
-                        {formatCurrency(qrData.totalAmount)}) from {qrData.paidByName} before
-                        confirming.
-                      </p>
-                    </div>
+                      <div className="w-10 h-10 rounded-xl flex items-center justify-center shrink-0"
+                           style={{ background: `${colors.warning}15` }}>
+                        <AlertTriangle
+                          className="w-5 h-5"
+                          style={{ color: colors.warning }}
+                        />
+                      </div>
+                      <div className="flex-1">
+                        <p className="font-semibold text-white mb-1">
+                          Verify Cash Received
+                        </p>
+                        <p
+                          className="text-sm"
+                          style={{ color: colors.textSecondary }}
+                        >
+                          Make sure you have received the exact amount in cash (
+                          <span className="font-semibold" style={{ color: colors.warning }}>{formatCurrency(qrData.totalAmount)}</span>) from {qrData.paidByName} before
+                          confirming.
+                        </p>
+                      </div>
+                    </motion.div>
                   </div>
-                </div>
 
-                {/* Actions */}
-                <div className="flex gap-3">
-                  <button
-                    onClick={handleCancel}
-                    disabled={confirming}
-                    className="flex-1 py-3 rounded-xl font-medium transition-all disabled:opacity-50"
-                    style={{
-                      background: "rgba(255,255,255,0.1)",
-                      color: colors.textSecondary,
-                      border: "1px solid rgba(255,255,255,0.2)",
-                    }}
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    onClick={handleConfirmPayment}
-                    disabled={confirming || !hasPermission?.("can_approve_payments")}
-                    className="flex-1 py-3 rounded-xl font-medium transition-all disabled:opacity-50 flex items-center justify-center gap-2"
-                    style={{
-                      background: gradients.mint,
-                      color: "white",
-                    }}
-                  >
-                    {confirming ? (
-                      <>
-                        <Loader2 className="w-5 h-5 animate-spin" />
-                        Confirming...
-                      </>
-                    ) : (
-                      <>
-                        <CheckCircle2 className="w-5 h-5" />
-                        Confirm Payment Received
-                      </>
-                    )}
-                  </button>
+                  {/* Actions */}
+                  <div className="flex gap-3">
+                    <motion.button
+                      whileHover={{ scale: 1.02 }}
+                      whileTap={{ scale: 0.98 }}
+                      onClick={handleCancel}
+                      disabled={confirming}
+                      className="flex-1 py-3.5 rounded-xl font-medium transition-all disabled:opacity-50"
+                      style={{
+                        background: "rgba(255,255,255,0.05)",
+                        color: colors.textSecondary,
+                        border: "1px solid rgba(255,255,255,0.1)",
+                      }}
+                    >
+                      Cancel
+                    </motion.button>
+                    <motion.button
+                      whileHover={{ scale: 1.02 }}
+                      whileTap={{ scale: 0.98 }}
+                      onClick={handleConfirmPayment}
+                      disabled={confirming || !hasPermission?.("can_approve_payments")}
+                      className="flex-1 py-3.5 rounded-xl font-semibold transition-all disabled:opacity-50 flex items-center justify-center gap-2"
+                      style={{
+                        background: `linear-gradient(135deg, ${colors.statusPaid}, ${colors.accentMint})`,
+                        color: "white",
+                        boxShadow: `0 4px 15px ${colors.statusPaid}40`
+                      }}
+                    >
+                      {confirming ? (
+                        <>
+                          <Loader2 className="w-5 h-5 animate-spin" />
+                          Confirming...
+                        </>
+                      ) : (
+                        <>
+                          <CheckCircle2 className="w-5 h-5" />
+                          Confirm Payment
+                        </>
+                      )}
+                    </motion.button>
+                  </div>
                 </div>
               </GlassCard>
             </motion.div>

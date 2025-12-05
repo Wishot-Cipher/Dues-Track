@@ -5,11 +5,13 @@ import RecordExpense from '@/components/admin/RecordExpense'
 import ExpenseList from '@/components/admin/ExpenseList'
 import ExpenseApprovalQueue from '@/components/admin/ExpenseApprovalQueue'
 import Footer from '@/components/Footer'
-import { ArrowLeft } from 'lucide-react'
+import { ArrowLeft, Receipt, Sparkles, TrendingDown, Wallet } from 'lucide-react'
 import { useAuth } from '@/hooks/useAuth'
+import { useNavigate } from 'react-router-dom'
 
 export default function ExpensesPage() {
   const { hasPermission } = useAuth()
+  const navigate = useNavigate()
 
   return (
     <div className="min-h-screen py-6 px-4 relative overflow-hidden" style={{ background: 'radial-gradient(ellipse at top, #1A0E09 0%, #0F0703 100%)' }}>
@@ -52,22 +54,80 @@ export default function ExpensesPage() {
       }} />
 
       <div className="max-w-7xl mx-auto space-y-6 relative z-10">
+        {/* Enhanced Header */}
         <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }}>
-          <GlassCard>
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-3">
-                <button
-                  onClick={() => window.history.back()}
-                  className="flex items-center gap-2 px-3 py-2 rounded-lg transition-all"
-                  style={{ background: 'rgba(255,255,255,0.03)' }}
-                >
-                  <ArrowLeft className="w-4 h-4" />
-                  <span className="text-sm" style={{ color: colors.textPrimary }}>Back</span>
-                </button>
+          <GlassCard className="relative overflow-hidden">
+            {/* Decorative Elements */}
+            <div className="absolute top-0 right-0 w-48 h-48 opacity-5 pointer-events-none">
+              <Receipt className="w-full h-full" style={{ color: colors.statusFailed }} />
+            </div>
+            <div 
+              className="absolute top-0 left-0 w-full h-1"
+              style={{ background: `linear-gradient(90deg, ${colors.statusFailed}, ${colors.primary}, transparent)` }}
+            />
 
-                <div>
-                  <h1 className="text-2xl font-bold text-white">Expenses</h1>
-                  <p className="text-sm mt-1" style={{ color: colors.textSecondary }}>Record and review class expenses</p>
+            <div className="relative z-10">
+              <motion.button
+                whileHover={{ x: -4 }}
+                onClick={() => navigate('/admin/dashboard')}
+                className="flex items-center gap-2 mb-4 px-4 py-2 rounded-xl transition-all"
+                style={{ 
+                  background: `${colors.primary}15`,
+                  border: `1px solid ${colors.primary}30`,
+                  color: colors.primary 
+                }}
+              >
+                <ArrowLeft className="w-4 h-4" />
+                <span className="font-medium">Back to Dashboard</span>
+              </motion.button>
+
+              <div className="flex flex-col sm:flex-row items-center gap-4">
+                <motion.div
+                  initial={{ scale: 0.9 }}
+                  animate={{ scale: 1 }}
+                  className="w-16 h-16 rounded-2xl flex items-center justify-center relative shrink-0"
+                  style={{ 
+                    background: `linear-gradient(135deg, ${colors.statusFailed}30, ${colors.statusFailed}10)`,
+                    border: `1px solid ${colors.statusFailed}40`,
+                    boxShadow: `0 4px 20px ${colors.statusFailed}30`
+                  }}
+                >
+                  <TrendingDown className="w-8 h-8" style={{ color: colors.statusFailed }} />
+                  <Sparkles className="w-4 h-4 absolute -top-1 -right-1" style={{ color: colors.primary }} />
+                </motion.div>
+                <div className="text-center sm:text-left">
+                  <motion.div 
+                    initial={{ opacity: 0, scale: 0.9 }}
+                    animate={{ opacity: 1, scale: 1 }}
+                    transition={{ delay: 0.1 }}
+                    className="inline-flex items-center gap-2 px-3 py-1 rounded-full text-xs font-semibold mb-2"
+                    style={{ 
+                      background: `linear-gradient(135deg, ${colors.statusFailed}30, ${colors.statusFailed}10)`,
+                      border: `1px solid ${colors.statusFailed}40`,
+                      color: colors.statusFailed,
+                    }}
+                  >
+                    <Wallet className="w-3 h-3" />
+                    EXPENSE TRACKING
+                  </motion.div>
+                  <h1 className="text-2xl sm:text-3xl font-bold text-white">Class Expenses</h1>
+                  <p className="text-sm" style={{ color: colors.textSecondary }}>
+                    Record, track, and review class expenses
+                  </p>
+                </div>
+              </div>
+
+              {/* Quick Info Cards */}
+              <div className="grid grid-cols-2 gap-3 mt-6">
+                <div className="p-3 rounded-xl text-center" 
+                     style={{ background: 'rgba(255, 255, 255, 0.03)', border: '1px solid rgba(255, 255, 255, 0.05)' }}>
+                  <Receipt className="w-5 h-5 mx-auto mb-1" style={{ color: colors.primary }} />
+                  <p className="text-xs" style={{ color: colors.textSecondary }}>Record expenses below</p>
+                </div>
+                <div className="p-3 rounded-xl text-center" 
+                     style={{ background: `${colors.statusPaid}08`, border: `1px solid ${colors.statusPaid}15` }}>
+                  <TrendingDown className="w-5 h-5 mx-auto mb-1" style={{ color: colors.statusPaid }} />
+                  <p className="text-xs" style={{ color: colors.textSecondary }}>Track all spending</p>
                 </div>
               </div>
             </div>

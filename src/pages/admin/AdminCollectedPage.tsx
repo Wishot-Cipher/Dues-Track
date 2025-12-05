@@ -2,11 +2,12 @@ import { useEffect, useState, useCallback } from 'react';
 import { motion } from 'framer-motion';
 import { useNavigate } from 'react-router-dom';
 import GlassCard from '@/components/ui/GlassCard';
+import AnimatedCounter from '@/components/ui/AnimatedCounter';
 import { supabase } from '@/config/supabase';
 import { colors } from '@/config/colors';
 import Footer from '@/components/Footer';
 import { formatCurrency, formatDate } from '@/utils/formatters';
-import { ArrowLeft, Users, Wallet, TrendingUp, Filter, Search, Download, ChevronLeft, ChevronRight } from 'lucide-react';
+import { ArrowLeft, Users, Wallet, TrendingUp, Filter, Search, Download, ChevronLeft, ChevronRight, Sparkles, PieChart, CheckCircle, XCircle, BarChart3 } from 'lucide-react';
 
 interface StudentPayment {
   id: string;
@@ -426,158 +427,221 @@ export default function AdminCollectedPage() {
       </div>
 
       <div className="max-w-7xl mx-auto relative z-10 space-y-6">
-        {/* Header */}
+        {/* Enhanced Header */}
         <motion.div
           initial={{ opacity: 0, y: -20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.5 }}
         >
-          <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3 sm:gap-4 mb-4 sm:mb-6">
-            <button
-              onClick={() => navigate("/admin/dashboard")}
-              className="flex items-center gap-2 px-3 sm:px-4 py-2 rounded-lg transition-all hover:scale-105"
-              style={{
-                background: 'rgba(255,255,255,0.05)',
-                border: `1px solid ${colors.primary}40`,
-                color: colors.textSecondary
-              }}
-            >
-              <ArrowLeft className="w-4 h-4" />
-              <span>Back</span>
-            </button>
-            <div className="flex-1">
-              <h1 className="text-xl sm:text-2xl lg:text-3xl font-bold text-white">Payment Collection Overview</h1>
-              <p className="text-xs sm:text-sm mt-1" style={{ color: colors.textSecondary }}>
-                Detailed breakdown of student payments across all categories
-              </p>
+          <GlassCard className="relative overflow-hidden">
+            {/* Decorative Elements */}
+            <div className="absolute top-0 right-0 w-64 h-64 opacity-5 pointer-events-none">
+              <BarChart3 className="w-full h-full" style={{ color: colors.statusPaid }} />
             </div>
-            <button
-              onClick={exportToCSV}
-              className="flex items-center gap-2 px-3 sm:px-4 py-2 rounded-lg transition-all hover:scale-105 text-sm"
-              style={{
-                background: `linear-gradient(135deg, ${colors.primary}30, ${colors.primary}10)`,
-                border: `1px solid ${colors.primary}60`,
-                color: 'white'
-              }}
-            >
-              <Download className="w-4 h-4" />
-              <span className="hidden sm:inline">Export CSV</span>
-            </button>
-          </div>
+            <div 
+              className="absolute top-0 left-0 w-full h-1"
+              style={{ background: `linear-gradient(90deg, ${colors.statusPaid}, ${colors.primary}, transparent)` }}
+            />
 
-          {/* Summary Stats Cards */}
-          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 sm:gap-4 mb-6">
-            <motion.div
-              initial={{ opacity: 0, scale: 0.9 }}
-              animate={{ opacity: 1, scale: 1 }}
-              transition={{ delay: 0.1 }}
-            >
-              <GlassCard className="relative overflow-hidden">
-                <div className="absolute top-0 right-0 w-16 h-16 sm:w-20 sm:h-20 opacity-10">
-                  <Wallet className="w-full h-full" style={{ color: colors.statusPaid }} />
+            <div className="relative z-10">
+              <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 mb-6">
+                <div className="flex flex-col sm:flex-row sm:items-center gap-3 sm:gap-4">
+                  <motion.button
+                    whileHover={{ x: -4 }}
+                    onClick={() => navigate("/admin/dashboard")}
+                    className="flex items-center justify-center sm:justify-start gap-2 w-fit px-4 py-2 rounded-xl transition-all"
+                    style={{
+                      background: `${colors.primary}15`,
+                      border: `1px solid ${colors.primary}30`,
+                      color: colors.primary 
+                    }}
+                  >
+                    <ArrowLeft className="w-4 h-4" />
+                    <span className="font-medium">Back</span>
+                  </motion.button>
+
+                  <div className="flex items-center gap-4">
+                    <motion.div
+                      initial={{ scale: 0.9 }}
+                      animate={{ scale: 1 }}
+                      className="w-14 h-14 rounded-xl flex items-center justify-center shrink-0 shadow-lg"
+                      style={{ 
+                        background: `linear-gradient(135deg, ${colors.statusPaid}30, ${colors.statusPaid}10)`,
+                        border: `1px solid ${colors.statusPaid}40`,
+                        boxShadow: `0 4px 15px ${colors.statusPaid}20`
+                      }}
+                    >
+                      <PieChart className="w-7 h-7" style={{ color: colors.statusPaid }} />
+                    </motion.div>
+                    <div>
+                      <motion.div 
+                        initial={{ opacity: 0, scale: 0.9 }}
+                        animate={{ opacity: 1, scale: 1 }}
+                        transition={{ delay: 0.1 }}
+                        className="inline-flex items-center gap-2 px-3 py-1 rounded-full text-xs font-semibold mb-2"
+                        style={{ 
+                          background: `linear-gradient(135deg, ${colors.statusPaid}30, ${colors.statusPaid}10)`,
+                          border: `1px solid ${colors.statusPaid}40`,
+                          color: colors.statusPaid,
+                        }}
+                      >
+                        <Sparkles className="w-3 h-3" />
+                        COLLECTION OVERVIEW
+                      </motion.div>
+                      <h1 className="text-xl sm:text-2xl lg:text-3xl font-bold text-white">Payment Collection</h1>
+                      <p className="text-xs sm:text-sm" style={{ color: colors.textSecondary }}>
+                        Detailed breakdown of student payments
+                      </p>
+                    </div>
+                  </div>
                 </div>
-                <div className="relative z-10">
-                  <p className="text-[10px] sm:text-xs mb-1" style={{ color: colors.textSecondary }}>Collected</p>
-                  <p className="text-lg sm:text-2xl font-bold text-white">{formatCurrency(totalCollected)}</p>
-                  <p className="text-[10px] sm:text-xs mt-1" style={{ color: colors.accentMint }}>
-                    {studentPayments.reduce((sum, s) => sum + s.payment_count, 0)} pays
+
+                <motion.button
+                  whileHover={{ scale: 1.05 }}
+                  whileTap={{ scale: 0.95 }}
+                  onClick={exportToCSV}
+                  className="flex items-center justify-center gap-2 px-5 py-3 rounded-xl transition-all text-sm font-semibold"
+                  style={{
+                    background: `linear-gradient(135deg, ${colors.statusPaid}, ${colors.accentMint})`,
+                    boxShadow: `0 4px 15px ${colors.statusPaid}40`,
+                    color: 'white'
+                  }}
+                >
+                  <Download className="w-4 h-4" />
+                  <span>Export CSV</span>
+                </motion.button>
+              </div>
+
+              {/* Summary Stats Cards */}
+              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 sm:gap-4">
+                <motion.div
+                  initial={{ opacity: 0, scale: 0.9 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  transition={{ delay: 0.1 }}
+                  className="p-4 rounded-xl relative overflow-hidden"
+                  style={{ 
+                    background: 'rgba(255, 255, 255, 0.03)',
+                    border: '1px solid rgba(255, 255, 255, 0.05)'
+                  }}
+                >
+                  <div className="absolute top-0 right-0 w-12 h-12 opacity-10">
+                    <Wallet className="w-full h-full" style={{ color: colors.statusPaid }} />
+                  </div>
+                  <p className="text-[10px] sm:text-xs font-medium mb-1" style={{ color: colors.textSecondary }}>Total Collected</p>
+                  <p className="text-lg sm:text-2xl font-bold text-white">
+                    <AnimatedCounter value={totalCollected} prefix="₦" />
                   </p>
-                </div>
-              </GlassCard>
-            </motion.div>
+                  <p className="text-[10px] sm:text-xs mt-1" style={{ color: colors.statusPaid }}>
+                    <AnimatedCounter value={studentPayments.reduce((sum, s) => sum + s.payment_count, 0)} /> payments
+                  </p>
+                </motion.div>
 
-            <motion.div
-              initial={{ opacity: 0, scale: 0.9 }}
-              animate={{ opacity: 1, scale: 1 }}
-              transition={{ delay: 0.15 }}
-            >
-              <GlassCard className="relative overflow-hidden">
-                <div className="absolute top-0 right-0 w-16 h-16 sm:w-20 sm:h-20 opacity-10">
-                  <TrendingUp className="w-full h-full" style={{ color: colors.statusFailed }} />
-                </div>
-                <div className="relative z-10">
-                  <p className="text-[10px] sm:text-xs mb-1" style={{ color: colors.textSecondary }}>Expenses</p>
+                <motion.div
+                  initial={{ opacity: 0, scale: 0.9 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  transition={{ delay: 0.15 }}
+                  className="p-4 rounded-xl relative overflow-hidden"
+                  style={{ 
+                    background: `${colors.statusFailed}08`,
+                    border: `1px solid ${colors.statusFailed}15`
+                  }}
+                >
+                  <div className="absolute top-0 right-0 w-12 h-12 opacity-10">
+                    <TrendingUp className="w-full h-full" style={{ color: colors.statusFailed }} />
+                  </div>
+                  <p className="text-[10px] sm:text-xs font-medium mb-1" style={{ color: colors.textSecondary }}>Total Expenses</p>
                   <p className="text-lg sm:text-2xl font-bold" style={{ color: totalExpenses > 0 ? colors.statusFailed : colors.textSecondary }}>
-                    {formatCurrency(totalExpenses)}
+                    <AnimatedCounter value={totalExpenses} prefix="₦" />
                   </p>
                   <p className="text-[10px] sm:text-xs mt-1" style={{ color: colors.textSecondary }}>
                     {totalExpenses > 0 ? 'Approved' : 'None yet'}
                   </p>
-                </div>
-              </GlassCard>
-            </motion.div>
+                </motion.div>
 
-            <motion.div
-              initial={{ opacity: 0, scale: 0.9 }}
-              animate={{ opacity: 1, scale: 1 }}
-              transition={{ delay: 0.2 }}
-            >
-              <GlassCard className="relative overflow-hidden">
-                <div className="absolute top-0 right-0 w-16 h-16 sm:w-20 sm:h-20 opacity-10">
-                  <Wallet className="w-full h-full" style={{ color: netBalance >= 0 ? colors.statusPaid : colors.statusFailed }} />
-                </div>
-                <div className="relative z-10">
-                  <p className="text-[10px] sm:text-xs mb-1" style={{ color: colors.textSecondary }}>Net</p>
+                <motion.div
+                  initial={{ opacity: 0, scale: 0.9 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  transition={{ delay: 0.2 }}
+                  className="p-4 rounded-xl relative overflow-hidden"
+                  style={{ 
+                    background: netBalance >= 0 ? `${colors.statusPaid}08` : `${colors.statusFailed}08`,
+                    border: `1px solid ${netBalance >= 0 ? colors.statusPaid : colors.statusFailed}15`
+                  }}
+                >
+                  <div className="absolute top-0 right-0 w-12 h-12 opacity-10">
+                    <Wallet className="w-full h-full" style={{ color: netBalance >= 0 ? colors.statusPaid : colors.statusFailed }} />
+                  </div>
+                  <p className="text-[10px] sm:text-xs font-medium mb-1" style={{ color: colors.textSecondary }}>Net Balance</p>
                   <p className="text-lg sm:text-2xl font-bold" style={{ color: netBalance >= 0 ? colors.statusPaid : colors.statusFailed }}>
-                    {formatCurrency(netBalance)}
+                    <AnimatedCounter value={netBalance} prefix="₦" />
                   </p>
-                  <p className="text-[10px] sm:text-xs mt-1" style={{ color: colors.textSecondary }}>
-                    Balance
-                  </p>
-                </div>
-              </GlassCard>
-            </motion.div>
+                  <p className="text-[10px] sm:text-xs mt-1" style={{ color: colors.textSecondary }}>Available</p>
+                </motion.div>
 
-            <motion.div
-              initial={{ opacity: 0, scale: 0.9 }}
-              animate={{ opacity: 1, scale: 1 }}
-              transition={{ delay: 0.25 }}
-            >
-              <GlassCard className="relative overflow-hidden">
-                <div className="absolute top-0 right-0 w-16 h-16 sm:w-20 sm:h-20 opacity-10">
-                  <Users className="w-full h-full" style={{ color: colors.statusPaid }} />
-                </div>
-                <div className="relative z-10">
-                  <p className="text-[10px] sm:text-xs mb-1" style={{ color: colors.textSecondary }}>Paid</p>
-                  <p className="text-lg sm:text-2xl font-bold text-white">{totalStudentsPaid}</p>
-                  <p className="text-[10px] sm:text-xs mt-1" style={{ color: colors.statusPaid }}>
-                    Students
+                <motion.div
+                  initial={{ opacity: 0, scale: 0.9 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  transition={{ delay: 0.25 }}
+                  className="p-4 rounded-xl relative overflow-hidden"
+                  style={{ 
+                    background: `${colors.statusPaid}08`,
+                    border: `1px solid ${colors.statusPaid}15`
+                  }}
+                >
+                  <div className="absolute top-0 right-0 w-12 h-12 opacity-10">
+                    <CheckCircle className="w-full h-full" style={{ color: colors.statusPaid }} />
+                  </div>
+                  <p className="text-[10px] sm:text-xs font-medium mb-1" style={{ color: colors.textSecondary }}>Paid Students</p>
+                  <p className="text-lg sm:text-2xl font-bold text-white">
+                    <AnimatedCounter value={totalStudentsPaid} />
                   </p>
-                </div>
-              </GlassCard>
-            </motion.div>
+                  <p className="text-[10px] sm:text-xs mt-1" style={{ color: colors.statusPaid }}>Completed</p>
+                </motion.div>
 
-            <motion.div
-              initial={{ opacity: 0, scale: 0.9 }}
-              animate={{ opacity: 1, scale: 1 }}
-              transition={{ delay: 0.3 }}
-            >
-              <GlassCard className="relative overflow-hidden">
-                <div className="absolute top-0 right-0 w-16 h-16 sm:w-20 sm:h-20 opacity-10">
-                  <Users className="w-full h-full" style={{ color: colors.statusFailed }} />
-                </div>
-                <div className="relative z-10">
-                  <p className="text-[10px] sm:text-xs mb-1" style={{ color: colors.textSecondary }}>Unpaid</p>
-                  <p className="text-lg sm:text-2xl font-bold" style={{ color: colors.statusFailed }}>{totalStudentsUnpaid}</p>
-                  <p className="text-[10px] sm:text-xs mt-1" style={{ color: colors.textSecondary }}>
-                    Students
+                <motion.div
+                  initial={{ opacity: 0, scale: 0.9 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  transition={{ delay: 0.3 }}
+                  className="p-4 rounded-xl relative overflow-hidden"
+                  style={{ 
+                    background: `${colors.statusFailed}08`,
+                    border: `1px solid ${colors.statusFailed}15`
+                  }}
+                >
+                  <div className="absolute top-0 right-0 w-12 h-12 opacity-10">
+                    <XCircle className="w-full h-full" style={{ color: colors.statusFailed }} />
+                  </div>
+                  <p className="text-[10px] sm:text-xs font-medium mb-1" style={{ color: colors.textSecondary }}>Unpaid Students</p>
+                  <p className="text-lg sm:text-2xl font-bold" style={{ color: colors.statusFailed }}>
+                    <AnimatedCounter value={totalStudentsUnpaid} />
                   </p>
-                </div>
-              </GlassCard>
-            </motion.div>
-          </div>
+                  <p className="text-[10px] sm:text-xs mt-1" style={{ color: colors.textSecondary }}>Pending</p>
+                </motion.div>
+              </div>
+            </div>
+          </GlassCard>
         </motion.div>
 
-        {/* Category Breakdown */}
+        {/* Enhanced Category Breakdown */}
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.4 }}
         >
-          <GlassCard>
-            <div className="flex items-center gap-2 mb-4">
-              <TrendingUp className="w-5 h-5" style={{ color: colors.primary }} />
-              <h2 className="text-xl font-bold text-white">Category Breakdown</h2>
+          <GlassCard className="relative overflow-hidden">
+            <div 
+              className="absolute top-0 left-0 w-full h-1"
+              style={{ background: `linear-gradient(90deg, ${colors.primary}, ${colors.accentMint}, transparent)` }}
+            />
+            <div className="flex items-center gap-3 mb-4">
+              <div className="w-10 h-10 rounded-xl flex items-center justify-center"
+                   style={{ background: `${colors.primary}15`, border: `1px solid ${colors.primary}30` }}>
+                <BarChart3 className="w-5 h-5" style={{ color: colors.primary }} />
+              </div>
+              <div>
+                <h2 className="text-xl font-bold text-white">Category Breakdown</h2>
+                <p className="text-xs" style={{ color: colors.textSecondary }}>Click to filter by category</p>
+              </div>
             </div>
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
               {categoriesBreakdown.map((cat, index) => (
@@ -586,8 +650,10 @@ export default function AdminCollectedPage() {
                   initial={{ opacity: 0, x: -20 }}
                   animate={{ opacity: 1, x: 0 }}
                   transition={{ delay: 0.5 + index * 0.05 }}
+                  whileHover={{ scale: 1.02, y: -2 }}
+                  whileTap={{ scale: 0.98 }}
                   onClick={() => setCategoryFilter(cat.category)}
-                  className={`p-3 sm:p-4 rounded-lg text-left transition-all hover:scale-[1.02] hover:shadow-lg ${
+                  className={`p-4 rounded-xl text-left transition-all relative overflow-hidden ${
                     categoryFilter === cat.category ? 'ring-2 shadow-xl' : ''
                   }`}
                   style={{
@@ -597,26 +663,38 @@ export default function AdminCollectedPage() {
                     borderWidth: '1px',
                     borderStyle: 'solid',
                     borderColor: categoryFilter === cat.category ? colors.primary : 'rgba(255,255,255,0.1)',
+                    boxShadow: categoryFilter === cat.category ? `0 4px 20px ${colors.primary}30` : 'none'
                   }}
                 >
-                  <p className="text-xs sm:text-sm font-medium capitalize" style={{ color: colors.textSecondary }}>
+                  <div className="absolute top-0 right-0 w-16 h-16 opacity-5 pointer-events-none">
+                    <TrendingUp className="w-full h-full" style={{ color: colors.primary }} />
+                  </div>
+                  <p className="text-xs sm:text-sm font-semibold capitalize mb-1" style={{ color: categoryFilter === cat.category ? colors.primary : colors.textSecondary }}>
                     {cat.category.replace(/_/g, ' ')}
                   </p>
                   <p className="text-lg sm:text-xl font-bold text-white mt-1">{formatCurrency(cat.total_collected)}</p>
                   {cat.total_expenses > 0 || cat.total_collected > 0 ? (
-                    <div className="text-[10px] sm:text-xs mt-1 space-y-0.5">
+                    <div className="text-[10px] sm:text-xs mt-2 space-y-1">
                       {cat.total_expenses > 0 && (
-                        <p style={{ color: colors.statusFailed }}>-{formatCurrency(cat.total_expenses)} spent</p>
+                        <p className="flex items-center gap-1" style={{ color: colors.statusFailed }}>
+                          <span className="w-1.5 h-1.5 rounded-full" style={{ background: colors.statusFailed }} />
+                          -{formatCurrency(cat.total_expenses)} spent
+                        </p>
                       )}
-                      <p className="font-semibold" style={{ color: cat.net_balance >= 0 ? colors.statusPaid : colors.statusFailed }}>
-                        = {formatCurrency(cat.net_balance)} net
+                      <p className="font-semibold flex items-center gap-1" style={{ color: cat.net_balance >= 0 ? colors.statusPaid : colors.statusFailed }}>
+                        <span className="w-1.5 h-1.5 rounded-full" style={{ background: cat.net_balance >= 0 ? colors.statusPaid : colors.statusFailed }} />
+                        {formatCurrency(cat.net_balance)} net
                       </p>
                     </div>
                   ) : (
-                    <p className="text-[10px] sm:text-xs mt-1" style={{ color: colors.textSecondary }}>
+                    <p className="text-[10px] sm:text-xs mt-2" style={{ color: colors.textSecondary }}>
                       No activity
                     </p>
                   )}
+                  <div className="mt-3 text-xs font-medium px-2 py-1 rounded-lg inline-block"
+                       style={{ background: `${colors.primary}10`, color: colors.primary }}>
+                    {cat.payment_count} payment{cat.payment_count !== 1 ? 's' : ''}
+                  </div>
                 </motion.button>
               ))}
             </div>
@@ -893,45 +971,97 @@ export default function AdminCollectedPage() {
           </motion.div>
         )}
 
-        {/* Pagination */}
+        {/* Enhanced Pagination */}
         {totalPages > 1 && (
           <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             transition={{ delay: 0.8 }}
           >
-            <GlassCard>
-              <div className="flex items-center justify-between">
-                <p className="text-sm" style={{ color: colors.textSecondary }}>
-                  Page {currentPage} of {totalPages}
-                </p>
-                <div className="flex gap-2">
-                  <button
+            <GlassCard className="relative overflow-hidden">
+              <div 
+                className="absolute bottom-0 left-0 w-full h-1"
+                style={{ background: `linear-gradient(90deg, ${colors.statusPaid}, ${colors.primary}, transparent)` }}
+              />
+              <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-xl flex items-center justify-center"
+                       style={{ background: `${colors.primary}15`, border: `1px solid ${colors.primary}30` }}>
+                    <Users className="w-5 h-5" style={{ color: colors.primary }} />
+                  </div>
+                  <div>
+                    <p className="text-sm font-medium text-white">
+                      Page {currentPage} of {totalPages}
+                    </p>
+                    <p className="text-xs" style={{ color: colors.textSecondary }}>
+                      Showing {(currentPage - 1) * itemsPerPage + 1} - {Math.min(currentPage * itemsPerPage, filteredStudents.length)} of {filteredStudents.length} students
+                    </p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2">
+                  <motion.button
+                    whileHover={{ scale: 1.05 }}
+                    whileTap={{ scale: 0.95 }}
                     onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
                     disabled={currentPage === 1}
-                    className="px-4 py-2 rounded-lg flex items-center gap-2 transition-all disabled:opacity-50 disabled:cursor-not-allowed hover:scale-105"
+                    className="flex items-center gap-2 px-4 py-2.5 rounded-xl transition-all disabled:opacity-40 disabled:cursor-not-allowed"
                     style={{
                       background: currentPage === 1 ? 'rgba(255,255,255,0.03)' : `linear-gradient(135deg, ${colors.primary}30, ${colors.primary}10)`,
-                      border: `1px solid ${currentPage === 1 ? 'transparent' : colors.primary}`,
-                      color: currentPage === 1 ? colors.textSecondary : 'white',
+                      border: `1px solid ${currentPage === 1 ? 'transparent' : colors.primary}40`,
+                      color: currentPage === 1 ? colors.textSecondary : colors.primary,
                     }}
                   >
                     <ChevronLeft className="w-4 h-4" />
-                    <span>Previous</span>
-                  </button>
-                  <button
+                    <span className="hidden sm:inline font-medium">Previous</span>
+                  </motion.button>
+                  <div className="flex gap-1">
+                    {Array.from({ length: Math.min(totalPages, 5) }, (_, i) => {
+                      let page: number;
+                      if (totalPages <= 5) {
+                        page = i + 1;
+                      } else if (currentPage <= 3) {
+                        page = i + 1;
+                      } else if (currentPage >= totalPages - 2) {
+                        page = totalPages - 4 + i;
+                      } else {
+                        page = currentPage - 2 + i;
+                      }
+                      
+                      return (
+                        <motion.button
+                          key={page}
+                          whileHover={{ scale: 1.1 }}
+                          whileTap={{ scale: 0.9 }}
+                          onClick={() => setCurrentPage(page)}
+                          className="w-10 h-10 rounded-xl text-sm font-semibold transition-all"
+                          style={{
+                            background: currentPage === page 
+                              ? `linear-gradient(135deg, ${colors.statusPaid}, ${colors.primary})`
+                              : 'rgba(255, 255, 255, 0.05)',
+                            color: currentPage === page ? 'white' : colors.textSecondary,
+                            boxShadow: currentPage === page ? `0 4px 15px ${colors.primary}40` : 'none',
+                          }}
+                        >
+                          {page}
+                        </motion.button>
+                      );
+                    })}
+                  </div>
+                  <motion.button
+                    whileHover={{ scale: 1.05 }}
+                    whileTap={{ scale: 0.95 }}
                     onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
                     disabled={currentPage === totalPages}
-                    className="px-4 py-2 rounded-lg flex items-center gap-2 transition-all disabled:opacity-50 disabled:cursor-not-allowed hover:scale-105"
+                    className="flex items-center gap-2 px-4 py-2.5 rounded-xl transition-all disabled:opacity-40 disabled:cursor-not-allowed"
                     style={{
                       background: currentPage === totalPages ? 'rgba(255,255,255,0.03)' : `linear-gradient(135deg, ${colors.primary}30, ${colors.primary}10)`,
-                      border: `1px solid ${currentPage === totalPages ? 'transparent' : colors.primary}`,
-                      color: currentPage === totalPages ? colors.textSecondary : 'white',
+                      border: `1px solid ${currentPage === totalPages ? 'transparent' : colors.primary}40`,
+                      color: currentPage === totalPages ? colors.textSecondary : colors.primary,
                     }}
                   >
-                    <span>Next</span>
+                    <span className="hidden sm:inline font-medium">Next</span>
                     <ChevronRight className="w-4 h-4" />
-                  </button>
+                  </motion.button>
                 </div>
               </div>
             </GlassCard>

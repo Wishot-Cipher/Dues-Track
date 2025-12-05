@@ -7,6 +7,7 @@ import { useToast } from "@/hooks/useToast";
 import { colors, gradients } from "@/config/colors";
 import GlassCard from "@/components/ui/GlassCard";
 import { formatCurrency, formatDate } from "@/utils/formatters";
+import AnimatedCounter from "@/components/ui/AnimatedCounter";
 import {
   CheckCircle,
   XCircle,
@@ -18,6 +19,12 @@ import {
   Check,
   Clock,
   ArrowLeft,
+  Shield,
+  Sparkles,
+  Filter,
+  ExternalLink,
+  ChevronLeft,
+  ChevronRight,
 } from "lucide-react";
 import Footer from "@/components/Footer";
 import notificationService from "@/services/notificationService";
@@ -316,55 +323,89 @@ export default function AdminReviewPage() {
           initial={{ opacity: 0, y: -20 }}
           animate={{ opacity: 1, y: 0 }}
         >
-          <GlassCard>
-            <div className="flex flex-col sm:flex-row items-center sm:items-start justify-between gap-4">
+          <GlassCard className="relative overflow-hidden">
+            {/* Decorative Elements */}
+            <div className="absolute top-0 right-0 w-64 h-64 opacity-5 pointer-events-none">
+              <Shield className="w-full h-full" style={{ color: colors.warning }} />
+            </div>
+            <div 
+              className="absolute top-0 left-0 w-full h-1"
+              style={{ background: `linear-gradient(90deg, ${colors.warning}, ${colors.primary}, transparent)` }}
+            />
+            
+            <div className="relative z-10 flex flex-col sm:flex-row items-center sm:items-start justify-between gap-4">
               <div className="text-center sm:text-left w-full sm:w-auto">
-                <button
+                <motion.button
+                  whileHover={{ x: -4 }}
                   onClick={() => navigate("/admin/dashboard")}
-                  className="flex items-center justify-center sm:justify-start gap-2 mb-4 px-3 py-2 rounded-lg transition-colors w-auto outline outline-orange-500 "
-                  style={{ color: colors.textSecondary }}
-                  onMouseEnter={(e) =>
-                    (e.currentTarget.style.color = colors.primary)
-                  }
-                  onMouseLeave={(e) =>
-                    (e.currentTarget.style.color = colors.textSecondary)
-                  }
-                >
-                  <ArrowLeft size={16} />
-                  <span>Back to Dashboard</span>
-                </button>
-                <h1 className="text-2xl sm:text-3xl font-bold text-white mb-2">
-                  Payment Review
-                </h1>
-                <p
-                  className="text-sm sm:text-base"
-                  style={{ color: colors.textSecondary }}
-                >
-                  Review and approve pending payment submissions
-                </p>
-              </div>
-              <div className="flex items-center gap-3 w-full sm:w-auto justify-center">
-                <div
-                  className="px-4 sm:px-6 py-3 sm:py-4 rounded-xl w-full sm:w-auto text-center"
-                  style={{
-                    background: `${colors.warning}20`,
-                    border: `1px solid ${colors.warning}40`,
+                  className="flex items-center justify-center sm:justify-start gap-2 mb-4 px-4 py-2 rounded-xl transition-all"
+                  style={{ 
+                    background: `${colors.primary}15`,
+                    border: `1px solid ${colors.primary}30`,
+                    color: colors.primary 
                   }}
                 >
-                  <p
-                    className="text-xs sm:text-sm"
-                    style={{ color: colors.textSecondary }}
-                  >
+                  <ArrowLeft size={16} />
+                  <span className="font-medium">Back to Dashboard</span>
+                </motion.button>
+                
+                {/* Badge */}
+                <motion.div 
+                  initial={{ opacity: 0, scale: 0.9 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  transition={{ delay: 0.1 }}
+                  className="inline-flex items-center gap-2 px-3 py-1 rounded-full text-xs font-semibold mb-3"
+                  style={{ 
+                    background: `linear-gradient(135deg, ${colors.warning}30, ${colors.warning}10)`,
+                    border: `1px solid ${colors.warning}40`,
+                    color: colors.warning,
+                  }}
+                >
+                  <Sparkles className="w-3 h-3" />
+                  PAYMENT REVIEW CENTER
+                </motion.div>
+                
+                <h1 className="text-2xl sm:text-3xl font-bold text-white mb-2">
+                  Review Submissions
+                </h1>
+                <p
+                  className="text-sm sm:text-base flex items-center justify-center sm:justify-start gap-2"
+                  style={{ color: colors.textSecondary }}
+                >
+                  <Filter className="w-4 h-4" />
+                  Approve or reject pending payment submissions
+                </p>
+              </div>
+              
+              {/* Stats Card */}
+              <motion.div
+                whileHover={{ scale: 1.02, y: -2 }}
+                className="flex items-center gap-4 px-6 py-4 rounded-2xl cursor-pointer"
+                style={{
+                  background: `linear-gradient(135deg, ${colors.warning}20, ${colors.warning}05)`,
+                  border: `1px solid ${colors.warning}40`,
+                  boxShadow: `0 4px 20px ${colors.warning}20`
+                }}
+                onClick={() => setFilter('pending')}
+              >
+                {/* Pulsing indicator */}
+                {payments.filter((p) => p.status === "pending").length > 0 && (
+                  <div className="absolute -top-1 -right-1 w-3 h-3 rounded-full animate-pulse"
+                       style={{ background: colors.warning, boxShadow: `0 0 8px ${colors.warning}` }} />
+                )}
+                <div className="w-14 h-14 rounded-xl flex items-center justify-center"
+                     style={{ background: `${colors.warning}30` }}>
+                  <Clock className="w-7 h-7" style={{ color: colors.warning }} />
+                </div>
+                <div>
+                  <p className="text-xs font-medium" style={{ color: colors.textSecondary }}>
                     Pending Review
                   </p>
-                  <p
-                    className="text-2xl sm:text-3xl font-bold mt-1"
-                    style={{ color: colors.warning }}
-                  >
-                    {payments.filter((p) => p.status === "pending").length}
+                  <p className="text-3xl font-bold" style={{ color: colors.warning }}>
+                    <AnimatedCounter value={payments.filter((p) => p.status === "pending").length} />
                   </p>
                 </div>
-              </div>
+              </motion.div>
             </div>
           </GlassCard>
         </motion.div>
@@ -375,47 +416,74 @@ export default function AdminReviewPage() {
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.1 }}
         >
-          <GlassCard>
+          <GlassCard className="relative overflow-hidden">
+            <div 
+              className="absolute top-0 left-0 w-full h-0.5 opacity-40"
+              style={{ background: `linear-gradient(90deg, ${colors.accentMint}, transparent)` }}
+            />
+            
+            <div className="flex items-center gap-3 mb-4">
+              <Filter className="w-5 h-5" style={{ color: colors.textSecondary }} />
+              <span className="text-sm font-medium" style={{ color: colors.textSecondary }}>Filter by status</span>
+            </div>
+            
             <div className="flex flex-wrap gap-2">
               {[
-                { value: "all", label: "All Payments", count: payments.length },
+                { value: "all", label: "All Payments", count: payments.length, color: colors.primary },
                 {
                   value: "pending",
                   label: "Pending",
                   count: payments.filter((p) => p.status === "pending").length,
+                  color: colors.warning
                 },
                 {
                   value: "approved",
                   label: "Approved",
                   count: payments.filter((p) => p.status === "approved").length,
+                  color: colors.statusPaid
                 },
                 {
                   value: "rejected",
                   label: "Rejected",
                   count: payments.filter((p) => p.status === "rejected").length,
+                  color: colors.statusUnpaid
                 },
-              ].map(({ value, label, count }) => (
-                <button
+              ].map(({ value, label, count, color }) => (
+                <motion.button
                   key={value}
+                  whileHover={{ scale: 1.02, y: -1 }}
+                  whileTap={{ scale: 0.98 }}
                   onClick={() => {
                     setFilter(value as typeof filter);
                     setCurrentPage(1);
                   }}
-                  className="px-4 py-2 rounded-lg text-sm font-medium transition-all"
+                  className="px-4 py-2.5 rounded-xl text-sm font-medium transition-all relative"
                   style={{
                     background:
                       filter === value
-                        ? `${colors.primary}30`
-                        : "rgba(255, 255, 255, 0.05)",
+                        ? `linear-gradient(135deg, ${color}30, ${color}10)`
+                        : "rgba(255, 255, 255, 0.03)",
                     border: `1px solid ${
-                      filter === value ? colors.primary + "60" : "transparent"
+                      filter === value ? color + "60" : "rgba(255, 255, 255, 0.1)"
                     }`,
-                    color:
-                      filter === value ? colors.primary : colors.textSecondary,
+                    color: filter === value ? color : colors.textSecondary,
+                    boxShadow: filter === value ? `0 2px 10px ${color}20` : 'none'
                   }}
                 >
-                  {label} ({count})
-                </button>
+                  <span className="flex items-center gap-2">
+                    {value === 'pending' && <Clock className="w-3.5 h-3.5" />}
+                    {value === 'approved' && <CheckCircle className="w-3.5 h-3.5" />}
+                    {value === 'rejected' && <XCircle className="w-3.5 h-3.5" />}
+                    {label}
+                    <span className="px-1.5 py-0.5 rounded-md text-xs font-bold"
+                          style={{ 
+                            background: filter === value ? `${color}40` : 'rgba(255, 255, 255, 0.1)',
+                            color: filter === value ? 'white' : colors.textSecondary
+                          }}>
+                      {count}
+                    </span>
+                  </span>
+                </motion.button>
               ))}
             </div>
           </GlassCard>
@@ -841,64 +909,74 @@ export default function AdminReviewPage() {
                     of {filteredPayments.length}
                   </p>
                   <div className="flex flex-wrap items-center justify-center gap-2">
-                    <button
+                    <motion.button
+                      whileHover={{ scale: 1.02 }}
+                      whileTap={{ scale: 0.98 }}
                       onClick={() => {
                         setCurrentPage((p) => Math.max(1, p - 1));
                         scrollToTop();
                       }}
                       disabled={currentPage === 1}
-                      className="px-3 sm:px-4 py-2 rounded-lg text-xs sm:text-sm font-medium transition-all disabled:opacity-30 disabled:cursor-not-allowed"
+                      className="flex items-center gap-1 px-3 sm:px-4 py-2 rounded-xl text-xs sm:text-sm font-medium transition-all disabled:opacity-30 disabled:cursor-not-allowed"
                       style={{
                         background:
                           currentPage === 1
                             ? "rgba(255, 255, 255, 0.05)"
-                            : `${colors.primary}20`,
+                            : `linear-gradient(135deg, ${colors.primary}20, ${colors.primary}10)`,
+                        border: `1px solid ${currentPage === 1 ? 'transparent' : colors.primary + '40'}`,
                         color:
                           currentPage === 1
                             ? colors.textSecondary
                             : colors.primary,
                       }}
                     >
+                      <ChevronLeft className="w-4 h-4" />
                       Previous
-                    </button>
+                    </motion.button>
                     <div className="flex flex-wrap gap-1 justify-center">
                       {Array.from({ length: totalPages }, (_, i) => i + 1).map(
                         (page) => (
-                          <button
+                          <motion.button
                             key={page}
+                            whileHover={{ scale: 1.1 }}
+                            whileTap={{ scale: 0.95 }}
                             onClick={() => {
                               setCurrentPage(page);
                               scrollToTop();
                             }}
-                            className="w-8 h-8 sm:w-10 sm:h-10 rounded-lg text-xs sm:text-sm font-medium transition-all"
+                            className="w-8 h-8 sm:w-10 sm:h-10 rounded-xl text-xs sm:text-sm font-medium transition-all"
                             style={{
                               background:
                                 currentPage === page
-                                  ? colors.primary
+                                  ? gradients.primary
                                   : "rgba(255, 255, 255, 0.05)",
                               color:
                                 currentPage === page
                                   ? "white"
                                   : colors.textSecondary,
+                              boxShadow: currentPage === page ? `0 2px 10px ${colors.primary}40` : 'none'
                             }}
                           >
                             {page}
-                          </button>
+                          </motion.button>
                         )
                       )}
                     </div>
-                    <button
+                    <motion.button
+                      whileHover={{ scale: 1.02 }}
+                      whileTap={{ scale: 0.98 }}
                       onClick={() => {
                         setCurrentPage((p) => Math.min(totalPages, p + 1));
                         scrollToTop();
                       }}
                       disabled={currentPage === totalPages}
-                      className="px-3 sm:px-4 py-2 rounded-lg text-xs sm:text-sm font-medium transition-all disabled:opacity-30 disabled:cursor-not-allowed"
+                      className="flex items-center gap-1 px-3 sm:px-4 py-2 rounded-xl text-xs sm:text-sm font-medium transition-all disabled:opacity-30 disabled:cursor-not-allowed"
                       style={{
                         background:
                           currentPage === totalPages
                             ? "rgba(255, 255, 255, 0.05)"
-                            : `${colors.primary}20`,
+                            : `linear-gradient(135deg, ${colors.primary}20, ${colors.primary}10)`,
+                        border: `1px solid ${currentPage === totalPages ? 'transparent' : colors.primary + '40'}`,
                         color:
                           currentPage === totalPages
                             ? colors.textSecondary
@@ -906,7 +984,8 @@ export default function AdminReviewPage() {
                       }}
                     >
                       Next
-                    </button>
+                      <ChevronRight className="w-4 h-4" />
+                    </motion.button>
                   </div>
                 </div>
               ) : (
@@ -932,136 +1011,216 @@ export default function AdminReviewPage() {
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50 p-4"
+            className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 overflow-y-auto"
             onClick={() => setSelectedPayment(null)}
           >
-            <motion.div
-              initial={{ scale: 0.9, opacity: 0 }}
-              animate={{ scale: 1, opacity: 1 }}
-              exit={{ scale: 0.9, opacity: 0 }}
-              className="w-full max-w-4xl"
-              onClick={(e) => e.stopPropagation()}
-            >
-              <GlassCard>
-                {/* Header */}
-                <div
-                  className="flex items-center justify-between mb-6 pb-4 border-b"
-                  style={{ borderColor: "rgba(255, 255, 255, 0.1)" }}
-                >
-                  <div>
-                    <h2 className="text-2xl font-bold text-white mb-1">
-                      Payment Receipt
-                    </h2>
-                    <p style={{ color: colors.textSecondary }}>
-                      {selectedPayment.students.full_name}
-                    </p>
-                  </div>
-                  <button
-                    onClick={() => setSelectedPayment(null)}
-                    className="p-2 hover:bg-white/10 rounded-lg transition-colors"
+            <div className="min-h-full flex items-start justify-center p-4 py-8">
+              <motion.div
+                initial={{ scale: 0.9, opacity: 0, y: 20 }}
+                animate={{ scale: 1, opacity: 1, y: 0 }}
+                exit={{ scale: 0.9, opacity: 0, y: 20 }}
+                transition={{ type: 'spring', damping: 25, stiffness: 300 }}
+                className="w-full max-w-4xl"
+                onClick={(e) => e.stopPropagation()}
+              >
+                <GlassCard className="p-0 overflow-hidden">
+                  {/* Gradient Header */}
+                  <div
+                    className="relative p-6 border-b"
+                    style={{ 
+                      borderColor: "rgba(255, 255, 255, 0.1)",
+                      background: `linear-gradient(135deg, ${colors.primary}15 0%, transparent 100%)`
+                    }}
                   >
-                    <X
-                      className="w-6 h-6"
-                      style={{ color: colors.textSecondary }}
+                    <div 
+                      className="absolute top-0 left-0 w-full h-1"
+                      style={{ background: `linear-gradient(90deg, ${colors.primary}, ${colors.accentMint}, transparent)` }}
                     />
-                  </button>
-                </div>
-
-                {/* Receipt Image */}
-                <div className="mb-6 max-h-[60vh] overflow-y-auto rounded-lg">
-                  <img
-                    src={selectedPayment.receipt_url}
-                    alt="Payment Receipt"
-                    className="w-full rounded-lg"
-                    style={{ background: "rgba(0, 0, 0, 0.5)" }}
-                  />
-                </div>
-
-                {/* Payment Info */}
-                <div
-                  className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6 p-4 rounded-lg"
-                  style={{ background: "rgba(255, 255, 255, 0.05)" }}
-                >
-                  <div>
-                    <p
-                      className="text-xs mb-1"
-                      style={{ color: colors.textSecondary }}
-                    >
-                      Amount
-                    </p>
-                    <p className="text-white font-semibold text-lg">
-                      {formatCurrency(selectedPayment.amount)}
-                    </p>
+                    <div className="flex items-start justify-between">
+                      <div className="flex items-center gap-4">
+                        <motion.div 
+                          initial={{ scale: 0.8 }}
+                          animate={{ scale: 1 }}
+                          className="w-14 h-14 rounded-2xl flex items-center justify-center shadow-lg"
+                          style={{ 
+                            background: `linear-gradient(135deg, ${colors.primary}40, ${colors.primary}20)`,
+                            border: `1px solid ${colors.primary}50`,
+                            boxShadow: `0 4px 15px ${colors.primary}30`
+                          }}
+                        >
+                          <FileText className="w-7 h-7" style={{ color: colors.primary }} />
+                        </motion.div>
+                        <div>
+                          <div className="flex items-center gap-2 mb-1">
+                            <span className="px-2 py-0.5 rounded-full text-[10px] font-bold uppercase"
+                                  style={{ background: `${colors.primary}30`, color: colors.primary }}>
+                              Payment Receipt
+                            </span>
+                            {(() => {
+                              const badge = getStatusBadge(selectedPayment.status, selectedPayment.transaction_ref);
+                              return (
+                                <span className="px-2 py-0.5 rounded-full text-[10px] font-bold uppercase"
+                                      style={{ background: badge.bg, color: badge.color }}>
+                                  {badge.label}
+                                </span>
+                              );
+                            })()}
+                          </div>
+                          <h2 className="text-xl sm:text-2xl font-bold text-white">
+                            {selectedPayment.students.full_name}
+                          </h2>
+                          <p className="flex items-center gap-2 text-sm" style={{ color: colors.textSecondary }}>
+                            <User className="w-4 h-4" />
+                            {selectedPayment.students.reg_number} • {selectedPayment.students.level}
+                          </p>
+                        </div>
+                      </div>
+                      <motion.button
+                        whileHover={{ scale: 1.1, rotate: 90 }}
+                        whileTap={{ scale: 0.9 }}
+                        onClick={() => setSelectedPayment(null)}
+                        className="p-2 hover:bg-white/10 rounded-xl transition-colors"
+                      >
+                        <X className="w-6 h-6" style={{ color: colors.textSecondary }} />
+                      </motion.button>
+                    </div>
                   </div>
-                  <div>
-                    <p
-                      className="text-xs mb-1"
-                      style={{ color: colors.textSecondary }}
-                    >
-                      Payment Type
-                    </p>
-                    <p className="text-white font-medium">
-                      {selectedPayment.payment_types.title}
-                    </p>
-                  </div>
-                  <div>
-                    <p
-                      className="text-xs mb-1"
-                      style={{ color: colors.textSecondary }}
-                    >
-                      Transaction Ref
-                    </p>
-                    <p className="text-white font-mono text-sm">
-                      {selectedPayment.transaction_ref}
-                    </p>
-                  </div>
-                </div>
 
-                {/* Actions */}
-                <div className="flex flex-col sm:flex-row gap-3">
-                  <button
-                    onClick={() =>
-                      window.open(selectedPayment.receipt_url, "_blank")
-                    }
-                    className="flex-1 flex items-center justify-center gap-2 py-3 rounded-lg font-medium transition-all"
-                    style={{
-                      background: `${colors.primary}20`,
-                      border: `1px solid ${colors.primary}40`,
-                      color: colors.primary,
-                    }}
-                  >
-                    <FileText className="w-5 h-5" />
-                    Open Full Size
-                  </button>
-                  <button
-                    onClick={() => {
-                      setShowApproveModal(true);
-                    }}
-                    disabled={processingId === selectedPayment.id}
-                    className="flex-1 flex items-center justify-center gap-2 py-3 rounded-lg font-medium text-white transition-all disabled:opacity-50"
-                    style={{ background: gradients.primary }}
-                  >
-                    <CheckCircle className="w-5 h-5" />
-                    {processingId === selectedPayment.id
-                      ? "Approving..."
-                      : "Approve Payment"}
-                  </button>
-                  <button
-                    onClick={() => setShowRejectModal(true)}
-                    disabled={processingId === selectedPayment.id}
-                    className="flex-1 flex items-center justify-center gap-2 py-3 rounded-lg font-medium transition-all disabled:opacity-50"
-                    style={{
-                      background: `${colors.statusUnpaid}20`,
-                      border: `1px solid ${colors.statusUnpaid}40`,
-                      color: colors.statusUnpaid,
-                    }}
-                  >
-                    <XCircle className="w-5 h-5" />
-                    Reject Payment
-                  </button>
-                </div>
-              </GlassCard>
-            </motion.div>
+                  {/* Body - Scrollable Content */}
+                  <div className="p-6 space-y-6">
+                    {/* Payment Details Grid */}
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                      <div className="p-4 rounded-xl text-center" 
+                           style={{ background: `linear-gradient(135deg, ${colors.primary}20, ${colors.primary}05)`, border: `1px solid ${colors.primary}30` }}>
+                        <p className="text-xs font-medium mb-1" style={{ color: colors.textSecondary }}>Amount</p>
+                        <p className="text-xl sm:text-2xl font-bold" style={{ color: colors.primary }}>
+                          {formatCurrency(selectedPayment.amount)}
+                        </p>
+                      </div>
+                      <div className="p-4 rounded-xl text-center" 
+                           style={{ background: 'rgba(255, 255, 255, 0.03)', border: '1px solid rgba(255, 255, 255, 0.08)' }}>
+                        <p className="text-xs font-medium mb-1" style={{ color: colors.textSecondary }}>Payment Type</p>
+                        <p className="text-white font-semibold text-sm sm:text-base">
+                          {selectedPayment.payment_types.title}
+                        </p>
+                      </div>
+                      <div className="p-4 rounded-xl text-center" 
+                           style={{ background: 'rgba(255, 255, 255, 0.03)', border: '1px solid rgba(255, 255, 255, 0.08)' }}>
+                        <p className="text-xs font-medium mb-1" style={{ color: colors.textSecondary }}>Category</p>
+                        <p className="text-white font-medium capitalize text-sm">
+                          {selectedPayment.payment_types.category.replace("_", " ")}
+                        </p>
+                      </div>
+                      <div className="p-4 rounded-xl text-center" 
+                           style={{ background: 'rgba(255, 255, 255, 0.03)', border: '1px solid rgba(255, 255, 255, 0.08)' }}>
+                        <p className="text-xs font-medium mb-1" style={{ color: colors.textSecondary }}>Submitted</p>
+                        <p className="text-white font-medium text-sm">
+                          {formatDate(selectedPayment.created_at, "short")}
+                        </p>
+                      </div>
+                    </div>
+
+                    {/* Transaction Reference */}
+                    <div className="p-4 rounded-xl" 
+                         style={{ background: 'rgba(255, 255, 255, 0.03)', border: '1px solid rgba(255, 255, 255, 0.08)' }}>
+                      <p className="text-xs font-medium mb-2" style={{ color: colors.textSecondary }}>Transaction Reference</p>
+                      <p className="text-white font-mono text-sm sm:text-base break-all bg-black/20 px-3 py-2 rounded-lg">
+                        {selectedPayment.transaction_ref}
+                      </p>
+                    </div>
+
+                    {/* Notes if available */}
+                    {selectedPayment.notes && (
+                      <div className="p-4 rounded-xl" 
+                           style={{ background: `${colors.accentMint}08`, border: `1px solid ${colors.accentMint}20` }}>
+                        <p className="text-xs font-medium mb-2" style={{ color: colors.accentMint }}>Payment Notes</p>
+                        <p className="text-white text-sm whitespace-pre-wrap">
+                          {selectedPayment.notes}
+                        </p>
+                      </div>
+                    )}
+
+                    {/* Rejection reason if rejected */}
+                    {selectedPayment.status === 'rejected' && selectedPayment.rejection_reason && (
+                      <div className="p-4 rounded-xl" 
+                           style={{ background: `${colors.statusUnpaid}10`, border: `1px solid ${colors.statusUnpaid}30` }}>
+                        <p className="text-xs font-medium mb-2" style={{ color: colors.statusUnpaid }}>Rejection Reason</p>
+                        <p className="text-white text-sm">
+                          {selectedPayment.rejection_reason}
+                        </p>
+                      </div>
+                    )}
+
+                    {/* Receipt Image Section */}
+                    <div>
+                      <p className="text-xs font-semibold uppercase tracking-wider mb-3" style={{ color: colors.textSecondary }}>
+                        Receipt Image
+                      </p>
+                      <div className="rounded-xl overflow-hidden border"
+                           style={{ background: 'rgba(0, 0, 0, 0.3)', borderColor: 'rgba(255, 255, 255, 0.1)' }}>
+                        <img
+                          src={selectedPayment.receipt_url}
+                          alt="Payment Receipt"
+                          className="w-full h-auto"
+                          style={{ maxHeight: '500px', objectFit: 'contain' }}
+                        />
+                      </div>
+                    </div>
+
+                    {/* Actions */}
+                    <div className="flex flex-col sm:flex-row gap-3 pt-4 border-t" style={{ borderColor: 'rgba(255, 255, 255, 0.1)' }}>
+                      <motion.button
+                        whileHover={{ scale: 1.02 }}
+                        whileTap={{ scale: 0.98 }}
+                        onClick={() => window.open(selectedPayment.receipt_url, "_blank")}
+                        className="flex-1 flex items-center justify-center gap-2 py-3.5 rounded-xl font-medium transition-all"
+                        style={{
+                          background: 'rgba(255, 255, 255, 0.05)',
+                          border: `1px solid ${colors.primary}40`,
+                          color: colors.primary,
+                        }}
+                      >
+                        <ExternalLink className="w-5 h-5" />
+                        Open Full Size
+                      </motion.button>
+                      {selectedPayment.status === "pending" && hasPermission('can_approve_payments') && (
+                        <>
+                          <motion.button
+                            whileHover={{ scale: 1.02 }}
+                            whileTap={{ scale: 0.98 }}
+                            onClick={() => setShowApproveModal(true)}
+                            disabled={processingId === selectedPayment.id}
+                            className="flex-1 flex items-center justify-center gap-2 py-3.5 rounded-xl font-semibold text-white transition-all disabled:opacity-50 shadow-lg"
+                            style={{ 
+                              background: `linear-gradient(135deg, ${colors.statusPaid}, ${colors.accentMint})`,
+                              boxShadow: `0 4px 15px ${colors.statusPaid}40`
+                            }}
+                          >
+                            <CheckCircle className="w-5 h-5" />
+                            {processingId === selectedPayment.id ? "Approving..." : "Approve Payment"}
+                          </motion.button>
+                          <motion.button
+                            whileHover={{ scale: 1.02 }}
+                            whileTap={{ scale: 0.98 }}
+                            onClick={() => setShowRejectModal(true)}
+                            disabled={processingId === selectedPayment.id}
+                            className="flex-1 flex items-center justify-center gap-2 py-3.5 rounded-xl font-semibold transition-all disabled:opacity-50"
+                            style={{
+                              background: `linear-gradient(135deg, ${colors.statusUnpaid}30, ${colors.statusUnpaid}10)`,
+                              border: `1px solid ${colors.statusUnpaid}50`,
+                              color: colors.statusUnpaid,
+                            }}
+                          >
+                            <XCircle className="w-5 h-5" />
+                            Reject Payment
+                          </motion.button>
+                        </>
+                      )}
+                    </div>
+                  </div>
+                </GlassCard>
+              </motion.div>
+            </div>
           </motion.div>
         )}
       </AnimatePresence>
@@ -1073,14 +1232,14 @@ export default function AdminReviewPage() {
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50 p-4"
+            className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-start justify-center z-50 p-4 overflow-y-auto"
             onClick={() => setShowApproveModal(false)}
           >
             <motion.div
               initial={{ scale: 0.9, opacity: 0 }}
               animate={{ scale: 1, opacity: 1 }}
               exit={{ scale: 0.9, opacity: 0 }}
-              className="w-full max-w-md"
+              className="w-full max-w-md my-8"
               onClick={(e) => e.stopPropagation()}
             >
               <GlassCard>
@@ -1182,7 +1341,7 @@ export default function AdminReviewPage() {
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50 p-4"
+            className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-start justify-center z-50 p-4 overflow-y-auto"
             onClick={() => {
               setShowRejectModal(false);
               setRejectionReason("");
@@ -1192,7 +1351,7 @@ export default function AdminReviewPage() {
               initial={{ scale: 0.9, opacity: 0 }}
               animate={{ scale: 1, opacity: 1 }}
               exit={{ scale: 0.9, opacity: 0 }}
-              className="w-full max-w-md"
+              className="w-full max-w-md my-8"
               onClick={(e) => e.stopPropagation()}
             >
               <GlassCard>

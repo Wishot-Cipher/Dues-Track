@@ -1,11 +1,10 @@
 import { useState } from "react";
 import { motion } from "framer-motion";
-import { Building2, Users, Palette, Check, ArrowLeft } from "lucide-react";
+import { Building2, Users, Palette, Check, ArrowLeft, Plus, Sparkles, CreditCard, Calendar, CheckCircle } from "lucide-react";
 import { colors } from "@/config/colors";
 import { useNavigate } from "react-router-dom";
 import GlassCard from "@/components/ui/GlassCard";
 import Input from "@/components/ui/Input";
-import CustomButton from "@/components/ui/CustomButton";
 import { useAuth } from "@/hooks/useAuth";
 import { useToast } from "@/hooks/useToast";
 import { supabase } from "@/config/supabase";
@@ -229,30 +228,102 @@ export default function CreatePaymentTypePage() {
 
       {/* Content */}
       <div className="relative z-10 max-w-4xl mx-auto px-4 py-8">
-        {/* Header */}
+        {/* Enhanced Header */}
         <motion.div
           className="mb-8"
           initial={{ opacity: 0, y: -20 }}
           animate={{ opacity: 1, y: 0 }}
         >
-          <button
-            onClick={() => navigate(-1)}
-            className="flex items-center justify-center sm:justify-start gap-2 mb-4 px-3 py-2 rounded-lg transition-colors w-auto outline outline-orange-500 "
-            style={{ color: colors.textSecondary }}
-            onMouseEnter={(e) => (e.currentTarget.style.color = colors.primary)}
-            onMouseLeave={(e) =>
-              (e.currentTarget.style.color = colors.textSecondary)
-            }
-          >
-            <ArrowLeft size={16} />
-            Back
-          </button>
-          <h1 className="text-3xl font-bold text-white mb-2">
-            ➕ Create New Payment
-          </h1>
-          <p style={{ color: colors.textSecondary }}>
-            Set up a new payment type for students to pay
-          </p>
+          <GlassCard className="relative overflow-hidden">
+            {/* Decorative Elements */}
+            <div className="absolute top-0 right-0 w-64 h-64 opacity-5 pointer-events-none">
+              <CreditCard className="w-full h-full" style={{ color: colors.primary }} />
+            </div>
+            <div 
+              className="absolute top-0 left-0 w-full h-1"
+              style={{ background: `linear-gradient(90deg, ${colors.primary}, ${colors.accentMint}, transparent)` }}
+            />
+            
+            <div className="relative z-10">
+              <motion.button
+                whileHover={{ x: -4 }}
+                onClick={() => navigate(-1)}
+                className="flex items-center gap-2 mb-4 px-4 py-2 rounded-xl transition-all"
+                style={{ 
+                  background: `${colors.primary}15`,
+                  border: `1px solid ${colors.primary}30`,
+                  color: colors.primary 
+                }}
+              >
+                <ArrowLeft size={16} />
+                <span className="font-medium">Back</span>
+              </motion.button>
+
+              <div className="flex flex-col sm:flex-row items-center sm:items-start gap-4">
+                <motion.div
+                  initial={{ scale: 0.9 }}
+                  animate={{ scale: 1 }}
+                  className="w-16 h-16 rounded-2xl flex items-center justify-center shrink-0 shadow-lg relative"
+                  style={{ 
+                    background: `linear-gradient(135deg, ${colors.primary}30, ${colors.primary}10)`,
+                    border: `1px solid ${colors.primary}40`,
+                    boxShadow: `0 4px 20px ${colors.primary}30`
+                  }}
+                >
+                  <Plus className="w-8 h-8" style={{ color: colors.primary }} />
+                  <Sparkles className="w-4 h-4 absolute -top-1 -right-1" style={{ color: colors.accentMint }} />
+                </motion.div>
+                <div className="text-center sm:text-left">
+                  <motion.div 
+                    initial={{ opacity: 0, scale: 0.9 }}
+                    animate={{ opacity: 1, scale: 1 }}
+                    transition={{ delay: 0.1 }}
+                    className="inline-flex items-center gap-2 px-3 py-1 rounded-full text-xs font-semibold mb-2"
+                    style={{ 
+                      background: `linear-gradient(135deg, ${colors.primary}30, ${colors.primary}10)`,
+                      border: `1px solid ${colors.primary}40`,
+                      color: colors.primary,
+                    }}
+                  >
+                    <Sparkles className="w-3 h-3" />
+                    CREATE PAYMENT
+                  </motion.div>
+                  <h1 className="text-2xl sm:text-3xl font-bold text-white">
+                    New Payment Type
+                  </h1>
+                  <p style={{ color: colors.textSecondary }}>
+                    Set up a new payment type for students to pay
+                  </p>
+                </div>
+              </div>
+
+              {/* Progress Steps */}
+              <div className="flex items-center justify-center gap-2 mt-6">
+                {['Basic Info', 'Bank Details', 'Target', 'Design'].map((step, index) => (
+                  <div key={step} className="flex items-center gap-2">
+                    <div className="flex items-center gap-2">
+                      <div 
+                        className="w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold"
+                        style={{ 
+                          background: `${colors.primary}20`,
+                          border: `2px solid ${colors.primary}`,
+                          color: colors.primary
+                        }}
+                      >
+                        {index + 1}
+                      </div>
+                      <span className="text-xs font-medium hidden sm:block" style={{ color: colors.textSecondary }}>
+                        {step}
+                      </span>
+                    </div>
+                    {index < 3 && (
+                      <div className="w-8 h-0.5 hidden sm:block" style={{ background: `${colors.primary}30` }} />
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
+          </GlassCard>
         </motion.div>
 
         <form onSubmit={handleSubmit}>
@@ -262,10 +333,21 @@ export default function CreatePaymentTypePage() {
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.1 }}
           >
-            <GlassCard className="mb-6">
-              <h2 className="text-xl font-bold text-white mb-4">
-                Basic Information
-              </h2>
+            <GlassCard className="mb-6 relative overflow-hidden">
+              <div 
+                className="absolute top-0 left-0 w-full h-1"
+                style={{ background: `linear-gradient(90deg, ${colors.primary}, transparent)` }}
+              />
+              <div className="flex items-center gap-3 mb-4">
+                <div className="w-10 h-10 rounded-xl flex items-center justify-center"
+                     style={{ background: `${colors.primary}15`, border: `1px solid ${colors.primary}30` }}>
+                  <CreditCard className="w-5 h-5" style={{ color: colors.primary }} />
+                </div>
+                <div>
+                  <h2 className="text-xl font-bold text-white">Basic Information</h2>
+                  <p className="text-xs" style={{ color: colors.textSecondary }}>Payment details and settings</p>
+                </div>
+              </div>
 
               <div className="space-y-4">
                 <Input
@@ -393,13 +475,16 @@ export default function CreatePaymentTypePage() {
                     Payment Deadline *
                   </label>
                   <div className="relative">
+                    <div className="absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none">
+                      <Calendar className="w-5 h-5" style={{ color: colors.primary }} />
+                    </div>
                     <input
                       type="date"
                       value={formData.deadline}
                       onChange={(e) =>
                         setFormData({ ...formData, deadline: e.target.value })
                       }
-                      className="w-full px-4 py-3 rounded-xl border text-white transition-all focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-orange-500 cursor-pointer"
+                      className="w-full pl-12 pr-4 py-3 rounded-xl border text-white transition-all focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-orange-500 cursor-pointer"
                       style={{
                         background: "rgba(255, 255, 255, 0.05)",
                         borderColor: "rgba(255, 104, 3, 0.2)",
@@ -407,32 +492,6 @@ export default function CreatePaymentTypePage() {
                       }}
                       required
                     />
-                    <div className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none">
-                      <svg
-                        width="20"
-                        height="20"
-                        viewBox="0 0 20 20"
-                        fill="none"
-                      >
-                        <rect
-                          x="3"
-                          y="4"
-                          width="14"
-                          height="14"
-                          rx="2"
-                          stroke="#FF6803"
-                          strokeWidth="1.5"
-                          fill="none"
-                        />
-                        <path d="M3 8H17" stroke="#FF6803" strokeWidth="1.5" />
-                        <path
-                          d="M7 2V4M13 2V4"
-                          stroke="#FF6803"
-                          strokeWidth="1.5"
-                          strokeLinecap="round"
-                        />
-                      </svg>
-                    </div>
                   </div>
                 </div>
               </div>
@@ -445,19 +504,21 @@ export default function CreatePaymentTypePage() {
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.2 }}
           >
-            <GlassCard className="mb-6">
+            <GlassCard className="mb-6 relative overflow-hidden">
+              <div 
+                className="absolute top-0 left-0 w-full h-1"
+                style={{ background: `linear-gradient(90deg, ${colors.accentMint}, transparent)` }}
+              />
               <div className="flex items-center gap-3 mb-4">
-                <Building2 size={24} style={{ color: colors.primary }} />
-                <h2 className="text-xl font-bold text-white">
-                  Bank Account Details
-                </h2>
+                <div className="w-10 h-10 rounded-xl flex items-center justify-center"
+                     style={{ background: `${colors.accentMint}15`, border: `1px solid ${colors.accentMint}30` }}>
+                  <Building2 className="w-5 h-5" style={{ color: colors.accentMint }} />
+                </div>
+                <div>
+                  <h2 className="text-xl font-bold text-white">Bank Account Details</h2>
+                  <p className="text-xs" style={{ color: colors.textSecondary }}>Where should payments be sent?</p>
+                </div>
               </div>
-              <p
-                className="text-sm mb-4"
-                style={{ color: colors.textSecondary }}
-              >
-                Which account should receive payments?
-              </p>
 
               <div className="space-y-4">
                 <div>
@@ -544,19 +605,21 @@ export default function CreatePaymentTypePage() {
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.3 }}
           >
-            <GlassCard className="mb-6">
+            <GlassCard className="mb-6 relative overflow-hidden">
+              <div 
+                className="absolute top-0 left-0 w-full h-1"
+                style={{ background: `linear-gradient(90deg, #3B82F6, transparent)` }}
+              />
               <div className="flex items-center gap-3 mb-4">
-                <Users size={24} style={{ color: colors.accentMint }} />
-                <h2 className="text-xl font-bold text-white">
-                  Target Students
-                </h2>
+                <div className="w-10 h-10 rounded-xl flex items-center justify-center"
+                     style={{ background: 'rgba(59, 130, 246, 0.15)', border: '1px solid rgba(59, 130, 246, 0.3)' }}>
+                  <Users className="w-5 h-5" style={{ color: '#3B82F6' }} />
+                </div>
+                <div>
+                  <h2 className="text-xl font-bold text-white">Target Students</h2>
+                  <p className="text-xs" style={{ color: colors.textSecondary }}>Select which students should pay</p>
+                </div>
               </div>
-              <p
-                className="text-sm mb-4"
-                style={{ color: colors.textSecondary }}
-              >
-                Who should pay this?
-              </p>
 
               <div>
                 <label className="block text-sm font-medium text-white mb-3">
@@ -598,10 +661,20 @@ export default function CreatePaymentTypePage() {
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.4 }}
           >
-            <GlassCard className="mb-6">
+            <GlassCard className="mb-6 relative overflow-hidden">
+              <div 
+                className="absolute top-0 left-0 w-full h-1"
+                style={{ background: `linear-gradient(90deg, #8B5CF6, transparent)` }}
+              />
               <div className="flex items-center gap-3 mb-4">
-                <Palette size={24} style={{ color: colors.warning }} />
-                <h2 className="text-xl font-bold text-white">Appearance</h2>
+                <div className="w-10 h-10 rounded-xl flex items-center justify-center"
+                     style={{ background: 'rgba(139, 92, 246, 0.15)', border: '1px solid rgba(139, 92, 246, 0.3)' }}>
+                  <Palette className="w-5 h-5" style={{ color: '#8B5CF6' }} />
+                </div>
+                <div>
+                  <h2 className="text-xl font-bold text-white">Appearance</h2>
+                  <p className="text-xs" style={{ color: colors.textSecondary }}>Customize how the payment looks</p>
+                </div>
               </div>
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
@@ -671,24 +744,31 @@ export default function CreatePaymentTypePage() {
               {/* Preview */}
               <div>
                 <label className="block text-sm font-medium text-white mb-3">
-                  Preview
+                  Live Preview
                 </label>
-                <div
-                  className="p-4 rounded-xl border-2"
+                <motion.div
+                  className="p-5 rounded-2xl border-2 relative overflow-hidden"
                   style={{
                     background: "rgba(255, 255, 255, 0.03)",
-                    borderColor: "rgba(255, 255, 255, 0.1)",
+                    borderColor: `${formData.color}40`,
+                    boxShadow: `0 4px 20px ${formData.color}20`
                   }}
+                  whileHover={{ scale: 1.02 }}
                 >
-                  <div className="flex items-center gap-3">
-                    <div
-                      className="w-12 h-12 rounded-lg flex items-center justify-center text-2xl"
-                      style={{ background: `${formData.color}20` }}
+                  <div 
+                    className="absolute top-0 left-0 w-full h-1"
+                    style={{ background: `linear-gradient(90deg, ${formData.color}, transparent)` }}
+                  />
+                  <div className="flex items-center gap-4">
+                    <motion.div
+                      className="w-14 h-14 rounded-xl flex items-center justify-center text-3xl"
+                      style={{ background: `${formData.color}20`, border: `1px solid ${formData.color}40` }}
+                      whileHover={{ scale: 1.1, rotate: 5 }}
                     >
                       {formData.icon}
-                    </div>
+                    </motion.div>
                     <div className="flex-1">
-                      <p className="font-semibold text-white">
+                      <p className="font-bold text-lg text-white">
                         {formData.title || "Payment Title"}
                       </p>
                       <p
@@ -698,43 +778,81 @@ export default function CreatePaymentTypePage() {
                         {formData.amount
                           ? formatCurrency(parseFloat(formData.amount))
                           : "₦0"}{" "}
-                        | Due:{" "}
+                        • Due:{" "}
                         {formData.deadline
                           ? formatDate(formData.deadline, "short")
                           : "Not set"}
                       </p>
+                      <div className="flex items-center gap-2 mt-2">
+                        {formData.is_mandatory && (
+                          <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold"
+                                style={{ background: `${colors.statusFailed}20`, color: colors.statusFailed }}>
+                            MANDATORY
+                          </span>
+                        )}
+                        {formData.allow_partial && (
+                          <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold"
+                                style={{ background: `${colors.accentMint}20`, color: colors.accentMint }}>
+                            PARTIAL OK
+                          </span>
+                        )}
+                      </div>
                     </div>
+                    <CheckCircle className="w-6 h-6" style={{ color: colors.statusPaid }} />
                   </div>
-                </div>
+                </motion.div>
               </div>
             </GlassCard>
           </motion.div>
 
           {/* Submit Buttons */}
           <motion.div
-            className="flex gap-4"
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.5 }}
           >
-            <CustomButton
-              type="submit"
-              loading={loading}
-              disabled={loading}
-              className="flex-1"
-            >
-              <Check size={20} />
-              Create Payment
-            </CustomButton>
+            <GlassCard className="relative overflow-hidden">
+              <div 
+                className="absolute bottom-0 left-0 w-full h-1"
+                style={{ background: `linear-gradient(90deg, ${colors.statusPaid}, ${colors.accentMint}, transparent)` }}
+              />
+              <div className="flex flex-col sm:flex-row gap-4">
+                <motion.button
+                  type="submit"
+                  disabled={loading}
+                  whileHover={{ scale: 1.02 }}
+                  whileTap={{ scale: 0.98 }}
+                  className="flex-1 flex items-center justify-center gap-3 px-6 py-4 rounded-xl font-bold text-white transition-all disabled:opacity-50"
+                  style={{ 
+                    background: `linear-gradient(135deg, ${colors.statusPaid}, ${colors.accentMint})`,
+                    boxShadow: `0 4px 20px ${colors.statusPaid}40`
+                  }}
+                >
+                  {loading ? (
+                    <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                  ) : (
+                    <Check size={20} />
+                  )}
+                  {loading ? 'Creating...' : 'Create Payment Type'}
+                </motion.button>
 
-            <CustomButton
-              type="button"
-              onClick={() => navigate(-1)}
-              variant="secondary"
-              disabled={loading}
-            >
-              Cancel
-            </CustomButton>
+                <motion.button
+                  type="button"
+                  onClick={() => navigate(-1)}
+                  disabled={loading}
+                  whileHover={{ scale: 1.02 }}
+                  whileTap={{ scale: 0.98 }}
+                  className="px-6 py-4 rounded-xl font-medium transition-all"
+                  style={{ 
+                    background: 'rgba(255, 255, 255, 0.05)',
+                    border: '1px solid rgba(255, 255, 255, 0.1)',
+                    color: colors.textSecondary
+                  }}
+                >
+                  Cancel
+                </motion.button>
+              </div>
+            </GlassCard>
           </motion.div>
         </form>
       </div>

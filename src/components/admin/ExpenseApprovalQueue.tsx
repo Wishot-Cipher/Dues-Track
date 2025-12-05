@@ -206,22 +206,49 @@ export default function ExpenseApprovalQueue() {
   }
 
   return (
-    <GlassCard className="p-6">
+    <GlassCard className="p-6 relative overflow-hidden">
+      {/* Decorative Top Border */}
+      <div 
+        className="absolute top-0 left-0 w-full h-1"
+        style={{ background: `linear-gradient(90deg, ${colors.warning}, ${colors.primary}, transparent)` }}
+      />
+      
       <div className="text-white">
-        <div className="flex items-center justify-between mb-4">
-          <div>
-            <h2 className="text-xl font-bold">Expense Approval Queue</h2>
-            <p className="text-sm mt-1" style={{ color: colors.textSecondary }}>
-              {pendingExpenses.length} expense{pendingExpenses.length !== 1 ? 's' : ''} awaiting approval
-            </p>
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
+          <div className="flex items-center gap-3">
+            <div 
+              className="w-12 h-12 rounded-xl flex items-center justify-center shrink-0 relative"
+              style={{ 
+                background: `linear-gradient(135deg, ${colors.warning}30, ${colors.warning}10)`,
+                border: `1px solid ${colors.warning}40`
+              }}
+            >
+              <svg className="w-6 h-6" style={{ color: colors.warning }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+              {pendingExpenses.length > 0 && (
+                <div className="absolute -top-1 -right-1 w-3 h-3 rounded-full animate-pulse"
+                     style={{ background: colors.warning, boxShadow: `0 0 8px ${colors.warning}` }} />
+              )}
+            </div>
+            <div>
+              <h2 className="text-xl font-bold text-white">Expense Approval Queue</h2>
+              <p className="text-xs sm:text-sm" style={{ color: colors.textSecondary }}>
+                {pendingExpenses.length} expense{pendingExpenses.length !== 1 ? 's' : ''} awaiting approval
+              </p>
+            </div>
           </div>
           <button
             onClick={loadPendingExpenses}
-            className="px-4 py-2 rounded-lg transition-all hover:bg-white/10"
-            style={{ border: `1px solid ${colors.borderLight}` }}
+            className="flex items-center gap-2 px-4 py-2.5 rounded-xl transition-all hover:scale-105"
+            style={{ 
+              background: `linear-gradient(135deg, ${colors.primary}20, ${colors.primary}10)`,
+              border: `1px solid ${colors.primary}40`,
+              color: colors.primary
+            }}
             disabled={loading}
           >
-            🔄 Refresh
+            🔄 <span className="font-medium">Refresh</span>
           </button>
         </div>
 
@@ -343,8 +370,8 @@ export default function ExpenseApprovalQueue() {
 
         {/* Rejection Modal */}
         {selectedExpense && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-70 p-4">
-            <div className="max-w-md w-full">
+          <div className="fixed inset-0 z-50 flex items-start justify-center bg-black bg-opacity-70 p-4 overflow-y-auto">
+            <div className="max-w-md w-full my-8">
               <GlassCard className="p-6">
                 <h3 className="text-lg font-bold text-white mb-4">Reject Expense</h3>
                 <p className="text-sm mb-4" style={{ color: colors.textSecondary }}>
@@ -405,7 +432,7 @@ export default function ExpenseApprovalQueue() {
         {/* Image Modal */}
         {imageModal && (
           <div 
-            className="fixed inset-0 z-200 flex items-center justify-center bg-black/90 p-4"
+            className="fixed inset-0 z-100 flex items-center justify-center bg-black/90 p-4"
             onClick={() => setImageModal(null)}
           >
             <button

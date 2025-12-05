@@ -1,10 +1,12 @@
 import { useState, useEffect } from 'react'
-import { motion } from 'framer-motion'
-import { Eye, EyeOff, Save, Shield, DollarSign } from 'lucide-react'
+import { motion, AnimatePresence } from 'framer-motion'
+import { Eye, EyeOff, Save, Shield, DollarSign, ChevronDown, ChevronUp } from 'lucide-react'
 import { colors, gradients } from '@/config/colors'
 import { useAuth } from '@/hooks/useAuth'
 import expenseVisibilityService, { type ExpenseVisibilitySetting } from '@/services/expenseVisibilityService'
 import GlassCard from '@/components/ui/GlassCard'
+
+const INITIAL_VISIBLE_COUNT = 3;
 
 export default function ExpenseVisibilitySettings() {
   const { user } = useAuth()
@@ -12,6 +14,7 @@ export default function ExpenseVisibilitySettings() {
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null)
+  const [showAll, setShowAll] = useState(false)
 
   useEffect(() => {
     loadSettings()
@@ -166,64 +169,94 @@ export default function ExpenseVisibilitySettings() {
 
       {/* Settings List */}
       <div className="space-y-3 mb-6">
-        {settings.map((setting, index) => (
-          <motion.div
-            key={setting.id}
-            initial={{ opacity: 0, y: 10 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: index * 0.05 }}
-            className="p-4 rounded-lg border transition-all"
-            style={{
-              background: setting.is_visible 
-                ? 'rgba(34, 197, 94, 0.05)' 
-                : 'rgba(156, 163, 175, 0.05)',
-              borderColor: setting.is_visible
-                ? 'rgba(34, 197, 94, 0.2)'
-                : 'rgba(156, 163, 175, 0.2)'
+        <AnimatePresence>
+          {(showAll ? settings : settings.slice(0, INITIAL_VISIBLE_COUNT)).map((setting, index) => (
+            <motion.div
+              key={setting.id}
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, height: 0 }}
+              transition={{ delay: index * 0.05 }}
+              className="p-4 rounded-lg border transition-all"
+              style={{
+                background: setting.is_visible 
+                  ? 'rgba(34, 197, 94, 0.05)' 
+                  : 'rgba(156, 163, 175, 0.05)',
+                borderColor: setting.is_visible
+                  ? 'rgba(34, 197, 94, 0.2)'
+                  : 'rgba(156, 163, 175, 0.2)'
+              }}
+            >
+              <div className="flex items-start gap-3">
+                {/* Icon */}
+                <div 
+                  className="w-10 h-10 rounded-lg flex items-center justify-center shrink-0"
+                  style={{ 
+                    background: setting.is_visible ? gradients.primary : 'rgba(156, 163, 175, 0.2)'
+                  }}
+                >
+                  {setting.is_visible ? (
+                    <Eye className="w-5 h-5 text-white" />
+                  ) : (
+                    <EyeOff className="w-5 h-5 text-gray-400" />
+                  )}
+                </div>
+
+                {/* Content */}
+                <div className="flex-1 min-w-0">
+                  <h4 className="text-sm font-semibold text-white mb-1">
+                    {setting.display_name}
+                  </h4>
+                  <p className="text-xs" style={{ color: colors.textSecondary }}>
+                    {setting.description}
+                  </p>
+                </div>
+
+                {/* Toggle Switch */}
+                <button
+                  onClick={() => handleToggle(setting.setting_key)}
+                  className="shrink-0 relative w-12 h-6 rounded-full transition-all"
+                  style={{
+                    background: setting.is_visible ? colors.primary : 'rgba(156, 163, 175, 0.3)'
+                  }}
+                >
+                  <motion.div
+                    className="absolute top-1 w-4 h-4 bg-white rounded-full"
+                    animate={{ left: setting.is_visible ? '28px' : '4px' }}
+                    transition={{ type: 'spring', stiffness: 500, damping: 30 }}
+                  />
+                </button>
+              </div>
+            </motion.div>
+          ))}
+        </AnimatePresence>
+        
+        {/* Show More/Less Button */}
+        {settings.length > INITIAL_VISIBLE_COUNT && (
+          <motion.button
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            onClick={() => setShowAll(!showAll)}
+            className="w-full py-3 rounded-xl text-sm font-medium flex items-center justify-center gap-2 transition-all"
+            style={{ 
+              background: 'rgba(255, 255, 255, 0.05)',
+              border: `1px solid rgba(255, 255, 255, 0.1)`,
+              color: colors.accentMint
             }}
           >
-            <div className="flex items-start gap-3">
-              {/* Icon */}
-              <div 
-                className="w-10 h-10 rounded-lg flex items-center justify-center shrink-0"
-                style={{ 
-                  background: setting.is_visible ? gradients.primary : 'rgba(156, 163, 175, 0.2)'
-                }}
-              >
-                {setting.is_visible ? (
-                  <Eye className="w-5 h-5 text-white" />
-                ) : (
-                  <EyeOff className="w-5 h-5 text-gray-400" />
-                )}
-              </div>
-
-              {/* Content */}
-              <div className="flex-1 min-w-0">
-                <h4 className="text-sm font-semibold text-white mb-1">
-                  {setting.display_name}
-                </h4>
-                <p className="text-xs" style={{ color: colors.textSecondary }}>
-                  {setting.description}
-                </p>
-              </div>
-
-              {/* Toggle Switch */}
-              <button
-                onClick={() => handleToggle(setting.setting_key)}
-                className="shrink-0 relative w-12 h-6 rounded-full transition-all"
-                style={{
-                  background: setting.is_visible ? colors.primary : 'rgba(156, 163, 175, 0.3)'
-                }}
-              >
-                <motion.div
-                  className="absolute top-1 w-4 h-4 bg-white rounded-full"
-                  animate={{ left: setting.is_visible ? '28px' : '4px' }}
-                  transition={{ type: 'spring', stiffness: 500, damping: 30 }}
-                />
-              </button>
-            </div>
-          </motion.div>
-        ))}
+            {showAll ? (
+              <>
+                <ChevronUp className="w-4 h-4" />
+                Show Less
+              </>
+            ) : (
+              <>
+                <ChevronDown className="w-4 h-4" />
+                Show {settings.length - INITIAL_VISIBLE_COUNT} More Settings
+              </>
+            )}
+          </motion.button>
+        )}
       </div>
 
       {/* Save Button */}

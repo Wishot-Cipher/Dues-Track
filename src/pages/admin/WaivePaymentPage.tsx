@@ -17,6 +17,10 @@ import {
   ArrowLeft,
   Bell,
   BellOff,
+  Sparkles,
+  BadgePercent,
+  Heart,
+  RefreshCw,
 } from "lucide-react";
 import Footer from "@/components/Footer";
 import notificationService from "@/services/notificationService";
@@ -53,6 +57,7 @@ export default function WaivePaymentPage() {
   const [notifyStudent, setNotifyStudent] = useState(true);
   const [searching, setSearching] = useState(false);
   const [showSuccess, setShowSuccess] = useState(false);
+  const [refreshingPayments, setRefreshingPayments] = useState(false);
 
   // Load payment types and student's existing payments when student is selected
   useEffect(() => {
@@ -62,8 +67,12 @@ export default function WaivePaymentPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedStudent]);
 
-  const loadPaymentTypesAndStudentPayments = async () => {
+  const loadPaymentTypesAndStudentPayments = async (showRefreshIndicator = false) => {
     if (!selectedStudent) return;
+
+    if (showRefreshIndicator) {
+      setRefreshingPayments(true);
+    }
 
     try {
       // Fetch all active payment types for student's level
@@ -97,6 +106,10 @@ export default function WaivePaymentPage() {
       setPaymentTypes(unpaidTypes);
     } catch (error) {
       console.error("Error loading payment types:", error);
+    } finally {
+      if (showRefreshIndicator) {
+        setRefreshingPayments(false);
+      }
     }
   };
 
@@ -270,33 +283,103 @@ export default function WaivePaymentPage() {
           />
         </div>
       </div>
-      {/* Header */}
+      {/* Enhanced Header */}
       <motion.div
         className="relative max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 pt-8 mb-6"
         initial={{ opacity: 0, y: -20 }}
         animate={{ opacity: 1, y: 0 }}
       >
-        <button
-          onClick={() => navigate("/admin/dashboard")}
-          className="flex items-center justify-center sm:justify-start gap-2 mb-4 px-3 py-2 rounded-lg transition-colors w-auto outline outline-orange-500 "
-            style={{ color: colors.textSecondary }}
-            onMouseEnter={(e) => (e.currentTarget.style.color = colors.primary)}
-            onMouseLeave={(e) => (e.currentTarget.style.color = colors.textSecondary)}
-        >
-          <ArrowLeft size={20} />
-          <span>Back to Dashboard</span>
-        </button>
+        <GlassCard className="relative overflow-hidden">
+          {/* Decorative Elements */}
+          <div className="absolute top-0 right-0 w-48 h-48 opacity-5 pointer-events-none">
+            <Heart className="w-full h-full" style={{ color: colors.accentMint }} />
+          </div>
+          <div 
+            className="absolute top-0 left-0 w-full h-1"
+            style={{ background: `linear-gradient(90deg, ${colors.accentMint}, ${colors.primary}, transparent)` }}
+          />
 
-        <h1 className="text-3xl sm:text-4xl font-bold text-white mb-2">
-          Waive Payment Fee
-        </h1>
-        <p
-          className="text-base sm:text-lg"
-          style={{ color: colors.textSecondary }}
-        >
-          Waive payment fees for students with financial hardship or special
-          circumstances
-        </p>
+          <div className="relative z-10">
+            <motion.button
+              whileHover={{ x: -4 }}
+              onClick={() => navigate("/admin/dashboard")}
+              className="flex items-center gap-2 mb-4 px-4 py-2 rounded-xl transition-all"
+              style={{ 
+                background: `${colors.primary}15`,
+                border: `1px solid ${colors.primary}30`,
+                color: colors.primary 
+              }}
+            >
+              <ArrowLeft size={16} />
+              <span className="font-medium">Back to Dashboard</span>
+            </motion.button>
+
+            <div className="flex flex-col sm:flex-row items-center gap-4">
+              <motion.div
+                initial={{ scale: 0.9 }}
+                animate={{ scale: 1 }}
+                className="w-16 h-16 rounded-2xl flex items-center justify-center relative shrink-0"
+                style={{ 
+                  background: `linear-gradient(135deg, ${colors.accentMint}30, ${colors.accentMint}10)`,
+                  border: `1px solid ${colors.accentMint}40`,
+                  boxShadow: `0 4px 20px ${colors.accentMint}30`
+                }}
+              >
+                <BadgePercent className="w-8 h-8" style={{ color: colors.accentMint }} />
+                <Sparkles className="w-4 h-4 absolute -top-1 -right-1" style={{ color: colors.primary }} />
+              </motion.div>
+              <div className="text-center sm:text-left">
+                <motion.div 
+                  initial={{ opacity: 0, scale: 0.9 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  transition={{ delay: 0.1 }}
+                  className="inline-flex items-center gap-2 px-3 py-1 rounded-full text-xs font-semibold mb-2"
+                  style={{ 
+                    background: `linear-gradient(135deg, ${colors.accentMint}30, ${colors.accentMint}10)`,
+                    border: `1px solid ${colors.accentMint}40`,
+                    color: colors.accentMint,
+                  }}
+                >
+                  <Heart className="w-3 h-3" />
+                  PAYMENT WAIVER
+                </motion.div>
+                <h1 className="text-2xl sm:text-3xl font-bold text-white">
+                  Waive Payment Fee
+                </h1>
+                <p
+                  className="text-sm sm:text-base"
+                  style={{ color: colors.textSecondary }}
+                >
+                  Waive payment fees for students with special circumstances
+                </p>
+              </div>
+            </div>
+
+            {/* Quick Steps */}
+            <div className="flex flex-wrap items-center justify-center gap-3 mt-6">
+              <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg"
+                   style={{ background: selectedStudent ? `${colors.statusPaid}15` : `${colors.primary}15`, border: `1px solid ${selectedStudent ? colors.statusPaid : colors.primary}30` }}>
+                <div className="w-5 h-5 rounded-full flex items-center justify-center text-xs font-bold"
+                     style={{ background: selectedStudent ? colors.statusPaid : colors.primary, color: 'white' }}>1</div>
+                <span className="text-xs font-medium" style={{ color: selectedStudent ? colors.statusPaid : colors.textSecondary }}>Select Student</span>
+              </div>
+              <div className="w-4 h-0.5" style={{ background: 'rgba(255,255,255,0.1)' }} />
+              <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg"
+                   style={{ background: selectedPaymentType ? `${colors.statusPaid}15` : 'rgba(255,255,255,0.03)', border: `1px solid ${selectedPaymentType ? colors.statusPaid : 'rgba(255,255,255,0.1)'}` }}>
+                <div className="w-5 h-5 rounded-full flex items-center justify-center text-xs font-bold"
+                     style={{ background: selectedPaymentType ? colors.statusPaid : 'rgba(255,255,255,0.1)', color: selectedPaymentType ? 'white' : colors.textSecondary }}>2</div>
+                <span className="text-xs font-medium" style={{ color: selectedPaymentType ? colors.statusPaid : colors.textSecondary }}>Select Payment</span>
+              </div>
+              <div className="w-4 h-0.5" style={{ background: 'rgba(255,255,255,0.1)' }} />
+              <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg"
+                   style={{ background: waiverReason ? `${colors.statusPaid}15` : 'rgba(255,255,255,0.03)', border: `1px solid ${waiverReason ? colors.statusPaid : 'rgba(255,255,255,0.1)'}` }}>
+                <div className="w-5 h-5 rounded-full flex items-center justify-center text-xs font-bold"
+                     style={{ background: waiverReason ? colors.statusPaid : 'rgba(255,255,255,0.1)', color: waiverReason ? 'white' : colors.textSecondary }}>3</div>
+                <span className="text-xs font-medium" style={{ color: waiverReason ? colors.statusPaid : colors.textSecondary }}>Add Details</span>
+              </div>
+            </div>
+          </div>
+        </GlassCard>
       </motion.div>
 
       {/* Success Modal */}
@@ -331,13 +414,32 @@ export default function WaivePaymentPage() {
 
       {/* Main Content */}
       <div className="relative max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
-        <GlassCard className="p-6 sm:p-8">
-          {/* Step 1: Search and Select Student */}
-          <div className="mb-8">
-            <h2 className="text-xl font-bold text-white mb-4 flex items-center gap-2">
-              <UserIcon size={20} style={{ color: colors.primary }} />
-              Select Student
-            </h2>
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.2 }}
+        >
+          <GlassCard className="p-6 sm:p-8 relative overflow-hidden">
+            {/* Decorative gradient */}
+            <div 
+              className="absolute top-0 left-0 w-full h-1"
+              style={{ background: `linear-gradient(90deg, ${colors.accentMint}, ${colors.primary}, transparent)` }}
+            />
+            
+            {/* Step 1: Search and Select Student */}
+            <div className="mb-8">
+              <div className="flex items-center gap-3 mb-4">
+                <div 
+                  className="w-10 h-10 rounded-xl flex items-center justify-center"
+                  style={{ background: `${colors.primary}15`, border: `1px solid ${colors.primary}30` }}
+                >
+                  <UserIcon size={20} style={{ color: colors.primary }} />
+                </div>
+                <div>
+                  <h2 className="text-lg font-bold text-white">Step 1: Select Student</h2>
+                  <p className="text-xs" style={{ color: colors.textSecondary }}>Search for the student to waive payment</p>
+                </div>
+              </div>
 
             {!selectedStudent ? (
               <>
@@ -453,10 +555,39 @@ export default function WaivePaymentPage() {
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
             >
-              <h2 className="text-xl font-bold text-white mb-4 flex items-center gap-2">
-                <FileText size={20} style={{ color: colors.primary }} />
-                Select Payment to Waive
-              </h2>
+              <div className="flex items-center justify-between mb-4">
+                <div className="flex items-center gap-3">
+                  <div 
+                    className="w-10 h-10 rounded-xl flex items-center justify-center"
+                    style={{ background: `${colors.accentMint}15`, border: `1px solid ${colors.accentMint}30` }}
+                  >
+                    <FileText size={20} style={{ color: colors.accentMint }} />
+                  </div>
+                  <div>
+                    <h2 className="text-lg font-bold text-white">Step 2: Select Payment to Waive</h2>
+                    <p className="text-xs" style={{ color: colors.textSecondary }}>Choose which payment to waive for this student</p>
+                  </div>
+                </div>
+                <motion.button
+                  whileHover={{ scale: 1.05 }}
+                  whileTap={{ scale: 0.95 }}
+                  onClick={() => loadPaymentTypesAndStudentPayments(true)}
+                  disabled={refreshingPayments}
+                  className="flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium transition-all disabled:opacity-50"
+                  style={{
+                    background: `${colors.accentMint}15`,
+                    border: `1px solid ${colors.accentMint}30`,
+                    color: colors.accentMint,
+                  }}
+                  title="Refresh payments"
+                >
+                  <RefreshCw 
+                    size={16} 
+                    className={refreshingPayments ? 'animate-spin' : ''}
+                  />
+                  <span className="hidden sm:inline">{refreshingPayments ? 'Refreshing...' : 'Refresh'}</span>
+                </motion.button>
+              </div>
 
               {paymentTypes.length === 0 ? (
                 <div
@@ -573,10 +704,18 @@ export default function WaivePaymentPage() {
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
             >
-              <h2 className="text-xl font-bold text-white mb-4 flex items-center gap-2">
-                <AlertCircle size={20} style={{ color: colors.primary }} />
-                Waiver Details
-              </h2>
+              <div className="flex items-center gap-3 mb-4">
+                <div 
+                  className="w-10 h-10 rounded-xl flex items-center justify-center"
+                  style={{ background: `${colors.warning}15`, border: `1px solid ${colors.warning}30` }}
+                >
+                  <AlertCircle size={20} style={{ color: colors.warning }} />
+                </div>
+                <div>
+                  <h2 className="text-lg font-bold text-white">Step 3: Waiver Details</h2>
+                  <p className="text-xs" style={{ color: colors.textSecondary }}>Provide reason and notes for this waiver</p>
+                </div>
+              </div>
 
               {/* Waiver Reason */}
               <div className="mb-4">
@@ -768,6 +907,7 @@ export default function WaivePaymentPage() {
             </motion.div>
           )}
         </GlassCard>
+        </motion.div>
       </div>
       <Footer />
     </div>

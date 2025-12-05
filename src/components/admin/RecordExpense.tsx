@@ -306,11 +306,38 @@ export default function RecordExpense() {
   }
 
   return (
-    <GlassCard className="p-6">
+    <GlassCard className="p-6 relative overflow-hidden">
+      {/* Decorative Top Border */}
+      <div 
+        className="absolute top-0 left-0 w-full h-1"
+        style={{ background: `linear-gradient(90deg, ${colors.statusFailed}, ${colors.primary}, transparent)` }}
+      />
+      
       <div className="text-white">
-        <h2 className="text-xl font-bold text-white mb-3">Record Expense</h2>
-        <p className="text-sm mb-4" style={{ color: colors.textSecondary }}>
-          Submit a new expense for approval. All expenses require senior admin approval before becoming final.
+        <div className="flex items-center gap-3 mb-4">
+          <div 
+            className="w-12 h-12 rounded-xl flex items-center justify-center shrink-0"
+            style={{ 
+              background: `linear-gradient(135deg, ${colors.statusFailed}30, ${colors.statusFailed}10)`,
+              border: `1px solid ${colors.statusFailed}40`
+            }}
+          >
+            <LucideIcons.Receipt className="w-6 h-6" style={{ color: colors.statusFailed }} />
+          </div>
+          <div>
+            <h2 className="text-xl font-bold text-white">Record Expense</h2>
+            <p className="text-xs" style={{ color: colors.textSecondary }}>
+              Submit for approval
+            </p>
+          </div>
+        </div>
+        
+        <p className="text-sm mb-4 p-3 rounded-lg" style={{ 
+          color: colors.textSecondary,
+          background: 'rgba(255, 255, 255, 0.03)',
+          border: '1px solid rgba(255, 255, 255, 0.05)'
+        }}>
+          All expenses require senior admin approval before becoming final.
         </p>
 
         {/* Available Balance Display */}

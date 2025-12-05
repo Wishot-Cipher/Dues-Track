@@ -1,9 +1,10 @@
 import { useState, useEffect } from 'react';
-import { motion } from 'framer-motion';
+import { motion, AnimatePresence } from 'framer-motion';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '@/config/supabase';
 import { colors, gradients } from '@/config/colors';
 import GlassCard from '@/components/ui/GlassCard';
+import AnimatedCounter from '@/components/ui/AnimatedCounter';
 import { useToast } from '@/hooks/useToast';
 import {
   Search,
@@ -15,7 +16,13 @@ import {
   User,
   CheckCircle,
   XCircle,
-  Crown
+  Crown,
+  Sparkles,
+  Users,
+  Filter,
+  ChevronLeft,
+  ChevronRight,
+  X,
 } from 'lucide-react';
 import Footer from '@/components/Footer';
 import { useAuth } from '@/hooks/useAuth';
@@ -467,29 +474,89 @@ export default function ManageStudentsPage() {
           animate={{ opacity: 1, y: 0 }}
           className="mb-4 sm:mb-6"
         >
-          <button
-            onClick={() => navigate('/admin/dashboard')}
-            className="flex items-center justify-center sm:justify-start gap-2 mb-4 px-3 py-2 rounded-lg transition-colors w-auto outline outline-orange-500 "
-            style={{ color: colors.textSecondary }}
-            onMouseEnter={(e) => (e.currentTarget.style.color = colors.primary)}
-            onMouseLeave={(e) => (e.currentTarget.style.color = colors.textSecondary)}
-          >
-            <ArrowLeft size={20} />
-            <span>Back to Admin Dashboard</span>
-          </button>
+          <GlassCard className="relative overflow-hidden">
+            {/* Decorative Elements */}
+            <div className="absolute top-0 right-0 w-64 h-64 opacity-5 pointer-events-none">
+              <Users className="w-full h-full" style={{ color: colors.accentMint }} />
+            </div>
+            <div 
+              className="absolute top-0 left-0 w-full h-1"
+              style={{ background: `linear-gradient(90deg, ${colors.accentMint}, ${colors.primary}, transparent)` }}
+            />
+            
+            <div className="relative z-10">
+              <motion.button
+                whileHover={{ x: -4 }}
+                onClick={() => navigate('/admin/dashboard')}
+                className="flex items-center justify-center sm:justify-start gap-2 mb-4 px-4 py-2 rounded-xl transition-all"
+                style={{ 
+                  background: `${colors.primary}15`,
+                  border: `1px solid ${colors.primary}30`,
+                  color: colors.primary 
+                }}
+              >
+                <ArrowLeft size={16} />
+                <span className="font-medium">Back to Dashboard</span>
+              </motion.button>
 
-          <div className="flex flex-col sm:flex-row items-center sm:items-start gap-3 mb-2">
-            <div
-              className="w-12 h-12 rounded-xl flex items-center justify-center shrink-0"
-              style={{ background: gradients.primary }}
-            >
-              <UserPlus className="w-6 h-6 text-white" />
+              <div className="flex flex-col sm:flex-row items-center sm:items-start gap-3 mb-2">
+                <motion.div
+                  initial={{ scale: 0.9 }}
+                  animate={{ scale: 1 }}
+                  className="w-14 h-14 rounded-xl flex items-center justify-center shrink-0 shadow-lg"
+                  style={{ 
+                    background: `linear-gradient(135deg, ${colors.accentMint}30, ${colors.accentMint}10)`,
+                    border: `1px solid ${colors.accentMint}40`,
+                    boxShadow: `0 4px 15px ${colors.accentMint}20`
+                  }}
+                >
+                  <UserPlus className="w-7 h-7" style={{ color: colors.accentMint }} />
+                </motion.div>
+                <div className="text-center sm:text-left">
+                  {/* Badge */}
+                  <motion.div 
+                    initial={{ opacity: 0, scale: 0.9 }}
+                    animate={{ opacity: 1, scale: 1 }}
+                    transition={{ delay: 0.1 }}
+                    className="inline-flex items-center gap-2 px-3 py-1 rounded-full text-xs font-semibold mb-2"
+                    style={{ 
+                      background: `linear-gradient(135deg, ${colors.accentMint}30, ${colors.accentMint}10)`,
+                      border: `1px solid ${colors.accentMint}40`,
+                      color: colors.accentMint,
+                    }}
+                  >
+                    <Sparkles className="w-3 h-3" />
+                    STUDENT MANAGEMENT
+                  </motion.div>
+                  <h1 className="text-2xl sm:text-3xl font-bold text-white">Manage Students</h1>
+                  <p className="flex items-center justify-center sm:justify-start gap-2" style={{ color: colors.textSecondary }}>
+                    <Filter className="w-4 h-4" />
+                    View and manage all registered students
+                  </p>
+                </div>
+              </div>
+
+              {/* Quick Stats */}
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mt-4">
+                <div className="p-3 rounded-xl text-center" style={{ background: 'rgba(255, 255, 255, 0.03)', border: '1px solid rgba(255, 255, 255, 0.05)' }}>
+                  <p className="text-2xl font-bold text-white"><AnimatedCounter value={filteredStudents.length} /></p>
+                  <p className="text-xs" style={{ color: colors.textSecondary }}>Total</p>
+                </div>
+                <div className="p-3 rounded-xl text-center" style={{ background: `${colors.statusPaid}10`, border: `1px solid ${colors.statusPaid}20` }}>
+                  <p className="text-2xl font-bold" style={{ color: colors.statusPaid }}><AnimatedCounter value={filteredStudents.filter(s => s.is_active).length} /></p>
+                  <p className="text-xs" style={{ color: colors.textSecondary }}>Active</p>
+                </div>
+                <div className="p-3 rounded-xl text-center" style={{ background: `${colors.primary}10`, border: `1px solid ${colors.primary}20` }}>
+                  <p className="text-2xl font-bold" style={{ color: colors.primary }}><AnimatedCounter value={filteredStudents.filter(s => s.is_admin).length} /></p>
+                  <p className="text-xs" style={{ color: colors.textSecondary }}>Admins</p>
+                </div>
+                <div className="p-3 rounded-xl text-center" style={{ background: `${colors.accentMint}10`, border: `1px solid ${colors.accentMint}20` }}>
+                  <p className="text-2xl font-bold" style={{ color: colors.accentMint }}><AnimatedCounter value={filteredStudents.filter(s => s.is_finsec).length} /></p>
+                  <p className="text-xs" style={{ color: colors.textSecondary }}>Finsecs</p>
+                </div>
+              </div>
             </div>
-            <div className="text-center sm:text-left">
-              <h1 className="text-2xl sm:text-3xl font-bold text-white">Manage Students</h1>
-              <p style={{ color: colors.textSecondary }}>View and manage all registered students</p>
-            </div>
-          </div>
+          </GlassCard>
         </motion.div>
 
         {/* Search Bar */}
@@ -872,7 +939,7 @@ export default function ManageStudentsPage() {
           </GlassCard>
         </motion.div>
 
-        {/* Pagination */}
+        {/* Enhanced Pagination */}
         {!loading && finalFilteredStudents.length > 0 && (
           <motion.div
             initial={{ opacity: 0, y: 20 }}
@@ -880,77 +947,110 @@ export default function ManageStudentsPage() {
             transition={{ delay: 0.3 }}
             className="mt-4 sm:mt-6"
           >
-            <GlassCard>
+            <GlassCard className="relative overflow-hidden">
+              <div 
+                className="absolute bottom-0 left-0 w-full h-1"
+                style={{ background: `linear-gradient(90deg, ${colors.accentMint}, ${colors.primary}, transparent)` }}
+              />
               {totalPages > 1 ? (
-                <div className="flex flex-col sm:flex-row items-center justify-between gap-3">
-                  <p className="text-xs sm:text-sm text-center sm:text-left" style={{ color: colors.textSecondary }}>
-                    Showing {(currentPage - 1) * itemsPerPage + 1} - {Math.min(currentPage * itemsPerPage, finalFilteredStudents.length)} of {finalFilteredStudents.length}
-                  </p>
-                  <div className="flex flex-wrap items-center justify-center gap-2">
-                    <button
+                <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-xl flex items-center justify-center"
+                         style={{ background: `${colors.primary}15`, border: `1px solid ${colors.primary}30` }}>
+                      <Users className="w-5 h-5" style={{ color: colors.primary }} />
+                    </div>
+                    <div>
+                      <p className="text-sm font-medium text-white">
+                        Page {currentPage} of {totalPages}
+                      </p>
+                      <p className="text-xs" style={{ color: colors.textSecondary }}>
+                        Showing {(currentPage - 1) * itemsPerPage + 1} - {Math.min(currentPage * itemsPerPage, finalFilteredStudents.length)} of {finalFilteredStudents.length} students
+                      </p>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <motion.button
+                      whileHover={{ scale: 1.05 }}
+                      whileTap={{ scale: 0.95 }}
                       onClick={() => {
                         setCurrentPage(p => Math.max(1, p - 1));
                         scrollToTop();
                       }}
                       disabled={currentPage === 1}
-                      className="px-3 sm:px-4 py-2 rounded-lg text-xs sm:text-sm font-medium transition-all disabled:opacity-30 disabled:cursor-not-allowed"
+                      className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-medium transition-all disabled:opacity-30 disabled:cursor-not-allowed"
                       style={{
                         background: currentPage === 1 ? 'rgba(255, 255, 255, 0.05)' : `${colors.primary}20`,
+                        border: `1px solid ${currentPage === 1 ? 'transparent' : `${colors.primary}40`}`,
                         color: currentPage === 1 ? colors.textSecondary : colors.primary,
                       }}
                     >
-                      Previous
-                    </button>
-                    <div className="flex flex-wrap gap-1 justify-center">
-                      {Array.from({ length: Math.min(totalPages, 10) }, (_, i) => {
-                        // Show first 3, last 3, and current page with neighbors
-                        const page = i + 1;
-                        const showPage = page <= 3 || page > totalPages - 3 || Math.abs(page - currentPage) <= 1;
-                        
-                        if (!showPage && i > 0 && (i === 3 || i === totalPages - 4)) {
-                          return <span key={page} className="px-2" style={{ color: colors.textSecondary }}>...</span>;
+                      <ChevronLeft className="w-4 h-4" />
+                      <span className="hidden sm:inline">Previous</span>
+                    </motion.button>
+                    <div className="flex gap-1">
+                      {Array.from({ length: Math.min(totalPages, 5) }, (_, i) => {
+                        let page: number;
+                        if (totalPages <= 5) {
+                          page = i + 1;
+                        } else if (currentPage <= 3) {
+                          page = i + 1;
+                        } else if (currentPage >= totalPages - 2) {
+                          page = totalPages - 4 + i;
+                        } else {
+                          page = currentPage - 2 + i;
                         }
                         
-                        if (!showPage) return null;
-                        
                         return (
-                          <button
+                          <motion.button
                             key={page}
+                            whileHover={{ scale: 1.1 }}
+                            whileTap={{ scale: 0.9 }}
                             onClick={() => {
                               setCurrentPage(page);
                               scrollToTop();
                             }}
-                            className="w-8 h-8 sm:w-10 sm:h-10 rounded-lg text-xs sm:text-sm font-medium transition-all"
+                            className="w-10 h-10 rounded-xl text-sm font-semibold transition-all"
                             style={{
-                              background: currentPage === page ? colors.primary : 'rgba(255, 255, 255, 0.05)',
+                              background: currentPage === page 
+                                ? `linear-gradient(135deg, ${colors.primary}, ${colors.accentMint})`
+                                : 'rgba(255, 255, 255, 0.05)',
                               color: currentPage === page ? 'white' : colors.textSecondary,
+                              boxShadow: currentPage === page ? `0 4px 15px ${colors.primary}40` : 'none',
                             }}
                           >
                             {page}
-                          </button>
+                          </motion.button>
                         );
                       })}
                     </div>
-                    <button
+                    <motion.button
+                      whileHover={{ scale: 1.05 }}
+                      whileTap={{ scale: 0.95 }}
                       onClick={() => {
                         setCurrentPage(p => Math.min(totalPages, p + 1));
                         scrollToTop();
                       }}
                       disabled={currentPage === totalPages}
-                      className="px-3 sm:px-4 py-2 rounded-lg text-xs sm:text-sm font-medium transition-all disabled:opacity-30 disabled:cursor-not-allowed"
+                      className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-medium transition-all disabled:opacity-30 disabled:cursor-not-allowed"
                       style={{
                         background: currentPage === totalPages ? 'rgba(255, 255, 255, 0.05)' : `${colors.primary}20`,
+                        border: `1px solid ${currentPage === totalPages ? 'transparent' : `${colors.primary}40`}`,
                         color: currentPage === totalPages ? colors.textSecondary : colors.primary,
                       }}
                     >
-                      Next
-                    </button>
+                      <span className="hidden sm:inline">Next</span>
+                      <ChevronRight className="w-4 h-4" />
+                    </motion.button>
                   </div>
                 </div>
               ) : (
-                <div className="text-center">
-                  <p className="text-xs sm:text-sm" style={{ color: colors.textSecondary }}>
-                    Showing all {finalFilteredStudents.length} student{finalFilteredStudents.length !== 1 ? 's' : ''}
+                <div className="flex items-center justify-center gap-3 py-2">
+                  <div className="w-8 h-8 rounded-lg flex items-center justify-center"
+                       style={{ background: `${colors.statusPaid}15` }}>
+                    <CheckCircle className="w-4 h-4" style={{ color: colors.statusPaid }} />
+                  </div>
+                  <p className="text-sm" style={{ color: colors.textSecondary }}>
+                    Showing all <span className="font-semibold text-white">{finalFilteredStudents.length}</span> student{finalFilteredStudents.length !== 1 ? 's' : ''}
                   </p>
                 </div>
               )}
@@ -959,148 +1059,263 @@ export default function ManageStudentsPage() {
         )}
       </div>
 
-      {/* Edit Modal */}
-      {showEditModal && selectedStudent && (
-        <div
-          className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4"
-          onClick={() => setShowEditModal(false)}
-        >
+      {/* Enhanced Edit Modal */}
+      <AnimatePresence>
+        {showEditModal && selectedStudent && (
           <motion.div
-            initial={{ scale: 0.9, opacity: 0 }}
-            animate={{ scale: 1, opacity: 1 }}
-            onClick={(e) => e.stopPropagation()}
-            className="max-w-md w-full"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50 p-4"
+            onClick={() => setShowEditModal(false)}
           >
-            <GlassCard className="p-6">
-              <h3 className="text-xl font-bold text-white mb-4">Edit Student</h3>
-              
-              <div className="space-y-4">
-                <div>
-                  <label className="block text-sm font-medium mb-2 text-white">Full Name</label>
-                  <input
-                    type="text"
-                    value={selectedStudent.full_name}
-                    onChange={(e) => setSelectedStudent({ ...selectedStudent, full_name: e.target.value })}
-                    className="w-full px-4 py-2 rounded-lg text-white focus:outline-none focus:ring-2"
-                    style={{ background: 'rgba(255, 255, 255, 0.05)', border: '1px solid rgba(255, 255, 255, 0.1)' }}
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium mb-2 text-white">Reg Number</label>
-                  <input
-                    type="text"
-                    value={selectedStudent.reg_number}
-                    onChange={(e) => setSelectedStudent({ ...selectedStudent, reg_number: e.target.value })}
-                    className="w-full px-4 py-2 rounded-lg text-white focus:outline-none focus:ring-2"
-                    style={{ background: 'rgba(255, 255, 255, 0.05)', border: '1px solid rgba(255, 255, 255, 0.1)' }}
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium mb-2 text-white">Email</label>
-                  <input
-                    type="email"
-                    value={selectedStudent.email}
-                    onChange={(e) => setSelectedStudent({ ...selectedStudent, email: e.target.value })}
-                    className="w-full px-4 py-2 rounded-lg text-white focus:outline-none focus:ring-2"
-                    style={{ background: 'rgba(255, 255, 255, 0.05)', border: '1px solid rgba(255, 255, 255, 0.1)' }}
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium mb-2 text-white">Phone</label>
-                  <input
-                    type="tel"
-                    value={selectedStudent.phone}
-                    onChange={(e) => setSelectedStudent({ ...selectedStudent, phone: e.target.value })}
-                    className="w-full px-4 py-2 rounded-lg text-white focus:outline-none focus:ring-2"
-                    style={{ background: 'rgba(255, 255, 255, 0.05)', border: '1px solid rgba(255, 255, 255, 0.1)' }}
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium mb-2 text-white">Department</label>
-                  <input
-                    type="text"
-                    value={selectedStudent.department}
-                    onChange={(e) => setSelectedStudent({ ...selectedStudent, department: e.target.value })}
-                    className="w-full px-4 py-2 rounded-lg text-white focus:outline-none focus:ring-2"
-                    style={{ background: 'rgba(255, 255, 255, 0.05)', border: '1px solid rgba(255, 255, 255, 0.1)' }}
-                  />
-                </div>
-
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-sm font-medium mb-2 text-white">Level</label>
-                    <select
-                      value={selectedStudent.level}
-                      onChange={(e) => setSelectedStudent({ ...selectedStudent, level: e.target.value })}
-                      className="w-full px-4 py-2 rounded-lg text-white focus:outline-none focus:ring-2"
-                      style={{ background: 'rgba(255, 255, 255, 0.05)', border: '1px solid rgba(255, 255, 255, 0.1)' }}
-                    >
-                      <option value="100L" style={{ background: colors.background }}>100 Level</option>
-                      <option value="200L" style={{ background: colors.background }}>200 Level</option>
-                      <option value="300L" style={{ background: colors.background }}>300 Level</option>
-                      <option value="400L" style={{ background: colors.background }}>400 Level</option>
-                      <option value="500L" style={{ background: colors.background }}>500 Level</option>
-                    </select>
-                  </div>
-
-                  <div>
-                    <label className="block text-sm font-medium mb-2 text-white">Section</label>
-                    <select
-                      value={selectedStudent.section}
-                      onChange={(e) => setSelectedStudent({ ...selectedStudent, section: e.target.value })}
-                      className="w-full px-4 py-2 rounded-lg text-white focus:outline-none focus:ring-2"
-                      style={{ background: 'rgba(255, 255, 255, 0.05)', border: '1px solid rgba(255, 255, 255, 0.1)' }}
-                    >
-                      <option value="A" style={{ background: colors.background }}>Section A</option>
-                      <option value="B" style={{ background: colors.background }}>Section B</option>
-                      <option value="C" style={{ background: colors.background }}>Section C</option>
-                      <option value="D" style={{ background: colors.background }}>Section D</option>
-                    </select>
-                  </div>
-                </div>
-
-                <div className="flex gap-4 mt-6">
-                  <button
+            <motion.div
+              initial={{ scale: 0.9, opacity: 0, y: 20 }}
+              animate={{ scale: 1, opacity: 1, y: 0 }}
+              exit={{ scale: 0.9, opacity: 0, y: 20 }}
+              onClick={(e) => e.stopPropagation()}
+              className="max-w-md w-full max-h-[90vh] overflow-y-auto"
+            >
+              <GlassCard className="relative overflow-hidden">
+                {/* Modal Header */}
+                <div 
+                  className="absolute top-0 left-0 w-full h-24"
+                  style={{ 
+                    background: `linear-gradient(135deg, ${colors.accentMint}30 0%, ${colors.primary}30 50%, transparent 100%)`,
+                  }}
+                />
+                <div 
+                  className="absolute top-0 left-0 w-full h-1"
+                  style={{ background: `linear-gradient(90deg, ${colors.accentMint}, ${colors.primary})` }}
+                />
+                
+                <div className="relative z-10">
+                  {/* Close Button */}
+                  <motion.button
+                    whileHover={{ scale: 1.1, rotate: 90 }}
+                    whileTap={{ scale: 0.9 }}
                     onClick={() => setShowEditModal(false)}
-                    className="flex-1 px-4 py-2 rounded-lg font-medium transition-colors"
-                    style={{ background: 'rgba(255, 255, 255, 0.1)', color: colors.textPrimary }}
+                    className="absolute top-0 right-0 w-8 h-8 rounded-full flex items-center justify-center transition-colors"
+                    style={{ background: 'rgba(255, 255, 255, 0.1)' }}
                   >
-                    Cancel
-                  </button>
-                  <div className="flex items-center gap-3">
-                    <label className="flex items-center gap-2 text-sm text-white">
-                      <input
-                        type="checkbox"
-                        checked={!!selectedStudent.force_password_change}
-                        onChange={(e) => setSelectedStudent({ ...selectedStudent, force_password_change: e.target.checked })}
-                        disabled={!hasPermission('can_manage_students')}
-                        className="w-4 h-4"
-                      />
-                      <span>Force password change</span>
-                    </label>
-                    {!hasPermission('can_manage_students') && (
-                      <span className="text-xs text-yellow-300">(Requires manage-students permission)</span>
-                    )}
-                  </div>
+                    <X className="w-4 h-4" style={{ color: colors.textSecondary }} />
+                  </motion.button>
 
-                  <button
-                    onClick={handleEditStudent}
-                    disabled={editLoading}
-                    className="flex-1 px-4 py-2 rounded-lg font-medium text-white transition-opacity disabled:opacity-50"
-                    style={{ background: gradients.primary }}
-                  >
-                    {editLoading ? 'Saving...' : 'Save Changes'}
-                  </button>
+                  {/* Header Content */}
+                  <div className="flex items-center gap-4 mb-6">
+                    <div className="w-14 h-14 rounded-xl flex items-center justify-center shadow-lg"
+                         style={{ 
+                           background: `linear-gradient(135deg, ${colors.accentMint}30, ${colors.accentMint}10)`,
+                           border: `1px solid ${colors.accentMint}40`,
+                           boxShadow: `0 4px 15px ${colors.accentMint}20`
+                         }}>
+                      <Edit2 className="w-7 h-7" style={{ color: colors.accentMint }} />
+                    </div>
+                    <div>
+                      <h3 className="text-xl font-bold text-white">Edit Student</h3>
+                      <p className="text-sm" style={{ color: colors.textSecondary }}>
+                        Update {selectedStudent.full_name}'s information
+                      </p>
+                    </div>
+                  </div>
+                
+                  <div className="space-y-4">
+                    <div>
+                      <label className="block text-sm font-medium mb-2 text-white">Full Name</label>
+                      <input
+                        type="text"
+                        value={selectedStudent.full_name}
+                        onChange={(e) => setSelectedStudent({ ...selectedStudent, full_name: e.target.value })}
+                        className="w-full px-4 py-3 rounded-xl text-white focus:outline-none focus:ring-2 transition-all"
+                        style={{ 
+                          background: 'rgba(255, 255, 255, 0.05)', 
+                          border: '1px solid rgba(255, 255, 255, 0.1)'
+                        }}
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-sm font-medium mb-2 text-white">Reg Number</label>
+                      <input
+                        type="text"
+                        value={selectedStudent.reg_number}
+                        onChange={(e) => setSelectedStudent({ ...selectedStudent, reg_number: e.target.value })}
+                        className="w-full px-4 py-3 rounded-xl text-white focus:outline-none focus:ring-2 transition-all"
+                        style={{ 
+                          background: 'rgba(255, 255, 255, 0.05)', 
+                          border: '1px solid rgba(255, 255, 255, 0.1)' 
+                        }}
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-sm font-medium mb-2 text-white">Email</label>
+                      <input
+                        type="email"
+                        value={selectedStudent.email}
+                        onChange={(e) => setSelectedStudent({ ...selectedStudent, email: e.target.value })}
+                        className="w-full px-4 py-3 rounded-xl text-white focus:outline-none focus:ring-2 transition-all"
+                        style={{ 
+                          background: 'rgba(255, 255, 255, 0.05)', 
+                          border: '1px solid rgba(255, 255, 255, 0.1)' 
+                        }}
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-sm font-medium mb-2 text-white">Phone</label>
+                      <input
+                        type="tel"
+                        value={selectedStudent.phone}
+                        onChange={(e) => setSelectedStudent({ ...selectedStudent, phone: e.target.value })}
+                        className="w-full px-4 py-3 rounded-xl text-white focus:outline-none focus:ring-2 transition-all"
+                        style={{ 
+                          background: 'rgba(255, 255, 255, 0.05)', 
+                          border: '1px solid rgba(255, 255, 255, 0.1)' 
+                        }}
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-sm font-medium mb-2 text-white">Department</label>
+                      <input
+                        type="text"
+                        value={selectedStudent.department}
+                        onChange={(e) => setSelectedStudent({ ...selectedStudent, department: e.target.value })}
+                        className="w-full px-4 py-3 rounded-xl text-white focus:outline-none focus:ring-2 transition-all"
+                        style={{ 
+                          background: 'rgba(255, 255, 255, 0.05)', 
+                          border: '1px solid rgba(255, 255, 255, 0.1)' 
+                        }}
+                      />
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <label className="block text-sm font-medium mb-2 text-white">Level</label>
+                        <select
+                          value={selectedStudent.level}
+                          onChange={(e) => setSelectedStudent({ ...selectedStudent, level: e.target.value })}
+                          className="w-full px-4 py-3 rounded-xl text-white focus:outline-none focus:ring-2 transition-all"
+                          style={{ 
+                            background: 'rgba(255, 255, 255, 0.05)', 
+                            border: '1px solid rgba(255, 255, 255, 0.1)' 
+                          }}
+                        >
+                          <option value="100L" style={{ background: colors.background }}>100 Level</option>
+                          <option value="200L" style={{ background: colors.background }}>200 Level</option>
+                          <option value="300L" style={{ background: colors.background }}>300 Level</option>
+                          <option value="400L" style={{ background: colors.background }}>400 Level</option>
+                          <option value="500L" style={{ background: colors.background }}>500 Level</option>
+                        </select>
+                      </div>
+
+                      <div>
+                        <label className="block text-sm font-medium mb-2 text-white">Section</label>
+                        <select
+                          value={selectedStudent.section}
+                          onChange={(e) => setSelectedStudent({ ...selectedStudent, section: e.target.value })}
+                          className="w-full px-4 py-3 rounded-xl text-white focus:outline-none focus:ring-2 transition-all"
+                          style={{ 
+                            background: 'rgba(255, 255, 255, 0.05)', 
+                            border: '1px solid rgba(255, 255, 255, 0.1)' 
+                          }}
+                        >
+                          <option value="A" style={{ background: colors.background }}>Section A</option>
+                          <option value="B" style={{ background: colors.background }}>Section B</option>
+                          <option value="C" style={{ background: colors.background }}>Section C</option>
+                          <option value="D" style={{ background: colors.background }}>Section D</option>
+                        </select>
+                      </div>
+                    </div>
+
+                    {/* Force Password Change Option */}
+                    <div className="p-4 rounded-xl" style={{ background: 'rgba(255, 255, 255, 0.03)', border: '1px solid rgba(255, 255, 255, 0.08)' }}>
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-3">
+                          <div className="w-10 h-10 rounded-lg flex items-center justify-center"
+                               style={{ background: `${colors.accentMint}15` }}>
+                            <Shield className="w-5 h-5" style={{ color: colors.accentMint }} />
+                          </div>
+                          <div>
+                            <p className="text-sm font-medium text-white">Force Password Change</p>
+                            <p className="text-xs" style={{ color: colors.textSecondary }}>
+                              Require password reset on next login
+                            </p>
+                          </div>
+                        </div>
+                        <label className="relative inline-flex items-center cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={!!selectedStudent.force_password_change}
+                            onChange={(e) => setSelectedStudent({ ...selectedStudent, force_password_change: e.target.checked })}
+                            disabled={!hasPermission('can_manage_students')}
+                            className="sr-only peer"
+                          />
+                          <div className="w-11 h-6 rounded-full peer transition-colors duration-200"
+                               style={{ 
+                                 background: selectedStudent.force_password_change ? colors.accentMint : 'rgba(255, 255, 255, 0.1)'
+                               }}
+                          >
+                            <div className="absolute top-[2px] left-[2px] w-5 h-5 bg-white rounded-full shadow-md transition-transform duration-200"
+                                 style={{ 
+                                   transform: selectedStudent.force_password_change ? 'translateX(20px)' : 'translateX(0)'
+                                 }}
+                            />
+                          </div>
+                        </label>
+                      </div>
+                      {!hasPermission('can_manage_students') && (
+                        <p className="text-xs mt-2 px-2 py-1 rounded-lg inline-block"
+                           style={{ background: `${colors.statusUnpaid}15`, color: colors.statusUnpaid }}>
+                          Requires manage-students permission
+                        </p>
+                      )}
+                    </div>
+
+                    {/* Action Buttons */}
+                    <div className="flex gap-3 pt-4">
+                      <motion.button
+                        whileHover={{ scale: 1.02 }}
+                        whileTap={{ scale: 0.98 }}
+                        onClick={() => setShowEditModal(false)}
+                        className="flex-1 px-4 py-3 rounded-xl font-medium transition-colors"
+                        style={{ 
+                          background: 'rgba(255, 255, 255, 0.1)', 
+                          color: colors.textPrimary,
+                          border: '1px solid rgba(255, 255, 255, 0.1)'
+                        }}
+                      >
+                        Cancel
+                      </motion.button>
+                      <motion.button
+                        whileHover={{ scale: 1.02 }}
+                        whileTap={{ scale: 0.98 }}
+                        onClick={handleEditStudent}
+                        disabled={editLoading}
+                        className="flex-1 px-4 py-3 rounded-xl font-semibold text-white transition-all disabled:opacity-50"
+                        style={{ 
+                          background: `linear-gradient(135deg, ${colors.accentMint}, ${colors.primary})`,
+                          boxShadow: `0 4px 15px ${colors.accentMint}30`
+                        }}
+                      >
+                        {editLoading ? (
+                          <span className="flex items-center justify-center gap-2">
+                            <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                            Saving...
+                          </span>
+                        ) : (
+                          'Save Changes'
+                        )}
+                      </motion.button>
+                    </div>
+                  </div>
                 </div>
-              </div>
-            </GlassCard>
+              </GlassCard>
+            </motion.div>
           </motion.div>
-        </div>
-      )}
+        )}
+      </AnimatePresence>
 
       <Footer />
     </div>

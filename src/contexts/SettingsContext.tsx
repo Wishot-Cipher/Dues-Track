@@ -120,23 +120,16 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
   const playNotificationSound = useCallback((type: 'success' | 'info' | 'warning' | 'ding' = 'info') => {
     if (!settings.notifications.soundEnabled) return;
     
-    try {
-      if (type === 'ding') {
-        notificationSound.playDing();
-      } else {
-        notificationSound.play(type);
-      }
-    } catch {
-      // Sound failed, ignore
+    // Use void to handle promise without await (fire and forget)
+    if (type === 'ding') {
+      void notificationSound.playDing();
+    } else {
+      void notificationSound.play(type);
     }
   }, [settings.notifications.soundEnabled]);
 
   const testNotificationSound = useCallback(() => {
-    try {
-      notificationSound.playDing();
-    } catch {
-      // Sound failed
-    }
+    void notificationSound.playDing();
   }, []);
 
   return (
