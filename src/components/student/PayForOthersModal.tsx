@@ -43,6 +43,7 @@ export default function PayForOthersModal({
   paymentTypeId,
   paymentTypeName,
   amount,
+  currentStudentId,
   currentUserHasPaid,
   onProceed
 }: PayForOthersModalProps) {
@@ -53,20 +54,15 @@ export default function PayForOthersModal({
   const [loading, setLoading] = useState(false);
   const { error: showError } = useToast();
 
-  useEffect(() => {
-    if (isOpen) {
-      fetchStudents();
-    }
-  }, [isOpen, paymentTypeId]);
-
   const fetchStudents = async () => {
     try {
       setLoading(true);
 
-      // Get all students (including current user)
+      // Get all students EXCEPT the current user (who is the one paying)
       const { data: allStudents, error: studentsError } = await supabase
         .from('students')
         .select('id, full_name, reg_number, level')
+        .neq('id', currentStudentId) // Exclude current user from the list
         .order('full_name');
 
       if (studentsError) throw studentsError;
@@ -93,6 +89,13 @@ export default function PayForOthersModal({
       setLoading(false);
     }
   };
+
+  useEffect(() => {
+    if (isOpen) {
+      fetchStudents();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isOpen, paymentTypeId, currentStudentId]);
 
   const toggleStudent = (student: Student) => {
     setSelectedStudents(prev => {

@@ -5,6 +5,7 @@ import { supabase } from '@/config/supabase';
 import { colors, gradients } from '@/config/colors';
 import GlassCard from '@/components/ui/GlassCard';
 import AnimatedCounter from '@/components/ui/AnimatedCounter';
+import Modal from '@/components/ui/Modal';
 import { useToast } from '@/hooks/useToast';
 import {
   Search,
@@ -23,6 +24,7 @@ import {
   ChevronLeft,
   ChevronRight,
   X,
+  AlertTriangle,
 } from 'lucide-react';
 import Footer from '@/components/Footer';
 import { useAuth } from '@/hooks/useAuth';
@@ -51,6 +53,7 @@ interface Student {
   }>;
   is_finsec?: boolean; // computed from admins
   is_admin?: boolean; // computed from admins
+  is_classrep?: boolean; // computed from admins
   created_at: string;
 }
 
@@ -72,7 +75,15 @@ export default function ManageStudentsPage() {
   
   // Quick filters
   const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'inactive'>('all');
-  const [roleFilter, setRoleFilter] = useState<'all' | 'admin' | 'finsec' | 'student'>('all');
+  const [roleFilter, setRoleFilter] = useState<'all' | 'admin' | 'finsec' | 'classrep' | 'student'>('all');
+  
+  // Confirmation modal state
+  const [confirmModal, setConfirmModal] = useState<{
+    isOpen: boolean;
+    type: 'delete' | 'admin' | 'finsec' | 'classrep' | null;
+    student: Student | null;
+    action: 'grant' | 'remove' | 'delete';
+  }>({ isOpen: false, type: null, student: null, action: 'grant' });
   
   // Apply filters and pagination
   const getFilteredStudents = () => {
@@ -90,8 +101,10 @@ export default function ManageStudentsPage() {
       filtered = filtered.filter(s => s.is_admin);
     } else if (roleFilter === 'finsec') {
       filtered = filtered.filter(s => s.is_finsec);
+    } else if (roleFilter === 'classrep') {
+      filtered = filtered.filter(s => s.is_classrep);
     } else if (roleFilter === 'student') {
-      filtered = filtered.filter(s => !s.is_admin && !s.is_finsec);
+      filtered = filtered.filter(s => !s.is_admin && !s.is_finsec && !s.is_classrep);
     }
     
     return filtered;
@@ -125,6 +138,7 @@ export default function ManageStudentsPage() {
       admins,
       is_admin: admins.some(a => a.role === 'admin'),
       is_finsec: admins.some(a => a.role === 'finsec'),
+      is_classrep: admins.some(a => a.role === 'classrep'),
     } as Student;
   };
 
@@ -259,27 +273,47 @@ export default function ManageStudentsPage() {
   };
 
   const toggleFinsec = async (student: Student) => {
+    // Show confirmation modal
+    setConfirmModal({
+      isOpen: true,
+      type: 'finsec',
+      student,
+      action: student.is_finsec ? 'remove' : 'grant'
+    });
+  };
+
+  const executeToggleFinsec = async (student: Student) => {
     try {
       if (!hasPermission('can_manage_students')) {
         showError('You do not have permission to manage student roles');
         return;
       }
-      // Use admins table for role management instead of a column on students
-      // Check if already has finsec role
-      const { data: existingFinsec } = await supabase
-        .from('admins')
-        .select('id')
-        .match({ student_id: student.id, role: 'finsec' })
-        .limit(1);
+      
+      // Check if already has finsec role using RPC function
+      const { data: existingRole, error: fetchError } = await supabase
+        .rpc('has_admin_role', { p_student_id: student.id, p_role: 'finsec' });
 
-  if (existingFinsec && existingFinsec.length > 0) {
-        // Remove existing finsec role
-        const { error } = await supabase
-          .from('admins')
-          .delete()
-          .match({ student_id: student.id, role: 'finsec' });
-        if (error) throw error;
+      if (fetchError) {
+        console.error('Error checking finsec status:', fetchError);
+        throw fetchError;
+      }
+
+      if (existingRole && existingRole.length > 0) {
+        // Remove existing finsec role using RPC function
+        const { data: removed, error } = await supabase
+          .rpc('remove_admin_role', { p_admin_id: existingRole[0].admin_id });
+        
+        if (error) {
+          console.error('Delete error:', error);
+          throw error;
+        }
+        
+        if (!removed) {
+          throw new Error('Failed to remove role - no rows affected');
+        }
+        
         success('Finsec role removed successfully');
+        
         // Notify the user
         await supabase.from('notifications').insert({
           recipient_id: student.id,
@@ -288,19 +322,17 @@ export default function ManageStudentsPage() {
           message: 'Your Finsec role has been removed. Contact admin for more details.',
           link: '/profile',
         });
-  } else {
-        // Add finsec role with sensible defaults
-        const { error } = await supabase
-          .from('admins')
-          .insert({
-            student_id: student.id,
-            role: 'finsec',
-            permissions: [],
-            can_create_payments: true,
-            can_approve_payments: true,
-            can_manage_students: false,
-            can_view_analytics: true,
-          });
+      } else {
+        // Add finsec role using RPC function
+        const { error } = await supabase.rpc('add_admin_role', {
+          p_student_id: student.id,
+          p_role: 'finsec',
+          p_can_create_payments: true,
+          p_can_approve_payments: true,
+          p_can_manage_students: false,
+          p_can_view_analytics: true,
+        });
+        
         if (error) throw error;
         success('Finsec role granted successfully');
         await supabase.from('notifications').insert({
@@ -311,10 +343,12 @@ export default function ManageStudentsPage() {
           link: '/admin/dashboard',
         });
       }
-      fetchStudents();
+      
+      // Refresh the students list
+      await fetchStudents();
+      
       // If current user was updated, refresh their session
       if (user?.id === student.id) {
-        // Re-fetch user session and reload so permissions update immediately
         await authService.getCurrentUser();
         window.location.reload();
       }
@@ -325,26 +359,47 @@ export default function ManageStudentsPage() {
   };
 
   const toggleAdmin = async (student: Student) => {
+    // Show confirmation modal
+    setConfirmModal({
+      isOpen: true,
+      type: 'admin',
+      student,
+      action: student.is_admin ? 'remove' : 'grant'
+    });
+  };
+
+  const executeToggleAdmin = async (student: Student) => {
     try {
       if (!hasPermission('can_manage_students')) {
         showError('You do not have permission to manage student roles');
         return;
       }
-      // Use admins table to create or remove admin records
-      // Check if admin record exists
-      const { data: existingAdmin } = await supabase
-        .from('admins')
-        .select('id')
-        .match({ student_id: student.id, role: 'admin' })
-        .limit(1);
+      
+      // Check if admin record exists using RPC function
+      const { data: existingRole, error: fetchError } = await supabase
+        .rpc('has_admin_role', { p_student_id: student.id, p_role: 'admin' });
 
-  if (existingAdmin && existingAdmin.length > 0) {
-        const { error } = await supabase
-          .from('admins')
-          .delete()
-          .match({ student_id: student.id, role: 'admin' });
-        if (error) throw error;
+      if (fetchError) {
+        console.error('Error checking admin status:', fetchError);
+        throw fetchError;
+      }
+
+      if (existingRole && existingRole.length > 0) {
+        // Remove existing admin role using RPC function
+        const { data: removed, error } = await supabase
+          .rpc('remove_admin_role', { p_admin_id: existingRole[0].admin_id });
+        
+        if (error) {
+          console.error('Delete error:', error);
+          throw error;
+        }
+        
+        if (!removed) {
+          throw new Error('Failed to remove role - no rows affected');
+        }
+        
         success('Admin role removed successfully');
+        
         await supabase.from('notifications').insert({
           recipient_id: student.id,
           type: 'role_removed',
@@ -352,18 +407,17 @@ export default function ManageStudentsPage() {
           message: 'Your Admin role has been removed. Contact admin for more details.',
           link: '/profile',
         });
-  } else {
-        const { error } = await supabase
-          .from('admins')
-          .insert({
-            student_id: student.id,
-            role: 'admin',
-            permissions: [],
-            can_create_payments: true,
-            can_approve_payments: true,
-            can_manage_students: true,
-            can_view_analytics: true,
-          });
+      } else {
+        // Add admin role using RPC function
+        const { error } = await supabase.rpc('add_admin_role', {
+          p_student_id: student.id,
+          p_role: 'admin',
+          p_can_create_payments: true,
+          p_can_approve_payments: true,
+          p_can_manage_students: true,
+          p_can_view_analytics: true,
+        });
+        
         if (error) throw error;
         success('Admin role granted successfully');
         await supabase.from('notifications').insert({
@@ -374,22 +428,115 @@ export default function ManageStudentsPage() {
           link: '/admin/dashboard',
         });
       }
-      fetchStudents();
-        // If current user was updated, refresh their session
-        if (user?.id === student.id) {
-          await authService.getCurrentUser();
-        }
+      
+      // Refresh the students list
+      await fetchStudents();
+      
+      // If current user was updated, refresh their session
+      if (user?.id === student.id) {
+        await authService.getCurrentUser();
+      }
     } catch (error) {
       console.error('Error toggling admin:', error);
       showError('Failed to update admin role');
     }
   };
 
-  const deleteStudent = async (student: Student) => {
-    if (!confirm(`Are you sure you want to delete ${student.full_name}? This action cannot be undone.`)) {
-      return;
-    }
+  const toggleClassRep = async (student: Student) => {
+    // Show confirmation modal
+    setConfirmModal({
+      isOpen: true,
+      type: 'classrep',
+      student,
+      action: student.is_classrep ? 'remove' : 'grant'
+    });
+  };
 
+  const executeToggleClassRep = async (student: Student) => {
+    try {
+      if (!hasPermission('can_manage_students')) {
+        showError('You do not have permission to manage student roles');
+        return;
+      }
+      
+      // Check if classrep record exists using RPC function
+      const { data: existingRole, error: fetchError } = await supabase
+        .rpc('has_admin_role', { p_student_id: student.id, p_role: 'classrep' });
+
+      if (fetchError) {
+        console.error('Error checking classrep status:', fetchError);
+        throw fetchError;
+      }
+
+      if (existingRole && existingRole.length > 0) {
+        // Remove existing classrep role using RPC function
+        const { data: removed, error } = await supabase
+          .rpc('remove_admin_role', { p_admin_id: existingRole[0].admin_id });
+        
+        if (error) {
+          console.error('Delete error:', error);
+          throw error;
+        }
+        
+        if (!removed) {
+          throw new Error('Failed to remove role - no rows affected');
+        }
+        
+        success('Class Rep role removed successfully');
+        
+        await supabase.from('notifications').insert({
+          recipient_id: student.id,
+          type: 'role_removed',
+          title: 'Class Rep Role Removed',
+          message: 'Your Class Rep role has been removed. Contact admin for more details.',
+          link: '/profile',
+        });
+      } else {
+        // Add classrep role using RPC function
+        const { error } = await supabase.rpc('add_admin_role', {
+          p_student_id: student.id,
+          p_role: 'classrep',
+          p_can_create_payments: false,
+          p_can_approve_payments: false,
+          p_can_manage_students: false,
+          p_can_view_analytics: true,
+        });
+        
+        if (error) throw error;
+        success('Class Rep role granted successfully');
+        await supabase.from('notifications').insert({
+          recipient_id: student.id,
+          type: 'role_assigned',
+          title: 'Class Rep Role Granted',
+          message: 'You have been granted Class Rep permissions. You can now view class analytics and represent your classmates.',
+          link: '/admin/dashboard',
+        });
+      }
+      
+      // Refresh the students list
+      await fetchStudents();
+      
+      // If current user was updated, refresh their session
+      if (user?.id === student.id) {
+        await authService.getCurrentUser();
+      }
+    } catch (error) {
+      console.error('Error toggling class rep:', error);
+      showError('Failed to update class rep role');
+    }
+  };
+
+  const deleteStudent = async (student: Student) => {
+    // Show confirmation modal
+    setConfirmModal({
+      isOpen: true,
+      type: 'delete',
+      student,
+      action: 'delete'
+    });
+  };
+
+  const executeDeleteStudent = async (student: Student) => {
     try {
       // First delete from auth.users
       const { error: authError } = await supabase.auth.admin.deleteUser(student.id);
@@ -415,11 +562,175 @@ export default function ManageStudentsPage() {
     }
   };
 
+  // Handle confirmation modal action
+  const handleConfirmAction = async () => {
+    if (!confirmModal.student) return;
+    
+    setConfirmModal(prev => ({ ...prev, isOpen: false }));
+    
+    switch (confirmModal.type) {
+      case 'finsec':
+        await executeToggleFinsec(confirmModal.student);
+        break;
+      case 'admin':
+        await executeToggleAdmin(confirmModal.student);
+        break;
+      case 'classrep':
+        await executeToggleClassRep(confirmModal.student);
+        break;
+      case 'delete':
+        await executeDeleteStudent(confirmModal.student);
+        break;
+    }
+  };
+
+  // Get confirmation modal content
+  const getConfirmModalContent = () => {
+    if (!confirmModal.student) return { title: '', message: '', icon: null, color: '' };
+    
+    const student = confirmModal.student;
+    
+    switch (confirmModal.type) {
+      case 'delete':
+        return {
+          title: 'Delete Student',
+          message: `Are you sure you want to permanently delete "${student.full_name}"? This action cannot be undone and will remove all associated data.`,
+          icon: <Trash2 className="w-8 h-8" />,
+          color: '#ef4444',
+          buttonText: 'Delete Student'
+        };
+      case 'admin':
+        return {
+          title: confirmModal.action === 'grant' ? 'Grant Admin Role' : 'Remove Admin Role',
+          message: confirmModal.action === 'grant' 
+            ? `Grant admin privileges to "${student.full_name}"? They will be able to manage students, create payments, and view analytics.`
+            : `Remove admin privileges from "${student.full_name}"? They will lose access to admin features.`,
+          icon: <Shield className="w-8 h-8" />,
+          color: confirmModal.action === 'grant' ? colors.accentMint : colors.warning,
+          buttonText: confirmModal.action === 'grant' ? 'Grant Admin' : 'Remove Admin'
+        };
+      case 'finsec':
+        return {
+          title: confirmModal.action === 'grant' ? 'Grant Finsec Role' : 'Remove Finsec Role',
+          message: confirmModal.action === 'grant'
+            ? `Grant financial secretary privileges to "${student.full_name}"? They will be able to approve and create payments.`
+            : `Remove financial secretary privileges from "${student.full_name}"? They will lose payment approval access.`,
+          icon: <Crown className="w-8 h-8" />,
+          color: confirmModal.action === 'grant' ? colors.primary : colors.warning,
+          buttonText: confirmModal.action === 'grant' ? 'Grant Finsec' : 'Remove Finsec'
+        };
+      case 'classrep':
+        return {
+          title: confirmModal.action === 'grant' ? 'Grant Class Rep Role' : 'Remove Class Rep Role',
+          message: confirmModal.action === 'grant'
+            ? `Grant class representative privileges to "${student.full_name}"? They will be able to view class analytics.`
+            : `Remove class representative privileges from "${student.full_name}"?`,
+          icon: <Users className="w-8 h-8" />,
+          color: confirmModal.action === 'grant' ? colors.accentMint : colors.warning,
+          buttonText: confirmModal.action === 'grant' ? 'Grant Class Rep' : 'Remove Class Rep'
+        };
+      default:
+        return { title: '', message: '', icon: null, color: '', buttonText: '' };
+    }
+  };
+
+  const modalContent = getConfirmModalContent();
+
   return (
     <div className="min-h-screen py-4 sm:py-6 relative overflow-x-hidden"  style={{
         background: 'radial-gradient(ellipse at top, #1A0E09 0%, #0F0703 100%)',
       }}
     >
+      {/* Confirmation Modal */}
+      <Modal
+        isOpen={confirmModal.isOpen}
+        onClose={() => setConfirmModal(prev => ({ ...prev, isOpen: false }))}
+        title={
+          <div className="flex items-center gap-3">
+            <div 
+              className="w-12 h-12 rounded-xl flex items-center justify-center"
+              style={{ background: `${modalContent.color}20`, color: modalContent.color }}
+            >
+              {modalContent.icon}
+            </div>
+            <span>{modalContent.title}</span>
+          </div>
+        }
+        size="sm"
+        footer={
+          <div className="flex items-center gap-3 w-full">
+            <motion.button
+              whileHover={{ scale: 1.02 }}
+              whileTap={{ scale: 0.98 }}
+              onClick={() => setConfirmModal(prev => ({ ...prev, isOpen: false }))}
+              className="flex-1 py-3 px-4 rounded-xl font-medium transition-all"
+              style={{ 
+                background: 'rgba(255, 255, 255, 0.05)',
+                border: '1px solid rgba(255, 255, 255, 0.1)',
+                color: colors.textSecondary
+              }}
+            >
+              Cancel
+            </motion.button>
+            <motion.button
+              whileHover={{ scale: 1.02 }}
+              whileTap={{ scale: 0.98 }}
+              onClick={handleConfirmAction}
+              className="flex-1 py-3 px-4 rounded-xl font-semibold text-white transition-all"
+              style={{ 
+                background: confirmModal.type === 'delete' 
+                  ? 'linear-gradient(135deg, #ef4444, #dc2626)'
+                  : confirmModal.action === 'remove'
+                    ? `linear-gradient(135deg, ${colors.warning}, #d97706)`
+                    : `linear-gradient(135deg, ${modalContent.color}, ${colors.primary})`,
+                boxShadow: `0 4px 15px ${modalContent.color}40`
+              }}
+            >
+              {modalContent.buttonText}
+            </motion.button>
+          </div>
+        }
+      >
+        <div className="space-y-4">
+          {/* Student info card */}
+          {confirmModal.student && (
+            <div 
+              className="p-4 rounded-xl flex items-center gap-4"
+              style={{ background: 'rgba(255, 255, 255, 0.03)', border: '1px solid rgba(255, 255, 255, 0.08)' }}
+            >
+              <div 
+                className="w-14 h-14 rounded-full flex items-center justify-center text-xl font-bold shrink-0"
+                style={{ background: `${colors.primary}20`, color: colors.primary }}
+              >
+                {confirmModal.student.full_name.charAt(0)}
+              </div>
+              <div>
+                <p className="font-semibold text-white text-lg">{confirmModal.student.full_name}</p>
+                <p className="text-sm" style={{ color: colors.textSecondary }}>{confirmModal.student.reg_number}</p>
+                <p className="text-xs mt-1" style={{ color: colors.textSecondary }}>{confirmModal.student.email}</p>
+              </div>
+            </div>
+          )}
+          
+          {/* Warning message */}
+          <div 
+            className="p-4 rounded-xl flex items-start gap-3"
+            style={{ 
+              background: confirmModal.type === 'delete' ? 'rgba(239, 68, 68, 0.1)' : `${modalContent.color}10`,
+              border: `1px solid ${confirmModal.type === 'delete' ? 'rgba(239, 68, 68, 0.2)' : modalContent.color + '20'}`
+            }}
+          >
+            <AlertTriangle 
+              className="w-5 h-5 mt-0.5 shrink-0" 
+              style={{ color: confirmModal.type === 'delete' ? '#ef4444' : modalContent.color }} 
+            />
+            <p className="text-sm" style={{ color: colors.textSecondary }}>
+              {modalContent.message}
+            </p>
+          </div>
+        </div>
+      </Modal>
+
       {/* Background Grid Pattern */}
       <div
         className="absolute inset-0 opacity-20 pointer-events-none"
@@ -537,7 +848,7 @@ export default function ManageStudentsPage() {
               </div>
 
               {/* Quick Stats */}
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mt-4">
+              <div className="grid grid-cols-2 sm:grid-cols-5 gap-3 mt-4">
                 <div className="p-3 rounded-xl text-center" style={{ background: 'rgba(255, 255, 255, 0.03)', border: '1px solid rgba(255, 255, 255, 0.05)' }}>
                   <p className="text-2xl font-bold text-white"><AnimatedCounter value={filteredStudents.length} /></p>
                   <p className="text-xs" style={{ color: colors.textSecondary }}>Total</p>
@@ -553,6 +864,10 @@ export default function ManageStudentsPage() {
                 <div className="p-3 rounded-xl text-center" style={{ background: `${colors.accentMint}10`, border: `1px solid ${colors.accentMint}20` }}>
                   <p className="text-2xl font-bold" style={{ color: colors.accentMint }}><AnimatedCounter value={filteredStudents.filter(s => s.is_finsec).length} /></p>
                   <p className="text-xs" style={{ color: colors.textSecondary }}>Finsecs</p>
+                </div>
+                <div className="p-3 rounded-xl text-center" style={{ background: `${colors.warning}10`, border: `1px solid ${colors.warning}20` }}>
+                  <p className="text-2xl font-bold" style={{ color: colors.warning }}><AnimatedCounter value={filteredStudents.filter(s => s.is_classrep).length} /></p>
+                  <p className="text-xs" style={{ color: colors.textSecondary }}>Class Reps</p>
                 </div>
               </div>
             </div>
@@ -619,7 +934,8 @@ export default function ManageStudentsPage() {
                     { value: 'all' as const, label: 'All Roles', count: filteredStudents.length },
                     { value: 'admin' as const, label: 'Admins', count: filteredStudents.filter(s => s.is_admin).length },
                     { value: 'finsec' as const, label: 'Finsecs', count: filteredStudents.filter(s => s.is_finsec).length },
-                    { value: 'student' as const, label: 'Students Only', count: filteredStudents.filter(s => !s.is_admin && !s.is_finsec).length },
+                    { value: 'classrep' as const, label: 'Class Reps', count: filteredStudents.filter(s => s.is_classrep).length },
+                    { value: 'student' as const, label: 'Students Only', count: filteredStudents.filter(s => !s.is_admin && !s.is_finsec && !s.is_classrep).length },
                   ].map(({ value, label, count }) => (
                     <button
                       key={value}
@@ -752,6 +1068,12 @@ export default function ManageStudentsPage() {
                                 Finsec
                               </span>
                             )}
+                            {student.is_classrep && (
+                              <span className="px-2 py-1 rounded text-xs font-medium whitespace-nowrap" style={{ background: `${colors.warning}20`, color: colors.warning }}>
+                                <Users className="w-3 h-3 inline mr-1" />
+                                Class Rep
+                              </span>
+                            )}
                           </div>
                         </td>
                         <td className="py-4 px-4">
@@ -784,6 +1106,14 @@ export default function ManageStudentsPage() {
                               title={student.is_admin ? 'Remove Admin' : 'Make Admin'}
                             >
                               <Crown className="w-4 h-4" style={{ color: student.is_admin ? colors.primary : colors.textSecondary }} />
+                            </button>
+                            <button
+                              onClick={() => toggleClassRep(student)}
+                              className="p-2 rounded-lg transition-colors"
+                              style={{ background: student.is_classrep ? `${colors.warning}20` : 'rgba(255, 255, 255, 0.05)' }}
+                              title={student.is_classrep ? 'Remove Class Rep' : 'Make Class Rep'}
+                            >
+                              <Users className="w-4 h-4" style={{ color: student.is_classrep ? colors.warning : colors.textSecondary }} />
                             </button>
                             <button
                               onClick={() => {
@@ -820,114 +1150,213 @@ export default function ManageStudentsPage() {
                     initial={{ opacity: 0, y: 20 }}
                     animate={{ opacity: 1, y: 0 }}
                     transition={{ delay: Math.min(index * 0.02, 0.3) }}
-                    className="p-4 rounded-lg"
-                    style={{ background: 'rgba(255, 255, 255, 0.05)' }}
+                    className="rounded-xl overflow-hidden"
+                    style={{ 
+                      background: 'rgba(255, 255, 255, 0.05)',
+                      border: '1px solid rgba(255, 255, 255, 0.1)'
+                    }}
                   >
-                    {/* Student Info */}
-                    <div className="flex flex-col items-center text-center mb-4">
+                    {/* Header with Avatar and Name */}
+                    <div 
+                      className="p-4 flex items-center gap-4"
+                      style={{ 
+                        background: student.is_admin 
+                          ? `linear-gradient(135deg, ${colors.primary}15, transparent)` 
+                          : student.is_finsec 
+                            ? `linear-gradient(135deg, ${colors.accentMint}15, transparent)`
+                            : student.is_classrep
+                              ? `linear-gradient(135deg, ${colors.warning}15, transparent)`
+                              : 'transparent'
+                      }}
+                    >
                       <div
-                        className="w-16 h-16 rounded-full flex items-center justify-center text-lg font-bold mb-3"
-                        style={{ background: gradients.primary }}
+                        className="w-14 h-14 rounded-full flex items-center justify-center text-lg font-bold flex-shrink-0"
+                        style={{ 
+                          background: student.is_admin 
+                            ? gradients.primary 
+                            : student.is_finsec 
+                              ? `linear-gradient(135deg, ${colors.accentMint}, ${colors.accentMint}80)`
+                              : student.is_classrep
+                                ? `linear-gradient(135deg, ${colors.warning}, ${colors.warning}80)`
+                                : gradients.primary
+                        }}
                       >
                         {student.full_name.charAt(0)}
                       </div>
-                      <p className="font-semibold text-white text-lg">{student.full_name}</p>
-                      <p className="text-sm mb-1" style={{ color: colors.textSecondary }}>{student.reg_number}</p>
-                      <p className="text-xs break-all" style={{ color: colors.textSecondary }}>{student.email}</p>
-                    </div>
-
-                    {/* Details */}
-                    <div className="grid grid-cols-2 gap-3 mb-4 text-sm">
-                      <div className="text-center p-2 rounded" style={{ background: 'rgba(255, 255, 255, 0.03)' }}>
-                        <p className="text-xs mb-1" style={{ color: colors.textSecondary }}>Level</p>
-                        <p className="text-white font-semibold">{student.level}</p>
+                      <div className="flex-1 min-w-0">
+                        <p className="font-semibold text-white text-base truncate">{student.full_name}</p>
+                        <p className="text-sm truncate" style={{ color: colors.textSecondary }}>{student.reg_number}</p>
+                        <p className="text-xs truncate" style={{ color: colors.textSecondary }}>{student.email}</p>
                       </div>
-                      <div className="text-center p-2 rounded" style={{ background: 'rgba(255, 255, 255, 0.03)' }}>
-                        <p className="text-xs mb-1" style={{ color: colors.textSecondary }}>Section</p>
-                        <p className="text-white font-semibold">{student.section}</p>
-                      </div>
-                    </div>
-
-                    {/* Roles & Status */}
-                    <div className="flex flex-wrap justify-center gap-2 mb-4">
-                      {student.is_admin && (
-                        <span className="px-3 py-1.5 rounded-full text-xs font-medium" style={{ background: `${colors.primary}20`, color: colors.primary }}>
-                          <Crown className="w-3 h-3 inline mr-1" />
-                          Admin
-                        </span>
-                      )}
-                      {student.is_finsec && (
-                        <span className="px-3 py-1.5 rounded-full text-xs font-medium" style={{ background: `${colors.accentMint}20`, color: colors.accentMint }}>
-                          <Shield className="w-3 h-3 inline mr-1" />
-                          Finsec
-                        </span>
-                      )}
-                      <span
-                        className="px-3 py-1.5 rounded-full text-xs font-medium"
+                      {/* Status Badge */}
+                      <div
+                        className="px-2 py-1 rounded-full text-[10px] font-medium flex-shrink-0"
                         style={{
                           background: student.is_active ? `${colors.statusPaid}20` : `${colors.statusUnpaid}20`,
-                          color: student.is_active ? colors.statusPaid : colors.statusUnpaid
+                          color: student.is_active ? colors.statusPaid : colors.statusUnpaid,
+                          border: `1px solid ${student.is_active ? `${colors.statusPaid}40` : `${colors.statusUnpaid}40`}`
                         }}
                       >
-                        {student.is_active ? '✓ Active' : '✕ Inactive'}
-                      </span>
+                        {student.is_active ? '● Active' : '○ Inactive'}
+                      </div>
                     </div>
 
-                    {/* Actions - Stacked Layout */}
-                    <div className="space-y-2">
-                      {/* Primary Action */}
+                    {/* Role Badges */}
+                    <div className="px-4 pb-3">
+                      <div className="flex flex-wrap gap-2">
+                        {student.is_admin && (
+                          <span 
+                            className="px-3 py-1.5 rounded-full text-xs font-semibold flex items-center gap-1.5"
+                            style={{ 
+                              background: `${colors.primary}25`, 
+                              color: colors.primary,
+                              border: `1px solid ${colors.primary}40`
+                            }}
+                          >
+                            <Crown className="w-3.5 h-3.5" />
+                            Admin
+                          </span>
+                        )}
+                        {student.is_finsec && (
+                          <span 
+                            className="px-3 py-1.5 rounded-full text-xs font-semibold flex items-center gap-1.5"
+                            style={{ 
+                              background: `${colors.accentMint}25`, 
+                              color: colors.accentMint,
+                              border: `1px solid ${colors.accentMint}40`
+                            }}
+                          >
+                            <Shield className="w-3.5 h-3.5" />
+                            Financial Sec
+                          </span>
+                        )}
+                        {student.is_classrep && (
+                          <span 
+                            className="px-3 py-1.5 rounded-full text-xs font-semibold flex items-center gap-1.5"
+                            style={{ 
+                              background: `${colors.warning}25`, 
+                              color: colors.warning,
+                              border: `1px solid ${colors.warning}40`
+                            }}
+                          >
+                            <Users className="w-3.5 h-3.5" />
+                            Class Rep
+                          </span>
+                        )}
+                        {!student.is_admin && !student.is_finsec && !student.is_classrep && (
+                          <span 
+                            className="px-3 py-1.5 rounded-full text-xs font-medium flex items-center gap-1.5"
+                            style={{ 
+                              background: 'rgba(255, 255, 255, 0.05)', 
+                              color: colors.textSecondary,
+                              border: '1px solid rgba(255, 255, 255, 0.1)'
+                            }}
+                          >
+                            <User className="w-3.5 h-3.5" />
+                            Student
+                          </span>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Details Grid */}
+                    <div className="px-4 pb-3">
+                      <div className="grid grid-cols-2 gap-2">
+                        <div className="p-2.5 rounded-lg text-center" style={{ background: 'rgba(255, 255, 255, 0.03)' }}>
+                          <p className="text-[10px] uppercase tracking-wider mb-0.5" style={{ color: colors.textSecondary }}>Level</p>
+                          <p className="text-white font-semibold text-sm">{student.level}</p>
+                        </div>
+                        <div className="p-2.5 rounded-lg text-center" style={{ background: 'rgba(255, 255, 255, 0.03)' }}>
+                          <p className="text-[10px] uppercase tracking-wider mb-0.5" style={{ color: colors.textSecondary }}>Section</p>
+                          <p className="text-white font-semibold text-sm">{student.section || 'N/A'}</p>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Actions */}
+                    <div className="p-4 pt-2 space-y-3" style={{ borderTop: '1px solid rgba(255, 255, 255, 0.05)' }}>
+                      {/* Activate/Deactivate Button */}
                       <button
                         onClick={() => toggleStudentStatus(student)}
-                        className="w-full px-4 py-2.5 rounded-lg text-sm font-medium transition-colors"
+                        className="w-full px-4 py-2.5 rounded-lg text-sm font-medium transition-all active:scale-[0.98]"
                         style={{
-                          background: student.is_active ? `${colors.statusUnpaid}20` : `${colors.statusPaid}20`,
+                          background: student.is_active ? `${colors.statusUnpaid}15` : `${colors.statusPaid}15`,
                           color: student.is_active ? colors.statusUnpaid : colors.statusPaid,
-                          border: `1px solid ${student.is_active ? `${colors.statusUnpaid}40` : `${colors.statusPaid}40`}`
+                          border: `1px solid ${student.is_active ? `${colors.statusUnpaid}30` : `${colors.statusPaid}30`}`
                         }}
                       >
-                        {student.is_active ? 'Deactivate Student' : 'Activate Student'}
+                        {student.is_active ? '⏸ Deactivate Student' : '▶ Activate Student'}
                       </button>
                       
-                      {/* Secondary Actions */}
-                      <div className="grid grid-cols-4 gap-2">
+                      {/* Role Toggle Buttons */}
+                      <div className="grid grid-cols-3 gap-2">
                         <button
                           onClick={() => toggleFinsec(student)}
-                          className="p-3 rounded-lg transition-colors flex flex-col items-center gap-1"
-                          style={{ background: student.is_finsec ? `${colors.accentMint}20` : 'rgba(255, 255, 255, 0.05)' }}
-                          title={student.is_finsec ? 'Remove Finsec' : 'Make Finsec'}
+                          className="p-3 rounded-xl transition-all active:scale-[0.95] flex flex-col items-center gap-1.5"
+                          style={{ 
+                            background: student.is_finsec ? `${colors.accentMint}20` : 'rgba(255, 255, 255, 0.05)',
+                            border: student.is_finsec ? `1px solid ${colors.accentMint}40` : '1px solid rgba(255, 255, 255, 0.1)'
+                          }}
                         >
                           <Shield className="w-5 h-5" style={{ color: student.is_finsec ? colors.accentMint : colors.textSecondary }} />
-                          <span className="text-[10px]" style={{ color: student.is_finsec ? colors.accentMint : colors.textSecondary }}>Finsec</span>
+                          <span className="text-[10px] font-medium" style={{ color: student.is_finsec ? colors.accentMint : colors.textSecondary }}>
+                            {student.is_finsec ? '✓ Finsec' : 'Finsec'}
+                          </span>
                         </button>
                         <button
                           onClick={() => toggleAdmin(student)}
-                          className="p-3 rounded-lg transition-colors flex flex-col items-center gap-1"
-                          style={{ background: student.is_admin ? `${colors.primary}20` : 'rgba(255, 255, 255, 0.05)' }}
-                          title={student.is_admin ? 'Remove Admin' : 'Make Admin'}
+                          className="p-3 rounded-xl transition-all active:scale-[0.95] flex flex-col items-center gap-1.5"
+                          style={{ 
+                            background: student.is_admin ? `${colors.primary}20` : 'rgba(255, 255, 255, 0.05)',
+                            border: student.is_admin ? `1px solid ${colors.primary}40` : '1px solid rgba(255, 255, 255, 0.1)'
+                          }}
                         >
                           <Crown className="w-5 h-5" style={{ color: student.is_admin ? colors.primary : colors.textSecondary }} />
-                          <span className="text-[10px]" style={{ color: student.is_admin ? colors.primary : colors.textSecondary }}>Admin</span>
+                          <span className="text-[10px] font-medium" style={{ color: student.is_admin ? colors.primary : colors.textSecondary }}>
+                            {student.is_admin ? '✓ Admin' : 'Admin'}
+                          </span>
                         </button>
+                        <button
+                          onClick={() => toggleClassRep(student)}
+                          className="p-3 rounded-xl transition-all active:scale-[0.95] flex flex-col items-center gap-1.5"
+                          style={{ 
+                            background: student.is_classrep ? `${colors.warning}20` : 'rgba(255, 255, 255, 0.05)',
+                            border: student.is_classrep ? `1px solid ${colors.warning}40` : '1px solid rgba(255, 255, 255, 0.1)'
+                          }}
+                        >
+                          <Users className="w-5 h-5" style={{ color: student.is_classrep ? colors.warning : colors.textSecondary }} />
+                          <span className="text-[10px] font-medium" style={{ color: student.is_classrep ? colors.warning : colors.textSecondary }}>
+                            {student.is_classrep ? '✓ Rep' : 'Class Rep'}
+                          </span>
+                        </button>
+                      </div>
+
+                      {/* Edit/Delete Buttons */}
+                      <div className="grid grid-cols-2 gap-2">
                         <button
                           onClick={() => {
                             setSelectedStudent(student);
                             setShowEditModal(true);
                           }}
-                          className="p-3 rounded-lg transition-colors flex flex-col items-center gap-1"
-                          style={{ background: 'rgba(255, 255, 255, 0.05)' }}
-                          title="Edit Student"
+                          className="p-3 rounded-xl transition-all active:scale-[0.95] flex items-center justify-center gap-2"
+                          style={{ 
+                            background: 'rgba(255, 255, 255, 0.05)',
+                            border: '1px solid rgba(255, 255, 255, 0.1)'
+                          }}
                         >
-                          <Edit2 className="w-5 h-5" style={{ color: colors.textSecondary }} />
-                          <span className="text-[10px]" style={{ color: colors.textSecondary }}>Edit</span>
+                          <Edit2 className="w-4 h-4" style={{ color: colors.textSecondary }} />
+                          <span className="text-xs font-medium" style={{ color: colors.textSecondary }}>Edit Profile</span>
                         </button>
                         <button
                           onClick={() => deleteStudent(student)}
-                          className="p-3 rounded-lg transition-colors flex flex-col items-center gap-1"
-                          style={{ background: 'rgba(255, 255, 255, 0.05)' }}
-                          title="Delete Student"
+                          className="p-3 rounded-xl transition-all active:scale-[0.95] flex items-center justify-center gap-2"
+                          style={{ 
+                            background: 'rgba(239, 68, 68, 0.1)',
+                            border: '1px solid rgba(239, 68, 68, 0.2)'
+                          }}
                         >
-                          <Trash2 className="w-5 h-5 text-red-400" />
-                          <span className="text-[10px] text-red-400">Delete</span>
+                          <Trash2 className="w-4 h-4 text-red-400" />
+                          <span className="text-xs font-medium text-red-400">Delete</span>
                         </button>
                       </div>
                     </div>

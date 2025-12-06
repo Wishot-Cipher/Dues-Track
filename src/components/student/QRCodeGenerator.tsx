@@ -15,6 +15,10 @@ import {
   Users,
   Shield,
   Zap,
+  Copy,
+  Check,
+  Hash,
+  MessageSquare,
 } from "lucide-react";
 import { formatCurrency } from "@/utils/formatters";
 
@@ -31,6 +35,48 @@ interface QRCodeGeneratorProps {
   onBack: () => void;
 }
 
+// Generate a short payment code from payment details
+// Uses first 3 chars of studentId (without dashes) + last 3 chars of paymentTypeId (without dashes) + last 4 digits of timestamp
+const generatePaymentCode = (studentId: string, paymentTypeId: string, timestamp: number): string => {
+  const studentPart = studentId.replace(/-/g, '').slice(0, 3).toUpperCase();
+  const paymentPart = paymentTypeId.replace(/-/g, '').slice(-3).toUpperCase();
+  const timePart = timestamp.toString().slice(-4);
+  return `${studentPart}-${paymentPart}-${timePart}`;
+};
+
+// Generate a multi-pay code with compressed reg numbers (NO DATABASE NEEDED)
+// Format: MP-XXX-P123-456.789 where:
+// - MP = Multi-pay prefix
+// - XXX = Last 3 chars of payment type ID  
+// - P123 = Payer's reg suffix (P prefix identifies who is paying the cash)
+// - 456.789 = ALL recipients' reg suffixes (dot-separated) - who the payment is FOR
+// Example: Payer REG001 paying for self + REG002 + REG003 -> MP-ABC-P001-001.002.003
+// Example: Payer REG001 paying for REG002 + REG003 only -> MP-ABC-P001-002.003
+const generateMultiPayCode = (
+  paymentTypeId: string, 
+  payerRegNumber: string,
+  recipientRegNumbers: string[] // ALL people being paid for
+): string => {
+  const paymentPart = paymentTypeId.replace(/-/g, '').slice(-3).toUpperCase();
+  
+  // Payer's suffix with P prefix (identifies who handed over the cash)
+  const payerCleaned = payerRegNumber.replace(/[^A-Z0-9]/gi, '');
+  const payerPart = 'P' + payerCleaned.slice(-3).toUpperCase();
+  
+  // All recipients' suffixes (dot-separated) - these are the people the payment is FOR
+  const recipientParts = recipientRegNumbers.map(reg => {
+    const cleaned = reg.replace(/[^A-Z0-9]/gi, '');
+    return cleaned.slice(-3).toUpperCase();
+  });
+  
+  // If no recipients, this shouldn't happen but handle gracefully
+  if (recipientParts.length === 0) {
+    return `MP-${paymentPart}-${payerPart}`;
+  }
+  
+  return `MP-${paymentPart}-${payerPart}-${recipientParts.join('.')}`;
+};
+
 export default function QRCodeGenerator({
   studentId,
   studentName,
@@ -46,11 +92,44 @@ export default function QRCodeGenerator({
   const [qrDataUrl, setQrDataUrl] = useState<string>("");
   const [showInstructions, setShowInstructions] = useState(true);
   const [qrTimestamp, setQrTimestamp] = useState(Date.now());
+  const [copiedCode, setCopiedCode] = useState(false);
+  const [paymentCode, setPaymentCode] = useState<string>("");
+  const [multiPayCode, setMultiPayCode] = useState<string>("");
 
   useEffect(() => {
     const generateQRCode = async () => {
       if (canvasRef.current) {
         try {
+          // Generate payment code for verbal sharing (single payment)
+          const code = generatePaymentCode(studentId, paymentTypeId, qrTimestamp);
+          setPaymentCode(code);
+          
+          // Generate multi-pay code if paying for multiple students
+          if (totalStudents > 1) {
+            // Build the list of ALL recipients (people being paid FOR)
+            const recipientRegNumbers: string[] = [];
+            
+            // If payer is also a recipient (includeSelf=true), add them first
+            if (includeSelf) {
+              recipientRegNumbers.push(studentRegNumber);
+            }
+            
+            // Add all selected students as recipients
+            selectedStudents.forEach(s => {
+              recipientRegNumbers.push(s.reg_number);
+            });
+            
+            // Generate the multi-pay code
+            // Payer = current user (studentRegNumber)
+            // Recipients = who the payment is FOR (may or may not include payer)
+            const mpCode = generateMultiPayCode(
+              paymentTypeId, 
+              studentRegNumber, // Payer is always the current user
+              recipientRegNumbers // All people being paid for
+            );
+            setMultiPayCode(mpCode);
+          }
+          
           // Generate QR Code Data with timestamp and multiple students support
           const studentsData = [];
           
@@ -83,6 +162,7 @@ export default function QRCodeGenerator({
             amountPerStudent: totalStudents > 0 ? amount / totalStudents : amount,
             timestamp: qrTimestamp,
             paymentMethod: "cash",
+            paymentCode: code, // Include the short code in QR data
           });
 
           // Generate QR code on canvas
@@ -131,6 +211,47 @@ export default function QRCodeGenerator({
   const handleRefreshQR = () => {
     // Regenerate QR code with new timestamp
     setQrTimestamp(Date.now());
+  };
+
+  const handleCopyPaymentCode = async () => {
+    if (paymentCode) {
+      try {
+        await navigator.clipboard.writeText(paymentCode);
+        setCopiedCode(true);
+        setTimeout(() => setCopiedCode(false), 2000);
+      } catch (error) {
+        console.error("Failed to copy:", error);
+        const textArea = document.createElement("textarea");
+        textArea.value = paymentCode;
+        document.body.appendChild(textArea);
+        textArea.select();
+        document.execCommand("copy");
+        document.body.removeChild(textArea);
+        setCopiedCode(true);
+        setTimeout(() => setCopiedCode(false), 2000);
+      }
+    }
+  };
+
+  // Copy multi-pay code for multi-student payments
+  const handleCopyMultiPayCode = async () => {
+    if (multiPayCode) {
+      try {
+        await navigator.clipboard.writeText(multiPayCode);
+        setCopiedCode(true);
+        setTimeout(() => setCopiedCode(false), 2000);
+      } catch (error) {
+        console.error("Failed to copy:", error);
+        const textArea = document.createElement("textarea");
+        textArea.value = multiPayCode;
+        document.body.appendChild(textArea);
+        textArea.select();
+        document.execCommand("copy");
+        document.body.removeChild(textArea);
+        setCopiedCode(true);
+        setTimeout(() => setCopiedCode(false), 2000);
+      }
+    }
   };
 
   return (
@@ -273,14 +394,14 @@ export default function QRCodeGenerator({
             </div>
             
             {/* List of students being paid for */}
-            {totalStudents > 1 && (
+            {totalStudents >= 1 && (
               <div 
                 className="mt-4 pt-4 border-t"
                 style={{ borderColor: 'rgba(255,255,255,0.06)' }}
               >
                 <p className="text-xs font-medium mb-2 flex items-center gap-2" style={{ color: colors.textSecondary }}>
                   <Users className="w-4 h-4" />
-                  Students ({totalStudents}):
+                  {totalStudents > 1 ? `Paying for ${totalStudents} Students:` : 'Paying for:'}
                 </p>
                 <div className="flex flex-wrap gap-2">
                   {includeSelf && (
@@ -392,6 +513,164 @@ export default function QRCodeGenerator({
                 <RefreshCw className="w-5 h-5" />
                 Refresh Code
               </motion.button>
+            </div>
+          </div>
+        </div>
+      </motion.div>
+
+      {/* Alternative Methods Section */}
+      <motion.div
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ delay: 0.35 }}
+        className="w-full max-w-lg"
+      >
+        <div 
+          className="rounded-2xl overflow-hidden"
+          style={{ 
+            background: 'rgba(255, 255, 255, 0.03)',
+            border: '1px solid rgba(255, 255, 255, 0.08)'
+          }}
+        >
+          <div 
+            className="px-5 py-4 flex items-center gap-3"
+            style={{ 
+              borderBottom: '1px solid rgba(255, 255, 255, 0.06)',
+              background: `linear-gradient(135deg, ${colors.warning}08 0%, transparent 100%)`
+            }}
+          >
+            <div 
+              className="w-10 h-10 rounded-xl flex items-center justify-center"
+              style={{ background: `${colors.warning}20` }}
+            >
+              <MessageSquare className="w-5 h-5" style={{ color: colors.warning }} />
+            </div>
+            <div>
+              <h3 className="text-base font-bold text-white">Can't Scan QR Code?</h3>
+              <p className="text-xs" style={{ color: colors.textSecondary }}>Use these alternatives</p>
+            </div>
+          </div>
+
+          <div className="p-5 space-y-4">
+            {/* Option 1: Verbal Payment Code - Only for single student payments */}
+            {totalStudents === 1 ? (
+              <div 
+                className="p-4 rounded-xl"
+                style={{ 
+                  background: `linear-gradient(135deg, ${colors.primary}10 0%, ${colors.primary}05 100%)`,
+                  border: `1px solid ${colors.primary}25`
+                }}
+              >
+                <div className="flex items-center gap-2 mb-3">
+                  <Hash className="w-4 h-4" style={{ color: colors.primary }} />
+                  <span className="text-sm font-semibold text-white">Option 1: Tell Payment Code</span>
+                  <span 
+                    className="px-2 py-0.5 rounded text-[10px] font-bold"
+                    style={{ background: `${colors.primary}20`, color: colors.primary }}
+                  >
+                    RECOMMENDED
+                  </span>
+                </div>
+                <p className="text-xs mb-3" style={{ color: colors.textSecondary }}>
+                  Verbally tell this code to the treasurer. They can enter it manually.
+                </p>
+                <div className="flex items-center gap-2">
+                  <div 
+                    className="flex-1 px-4 py-3 rounded-lg font-mono text-lg font-bold tracking-wider text-center"
+                    style={{ 
+                      background: 'rgba(0, 0, 0, 0.3)',
+                      color: colors.primary,
+                      border: `1px solid ${colors.primary}30`
+                    }}
+                  >
+                    {paymentCode}
+                  </div>
+                  <motion.button
+                    onClick={handleCopyPaymentCode}
+                    className="p-3 rounded-lg"
+                    style={{ 
+                      background: copiedCode ? `${colors.statusPaid}20` : `${colors.primary}20`,
+                      border: `1px solid ${copiedCode ? colors.statusPaid : colors.primary}30`
+                    }}
+                    whileHover={{ scale: 1.05 }}
+                    whileTap={{ scale: 0.95 }}
+                  >
+                    {copiedCode ? (
+                      <Check className="w-5 h-5" style={{ color: colors.statusPaid }} />
+                    ) : (
+                      <Copy className="w-5 h-5" style={{ color: colors.primary }} />
+                    )}
+                  </motion.button>
+                </div>
+              </div>
+            ) : (
+              <div 
+                className="p-4 rounded-xl"
+                style={{ 
+                  background: `linear-gradient(135deg, ${colors.primary}10 0%, ${colors.primary}05 100%)`,
+                  border: `1px solid ${colors.primary}25`
+                }}
+              >
+                <div className="flex items-center gap-2 mb-3">
+                  <Hash className="w-4 h-4" style={{ color: colors.primary }} />
+                  <span className="text-sm font-semibold text-white">Option 1: Multi-Pay Code</span>
+                  <span 
+                    className="px-2 py-0.5 rounded text-[10px] font-bold"
+                    style={{ background: `${colors.accentMint}20`, color: colors.accentMint }}
+                  >
+                    {totalStudents} STUDENTS
+                  </span>
+                </div>
+                <p className="text-xs mb-3" style={{ color: colors.textSecondary }}>
+                  Tell this short code to the treasurer. Contains all {totalStudents} students!
+                </p>
+                <div className="flex items-center gap-2 mb-3">
+                  <div 
+                    className="flex-1 px-4 py-3 rounded-lg font-mono text-lg font-bold tracking-wider text-center"
+                    style={{ 
+                      background: 'rgba(0, 0, 0, 0.3)',
+                      color: colors.primary,
+                      border: `1px solid ${colors.primary}30`
+                    }}
+                  >
+                    {multiPayCode || '---'}
+                  </div>
+                  <motion.button
+                    onClick={handleCopyMultiPayCode}
+                    disabled={!multiPayCode}
+                    className="p-3 rounded-lg disabled:opacity-50"
+                    style={{ 
+                      background: copiedCode ? `${colors.statusPaid}20` : `${colors.primary}20`,
+                      border: `1px solid ${copiedCode ? colors.statusPaid : colors.primary}30`
+                    }}
+                    whileHover={{ scale: 1.05 }}
+                    whileTap={{ scale: 0.95 }}
+                  >
+                    {copiedCode ? (
+                      <Check className="w-5 h-5" style={{ color: colors.statusPaid }} />
+                    ) : (
+                      <Copy className="w-5 h-5" style={{ color: colors.primary }} />
+                    )}
+                  </motion.button>
+                </div>
+              </div>
+            )}
+
+            {/* Option 2: Show Screen */}
+            <div 
+              className="p-4 rounded-xl"
+              style={{ 
+                background: 'rgba(255, 255, 255, 0.03)',
+                border: '1px solid rgba(255, 255, 255, 0.08)'
+              }}
+            >
+              <div className="flex items-center gap-2 mb-2">
+                <QrCode className="w-4 h-4" style={{ color: colors.accentMint }} />
+                <span className="text-sm font-semibold text-white">{totalStudents === 1 ? 'Option 2' : 'Best Option'}: Show Your Screen</span>
+              </div>
+              <p className="text-xs" style={{ color: colors.textSecondary }}>
+                Simply show this QR code on your phone screen to the treasurer for them to scan directly.
+              </p>
             </div>
           </div>
         </div>
