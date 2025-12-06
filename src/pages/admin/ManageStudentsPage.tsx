@@ -53,7 +53,7 @@ interface Student {
   }>;
   is_finsec?: boolean; // computed from admins
   is_admin?: boolean; // computed from admins
-  is_classrep?: boolean; // computed from admins
+  is_class_rep?: boolean; // computed from admins
   created_at: string;
 }
 
@@ -75,12 +75,12 @@ export default function ManageStudentsPage() {
   
   // Quick filters
   const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'inactive'>('all');
-  const [roleFilter, setRoleFilter] = useState<'all' | 'admin' | 'finsec' | 'classrep' | 'student'>('all');
+  const [roleFilter, setRoleFilter] = useState<'all' | 'admin' | 'finsec' | 'class_rep' | 'student'>('all');
   
   // Confirmation modal state
   const [confirmModal, setConfirmModal] = useState<{
     isOpen: boolean;
-    type: 'delete' | 'admin' | 'finsec' | 'classrep' | null;
+    type: 'delete' | 'admin' | 'finsec' | 'class_rep' | null;
     student: Student | null;
     action: 'grant' | 'remove' | 'delete';
   }>({ isOpen: false, type: null, student: null, action: 'grant' });
@@ -101,10 +101,10 @@ export default function ManageStudentsPage() {
       filtered = filtered.filter(s => s.is_admin);
     } else if (roleFilter === 'finsec') {
       filtered = filtered.filter(s => s.is_finsec);
-    } else if (roleFilter === 'classrep') {
-      filtered = filtered.filter(s => s.is_classrep);
+    } else if (roleFilter === 'class_rep') {
+      filtered = filtered.filter(s => s.is_class_rep);
     } else if (roleFilter === 'student') {
-      filtered = filtered.filter(s => !s.is_admin && !s.is_finsec && !s.is_classrep);
+      filtered = filtered.filter(s => !s.is_admin && !s.is_finsec && !s.is_class_rep);
     }
     
     return filtered;
@@ -138,7 +138,7 @@ export default function ManageStudentsPage() {
       admins,
       is_admin: admins.some(a => a.role === 'admin'),
       is_finsec: admins.some(a => a.role === 'finsec'),
-      is_classrep: admins.some(a => a.role === 'classrep'),
+      is_classrep: admins.some(a => a.role === 'class_rep'),
     } as Student;
   };
 
@@ -446,9 +446,9 @@ export default function ManageStudentsPage() {
     // Show confirmation modal
     setConfirmModal({
       isOpen: true,
-      type: 'classrep',
+      type: 'class_rep',
       student,
-      action: student.is_classrep ? 'remove' : 'grant'
+      action: student.is_class_rep ? 'remove' : 'grant'
     });
   };
 
@@ -459,9 +459,9 @@ export default function ManageStudentsPage() {
         return;
       }
       
-      // Check if classrep record exists using RPC function
+      // Check if class_rep record exists using RPC function
       const { data: existingRole, error: fetchError } = await supabase
-        .rpc('has_admin_role', { p_student_id: student.id, p_role: 'classrep' });
+        .rpc('has_admin_role', { p_student_id: student.id, p_role: 'class_rep' });
 
       if (fetchError) {
         console.error('Error checking classrep status:', fetchError);
@@ -619,7 +619,7 @@ export default function ManageStudentsPage() {
           color: confirmModal.action === 'grant' ? colors.primary : colors.warning,
           buttonText: confirmModal.action === 'grant' ? 'Grant Finsec' : 'Remove Finsec'
         };
-      case 'classrep':
+      case 'class_rep':
         return {
           title: confirmModal.action === 'grant' ? 'Grant Class Rep Role' : 'Remove Class Rep Role',
           message: confirmModal.action === 'grant'
@@ -866,7 +866,7 @@ export default function ManageStudentsPage() {
                   <p className="text-xs" style={{ color: colors.textSecondary }}>Finsecs</p>
                 </div>
                 <div className="p-3 rounded-xl text-center" style={{ background: `${colors.warning}10`, border: `1px solid ${colors.warning}20` }}>
-                  <p className="text-2xl font-bold" style={{ color: colors.warning }}><AnimatedCounter value={filteredStudents.filter(s => s.is_classrep).length} /></p>
+                  <p className="text-2xl font-bold" style={{ color: colors.warning }}><AnimatedCounter value={filteredStudents.filter(s => s.is_class_rep).length} /></p>
                   <p className="text-xs" style={{ color: colors.textSecondary }}>Class Reps</p>
                 </div>
               </div>
@@ -934,8 +934,8 @@ export default function ManageStudentsPage() {
                     { value: 'all' as const, label: 'All Roles', count: filteredStudents.length },
                     { value: 'admin' as const, label: 'Admins', count: filteredStudents.filter(s => s.is_admin).length },
                     { value: 'finsec' as const, label: 'Finsecs', count: filteredStudents.filter(s => s.is_finsec).length },
-                    { value: 'classrep' as const, label: 'Class Reps', count: filteredStudents.filter(s => s.is_classrep).length },
-                    { value: 'student' as const, label: 'Students Only', count: filteredStudents.filter(s => !s.is_admin && !s.is_finsec && !s.is_classrep).length },
+                    { value: 'class_rep' as const, label: 'Class Reps', count: filteredStudents.filter(s => s.is_class_rep).length },
+                    { value: 'student' as const, label: 'Students Only', count: filteredStudents.filter(s => !s.is_admin && !s.is_finsec && !s.is_class_rep).length },
                   ].map(({ value, label, count }) => (
                     <button
                       key={value}
@@ -1068,7 +1068,7 @@ export default function ManageStudentsPage() {
                                 Finsec
                               </span>
                             )}
-                            {student.is_classrep && (
+                            {student.is_class_rep && (
                               <span className="px-2 py-1 rounded text-xs font-medium whitespace-nowrap" style={{ background: `${colors.warning}20`, color: colors.warning }}>
                                 <Users className="w-3 h-3 inline mr-1" />
                                 Class Rep
@@ -1110,10 +1110,10 @@ export default function ManageStudentsPage() {
                             <button
                               onClick={() => toggleClassRep(student)}
                               className="p-2 rounded-lg transition-colors"
-                              style={{ background: student.is_classrep ? `${colors.warning}20` : 'rgba(255, 255, 255, 0.05)' }}
-                              title={student.is_classrep ? 'Remove Class Rep' : 'Make Class Rep'}
+                              style={{ background: student.is_class_rep ? `${colors.warning}20` : 'rgba(255, 255, 255, 0.05)' }}
+                              title={student.is_class_rep ? 'Remove Class Rep' : 'Make Class Rep'}
                             >
-                              <Users className="w-4 h-4" style={{ color: student.is_classrep ? colors.warning : colors.textSecondary }} />
+                              <Users className="w-4 h-4" style={{ color: student.is_class_rep ? colors.warning : colors.textSecondary }} />
                             </button>
                             <button
                               onClick={() => {
@@ -1164,7 +1164,7 @@ export default function ManageStudentsPage() {
                           ? `linear-gradient(135deg, ${colors.primary}15, transparent)` 
                           : student.is_finsec 
                             ? `linear-gradient(135deg, ${colors.accentMint}15, transparent)`
-                            : student.is_classrep
+                            : student.is_class_rep
                               ? `linear-gradient(135deg, ${colors.warning}15, transparent)`
                               : 'transparent'
                       }}
@@ -1176,7 +1176,7 @@ export default function ManageStudentsPage() {
                             ? gradients.primary 
                             : student.is_finsec 
                               ? `linear-gradient(135deg, ${colors.accentMint}, ${colors.accentMint}80)`
-                              : student.is_classrep
+                              : student.is_class_rep
                                 ? `linear-gradient(135deg, ${colors.warning}, ${colors.warning}80)`
                                 : gradients.primary
                         }}
@@ -1230,7 +1230,7 @@ export default function ManageStudentsPage() {
                             Financial Sec
                           </span>
                         )}
-                        {student.is_classrep && (
+                        {student.is_class_rep && (
                           <span 
                             className="px-3 py-1.5 rounded-full text-xs font-semibold flex items-center gap-1.5"
                             style={{ 
@@ -1243,7 +1243,7 @@ export default function ManageStudentsPage() {
                             Class Rep
                           </span>
                         )}
-                        {!student.is_admin && !student.is_finsec && !student.is_classrep && (
+                        {!student.is_admin && !student.is_finsec && !student.is_class_rep && (
                           <span 
                             className="px-3 py-1.5 rounded-full text-xs font-medium flex items-center gap-1.5"
                             style={{ 
@@ -1320,13 +1320,13 @@ export default function ManageStudentsPage() {
                           onClick={() => toggleClassRep(student)}
                           className="p-3 rounded-xl transition-all active:scale-[0.95] flex flex-col items-center gap-1.5"
                           style={{ 
-                            background: student.is_classrep ? `${colors.warning}20` : 'rgba(255, 255, 255, 0.05)',
-                            border: student.is_classrep ? `1px solid ${colors.warning}40` : '1px solid rgba(255, 255, 255, 0.1)'
+                            background: student.is_class_rep ? `${colors.warning}20` : 'rgba(255, 255, 255, 0.05)',
+                            border: student.is_class_rep ? `1px solid ${colors.warning}40` : '1px solid rgba(255, 255, 255, 0.1)'
                           }}
                         >
-                          <Users className="w-5 h-5" style={{ color: student.is_classrep ? colors.warning : colors.textSecondary }} />
-                          <span className="text-[10px] font-medium" style={{ color: student.is_classrep ? colors.warning : colors.textSecondary }}>
-                            {student.is_classrep ? '✓ Rep' : 'Class Rep'}
+                          <Users className="w-5 h-5" style={{ color: student.is_class_rep ? colors.warning : colors.textSecondary }} />
+                          <span className="text-[10px] font-medium" style={{ color: student.is_class_rep ? colors.warning : colors.textSecondary }}>
+                            {student.is_class_rep ? '✓ Rep' : 'Class Rep'}
                           </span>
                         </button>
                       </div>
