@@ -482,12 +482,12 @@ export default function ManageStudentsPage() {
           throw new Error('Failed to remove role - no rows affected');
         }
         
-        success('Class Rep role removed successfully');
+        success('class_rep role removed successfully');
         
         await supabase.from('notifications').insert({
           recipient_id: student.id,
           type: 'role_removed',
-          title: 'Class Rep Role Removed',
+          title: 'class_rep Role Removed',
           message: 'Your Class Rep role has been removed. Contact admin for more details.',
           link: '/profile',
         });
@@ -495,7 +495,7 @@ export default function ManageStudentsPage() {
         // Add classrep role using RPC function
         const { error } = await supabase.rpc('add_admin_role', {
           p_student_id: student.id,
-          p_role: 'classrep',
+          p_role: 'class_rep',
           p_can_create_payments: false,
           p_can_approve_payments: false,
           p_can_manage_students: false,
@@ -575,7 +575,7 @@ export default function ManageStudentsPage() {
       case 'admin':
         await executeToggleAdmin(confirmModal.student);
         break;
-      case 'classrep':
+      case 'class_rep':
         await executeToggleClassRep(confirmModal.student);
         break;
       case 'delete':
