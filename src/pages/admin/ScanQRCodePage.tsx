@@ -126,17 +126,51 @@ export default function ScanQRCodePage() {
   const html5QrCodeRef = useRef<Html5Qrcode | null>(null);
   const scannerContainerId = "qr-reader-container";
 
+  // Ensure the scanner container exists in the DOM and has a width > 0 before starting the scanner.
+  const ensureScannerContainer = async () => {
+    const maxAttempts = 8;
+    let attempts = 0;
+    while (attempts < maxAttempts) {
+      const el = document.getElementById(scannerContainerId);
+      if (el && (el as HTMLElement).clientWidth > 0) return el as HTMLElement;
+      attempts += 1;
+      await new Promise((r) => setTimeout(r, 100));
+    }
+    return document.getElementById(scannerContainerId) as HTMLElement | null;
+  };
+
   // Stop scanner safely
+  const stopLockRef = useRef(false);
   const stopScanner = useCallback(async () => {
-    if (html5QrCodeRef.current) {
-      try {
-        const state = html5QrCodeRef.current.getState();
-        if (state === 2) { // SCANNING
-          await html5QrCodeRef.current.stop();
+    if (!html5QrCodeRef.current) return;
+    if (stopLockRef.current) return; // already stopping
+    stopLockRef.current = true;
+    try {
+      const MAX_RETRIES = 4;
+      for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
+        try {
+          const state = html5QrCodeRef.current.getState();
+          // If it's scanning or starting, attempt to stop
+          if (state === 2 || state === 1) {
+            await html5QrCodeRef.current.stop();
+          }
+          // clear UI elements after stopping (if supported)
+          try { html5QrCodeRef.current.clear(); } catch { /* ignore */ }
+          break;
+        } catch (err: unknown) {
+          const msg = (err instanceof Error && err.message) ? err.message : String(err);
+          // If the error is a transition/race condition, wait and retry
+          if (/transition|ongoing|busy|in use|cannot clear/i.test(msg) && attempt < MAX_RETRIES - 1) {
+            await new Promise(r => setTimeout(r, 300 + attempt * 150));
+            continue;
+          }
+          // Give up if not a recognized transient error
+          console.debug("Scanner stop error (non-critical):", err);
+          break;
         }
-      } catch (err) {
-        console.debug("Scanner stop error (non-critical):", err);
       }
+    } finally {
+      stopLockRef.current = false;
     }
   }, []);
 
@@ -269,14 +303,30 @@ export default function ScanQRCodePage() {
 
   // Fallback scanner with minimal constraints
   const startScannerFallback = useCallback(async () => {
+    setCameraLoading(true);
+    setCameraError(null);
     try {
+      // Ensure the DOM container for the scanner exists and is ready
+      const container = await ensureScannerContainer();
+      if (!container) throw new Error('Scanner container not found');
       if (!html5QrCodeRef.current) {
         html5QrCodeRef.current = new Html5Qrcode(scannerContainerId);
+      } else {
+        await stopScanner();
       }
 
+      const config = { fps: 5, qrbox: { width: 200, height: 200 } };
+      let startTimeout: number | null = window.setTimeout(() => {
+        if (cameraLoading) {
+          console.warn('Fallback scanner start timed out');
+          setCameraLoading(false);
+          setCameraError('Fallback scanner timed out. Try manual input or refresh.');
+        }
+      }, SCANNER_START_TIMEOUT_MS);
+
       await html5QrCodeRef.current.start(
-        { facingMode: "environment" },
-        { fps: 5, qrbox: { width: 200, height: 200 } },
+        { facingMode: 'environment' },
+        config,
         async (decodedText) => {
           await stopScanner();
           const success = await processQRData(decodedText);
@@ -286,21 +336,38 @@ export default function ScanQRCodePage() {
         },
         () => {}
       );
+
+      if (startTimeout) { clearTimeout(startTimeout); startTimeout = null; }
       setCameraLoading(false);
-      setCameraError(null);
     } catch (err) {
-      console.error("Fallback scanner failed:", err);
-      setCameraError("Camera not available. Please use manual input instead.");
+      console.error('Fallback scanner failed:', err);
+      setCameraError('Camera not available. Please use manual input instead.');
       setCameraLoading(false);
     }
-  }, [processQRData, stopScanner]);
+  }, [processQRData, stopScanner, cameraLoading]);
 
   // Start scanner
+  const SCANNER_START_TIMEOUT_MS = 10000; // 10s
   const startScanner = useCallback(async (cameraId?: string) => {
+    if (cameraLoading) return; // prevent reentrant starts
     setCameraLoading(true);
     setCameraError(null);
 
     try {
+      // If the user hasn't given permission yet, try requesting explicitly to prompt sooner
+      async function tryReRequestPermission() {
+        if (navigator.mediaDevices && typeof navigator.mediaDevices.getUserMedia === 'function') {
+          try {
+            const stream = await navigator.mediaDevices.getUserMedia({ video: true });
+            // Immediately stop after prompt success to allow Html5Qrcode to take over
+            stream.getTracks().forEach(t => t.stop());
+          } catch (err) {
+            // Permission denied - will be handled by following logic
+            console.debug('Re-request permission failed', err);
+          }
+        }
+      }
+      await tryReRequestPermission();
       // Check secure context
       if (!isSecureContext()) {
         setCameraError("Camera access requires HTTPS. Please use a secure connection.");
@@ -310,6 +377,22 @@ export default function ScanQRCodePage() {
 
       // Get available cameras
       let devices: { id: string; label: string }[] = [];
+      // Force a quick userMedia check to trigger permission prompt earlier in some browsers
+      if (navigator.mediaDevices && typeof navigator.mediaDevices.getUserMedia === 'function') {
+        try {
+          // Try requesting permission once - close the stream immediately so Html5Qrcode can open it
+          const testStream = await navigator.mediaDevices.getUserMedia({ video: true });
+          testStream.getTracks().forEach(t => t.stop());
+        } catch (err) {
+          // Permission denied or blocked - surface a helpful message and exit
+          console.error('getUserMedia permission check failed:', err);
+          setCameraError(isIOS() ?
+            "Camera access denied. On iOS:\n1. Go to Settings > Safari\n2. Scroll to 'Camera'\n3. Allow camera access\n4. Refresh this page" :
+            "Camera permission denied. Please allow camera access in your browser settings and refresh.");
+          setCameraLoading(false);
+          return;
+        }
+      }
       try {
         const cameraDevices = await Html5Qrcode.getCameras();
         devices = cameraDevices.map(d => ({ id: d.id, label: d.label || `Camera ${d.id.slice(0, 8)}` }));
@@ -331,9 +414,20 @@ export default function ScanQRCodePage() {
         return;
       }
 
+      // Ensure DOM node exists
+      const container = await ensureScannerContainer();
+      if (!container) {
+        setCameraError('Scanner UI not initialized yet. Try again in a moment.');
+        setCameraLoading(false);
+        return;
+      }
+
       // Create scanner instance
       if (!html5QrCodeRef.current) {
         html5QrCodeRef.current = new Html5Qrcode(scannerContainerId);
+      } else {
+        // If a previous scanner is still starting/stopping, ensure it is stopped first
+        await stopScanner();
       }
 
       // Determine which camera to use
@@ -352,7 +446,18 @@ export default function ScanQRCodePage() {
         ? { facingMode: "environment" }
         : cameraToUse;
 
-      await html5QrCodeRef.current.start(
+      let startTimeout: number | null = null;
+      try {
+        startTimeout = window.setTimeout(() => {
+          if (cameraLoading) {
+            console.warn('Scanner start timed out');
+            // Provide user-friendly guidance when the start hangs
+            setCameraLoading(false);
+            setCameraError('Camera start timed out. Check camera permissions or try manual input.');
+          }
+        }, SCANNER_START_TIMEOUT_MS);
+
+        await html5QrCodeRef.current.start(
         cameraConfig,
         config,
         async (decodedText) => {
@@ -370,7 +475,59 @@ export default function ScanQRCodePage() {
         }
       );
 
-      setCameraLoading(false);
+        // Successful start -> clear timeout & update UI
+        if (startTimeout) {
+          clearTimeout(startTimeout);
+          startTimeout = null;
+        }
+        setCameraLoading(false);
+      } catch (startErr) {
+        // Handle any start-time exceptions cleanly
+        console.error('Scanner start exception:', startErr);
+        setCameraLoading(false);
+        if (startTimeout) {
+          clearTimeout(startTimeout);
+          startTimeout = null;
+        }
+        // Retry once if error suggests scanner was still running or in transition
+        try {
+          const startMsg = startErr instanceof Error ? startErr.message : String(startErr);
+          if (/already under transition|already running|cannot clear|in use|busy/i.test(startMsg)) {
+            console.info('Attempting to stop and retry scanner start due to transition error');
+            await stopScanner();
+            await new Promise(r => setTimeout(r, 300));
+            try {
+              await html5QrCodeRef.current?.start(
+                cameraConfig,
+                config,
+                async (decodedText) => {
+                  await stopScanner();
+                  const success = await processQRData(decodedText);
+                  if (!success) {
+                    setTimeout(() => startScanner(cameraToUse), 1000);
+                  }
+                },
+                (errorMessage) => { console.debug('Scan attempt:', errorMessage); }
+              );
+              // success
+              setCameraLoading(false);
+              return;
+            } catch (inner) {
+              console.error('Retry scanner start failed:', inner);
+            }
+          }
+        } catch {
+          // ignore
+        }
+        // If permission denied, prefer an informative message
+        if (startErr instanceof Error && /permission|denied|notallowed/i.test(startErr.message)) {
+          setCameraError(isIOS() ?
+            "Camera access denied. On iOS:\n1. Go to Settings > Safari\n2. Scroll to 'Camera'\n3. Allow camera access\n4. Refresh this page" :
+            "Camera permission denied. Please allow camera access in your browser settings and refresh.");
+        } else {
+          setCameraError('Failed to start camera. Please try manual input or refresh the page.');
+        }
+      }
     } catch (error: unknown) {
       console.error("Camera start error:", error);
       setCameraLoading(false);
@@ -404,7 +561,7 @@ export default function ScanQRCodePage() {
       
       setCameraError(errorMsg);
     }
-  }, [selectedCamera, processQRData, stopScanner, startScannerFallback]);
+  }, [selectedCamera, processQRData, stopScanner, startScannerFallback, cameraLoading]);
 
   // Initialize scanner on mount
   useEffect(() => {
@@ -1134,6 +1291,48 @@ export default function ScanQRCodePage() {
                     <p className="text-sm mt-1" style={{ color: colors.textSecondary }}>
                       Please allow camera access when prompted
                     </p>
+                    <div className="flex items-center justify-center gap-3 mt-4">
+                      <motion.button
+                        whileHover={{ scale: 1.02 }}
+                        whileTap={{ scale: 0.98 }}
+                        onClick={() => setShowManualInput(true)}
+                        className="flex items-center gap-2 px-5 py-2.5 rounded-xl font-medium"
+                        style={{ 
+                          background: `${colors.accentMint}20`,
+                          border: `1px solid ${colors.accentMint}40`,
+                          color: colors.accentMint
+                        }}
+                      >
+                        <Keyboard className="w-4 h-4" />
+                        Use Manual Input
+                      </motion.button>
+
+                      <motion.button
+                        whileHover={{ scale: 1.02 }}
+                        whileTap={{ scale: 0.98 }}
+                        onClick={async () => {
+                          try {
+                            setCameraLoading(true);
+                            if (navigator.mediaDevices && typeof navigator.mediaDevices.getUserMedia === 'function') {
+                              const stream = await navigator.mediaDevices.getUserMedia({ video: true });
+                              stream.getTracks().forEach(t => t.stop());
+                              // After user accepts, attempt to start scanner again
+                              await startScanner();
+                            }
+                          } catch (err) {
+                            console.debug('Re-request permission or start scanner failed:', err);
+                            setCameraError('Permission denied or camera unavailable. Use Manual Input instead.');
+                          } finally {
+                            setCameraLoading(false);
+                          }
+                        }}
+                        className="flex items-center gap-2 px-5 py-2.5 rounded-xl font-medium"
+                        style={{ background: `${colors.primary}20`, border: `1px solid ${colors.primary}40`, color: colors.primary }}
+                      >
+                        <RefreshCw className="w-4 h-4" />
+                        Re-request Permission
+                      </motion.button>
+                    </div>
                   </div>
                 )}
 

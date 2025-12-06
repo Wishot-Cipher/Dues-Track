@@ -183,7 +183,7 @@ function App() {
             <Route
               path="/admin/expenses"
               element={
-                <ProtectedRoute requiredPermission="can_manage_students">
+                <ProtectedRoute requiredPermission="can_approve_payments">
                   <ExpensesPage />
                 </ProtectedRoute>
               }

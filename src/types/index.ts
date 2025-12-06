@@ -47,6 +47,8 @@ export interface AuthContextType {
   isProfileComplete: boolean;
   needsPasswordChange: boolean;
   hasPermission: (permission: 'can_create_payments' | 'can_approve_payments' | 'can_manage_students' | 'can_view_analytics') => boolean;
+  // Refresh current session from server and update context
+  refreshSession: () => Promise<void>;
 }
 
 // Profile Update Data

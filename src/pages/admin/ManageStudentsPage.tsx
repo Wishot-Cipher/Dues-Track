@@ -136,9 +136,9 @@ export default function ManageStudentsPage() {
     return {
       ...(s as Student),
       admins,
-      is_admin: admins.some(a => a.role === 'admin'),
-      is_finsec: admins.some(a => a.role === 'finsec'),
-      is_classrep: admins.some(a => a.role === 'class_rep'),
+        is_admin: admins.some(a => a.role === 'admin'),
+        is_finsec: admins.some(a => a.role === 'finsec'),
+        is_class_rep: admins.some(a => a.role === 'class_rep'),
     } as Student;
   };
 
@@ -1170,7 +1170,7 @@ export default function ManageStudentsPage() {
                       }}
                     >
                       <div
-                        className="w-14 h-14 rounded-full flex items-center justify-center text-lg font-bold flex-shrink-0"
+                        className="w-14 h-14 rounded-full flex items-center justify-center text-lg font-bold shrink-0"
                         style={{ 
                           background: student.is_admin 
                             ? gradients.primary 
@@ -1190,7 +1190,7 @@ export default function ManageStudentsPage() {
                       </div>
                       {/* Status Badge */}
                       <div
-                        className="px-2 py-1 rounded-full text-[10px] font-medium flex-shrink-0"
+                        className="px-2 py-1 rounded-full text-[10px] font-medium shrink-0"
                         style={{
                           background: student.is_active ? `${colors.statusPaid}20` : `${colors.statusUnpaid}20`,
                           color: student.is_active ? colors.statusPaid : colors.statusUnpaid,
@@ -1686,7 +1686,7 @@ export default function ManageStudentsPage() {
                                  background: selectedStudent.force_password_change ? colors.accentMint : 'rgba(255, 255, 255, 0.1)'
                                }}
                           >
-                            <div className="absolute top-[2px] left-[2px] w-5 h-5 bg-white rounded-full shadow-md transition-transform duration-200"
+                            <div className="absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full shadow-md transition-transform duration-200"
                                  style={{ 
                                    transform: selectedStudent.force_password_change ? 'translateX(20px)' : 'translateX(0)'
                                  }}

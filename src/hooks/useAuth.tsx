@@ -108,11 +108,29 @@ export function AuthProvider({ children }: AuthProviderProps) {
     isAuthenticated: !!user,
     isProfileComplete: user ? authService.isProfileComplete(user) : false,
     needsPasswordChange: user?.force_password_change || false,
-  hasPermission: (permission: 'can_create_payments' | 'can_approve_payments' | 'can_manage_students' | 'can_view_analytics') => {
+    hasPermission: (permission: 'can_create_payments' | 'can_approve_payments' | 'can_manage_students' | 'can_view_analytics') => {
       if (!user) return false;
-      if (user.roles?.includes('admin')) return true; // full admin
-      return Boolean(user.admin_permissions && user.admin_permissions[permission]);
+      // Full admin always allowed
+      if (user.roles?.includes('admin')) return true;
+
+      // Keep manage-students restricted to explicit permission only
+      if (permission === 'can_manage_students') {
+        return Boolean(user.admin_permissions && user.admin_permissions.can_manage_students);
+      }
+
+      // Allow users who have explicit admin_permissions
+      if (user.admin_permissions && user.admin_permissions[permission]) return true;
+
+      // Allow certain admin roles (finsec, class_rep) to VIEW admin pages (but not manage students)
+      // This lets Finsec and Class Rep access admin pages even if they don't have the explicit permission.
+      const adminRoles = user.admins?.map(a => a.role) || [];
+      if (adminRoles.includes('finsec') || adminRoles.includes('class_rep')) return true;
+
+      return false;
     },
+    refreshSession: function (): Promise<void> {
+      throw new Error('Function not implemented.');
+    }
   };
 
   return (
@@ -122,6 +140,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
   );
 }
 
+// eslint-disable-next-line react-refresh/only-export-components
 export function useAuth(): AuthContextType {
   const context = useContext(AuthContext);
   if (!context) {

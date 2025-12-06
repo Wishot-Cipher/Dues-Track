@@ -80,7 +80,7 @@ export default function UpdateNotification() {
         animate={{ opacity: 1, y: 0 }}
         exit={{ opacity: 0, y: -20 }}
         transition={{ type: 'spring', damping: 30, stiffness: 400 }}
-        className="fixed top-3 left-1/2 -translate-x-1/2 z-[100] w-[calc(100%-2rem)] max-w-sm"
+        className="fixed top-3 left-1/2 -translate-x-1/2 z-100 w-[calc(100%-2rem)] max-w-sm"
       >
         <div
           className="flex items-center gap-3 px-4 py-3 rounded-xl shadow-lg"
