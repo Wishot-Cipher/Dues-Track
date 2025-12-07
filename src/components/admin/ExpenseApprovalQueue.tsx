@@ -119,7 +119,7 @@ export default function ExpenseApprovalQueue() {
 
     // Check for negative balance
     if (balanceAfterApproval < 0) {
-      const negativeMessage = `🚫 CRITICAL: Negative Balance!\n\nApproving this expense will result in a NEGATIVE balance of ₦${balanceAfterApproval.toLocaleString()}.\n\nThis means you'll be overspending. Are you absolutely sure?`
+      const negativeMessage = `🚫 CRITICAL: Negative Balance!\n\nApproving this expense will result in a NEGATIVE balance of ₦${balanceAfterApproval.toLocaleString()}.\n\nThis means you'll be over[...]
       
       setConfirmDialog({
         isOpen: true,
@@ -133,7 +133,7 @@ export default function ExpenseApprovalQueue() {
 
     // Check for low balance warning
     if (balanceAfterApproval < LOW_BALANCE_THRESHOLD && balanceAfterApproval >= 0) {
-      const warningMessage = `⚠️ WARNING: Low Balance Alert!\n\nApproving this expense will bring the balance down to ₦${balanceAfterApproval.toLocaleString()}, which is below ₦${LOW_BALANCE_THRESHOLD.toLocaleString()}.\n\nDo you still want to proceed?`
+      const warningMessage = `⚠️ WARNING: Low Balance Alert!\n\nApproving this expense will bring the balance down to ₦${balanceAfterApproval.toLocaleString()}, which is below ₦${LOW_BALANCE_T[...]
       
       setConfirmDialog({
         isOpen: true,
@@ -146,7 +146,7 @@ export default function ExpenseApprovalQueue() {
     }
 
     // Standard confirmation
-    const confirmMessage = `Are you sure you want to approve this expense?\n\nExpense: ${expense.title}\nAmount: ₦${(expense.amount || 0).toLocaleString()}\nCurrent Balance: ₦${currentBalance.toLocaleString()}\nBalance After: ₦${balanceAfterApproval.toLocaleString()}`
+    const confirmMessage = `Are you sure you want to approve this expense?\n\nExpense: ${expense.title}\nAmount: ₦${(expense.amount || 0).toLocaleString()}\nCurrent Balance: ₦${currentBalance.toLo[...]
     
     setConfirmDialog({
       isOpen: true,
@@ -187,9 +187,9 @@ export default function ExpenseApprovalQueue() {
     }
   }
 
-  // Only class_rep or financial_secretary can approve expenses
-  const canApprove = user?.admins?.some((admin: { role: string }) => 
-    admin.role === 'class_rep' || admin.role === 'financial_secretary'
+  // Only admin, class_rep or finsec can approve expenses
+  const canApprove = user?.admins?.some((a: { role: string }) =>
+    ['admin', 'class_rep', 'finsec'].includes(a.role)
   )
 
   if (!canApprove) {
@@ -198,7 +198,7 @@ export default function ExpenseApprovalQueue() {
         <div className="text-white">
           <h2 className="text-xl font-bold mb-2">Expense Approval Queue</h2>
           <p className="text-sm" style={{ color: colors.textSecondary }}>
-            Only the Class Representative or Financial Secretary can approve expenses.
+            Only Admins, the Class Representative or FinSec can approve expenses.
           </p>
         </div>
       </GlassCard>
@@ -450,7 +450,7 @@ export default function ExpenseApprovalQueue() {
               onClick={(e) => e.stopPropagation()}
               onError={(e) => {
                 console.error('Failed to load image:', imageModal)
-                e.currentTarget.src = 'data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/2000/svg" width="200" height="200"%3E%3Ctext x="50%25" y="50%25" font-size="16" text-anchor="middle" fill="white"%3EImage not found%3C/text%3E%3C/svg%3E'
+                e.currentTarget.src = 'data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/2000/svg" width="200" height="200"%3E%3Ctext x="50%25" y="50%25" font-size="16" text-anchor="middle" fill="whi[...]
               }}
             />
           </div>
