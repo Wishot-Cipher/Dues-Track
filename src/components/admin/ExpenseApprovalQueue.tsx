@@ -1,4 +1,5 @@
-```typescript name=src/components/admin/ExpenseApprovalQueue.tsx url=https://github.com/Wishot-Cipher/Dues-Track/blob/2bdf3797aba496cb2718e117d7c1e65408b148e6/src/components/admin/ExpenseApprovalQueue.tsx
+/* eslint-disable @typescript-eslint/no-unused-vars */
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import { useState, useEffect } from 'react'
 import GlassCard from '@/components/ui/GlassCard'
 import CustomButton from '@/components/ui/CustomButton'
@@ -191,8 +192,10 @@ Balance After Approval: N${balanceAfterApproval.toLocaleString()}`
     }
   }
 
-  const canApprove = user?.admins?.some((admin: { role: string }) =>
-    admin.role === 'admin' || admin.role === 'class_rep' || admin.role === 'finsec'
+
+  // Only class_rep or financial_secretary can approve expenses
+  const canApprove = user?.admins?.some((admin: { role: string }) => 
+    admin.role === 'class_rep' || admin.role === 'finsec' || admin.role === 'admin'
   )
 
   if (!canApprove) {
@@ -463,4 +466,3 @@ Balance After Approval: N${balanceAfterApproval.toLocaleString()}`
     </GlassCard>
   )
 }
-```

@@ -194,7 +194,7 @@ export default function ManageStudentsPage() {
 
     try {
       setEditLoading(true);
-      const { error } = await supabase
+      const { data: updated, error } = await supabase
         .from('students')
         .update({
           full_name: selectedStudent.full_name,
@@ -207,7 +207,9 @@ export default function ManageStudentsPage() {
           force_password_change: selectedStudent.force_password_change ?? false,
           is_active: selectedStudent.is_active,
         })
-        .eq('id', selectedStudent.id);
+        .eq('id', selectedStudent.id)
+        .select()
+        .single();
 
       if (error) {
         // Handle unique constraint on reg_number gracefully
@@ -226,6 +228,10 @@ export default function ManageStudentsPage() {
           return;
         }
         throw error;
+      }
+
+      if (!updated) {
+        throw new Error('No rows were updated. Check permissions or if the student exists.');
       }
 
       success('Student updated successfully');
@@ -257,15 +263,18 @@ export default function ManageStudentsPage() {
 
   const toggleStudentStatus = async (student: Student) => {
     try {
-      const { error } = await supabase
+      const { data: updated, error } = await supabase
         .from('students')
         .update({ is_active: !student.is_active })
-        .eq('id', student.id);
+        .eq('id', student.id)
+        .select()
+        .single();
 
       if (error) throw error;
+      if (!updated) throw new Error('No rows were updated. Permission may be denied.');
 
       success(`Student ${student.is_active ? 'deactivated' : 'activated'} successfully`);
-      fetchStudents();
+      await fetchStudents();
     } catch (error) {
       console.error('Error toggling student status:', error);
       showError('Failed to update student status');
@@ -540,22 +549,24 @@ export default function ManageStudentsPage() {
     try {
       // First delete from auth.users
       const { error: authError } = await supabase.auth.admin.deleteUser(student.id);
-      
       if (authError) {
         console.error('Auth deletion error:', authError);
         // Continue even if auth deletion fails (user might not exist in auth)
       }
 
-      // Then delete from students table
-      const { error: studentError } = await supabase
+      // Then delete from students table and return deleted row to verify
+      const { data: deleted, error: studentError } = await supabase
         .from('students')
         .delete()
-        .eq('id', student.id);
+        .eq('id', student.id)
+        .select()
+        .single();
 
       if (studentError) throw studentError;
+      if (!deleted) throw new Error('No rows were deleted. Permission may be denied.');
 
       success('Student deleted successfully');
-      fetchStudents();
+      await fetchStudents();
     } catch (error) {
       console.error('Error deleting student:', error);
       showError('Failed to delete student');

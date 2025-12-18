@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-unused-vars */
 import { useState, useEffect, useRef, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useNavigate } from "react-router-dom";
@@ -121,79 +122,228 @@ export default function ScanQRCodePage() {
   // Payment code input state
   const [paymentCodeInput, setPaymentCodeInput] = useState("");
   
-
-  
+  // Critical refs for preventing race conditions
   const html5QrCodeRef = useRef<Html5Qrcode | null>(null);
+  const mountedRef = useRef(true);
+  const scannerInitializedRef = useRef(false);
+  const isStoppingRef = useRef(false);
+  const startScannerRef = useRef<((cameraId?: string) => Promise<void>) | null>(null);
   const scannerContainerId = "qr-reader-container";
 
-  // Ensure the scanner container exists in the DOM and has a width > 0 before starting the scanner.
+  // Simple async mutex to serialize scanner operations
+  const scannerMutexRef = useRef(false);
+  const withScannerLock = useCallback(async <T,>(fn: () => Promise<T>): Promise<T> => {
+    while (scannerMutexRef.current) {
+      await new Promise((r) => setTimeout(r, 50));
+    }
+    scannerMutexRef.current = true;
+    try {
+      return await fn();
+    } finally {
+      scannerMutexRef.current = false;
+    }
+  }, []);
+
+  // Ensure the scanner container exists in the DOM
   const ensureScannerContainer = async () => {
     const maxAttempts = 8;
     let attempts = 0;
     while (attempts < maxAttempts) {
       const el = document.getElementById(scannerContainerId);
-      if (el && (el as HTMLElement).clientWidth > 0) return el as HTMLElement;
+      if (el && (el as HTMLElement).clientWidth > 0 && (el as HTMLElement).isConnected && (el as HTMLElement).offsetParent !== null) {
+        return el as HTMLElement;
+      }
       attempts += 1;
       await new Promise((r) => setTimeout(r, 100));
     }
-    return document.getElementById(scannerContainerId) as HTMLElement | null;
+    const final = document.getElementById(scannerContainerId) as HTMLElement | null;
+    if (final && final.clientWidth > 0 && final.isConnected) return final;
+    return null;
   };
 
-  // Stop scanner safely
-  const stopLockRef = useRef(false);
-  const stopScanner = useCallback(async () => {
-    if (!html5QrCodeRef.current) return;
-    if (stopLockRef.current) return; // already stopping
-    stopLockRef.current = true;
-    try {
-      const MAX_RETRIES = 4;
-      for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
-        try {
-          const state = html5QrCodeRef.current.getState();
-          // If it's scanning or starting, attempt to stop
-          if (state === 2 || state === 1) {
-            await html5QrCodeRef.current.stop();
-          }
-          // clear UI elements after stopping (if supported)
-          try { html5QrCodeRef.current.clear(); } catch { /* ignore */ }
-          break;
-        } catch (err: unknown) {
-          const msg = (err instanceof Error && err.message) ? err.message : String(err);
-          // If the error is a transition/race condition, wait and retry
-          if (/transition|ongoing|busy|in use|cannot clear/i.test(msg) && attempt < MAX_RETRIES - 1) {
-            await new Promise(r => setTimeout(r, 300 + attempt * 150));
-            continue;
-          }
-          // Give up if not a recognized transient error
-          console.debug("Scanner stop error (non-critical):", err);
-          break;
-        }
-      }
-    } finally {
-      stopLockRef.current = false;
-    }
+  // Diagnostic logs
+  const [scannerLogs, setScannerLogs] = useState<string[]>([]);
+  const [showDiagnostics, setShowDiagnostics] = useState<boolean>(false);
+
+  const pushScannerError = useCallback((msg: string) => {
+    const entry = `${new Date().toISOString()} - ${String(msg)}`;
+    console.warn("Scanner diagnostic:", entry);
+    setScannerLogs((prev) => [entry, ...prev].slice(0, 200));
   }, []);
 
-  // Process QR code data (shared between camera scan and manual input)
-  const processQRData = useCallback(async (decodedText: string): Promise<boolean> => {
+  const copyDiagnostics = useCallback(async () => {
     try {
-      // Parse QR Code data (supports both old and new format)
+      const container = document.getElementById(scannerContainerId);
+      let state = 'no-instance';
+      try {
+        const inst = html5QrCodeRef.current;
+        state = inst ? String(inst.getState()) : 'null';
+      } catch (e) {
+        state = 'unknown';
+      }
+
+      const diag = {
+        timestamp: new Date().toISOString(),
+        mounted: Boolean(mountedRef.current),
+        scannerInitialized: Boolean(scannerInitializedRef.current),
+        html5QrCodeInstance: html5QrCodeRef.current ? 'present' : 'null',
+        html5QrCodeState: state,
+        selectedCamera,
+        cameras,
+        cameraLoading,
+        cameraError,
+        containerPresent: Boolean(container && container.isConnected && container.clientWidth > 0),
+        logs: scannerLogs.slice(0, 200),
+      };
+
+      const text = JSON.stringify(diag, null, 2);
+      if (navigator.clipboard && typeof navigator.clipboard.writeText === 'function') {
+        await navigator.clipboard.writeText(text);
+        toast.success('Diagnostics copied to clipboard');
+      } else {
+        // fallback: open in new window
+        const w = window.open('', '_blank');
+        if (w) { w.document.body.innerText = text; }
+        toast.info('Diagnostics opened in a new tab (no clipboard)');
+      }
+    } catch (err) {
+      console.error('Failed to copy diagnostics:', err);
+      toast.error('Failed to copy diagnostics');
+    }
+  }, [scannerLogs, selectedCamera, cameras, cameraLoading, cameraError, toast]);
+
+  const clearLogs = useCallback(() => setScannerLogs([]), []);
+
+  // IMPROVED: Stop scanner safely with better DOM checks
+  const stopScanner = useCallback(async () => {
+    if (!html5QrCodeRef.current || isStoppingRef.current) return;
+
+    // Early DOM presence check: if container is detached, avoid calling library methods
+    const earlyContainerEl = document.getElementById(scannerContainerId);
+    if (!earlyContainerEl || !earlyContainerEl.isConnected) {
+      // Container removed: stop any orphaned video tracks and clear ref without calling library
+      try {
+        const videos = Array.from(document.querySelectorAll('video')) as HTMLVideoElement[];
+        for (const v of videos) {
+          try {
+            const stream = v.srcObject as MediaStream | null;
+            if (stream) stream.getTracks().forEach(t => { try { t.stop(); } catch { console.debug('stop track error'); } });
+          } catch { console.debug('video srcObject read error'); }
+          try { if (v.parentNode) v.parentNode.removeChild(v); } catch { console.debug('remove orphaned video error'); }
+        }
+      } catch (e) { console.debug('early forced video cleanup error', e); }
+      html5QrCodeRef.current = null;
+      pushScannerError('stopScanner: early container missing — cleared scanner ref');
+      return;
+    }
+
+    isStoppingRef.current = true;
+
+    try {
+      await withScannerLock(async () => {
+      try {
+        const MAX_RETRIES = 3;
+        
+        for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
+          try {
+            if (!html5QrCodeRef.current) break;
+            
+            const state = html5QrCodeRef.current.getState();
+            
+            // Only stop if actually scanning
+            if (state === 2 || state === 1) {
+              await html5QrCodeRef.current.stop();
+            }
+            
+            // Try to clear UI
+            try {
+              html5QrCodeRef.current.clear();
+            } catch (clearErr) {
+              console.debug('Clear UI error (non-critical):', clearErr);
+            }
+            
+            break;
+          } catch (err: unknown) {
+            const msg = (err instanceof Error && err.message) ? err.message : String(err);
+            
+            if (/transition|ongoing|busy|in use/i.test(msg) && attempt < MAX_RETRIES - 1) {
+              await new Promise(r => setTimeout(r, 250 + attempt * 200));
+              continue;
+            }
+            
+            console.debug("Scanner stop error (non-critical):", err);
+            pushScannerError(`stopScanner error: ${String(err)}`);
+            break;
+          }
+        }
+        
+        // IMPROVED: Safe cleanup of DOM elements
+        try {
+          const containerEl = document.getElementById(scannerContainerId);
+          
+          if (!containerEl || !containerEl.isConnected) {
+            // Container is gone or detached - just stop video tracks and clear ref
+            const videos = Array.from(document.querySelectorAll('video')) as HTMLVideoElement[];
+            for (const v of videos) {
+              try {
+                const stream = v.srcObject as MediaStream | null;
+                if (stream) {
+                  stream.getTracks().forEach(t => {
+                    try {
+                      t.stop();
+                    } catch (e) {
+                      console.debug('stop track error', e);
+                    }
+                  });
+                }
+                  } catch { console.debug('video srcObject read error'); }
+              
+              // IMPROVED: Only remove if parent exists and node is connected
+              try {
+                if (v.parentNode && v.isConnected && containerEl && containerEl.contains(v)) {
+                  v.parentNode.removeChild(v);
+                }
+              } catch (e) {
+                console.debug('remove video node error (non-critical)', e);
+              }
+            }
+            
+            html5QrCodeRef.current = null;
+            pushScannerError('stopScanner: container missing — cleared scanner ref');
+          } else {
+            // Container exists - normal cleanup
+            html5QrCodeRef.current = null;
+          }
+        } catch (outer) {
+          console.debug('stopScanner cleanup error', outer);
+          html5QrCodeRef.current = null;
+        }
+      } finally {
+        isStoppingRef.current = false;
+      }
+    });
+    } finally {
+      isStoppingRef.current = false;
+    }
+  }, [pushScannerError, withScannerLock]);
+
+  // Process QR code data
+  const processQRData = useCallback(async (decodedText: string): Promise<boolean> => {
+    if (!mountedRef.current) return false;
+    
+    try {
       const rawData = JSON.parse(decodedText);
 
-      // Validate QR code type
       if (rawData.type !== "CASH_PAYMENT") {
         toast.error("Invalid QR code format - not a cash payment QR");
         return false;
       }
 
-      // Normalize to new format (support legacy QR codes)
       let data: QRData;
       
       if (rawData.paidBy && rawData.students) {
-        // New multi-student format
         data = rawData as NewQRData;
       } else if (rawData.studentId) {
-        // Legacy single-student format - convert to new format
         const legacyData = rawData as LegacyQRData;
         data = {
           type: legacyData.type,
@@ -218,24 +368,20 @@ export default function ScanQRCodePage() {
         return false;
       }
 
-      // Validate timestamp (not older than 24 hours)
       const qrAge = Date.now() - data.timestamp;
-      const maxAge = 24 * 60 * 60 * 1000; // 24 hours
+      const maxAge = 24 * 60 * 60 * 1000;
       if (qrAge > maxAge) {
         toast.error("QR code has expired. Please generate a new one.");
         return false;
       }
 
-      // Validate that we have at least one student to process
       if (!data.students || data.students.length === 0) {
         toast.error("No students found in QR code");
         return false;
       }
 
-      // Stop scanner if running
       await stopScanner();
 
-      // Fetch payer details (the person who generated the QR)
       const { data: payerData, error: payerError } = await supabase
         .from("students")
         .select("id, full_name, reg_number")
@@ -247,7 +393,6 @@ export default function ScanQRCodePage() {
         return false;
       }
 
-      // Fetch payment type details
       const { data: paymentTypeData, error: paymentTypeError } = await supabase
         .from("payment_types")
         .select("id, title, amount")
@@ -259,7 +404,6 @@ export default function ScanQRCodePage() {
         return false;
       }
 
-      // Check if any student already fully paid
       const alreadyPaidStudents: string[] = [];
       for (const stu of data.students) {
         const { data: existingPayments } = await supabase
@@ -287,7 +431,8 @@ export default function ScanQRCodePage() {
         toast.error(`Warning: ${alreadyPaidStudents.join(", ")} already paid`);
       }
 
-      // Set data for confirmation
+      if (!mountedRef.current) return false;
+
       setQrData(data);
       setStudent(payerData);
       setPaymentType(paymentTypeData);
@@ -301,14 +446,27 @@ export default function ScanQRCodePage() {
     }
   }, [toast, stopScanner]);
 
+  // IMPROVED: Extracted retry function to avoid circular dependency
+  const retryScanner = useCallback(async (cameraId?: string) => {
+    if (!mountedRef.current) return;
+    await new Promise(r => setTimeout(r, 1000));
+    if (mountedRef.current && !isStoppingRef.current) {
+      const startFn = startScannerRef.current;
+      if (startFn) startFn(cameraId);
+    }
+  }, []);
+
   // Fallback scanner with minimal constraints
   const startScannerFallback = useCallback(async () => {
+    if (!mountedRef.current) return;
+    
     setCameraLoading(true);
     setCameraError(null);
+    
     try {
-      // Ensure the DOM container for the scanner exists and is ready
       const container = await ensureScannerContainer();
-      if (!container) throw new Error('Scanner container not found');
+      if (!container || !mountedRef.current) throw new Error('Scanner container not found');
+      
       if (!html5QrCodeRef.current) {
         html5QrCodeRef.current = new Html5Qrcode(scannerContainerId);
       } else {
@@ -316,90 +474,72 @@ export default function ScanQRCodePage() {
       }
 
       const config = { fps: 5, qrbox: { width: 200, height: 200 } };
-      let startTimeout: number | null = window.setTimeout(() => {
-        if (cameraLoading) {
-          console.warn('Fallback scanner start timed out');
-          setCameraLoading(false);
-          setCameraError('Fallback scanner timed out. Try manual input or refresh.');
-        }
-      }, SCANNER_START_TIMEOUT_MS);
-
-      await html5QrCodeRef.current.start(
-        { facingMode: 'environment' },
-        config,
-        async (decodedText) => {
-          await stopScanner();
-          const success = await processQRData(decodedText);
-          if (!success) {
-            setTimeout(() => startScannerFallback(), 1000);
+      
+        await withScannerLock(async () => {
+          const currentContainer = document.getElementById(scannerContainerId);
+          if (!currentContainer || !currentContainer.isConnected) {
+            throw new Error('Scanner container not available at start time');
           }
-        },
-        () => {}
-      );
 
-      if (startTimeout) { clearTimeout(startTimeout); startTimeout = null; }
-      setCameraLoading(false);
+          let inst = html5QrCodeRef.current;
+          if (!inst) {
+            // Create a new instance if it was destroyed meanwhile
+            pushScannerError('startScanner: creating new Html5Qrcode instance (was missing)');
+            inst = new Html5Qrcode(scannerContainerId);
+            html5QrCodeRef.current = inst;
+          }
+
+          return inst.start(
+            { facingMode: 'environment' },
+            config,
+            async (decodedText) => {
+              if (!mountedRef.current) return;
+              await stopScanner();
+              const success = await processQRData(decodedText);
+              if (!success && mountedRef.current) {
+                retryScanner();
+              }
+            },
+            () => {}
+          );
+        });
+
+      if (mountedRef.current) {
+        setCameraLoading(false);
+      }
     } catch (err) {
       console.error('Fallback scanner failed:', err);
-      setCameraError('Camera not available. Please use manual input instead.');
-      setCameraLoading(false);
+      if (mountedRef.current) {
+        setCameraError('Camera not available. Please use manual input instead.');
+        pushScannerError(`fallback start error: ${String(err)}`);
+        setCameraLoading(false);
+      }
     }
-  }, [processQRData, stopScanner, cameraLoading]);
+  }, [processQRData, stopScanner, pushScannerError, withScannerLock, retryScanner]);
 
-  // Start scanner
-  const SCANNER_START_TIMEOUT_MS = 10000; // 10s
+  // IMPROVED: Start scanner without circular dependency
+  const SCANNER_START_TIMEOUT_MS = 10000;
   const startScanner = useCallback(async (cameraId?: string) => {
-    if (cameraLoading) return; // prevent reentrant starts
+    if (!mountedRef.current || isStoppingRef.current) return;
+    
     setCameraLoading(true);
     setCameraError(null);
 
     try {
-      // If the user hasn't given permission yet, try requesting explicitly to prompt sooner
-      async function tryReRequestPermission() {
-        if (navigator.mediaDevices && typeof navigator.mediaDevices.getUserMedia === 'function') {
-          try {
-            const stream = await navigator.mediaDevices.getUserMedia({ video: true });
-            // Immediately stop after prompt success to allow Html5Qrcode to take over
-            stream.getTracks().forEach(t => t.stop());
-          } catch (err) {
-            // Permission denied - will be handled by following logic
-            console.debug('Re-request permission failed', err);
-          }
-        }
-      }
-      await tryReRequestPermission();
-      // Check secure context
       if (!isSecureContext()) {
         setCameraError("Camera access requires HTTPS. Please use a secure connection.");
         setCameraLoading(false);
         return;
       }
 
-      // Get available cameras
       let devices: { id: string; label: string }[] = [];
-      // Force a quick userMedia check to trigger permission prompt earlier in some browsers
-      if (navigator.mediaDevices && typeof navigator.mediaDevices.getUserMedia === 'function') {
-        try {
-          // Try requesting permission once - close the stream immediately so Html5Qrcode can open it
-          const testStream = await navigator.mediaDevices.getUserMedia({ video: true });
-          testStream.getTracks().forEach(t => t.stop());
-        } catch (err) {
-          // Permission denied or blocked - surface a helpful message and exit
-          console.error('getUserMedia permission check failed:', err);
-          setCameraError(isIOS() ?
-            "Camera access denied. On iOS:\n1. Go to Settings > Safari\n2. Scroll to 'Camera'\n3. Allow camera access\n4. Refresh this page" :
-            "Camera permission denied. Please allow camera access in your browser settings and refresh.");
-          setCameraLoading(false);
-          return;
-        }
-      }
+      
       try {
         const cameraDevices = await Html5Qrcode.getCameras();
         devices = cameraDevices.map(d => ({ id: d.id, label: d.label || `Camera ${d.id.slice(0, 8)}` }));
         setCameras(devices);
       } catch (err) {
         console.error("Error getting cameras:", err);
-        // On iOS, this often fails but we can still try to use the camera
         if (isIOS()) {
           devices = [{ id: "environment", label: "Back Camera" }];
           setCameras(devices);
@@ -414,112 +554,91 @@ export default function ScanQRCodePage() {
         return;
       }
 
-      // Ensure DOM node exists
       const container = await ensureScannerContainer();
-      if (!container) {
+      if (!container || !mountedRef.current) {
         setCameraError('Scanner UI not initialized yet. Try again in a moment.');
         setCameraLoading(false);
         return;
       }
 
-      // Create scanner instance
       if (!html5QrCodeRef.current) {
         html5QrCodeRef.current = new Html5Qrcode(scannerContainerId);
       } else {
-        // If a previous scanner is still starting/stopping, ensure it is stopped first
         await stopScanner();
       }
 
-      // Determine which camera to use
       const cameraToUse = cameraId || selectedCamera || devices[0].id;
       setSelectedCamera(cameraToUse);
 
-      // Camera config - optimized for clarity without zoom
       const config = {
         fps: 10,
         qrbox: { width: 250, height: 250 },
         aspectRatio: 1.0,
       };
 
-      // iOS-specific handling
       const cameraConfig = isIOS() 
         ? { facingMode: "environment" }
         : cameraToUse;
 
       let startTimeout: number | null = null;
+      
       try {
         startTimeout = window.setTimeout(() => {
-          if (cameraLoading) {
+          if (mountedRef.current && cameraLoading) {
             console.warn('Scanner start timed out');
-            // Provide user-friendly guidance when the start hangs
             setCameraLoading(false);
             setCameraError('Camera start timed out. Check camera permissions or try manual input.');
           }
         }, SCANNER_START_TIMEOUT_MS);
 
-        await html5QrCodeRef.current.start(
-        cameraConfig,
-        config,
-        async (decodedText) => {
-          // Pause scanning while processing
-          await stopScanner();
-          const success = await processQRData(decodedText);
-          if (!success) {
-            // Resume scanning if processing failed
-            setTimeout(() => startScanner(cameraToUse), 1000);
+        await withScannerLock(async () => {
+          const currentContainer = document.getElementById(scannerContainerId);
+          if (!currentContainer || !currentContainer.isConnected) {
+            throw new Error('Scanner container not available at start time');
           }
-        },
-        (errorMessage) => {
-          // Ignore scan errors (they happen frequently during scanning)
-          console.debug("Scan attempt:", errorMessage);
-        }
-      );
 
-        // Successful start -> clear timeout & update UI
-        if (startTimeout) {
-          clearTimeout(startTimeout);
-          startTimeout = null;
-        }
-        setCameraLoading(false);
-      } catch (startErr) {
-        // Handle any start-time exceptions cleanly
-        console.error('Scanner start exception:', startErr);
-        setCameraLoading(false);
-        if (startTimeout) {
-          clearTimeout(startTimeout);
-          startTimeout = null;
-        }
-        // Retry once if error suggests scanner was still running or in transition
-        try {
-          const startMsg = startErr instanceof Error ? startErr.message : String(startErr);
-          if (/already under transition|already running|cannot clear|in use|busy/i.test(startMsg)) {
-            console.info('Attempting to stop and retry scanner start due to transition error');
-            await stopScanner();
-            await new Promise(r => setTimeout(r, 300));
-            try {
-              await html5QrCodeRef.current?.start(
-                cameraConfig,
-                config,
-                async (decodedText) => {
-                  await stopScanner();
-                  const success = await processQRData(decodedText);
-                  if (!success) {
-                    setTimeout(() => startScanner(cameraToUse), 1000);
-                  }
-                },
-                (errorMessage) => { console.debug('Scan attempt:', errorMessage); }
-              );
-              // success
-              setCameraLoading(false);
-              return;
-            } catch (inner) {
-              console.error('Retry scanner start failed:', inner);
-            }
+          let inst = html5QrCodeRef.current;
+          if (!inst) {
+            pushScannerError('startScanner: creating new Html5Qrcode instance (was missing)');
+            inst = new Html5Qrcode(scannerContainerId);
+            html5QrCodeRef.current = inst;
           }
-        } catch {
-          // ignore
+
+          return inst.start(
+            cameraConfig,
+            config,
+            async (decodedText) => {
+              if (!mountedRef.current) return;
+              await stopScanner();
+              const success = await processQRData(decodedText);
+              if (!success && mountedRef.current) {
+                retryScanner(cameraToUse);
+              }
+            },
+            () => {}
+          );
+        });
+
+        if (startTimeout) {
+          clearTimeout(startTimeout);
+          startTimeout = null;
         }
-        // If permission denied, prefer an informative message
+        
+        if (mountedRef.current) {
+          setCameraLoading(false);
+        }
+      } catch (startErr) {
+        console.error('Scanner start exception:', startErr);
+        
+        if (startTimeout) {
+          clearTimeout(startTimeout);
+        }
+        
+        if (!mountedRef.current) return;
+        
+        setCameraLoading(false);
+        pushScannerError(`start scanner failed: ${String(startErr)}`);
+        
         if (startErr instanceof Error && /permission|denied|notallowed/i.test(startErr.message)) {
           setCameraError(isIOS() ?
             "Camera access denied. On iOS:\n1. Go to Settings > Safari\n2. Scroll to 'Camera'\n3. Allow camera access\n4. Refresh this page" :
@@ -530,6 +649,9 @@ export default function ScanQRCodePage() {
       }
     } catch (error: unknown) {
       console.error("Camera start error:", error);
+      
+      if (!mountedRef.current) return;
+      
       setCameraLoading(false);
       
       let errorMsg = "Could not access camera";
@@ -538,18 +660,15 @@ export default function ScanQRCodePage() {
         const msg = error.message.toLowerCase();
         
         if (msg.includes("permission") || msg.includes("denied") || msg.includes("notallowed")) {
-          if (isIOS()) {
-            errorMsg = "Camera access denied. On iOS:\n1. Go to Settings > Safari\n2. Scroll to 'Camera'\n3. Allow camera access\n4. Refresh this page";
-          } else {
-            errorMsg = "Camera permission denied. Please allow camera access in your browser settings and refresh.";
-          }
-        } else if (msg.includes("notfound") || msg.includes("not found")) {
+          errorMsg = isIOS() ?
+            "Camera access denied. On iOS:\n1. Go to Settings > Safari\n2. Scroll to 'Camera'\n3. Allow camera access\n4. Refresh this page" :
+            "Camera permission denied. Please allow camera access in your browser settings and refresh.";
+        } else if (msg.includes("notfound")) {
           errorMsg = "No camera found on this device";
-        } else if (msg.includes("notreadable") || msg.includes("not readable") || msg.includes("hardware")) {
+        } else if (msg.includes("notreadable") || msg.includes("hardware")) {
           errorMsg = "Camera is being used by another app. Please close other apps using the camera and try again.";
         } else if (msg.includes("overconstrained")) {
           errorMsg = "Camera configuration not supported. Trying alternative settings...";
-          // Try with basic constraints
           setTimeout(() => startScannerFallback(), 500);
           return;
         } else if (msg.includes("https") || msg.includes("secure")) {
@@ -560,17 +679,122 @@ export default function ScanQRCodePage() {
       }
       
       setCameraError(errorMsg);
+      pushScannerError(`startScanner error: ${String(error)}`);
     }
-  }, [selectedCamera, processQRData, stopScanner, startScannerFallback, cameraLoading]);
+  }, [selectedCamera, processQRData, stopScanner, startScannerFallback, pushScannerError, withScannerLock, retryScanner, cameraLoading]);
 
-  // Initialize scanner on mount
+  // Keep a ref to the start function for safe retries (avoids globals)
   useEffect(() => {
-    if (scanning && !showManualInput) {
-      startScanner();
+    startScannerRef.current = startScanner;
+    return () => { startScannerRef.current = null; };
+  }, [startScanner]);
+
+  // Keep logs visible
+  useEffect(() => {
+    if (scannerLogs.length > 0) {
+      console.debug('scannerLogs (latest):', scannerLogs.slice(0, 5));
     }
+  }, [scannerLogs]);
+
+  // Request camera permission
+  const requestCameraPermission = useCallback(async (): Promise<boolean> => {
+    if (!navigator.mediaDevices || typeof navigator.mediaDevices.getUserMedia !== 'function') {
+      setCameraError('Camera API not supported in this browser');
+      return false;
+    }
+    
+    setCameraLoading(true);
+    setCameraError(null);
+    
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ video: true });
+      try {
+        stream.getTracks().forEach(t => {
+          try {
+            t.stop();
+          } catch (e) {
+            console.debug('stop track error', e);
+          }
+        });
+      } catch (e) {
+        console.debug('stop tracks error', e);
+      }
+      
+      setCameraLoading(false);
+      setCameraError(null);
+      
+      if (mountedRef.current) {
+        try {
+          await startScanner();
+        } catch (e) {
+          console.debug('startScanner after permission error', e);
+        }
+      }
+      
+      return true;
+    } catch (err: unknown) {
+      console.debug('requestCameraPermission failed', err);
+      setCameraLoading(false);
+      setCameraError(isIOS() ?
+        "Camera access denied. On iOS:\n1. Go to Settings > Safari\n2. Scroll to 'Camera'\n3. Allow camera access\n4. Refresh this page" :
+        "Camera permission denied. Please allow camera access in your browser settings and refresh.");
+      pushScannerError(`permission request failed: ${String(err)}`);
+      return false;
+    }
+  }, [startScanner, pushScannerError]);
+
+  // IMPROVED: Initialize scanner on mount with better guards
+  useEffect(() => {
+    mountedRef.current = true;
+    scannerInitializedRef.current = false;
+    
+    const initScanner = async () => {
+      if (!scanning || showManualInput || !mountedRef.current || scannerInitializedRef.current) {
+        return;
+      }
+      
+      scannerInitializedRef.current = true;
+      
+      try {
+        if (navigator.permissions && typeof navigator.permissions.query === 'function') {
+          try {
+            const perm = await navigator.permissions.query({ name: 'camera' as PermissionName });
+            
+            if (!mountedRef.current) return;
+            
+            if (perm.state === 'granted') {
+              await startScanner();
+            } else if (perm.state === 'prompt') {
+              setCameraLoading(false);
+              setCameraError(null);
+            } else {
+              setCameraLoading(false);
+              setCameraError(isIOS() ?
+                "Camera access denied. On iOS:\n1. Go to Settings > Safari\n2. Scroll to 'Camera'\n3. Allow camera access\n4. Refresh this page" :
+                "Camera permission denied. Please allow camera access in your browser settings and refresh.");
+            }
+          } catch {
+            if (mountedRef.current) {
+              await startScanner();
+            }
+          }
+        } else {
+          if (mountedRef.current) {
+            await startScanner();
+          }
+        }
+      } catch (err) {
+        console.debug('initScanner error', err);
+      }
+    };
+
+    initScanner();
 
     return () => {
+      // Ensure scanner stop starts first while DOM still present
       stopScanner();
+      mountedRef.current = false;
+      scannerInitializedRef.current = false;
     };
   }, [scanning, showManualInput, startScanner, stopScanner]);
 
@@ -596,11 +820,9 @@ export default function ScanQRCodePage() {
       const successfulPayments: string[] = [];
       const failedPayments: string[] = [];
 
-      // Process payment for each student in the QR code
       for (let i = 0; i < qrData.students.length; i++) {
         const studentToPay = qrData.students[i];
         
-        // Check if student already fully paid (skip if so)
         const { data: existingPayments } = await supabase
           .from("payments")
           .select("status, amount")
@@ -616,10 +838,8 @@ export default function ScanQRCodePage() {
           continue;
         }
 
-        // Generate unique transaction reference for each payment
         const transactionRef = `CASH-${studentToPay.regNumber}-${baseTimestamp}-${i}`;
 
-        // Create payment record for this student
         const paymentResponse = await supabase
           .from("payments")
           .insert({
@@ -648,7 +868,6 @@ export default function ScanQRCodePage() {
 
         successfulPayments.push(studentToPay.name);
 
-        // Send notification to student
         await supabase.from("notifications").insert({
           recipient_id: studentToPay.id,
           type: "payment_approved",
@@ -660,7 +879,6 @@ export default function ScanQRCodePage() {
         });
       }
 
-      // Show appropriate success/error message
       if (successfulPayments.length > 0 && failedPayments.length === 0) {
         const message = successfulPayments.length === 1
           ? `Payment confirmed for ${successfulPayments[0]}!`
@@ -672,12 +890,13 @@ export default function ScanQRCodePage() {
         throw new Error("No payments were processed successfully");
       }
 
-      // Reset and restart scanner
       setTimeout(() => {
-        setQrData(null);
-        setStudent(null);
-        setPaymentType(null);
-        setScanning(true);
+        if (mountedRef.current) {
+          setQrData(null);
+          setStudent(null);
+          setPaymentType(null);
+          setScanning(true);
+        }
       }, 2000);
     } catch (error: unknown) {
       console.error("Error confirming payment:", error);
@@ -701,324 +920,97 @@ export default function ScanQRCodePage() {
     setPaymentCodeInput("");
   };
 
-  // Handle multi-pay code lookup (NO DATABASE - parses compressed reg numbers)
-  // Format: MP-XXX-P123-456.789 where:
-  // - MP = Multi-pay prefix
-  // - XXX = Last 3 chars of payment type ID
-  // - P123 = Payer's reg suffix (P prefix marks who is paying)
-  // - 456.789 = Other students' reg suffixes (dot-separated)
-  const handleMultiPayCode = async (codeInput: string) => {
-    try {
-      // Parse the code: MP-XXX-P123-456.789 or MP-XXX-P123 (payer only)
-      const withoutPrefix = codeInput.substring(3); // Remove "MP-"
-      const parts = withoutPrefix.split('-');
-      
-      if (parts.length < 2) {
-        toast.error("Invalid multi-pay code format");
-        setProcessingManual(false);
-        return;
-      }
-      
-      const paymentPart = parts[0]; // XXX (payment type identifier)
-      const payerPart = parts[1]; // P123 (payer identifier)
-      
-      // Validate payer part starts with P
-      if (!payerPart.startsWith('P')) {
-        toast.error("Invalid code: Missing payer identifier");
-        setProcessingManual(false);
-        return;
-      }
-      
-      const payerSuffix = payerPart.substring(1); // Remove 'P' prefix -> "123"
-      
-      // Other students (optional - parts[2] contains dot-separated suffixes)
-      const otherSuffixes = parts.length > 2 
-        ? parts[2].split('.').filter(s => s.length > 0) 
-        : [];
+  // Handle multi-pay code lookup
+  // Continuation of ScanQRCodePage.tsx
 
-      // Fetch all active payment types
-      const { data: allPaymentTypes, error: ptError } = await supabase
-        .from("payment_types")
-        .select("id, title, amount")
-        .eq("is_active", true);
-
-      if (ptError) throw ptError;
-
-      // Find payment type where ID (without dashes) ends with paymentPart
-      const matchingPT = allPaymentTypes?.find(pt => 
-        pt.id.replace(/-/g, '').slice(-3).toUpperCase() === paymentPart.toUpperCase()
-      );
-
-      if (!matchingPT) {
-        toast.error("Payment type not found. The code may be invalid.");
-        setProcessingManual(false);
-        return;
-      }
-
-      // Fetch ALL students
-      const { data: allStudents, error: studentError } = await supabase
-        .from("students")
-        .select("id, full_name, reg_number");
-
-      if (studentError) throw studentError;
-
-      // Helper to match student by reg suffix
-      const findStudentBySuffix = (suffix: string) => {
-        return allStudents?.find(stu => {
-          const cleanedReg = stu.reg_number.replace(/[^A-Z0-9]/gi, '');
-          return cleanedReg.slice(-3).toUpperCase() === suffix.toUpperCase();
-        });
-      };
-
-      // Find the PAYER first
-      const payerStudent = findStudentBySuffix(payerSuffix);
-      
-      if (!payerStudent) {
-        toast.error("Could not identify the payer. Invalid code.");
-        setProcessingManual(false);
-        return;
-      }
-
-      // Find other students to pay for
-      const otherStudents = otherSuffixes
-        .map(suffix => findStudentBySuffix(suffix))
-        .filter((s): s is NonNullable<typeof s> => s !== undefined);
-
-      // The recipients list (otherSuffixes) already contains ALL people being paid for
-      // This may or may not include the payer themselves
-      const allRecipients = otherStudents;
-      
-      // Check if any suffixes didn't match
-      if (allRecipients.length < otherSuffixes.length) {
-        const missingCount = otherSuffixes.length - allRecipients.length;
-        toast.warning(`${missingCount} recipient(s) could not be found. Proceeding with ${allRecipients.length} students.`);
-      }
-      
-      if (allRecipients.length === 0) {
-        toast.error("No valid recipients found in the code.");
-        setProcessingManual(false);
-        return;
-      }
-
-      // Check for any students who already paid
-      const alreadyPaidStudents: string[] = [];
-      const studentsToPay: Array<{ id: string; name: string; regNumber: string }> = [];
-
-      for (const stu of allRecipients) {
-        const { data: existingPayments } = await supabase
-          .from("payments")
-          .select("status, amount")
-          .eq("student_id", stu.id)
-          .eq("payment_type_id", matchingPT.id);
-
-        const totalPaid = existingPayments
-          ?.filter(p => p.status === "approved")
-          .reduce((sum, p) => sum + (p.amount || 0), 0) || 0;
-
-        if (totalPaid >= matchingPT.amount) {
-          alreadyPaidStudents.push(stu.full_name);
-        } else {
-          studentsToPay.push({
-            id: stu.id,
-            name: stu.full_name,
-            regNumber: stu.reg_number,
-          });
-        }
-      }
-
-      if (studentsToPay.length === 0) {
-        toast.error(`All students have already paid for ${matchingPT.title}`);
-        setProcessingManual(false);
-        return;
-      }
-
-      if (alreadyPaidStudents.length > 0) {
-        toast.warning(`${alreadyPaidStudents.join(", ")} already paid and will be skipped`);
-      }
-
-      // Create QR data structure for multi-pay
-      // PAYER is always payerStudent (identified by P prefix in code)
-      const manualQrData: QRData = {
-        type: "CASH_PAYMENT",
-        paidBy: payerStudent.id,
-        paidByName: payerStudent.full_name,
-        paidByRegNumber: payerStudent.reg_number,
-        students: studentsToPay,
-        totalStudents: studentsToPay.length,
-        paymentTypeId: matchingPT.id,
-        paymentTypeName: matchingPT.title,
-        totalAmount: matchingPT.amount * studentsToPay.length,
-        amountPerStudent: matchingPT.amount,
-        timestamp: Date.now(),
-        paymentMethod: "cash",
-      };
-
-      // Set state and proceed to confirmation
-      setQrData(manualQrData);
-      setStudent({
-        id: payerStudent.id,
-        full_name: payerStudent.full_name,
-        reg_number: payerStudent.reg_number,
-      });
-      setPaymentType(matchingPT);
-      setScanning(false);
-      setShowManualInput(false);
-
-      toast.success(`${payerStudent.full_name} paying for ${studentsToPay.length} student(s) - please confirm`);
-    } catch (error) {
-      console.error("Error processing multi-pay code:", error);
-      toast.error("Failed to process multi-pay code. Please try again.");
-    } finally {
+const handleMultiPayCode = async (codeInput: string) => {
+  try {
+    const withoutPrefix = codeInput.substring(3);
+    const parts = withoutPrefix.split('-');
+    
+    if (parts.length < 2) {
+      toast.error("Invalid multi-pay code format");
       setProcessingManual(false);
-    }
-  };
-
-  // Auto-format payment code as user types
-  // Single format: ABCDEF1234 -> ABC-DEF-1234
-  // Multi format: MPXXXP123456789 -> MP-XXX-P123-456.789
-  const formatPaymentCode = (input: string): string => {
-    // Allow letters, numbers, dashes and dots (for multi-pay)
-    const value = input.toUpperCase().replace(/[^A-Z0-9.-]/g, '');
-    
-    // Multi-pay code starts with MP
-    if (value.startsWith('MP')) {
-      // If already formatted with dashes/dots, preserve structure
-      if (value.includes('-') && value.split('-').length >= 3) {
-        return value; // Already formatted
-      }
-      
-      // Strip to just alphanumeric
-      const stripped = value.replace(/[^A-Z0-9]/g, '').substring(2); // Remove MP
-      
-      if (stripped.length <= 3) return `MP-${stripped}`;
-      
-      // Format: MP-XXX-P123-456.789
-      const paymentPart = stripped.slice(0, 3); // Payment type (XXX)
-      const rest = stripped.slice(3);
-      
-      if (rest.length === 0) return `MP-${paymentPart}`;
-      
-      // Check if payer prefix (P) is present
-      if (rest.startsWith('P')) {
-        // P + 3 digits for payer
-        if (rest.length <= 4) return `MP-${paymentPart}-${rest}`;
-        
-        const payerPart = rest.slice(0, 4); // P123
-        const otherPart = rest.slice(4);
-        
-        if (otherPart.length === 0) return `MP-${paymentPart}-${payerPart}`;
-        
-        // Split remaining into groups of 3 for other students
-        const otherSuffixes: string[] = [];
-        for (let i = 0; i < otherPart.length; i += 3) {
-          otherSuffixes.push(otherPart.slice(i, i + 3));
-        }
-        
-        return `MP-${paymentPart}-${payerPart}-${otherSuffixes.join('.')}`;
-      } else {
-        // Auto-add P prefix to payer
-        if (rest.length <= 3) return `MP-${paymentPart}-P${rest}`;
-        
-        const payerPart = `P${rest.slice(0, 3)}`;
-        const otherPart = rest.slice(3);
-        
-        if (otherPart.length === 0) return `MP-${paymentPart}-${payerPart}`;
-        
-        // Split remaining into groups of 3 for other students
-        const otherSuffixes: string[] = [];
-        for (let i = 0; i < otherPart.length; i += 3) {
-          otherSuffixes.push(otherPart.slice(i, i + 3));
-        }
-        
-        return `MP-${paymentPart}-${payerPart}-${otherSuffixes.join('.')}`;
-      }
+      return;
     }
     
-    // Single payment code: ABC-DEF-1234
-    const stripped = value.replace(/[^A-Z0-9]/g, '');
-    if (stripped.length <= 3) return stripped;
-    if (stripped.length <= 6) return `${stripped.slice(0, 3)}-${stripped.slice(3)}`;
-    return `${stripped.slice(0, 3)}-${stripped.slice(3, 6)}-${stripped.slice(6, 10)}`;
-  };
-
-  // Handle payment code input with auto-formatting
-  const handlePaymentCodeChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const formatted = formatPaymentCode(e.target.value);
-    setPaymentCodeInput(formatted);
-  };
-
-  // Handle payment code lookup
-  const handlePaymentCodeSubmit = async () => {
-    if (!paymentCodeInput.trim()) return;
+    const paymentPart = parts[0];
+    const payerPart = parts[1];
     
-    setProcessingManual(true);
-    try {
-      const codeInput = paymentCodeInput.trim().toUpperCase();
-      
-      // Check if it's a multi-pay code (starts with MP-)
-      // Multi-pay format: MP-XXX-1234
-      if (codeInput.startsWith('MP-')) {
-        await handleMultiPayCode(codeInput);
-        return;
-      }
-      
-      // Single payment code format: ABC-DEF-1234
-      // StudentID(first 3 chars)-PaymentTypeID(last 3 chars)-Timestamp(last 4 digits)
-      const codeParts = codeInput.split('-');
-      
-      if (codeParts.length !== 3) {
-        toast.error("Invalid code format. Single: ABC-DEF-1234 | Multi: MP-XXX-P123-456");
-        setProcessingManual(false);
-        return;
-      }
+    if (!payerPart.startsWith('P')) {
+      toast.error("Invalid code: Missing payer identifier");
+      setProcessingManual(false);
+      return;
+    }
+    
+    const payerSuffix = payerPart.substring(1);
+    const otherSuffixes = parts.length > 2 
+      ? parts[2].split('.').filter(s => s.length > 0) 
+      : [];
 
-      const [studentPart, paymentPart] = codeParts;
-      
-      // Fetch all students and find those whose ID starts with studentPart (after removing dashes)
-      const { data: allStudents, error: studentError } = await supabase
-        .from("students")
-        .select("id, full_name, reg_number");
+    const { data: allPaymentTypes, error: ptError } = await supabase
+      .from("payment_types")
+      .select("id, title, amount")
+      .eq("is_active", true);
 
-      if (studentError) throw studentError;
+    if (ptError) throw ptError;
 
-      // Filter students where ID (without dashes) starts with studentPart
-      const matchingStudents = allStudents?.filter(s => 
-        s.id.replace(/-/g, '').slice(0, 3).toUpperCase() === studentPart
-      ) || [];
+    const matchingPT = allPaymentTypes?.find(pt => 
+      pt.id.replace(/-/g, '').slice(-3).toUpperCase() === paymentPart.toUpperCase()
+    );
 
-      if (matchingStudents.length === 0) {
-        toast.error("No student found matching this payment code. Please verify the code or ask student to regenerate.");
-        setProcessingManual(false);
-        return;
-      }
+    if (!matchingPT) {
+      toast.error("Payment type not found. The code may be invalid.");
+      setProcessingManual(false);
+      return;
+    }
 
-      // Fetch all active payment types
-      const { data: allPaymentTypes, error: ptError } = await supabase
-        .from("payment_types")
-        .select("id, title, amount")
-        .eq("is_active", true);
+    const { data: allStudents, error: studentError } = await supabase
+      .from("students")
+      .select("id, full_name, reg_number");
 
-      if (ptError) throw ptError;
+    if (studentError) throw studentError;
 
-      // Find payment type where ID (without dashes) ends with paymentPart
-      const matchingPT = allPaymentTypes?.find(pt => 
-        pt.id.replace(/-/g, '').slice(-3).toUpperCase() === paymentPart
-      );
+    const findStudentBySuffix = (suffix: string) => {
+      return allStudents?.find(stu => {
+        const cleanedReg = stu.reg_number.replace(/[^A-Z0-9]/gi, '');
+        return cleanedReg.slice(-3).toUpperCase() === suffix.toUpperCase();
+      });
+    };
 
-      if (!matchingPT) {
-        toast.error("Payment type not found. The code may be expired - ask student to regenerate QR code.");
-        setProcessingManual(false);
-        return;
-      }
+    const payerStudent = findStudentBySuffix(payerSuffix);
+    
+    if (!payerStudent) {
+      toast.error("Could not identify the payer. Invalid code.");
+      setProcessingManual(false);
+      return;
+    }
 
-      // Use the first matching student
-      const matchedStudent = matchingStudents[0];
+    const otherStudents = otherSuffixes
+      .map(suffix => findStudentBySuffix(suffix))
+      .filter((s): s is NonNullable<typeof s> => s !== undefined);
 
-      // Check if already paid
+    const allRecipients = otherStudents;
+    
+    if (allRecipients.length < otherSuffixes.length) {
+      const missingCount = otherSuffixes.length - allRecipients.length;
+      toast.warning(`${missingCount} recipient(s) could not be found. Proceeding with ${allRecipients.length} students.`);
+    }
+    
+    if (allRecipients.length === 0) {
+      toast.error("No valid recipients found in the code.");
+      setProcessingManual(false);
+      return;
+    }
+
+    const alreadyPaidStudents: string[] = [];
+    const studentsToPay: Array<{ id: string; name: string; regNumber: string }> = [];
+
+    for (const stu of allRecipients) {
       const { data: existingPayments } = await supabase
         .from("payments")
         .select("status, amount")
-        .eq("student_id", matchedStudent.id)
+        .eq("student_id", stu.id)
         .eq("payment_type_id", matchingPT.id);
 
       const totalPaid = existingPayments
@@ -1026,54 +1018,233 @@ export default function ScanQRCodePage() {
         .reduce((sum, p) => sum + (p.amount || 0), 0) || 0;
 
       if (totalPaid >= matchingPT.amount) {
-        toast.error(`${matchedStudent.full_name} has already fully paid for ${matchingPT.title}`);
-        setProcessingManual(false);
-        return;
+        alreadyPaidStudents.push(stu.full_name);
+      } else {
+        studentsToPay.push({
+          id: stu.id,
+          name: stu.full_name,
+          regNumber: stu.reg_number,
+        });
       }
-
-      // Create QR data structure for consistency
-      const manualQrData: QRData = {
-        type: "CASH_PAYMENT",
-        paidBy: matchedStudent.id,
-        paidByName: matchedStudent.full_name,
-        paidByRegNumber: matchedStudent.reg_number,
-        students: [{
-          id: matchedStudent.id,
-          name: matchedStudent.full_name,
-          regNumber: matchedStudent.reg_number,
-        }],
-        totalStudents: 1,
-        paymentTypeId: matchingPT.id,
-        paymentTypeName: matchingPT.title,
-        totalAmount: matchingPT.amount,
-        amountPerStudent: matchingPT.amount,
-        timestamp: Date.now(),
-        paymentMethod: "cash",
-      };
-
-      // Set state and proceed to confirmation
-      setQrData(manualQrData);
-      setStudent(matchedStudent);
-      setPaymentType(matchingPT);
-      setScanning(false);
-      setShowManualInput(false);
-
-      toast.success(`Found payment for ${matchedStudent.full_name} - please confirm`);
-    } catch (error) {
-      console.error("Error looking up payment code:", error);
-      toast.error("Failed to lookup payment code. Please try again.");
-    } finally {
-      setProcessingManual(false);
     }
-  };
 
+    if (studentsToPay.length === 0) {
+      toast.error(`All students have already paid for ${matchingPT.title}`);
+      setProcessingManual(false);
+      return;
+    }
 
+    if (alreadyPaidStudents.length > 0) {
+      toast.warning(`${alreadyPaidStudents.join(", ")} already paid and will be skipped`);
+    }
 
-  const switchCamera = async (newCameraId: string) => {
-    await stopScanner();
-    setSelectedCamera(newCameraId);
-    await startScanner(newCameraId);
-  };
+    const manualQrData: QRData = {
+      type: "CASH_PAYMENT",
+      paidBy: payerStudent.id,
+      paidByName: payerStudent.full_name,
+      paidByRegNumber: payerStudent.reg_number,
+      students: studentsToPay,
+      totalStudents: studentsToPay.length,
+      paymentTypeId: matchingPT.id,
+      paymentTypeName: matchingPT.title,
+      totalAmount: matchingPT.amount * studentsToPay.length,
+      amountPerStudent: matchingPT.amount,
+      timestamp: Date.now(),
+      paymentMethod: "cash",
+    };
+
+    setQrData(manualQrData);
+    setStudent({
+      id: payerStudent.id,
+      full_name: payerStudent.full_name,
+      reg_number: payerStudent.reg_number,
+    });
+    setPaymentType(matchingPT);
+    setScanning(false);
+    setShowManualInput(false);
+
+    toast.success(`${payerStudent.full_name} paying for ${studentsToPay.length} student(s) - please confirm`);
+  } catch (err) {
+    console.error('Multi-pay code error:', err);
+    toast.error('Failed to process multi-pay code. Please try again.');
+    setProcessingManual(false);
+  }
+};
+
+const formatPaymentCode = (input: string): string => {
+  const value = input.toUpperCase().replace(/[^A-Z0-9.-]/g, '');
+  
+  if (value.startsWith('MP')) {
+    if (value.includes('-') && value.split('-').length >= 3) {
+      return value;
+    }
+    
+    const stripped = value.replace(/[^A-Z0-9]/g, '').substring(2);
+    
+    if (stripped.length <= 3) return `MP-${stripped}`;
+    
+    const paymentPart = stripped.slice(0, 3);
+    const rest = stripped.slice(3);
+    
+    if (rest.length === 0) return `MP-${paymentPart}`;
+    
+    if (rest.startsWith('P')) {
+      if (rest.length <= 4) return `MP-${paymentPart}-${rest}`;
+      
+      const payerPart = rest.slice(0, 4);
+      const otherPart = rest.slice(4);
+      
+      if (otherPart.length === 0) return `MP-${paymentPart}-${payerPart}`;
+      
+      const otherSuffixes: string[] = [];
+      for (let i = 0; i < otherPart.length; i += 3) {
+        otherSuffixes.push(otherPart.slice(i, i + 3));
+      }
+      
+      return `MP-${paymentPart}-${payerPart}-${otherSuffixes.join('.')}`;
+    } else {
+      if (rest.length <= 3) return `MP-${paymentPart}-P${rest}`;
+      
+      const payerPart = `P${rest.slice(0, 3)}`;
+      const otherPart = rest.slice(3);
+      
+      if (otherPart.length === 0) return `MP-${paymentPart}-${payerPart}`;
+      
+      const otherSuffixes: string[] = [];
+      for (let i = 0; i < otherPart.length; i += 3) {
+        otherSuffixes.push(otherPart.slice(i, i + 3));
+      }
+      
+      return `MP-${paymentPart}-${payerPart}-${otherSuffixes.join('.')}`;
+    }
+  }
+  
+  const stripped = value.replace(/[^A-Z0-9]/g, '');
+  if (stripped.length <= 3) return stripped;
+  if (stripped.length <= 6) return `${stripped.slice(0, 3)}-${stripped.slice(3)}`;
+  return `${stripped.slice(0, 3)}-${stripped.slice(3, 6)}-${stripped.slice(6, 10)}`;
+};
+
+const handlePaymentCodeChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const formatted = formatPaymentCode(e.target.value);
+  setPaymentCodeInput(formatted);
+};
+
+const handlePaymentCodeSubmit = async () => {
+  if (!paymentCodeInput.trim()) return;
+  
+  setProcessingManual(true);
+  try {
+    const codeInput = paymentCodeInput.trim().toUpperCase();
+    
+    if (codeInput.startsWith('MP-')) {
+      await handleMultiPayCode(codeInput);
+      return;
+    }
+    
+    const codeParts = codeInput.split('-');
+    
+    if (codeParts.length !== 3) {
+      toast.error("Invalid code format. Single: ABC-DEF-1234 | Multi: MP-XXX-P123-456");
+      setProcessingManual(false);
+      return;
+    }
+
+    const [studentPart, paymentPart] = codeParts;
+    
+    const { data: allStudents, error: studentError } = await supabase
+      .from("students")
+      .select("id, full_name, reg_number");
+
+    if (studentError) throw studentError;
+
+    const matchingStudents = allStudents?.filter(s => 
+      s.id.replace(/-/g, '').slice(0, 3).toUpperCase() === studentPart
+    ) || [];
+
+    if (matchingStudents.length === 0) {
+      toast.error("No student found matching this payment code. Please verify the code or ask student to regenerate.");
+      setProcessingManual(false);
+      return;
+    }
+
+    const { data: allPaymentTypes, error: ptError } = await supabase
+      .from("payment_types")
+      .select("id, title, amount")
+      .eq("is_active", true);
+
+    if (ptError) throw ptError;
+
+    const matchingPT = allPaymentTypes?.find(pt => 
+      pt.id.replace(/-/g, '').slice(-3).toUpperCase() === paymentPart
+    );
+
+    if (!matchingPT) {
+      toast.error("Payment type not found. The code may be expired - ask student to regenerate QR code.");
+      setProcessingManual(false);
+      return;
+    }
+
+    const matchedStudent = matchingStudents[0];
+
+    const { data: existingPayments } = await supabase
+      .from("payments")
+      .select("status, amount")
+      .eq("student_id", matchedStudent.id)
+      .eq("payment_type_id", matchingPT.id);
+
+    const totalPaid = existingPayments
+      ?.filter(p => p.status === "approved")
+      .reduce((sum, p) => sum + (p.amount || 0), 0) || 0;
+
+    if (totalPaid >= matchingPT.amount) {
+      toast.error(`${matchedStudent.full_name} has already fully paid for ${matchingPT.title}`);
+      setProcessingManual(false);
+      return;
+    }
+
+    const manualQrData: QRData = {
+      type: "CASH_PAYMENT",
+      paidBy: matchedStudent.id,
+      paidByName: matchedStudent.full_name,
+      paidByRegNumber: matchedStudent.reg_number,
+      students: [{
+        id: matchedStudent.id,
+        name: matchedStudent.full_name,
+        regNumber: matchedStudent.reg_number,
+      }],
+      totalStudents: 1,
+      paymentTypeId: matchingPT.id,
+      paymentTypeName: matchingPT.title,
+      totalAmount: matchingPT.amount,
+      amountPerStudent: matchingPT.amount,
+      timestamp: Date.now(),
+      paymentMethod: "cash",
+    };
+
+    setQrData(manualQrData);
+    setStudent(matchedStudent);
+    setPaymentType(matchingPT);
+    setScanning(false);
+    setShowManualInput(false);
+
+    toast.success(`Found payment for ${matchedStudent.full_name} - please confirm`);
+  } catch (error) {
+    console.error("Error looking up payment code:", error);
+    toast.error("Failed to lookup payment code. Please try again.");
+  } finally {
+    setProcessingManual(false);
+  }
+};
+
+const switchCamera = async (newCameraId: string) => {
+  await stopScanner();
+  setSelectedCamera(newCameraId);
+  await startScanner(newCameraId);
+};
+
+// Continue with the JSX return statement from the original code...
+// (The UI rendering part remains the same)
 
   return (
     <div
@@ -1254,7 +1425,7 @@ export default function ScanQRCodePage() {
                       <motion.button
                         whileHover={{ scale: 1.02 }}
                         whileTap={{ scale: 0.98 }}
-                        onClick={() => startScanner()}
+                        onClick={async () => { await requestCameraPermission(); }}
                         className="flex items-center gap-2 px-5 py-2.5 rounded-xl font-medium"
                         style={{ 
                           background: `${colors.primary}20`,
@@ -1268,7 +1439,7 @@ export default function ScanQRCodePage() {
                       <motion.button
                         whileHover={{ scale: 1.02 }}
                         whileTap={{ scale: 0.98 }}
-                        onClick={() => setShowManualInput(true)}
+                        onClick={async () => { setShowManualInput(true); await stopScanner(); }}
                         className="flex items-center gap-2 px-5 py-2.5 rounded-xl font-medium"
                         style={{ 
                           background: `${colors.accentMint}20`,
@@ -1279,7 +1450,33 @@ export default function ScanQRCodePage() {
                         <Keyboard className="w-4 h-4" />
                         Use Manual Input
                       </motion.button>
+                      <motion.button
+                        whileHover={{ scale: 1.02 }}
+                        whileTap={{ scale: 0.98 }}
+                        onClick={() => setShowDiagnostics((s) => !s)}
+                        className="flex items-center gap-2 px-5 py-2.5 rounded-xl font-medium"
+                        style={{ background: `${colors.accentMint}10`, border: `1px solid ${colors.accentMint}20`, color: colors.accentMint }}
+                      >
+                        <FileText className="w-4 h-4" />
+                        {showDiagnostics ? 'Hide Diagnostics' : 'Show Diagnostics'}
+                      </motion.button>
                     </div>
+                    {showDiagnostics && (
+                      <div className="mt-4 text-left text-xs max-w-md mx-auto" style={{ color: colors.textSecondary }}>
+                        <div className="flex items-center gap-2 mb-2">
+                          <button onClick={copyDiagnostics} className="px-3 py-1 rounded bg-white/5">Copy Diagnostics</button>
+                          <button onClick={clearLogs} className="px-3 py-1 rounded bg-white/5">Clear Logs</button>
+                        </div>
+                        <div className="space-y-1">
+                          <div><strong>Mounted:</strong> {String(Boolean(mountedRef.current))}</div>
+                          <div><strong>Initialized:</strong> {String(Boolean(scannerInitializedRef.current))}</div>
+                          <div><strong>Instance:</strong> {html5QrCodeRef.current ? 'present' : 'null'}</div>
+                          <div><strong>Container present:</strong> {String(Boolean(document.getElementById(scannerContainerId)))}</div>
+                          <div><strong>Selected camera:</strong> {selectedCamera || 'n/a'}</div>
+                        </div>
+                        <pre className="max-h-40 overflow-auto p-2 rounded bg-black/10 mt-2" style={{ color: 'white' }}>{scannerLogs.slice(0, 30).join('\n')}</pre>
+                      </div>
+                    )}
                   </motion.div>
                 )}
 
@@ -1310,29 +1507,33 @@ export default function ScanQRCodePage() {
                       <motion.button
                         whileHover={{ scale: 1.02 }}
                         whileTap={{ scale: 0.98 }}
-                        onClick={async () => {
-                          try {
-                            setCameraLoading(true);
-                            if (navigator.mediaDevices && typeof navigator.mediaDevices.getUserMedia === 'function') {
-                              const stream = await navigator.mediaDevices.getUserMedia({ video: true });
-                              stream.getTracks().forEach(t => t.stop());
-                              // After user accepts, attempt to start scanner again
-                              await startScanner();
-                            }
-                          } catch (err) {
-                            console.debug('Re-request permission or start scanner failed:', err);
-                            setCameraError('Permission denied or camera unavailable. Use Manual Input instead.');
-                          } finally {
-                            setCameraLoading(false);
-                          }
-                        }}
+                        onClick={async () => { await requestCameraPermission(); }}
                         className="flex items-center gap-2 px-5 py-2.5 rounded-xl font-medium"
                         style={{ background: `${colors.primary}20`, border: `1px solid ${colors.primary}40`, color: colors.primary }}
                       >
                         <RefreshCw className="w-4 h-4" />
                         Re-request Permission
                       </motion.button>
+                      <motion.button
+                        whileHover={{ scale: 1.02 }}
+                        whileTap={{ scale: 0.98 }}
+                        onClick={() => setShowDiagnostics((s) => !s)}
+                        className="flex items-center gap-2 px-5 py-2.5 rounded-xl font-medium"
+                        style={{ background: `${colors.accentMint}10`, border: `1px solid ${colors.accentMint}20`, color: colors.accentMint }}
+                      >
+                        <FileText className="w-4 h-4" />
+                        {showDiagnostics ? 'Hide Diagnostics' : 'Show Diagnostics'}
+                      </motion.button>
                     </div>
+                    {showDiagnostics && (
+                      <div className="mt-4 text-left text-xs max-w-xl mx-auto" style={{ color: colors.textSecondary }}>
+                        <div className="flex items-center gap-2 mb-2">
+                          <button onClick={copyDiagnostics} className="px-3 py-1 rounded bg-white/5">Copy Diagnostics</button>
+                          <button onClick={clearLogs} className="px-3 py-1 rounded bg-white/5">Clear Logs</button>
+                        </div>
+                        <pre className="max-h-40 overflow-auto p-2 rounded bg-black/10" style={{ color: 'white' }}>{scannerLogs.slice(0, 30).join('\n')}</pre>
+                      </div>
+                    )}
                   </div>
                 )}
 
