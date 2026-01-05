@@ -3,11 +3,32 @@
  * 
  * Provides organization and department information throughout the app.
  * This is the foundation for multi-tenancy in the frontend.
+ * 
+ * NOTE: When integrating into the main app, update these imports:
+ * - supabase: import from '@/lib/supabase'
+ * - types: move to '@/types' or update path alias
  */
 
-import React, { createContext, useContext, useState, useEffect, useCallback, useMemo } from 'react';
-import { supabase } from '@/lib/supabase';
-import type { Organization, Department, OrganizationSettings, OrganizationContextType } from '@/multi-tenant/types';
+import React, { createContext, useState, useEffect, useCallback, useMemo } from 'react';
+// TODO: Uncomment when integrating into main app
+// import { supabase } from '@/lib/supabase';
+import type { Organization, Department, OrganizationSettings, OrganizationContextType } from '../types';
+
+/* eslint-disable @typescript-eslint/no-explicit-any */
+// Temporary supabase mock for development - replace with real import when integrating
+// When integrating: import { supabase } from '@/lib/supabase';
+const supabase: any = {
+  from: () => ({
+    select: () => ({
+      eq: () => ({
+        eq: () => ({
+          single: async () => ({ data: null, error: null })
+        })
+      })
+    })
+  })
+};
+/* eslint-enable @typescript-eslint/no-explicit-any */
 
 const OrganizationContext = createContext<OrganizationContextType | null>(null);
 
@@ -47,11 +68,17 @@ export const OrganizationProvider: React.FC<OrganizationProviderProps> = ({
       if (orgError) throw orgError;
       if (!org) throw new Error('Organization not found');
 
-      setOrganization(org);
-      setSettings(org.organization_settings?.[0] || null);
+      // Type assertion for the joined data
+      const orgData = org as Organization & {
+        departments?: Department[];
+        organization_settings?: OrganizationSettings[];
+      };
+
+      setOrganization(orgData);
+      setSettings(orgData.organization_settings?.[0] || null);
 
       // Set default department (first active one)
-      const activeDepts = org.departments?.filter((d: Department) => d.is_active) || [];
+      const activeDepts = orgData.departments?.filter((d: Department) => d.is_active) || [];
       if (activeDepts.length > 0) {
         setDepartment(activeDepts[0]);
       }
@@ -68,7 +95,7 @@ export const OrganizationProvider: React.FC<OrganizationProviderProps> = ({
   const switchDepartment = useCallback(async (departmentId: string) => {
     if (!organization) return;
 
-    const dept = organization.departments?.find(d => d.id === departmentId);
+    const dept = organization.departments?.find((d: Department) => d.id === departmentId);
     if (dept) {
       setDepartment(dept);
       // Optionally save to localStorage for persistence
@@ -139,7 +166,7 @@ export const OrganizationProvider: React.FC<OrganizationProviderProps> = ({
     if (organization?.id) {
       const savedDeptId = localStorage.getItem(`org_${organization.id}_dept`);
       if (savedDeptId) {
-        const dept = organization.departments?.find(d => d.id === savedDeptId);
+        const dept = organization.departments?.find((d: Department) => d.id === savedDeptId);
         if (dept && dept.is_active) {
           setDepartment(dept);
         }
@@ -178,34 +205,7 @@ export const OrganizationProvider: React.FC<OrganizationProviderProps> = ({
   );
 };
 
-// Hook to use organization context
-export const useOrganization = (): OrganizationContextType => {
-  const context = useContext(OrganizationContext);
-  if (!context) {
-    throw new Error('useOrganization must be used within an OrganizationProvider');
-  }
-  return context;
-};
-
-// Hook to get just the format currency function (common use case)
-export const useCurrency = () => {
-  const { formatCurrency, organization } = useOrganization();
-  return {
-    formatCurrency,
-    currencySymbol: organization?.currency_symbol || '₦',
-    currencyCode: organization?.currency_code || 'NGN',
-  };
-};
-
-// Hook to get levels and sections
-export const useAcademicConfig = () => {
-  const { getLevels, getSections, department } = useOrganization();
-  return {
-    levels: getLevels(),
-    sections: getSections(),
-    departmentName: department?.name,
-    departmentShortName: department?.short_name,
-  };
-};
-
 export default OrganizationContext;
+
+// NOTE: Import hooks directly from './useOrganization' instead:
+// import { useOrganization, useCurrency, useAcademicConfig } from './useOrganization';
