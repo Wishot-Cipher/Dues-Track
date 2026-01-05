@@ -1,13 +1,13 @@
 # 😱 I Lost Hours of Code That Git Never Tracked — Here's How VS Code Saved My Life
 
-**A Developer's Nightmare and The Hidden Feature That Saved Everything**
+**A Developer's Nightmare While Building DuesTracker and The Hidden Feature That Saved Everything**
 
 ![Code Recovery](https://dev-to-uploads.s3.amazonaws.com/uploads/articles/placeholder.png)
 
 ---
 
 ## TL;DR
-I spent an entire morning writing beautiful React components, custom dropdowns, PDF export utilities, and security configurations. When I tried to commit, a git rebase conflict corrupted everything. **My code vanished.** Git couldn't help because the files were never committed. But VS Code's **Local History** feature — one I never knew existed — saved every single line. Here's the full story and how you can protect yourself.
+I've been building **DuesTracker** — a class payment management system for my university. I spent an entire morning writing beautiful React components, custom dropdowns, PDF export utilities, and security configurations. When I tried to commit, a git rebase conflict corrupted everything. **My code vanished.** Git couldn't help because the files were never committed. But VS Code's **Local History** feature — one I never knew existed — saved every single line. Here's the full story and how you can protect yourself.
 
 ---
 
@@ -15,7 +15,9 @@ I spent an entire morning writing beautiful React components, custom dropdowns, 
 
 It was January 5th, 2026. I was in the zone.
 
-I had just finished implementing some seriously cool features for my Class Dues Tracker app:
+For those who've been following my journey, I've been building **DuesTracker** — a React + TypeScript + Supabase app to help manage class payment dues for ECE students at my university. It's been an exciting project, and today was supposed to be a big milestone.
+
+I had just finished implementing some seriously cool features:
 
 - ✨ A **ProfessionalDropdown** component with search, multi-select, keyboard navigation, and smooth Framer Motion animations
 - 📄 A complete **PDF Export utility** using jsPDF with professional headers, footers, and styled tables
@@ -114,9 +116,9 @@ I was about to accept my fate and rewrite everything from memory...
 
 ## 💡 The Discovery: VS Code's Secret Weapon
 
-Then it hit me. I vaguely remembered reading something about VS Code having a local history feature. But where does it actually store those files?
+I use an AI coding assistant to help me debug issues faster. While going through possible recovery options together, we discovered something I had completely overlooked — VS Code has a local history feature!
 
-I started digging through VS Code's AppData folder:
+I quickly navigated to VS Code's AppData folder:
 
 ```powershell
 Get-ChildItem -Path "$env:APPDATA\Code\User\History" -Recurse
@@ -231,7 +233,7 @@ After restoration, here's what my git diff looked like:
  create mode 100644 src/utils/pdfExport.ts
 ```
 
-**5,976 lines of code saved.** Not rewritten from memory. Not approximated. The exact code I wrote.
+**5,976 lines of code saved.** Not rewritten from memory. Not approximated. The exact code I wrote for DuesTracker.
 
 ---
 
@@ -380,7 +382,7 @@ The next time you're deep in a coding session, remember: **commit early, commit 
 
 This experience taught me that knowing your tools inside-out is just as important as knowing how to code. VS Code's Local History isn't a new feature — it's been there all along. I just never took the time to explore it until I desperately needed it.
 
-Sometimes the best solutions aren't complex — they're hidden features in tools you already use every day.
+Building DuesTracker has been a journey of constant learning — from React patterns to Supabase RLS policies, and now... disaster recovery. Sometimes the best solutions aren't complex — they're hidden features in tools you already use every day.
 
 ---
 
@@ -395,4 +397,4 @@ Sometimes the best solutions aren't complex — they're hidden features in tools
 
 *Written by Dev_Wishot*
 
-*Originally experienced on January 5th, 2026, while building a React + TypeScript + Supabase application for managing class payment dues.*
+*Part of my ongoing DuesTracker development series — documenting the journey of building a React + TypeScript + Supabase application for managing class payment dues. Follow along for more updates!*
