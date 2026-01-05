@@ -4,6 +4,7 @@ import { useNavigate } from "react-router-dom";
 import { supabase } from "@/config/supabase";
 import { colors, gradients } from "@/config/colors";
 import GlassCard from "@/components/ui/GlassCard";
+import ProfessionalDropdown from "@/components/ui/ProfessionalDropdown";
 import { formatCurrency } from "@/utils/formatters";
 import { useAuth } from "@/hooks/useAuth";
 import { useToast } from "@/hooks/useToast";
@@ -21,6 +22,7 @@ import {
   BadgePercent,
   Heart,
   RefreshCw,
+  HelpCircle,
 } from "lucide-react";
 import Footer from "@/components/Footer";
 import notificationService from "@/services/notificationService";
@@ -719,69 +721,21 @@ export default function WaivePaymentPage() {
 
               {/* Waiver Reason */}
               <div className="mb-4">
-                <label className="block text-sm font-medium text-white mb-2">
-                  Waiver Reason{" "}
-                  <span style={{ color: colors.statusUnpaid }}>*</span>
-                </label>
-                <div className="relative">
-                  <select
-                    value={waiverReason}
-                    onChange={(e) => setWaiverReason(e.target.value)}
-                    className="w-full px-4 py-3 rounded-xl border text-white appearance-none cursor-pointer transition-all focus:outline-none focus:ring-2 focus:ring-orange-500"
-                    style={{
-                      background: "rgba(255, 255, 255, 0.05)",
-                      borderColor: "rgba(255, 104, 3, 0.2)",
-                    }}
-                  >
-                    <option value="" style={{ background: "#1A0E09" }}>
-                      Select reason...
-                    </option>
-                    <option
-                      value="financial_hardship"
-                      style={{ background: "#1A0E09" }}
-                    >
-                      💰 Financial Hardship
-                    </option>
-                    <option
-                      value="medical_emergency"
-                      style={{ background: "#1A0E09" }}
-                    >
-                      🏥 Medical Emergency
-                    </option>
-                    <option
-                      value="class_executive"
-                      style={{ background: "#1A0E09" }}
-                    >
-                      👔 Class Executive Role
-                    </option>
-                    <option
-                      value="scholarship"
-                      style={{ background: "#1A0E09" }}
-                    >
-                      🎓 Scholarship/Sponsorship
-                    </option>
-                    <option
-                      value="departmental_support"
-                      style={{ background: "#1A0E09" }}
-                    >
-                      🏫 Departmental Support
-                    </option>
-                    <option value="other" style={{ background: "#1A0E09" }}>
-                      📝 Other
-                    </option>
-                  </select>
-                  <div className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none">
-                    <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
-                      <path
-                        d="M5 7.5L10 12.5L15 7.5"
-                        stroke="#FF6803"
-                        strokeWidth="2"
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                      />
-                    </svg>
-                  </div>
-                </div>
+                <ProfessionalDropdown
+                  label="Waiver Reason *"
+                  placeholder="Select reason..."
+                  icon={<HelpCircle className="w-5 h-5" />}
+                  value={waiverReason}
+                  onChange={(val) => setWaiverReason(val as string)}
+                  options={[
+                    { value: "financial_hardship", label: "Financial Hardship", icon: <span>💰</span> },
+                    { value: "medical_emergency", label: "Medical Emergency", icon: <span>🏥</span> },
+                    { value: "class_executive", label: "Class Executive Role", icon: <span>👔</span> },
+                    { value: "scholarship", label: "Scholarship/Sponsorship", icon: <span>🎓</span> },
+                    { value: "departmental_support", label: "Departmental Support", icon: <span>🏫</span> },
+                    { value: "other", label: "Other", icon: <span>📝</span> },
+                  ]}
+                />
               </div>
 
               {/* Custom Notes */}

@@ -193,9 +193,14 @@ Balance After Approval: N${balanceAfterApproval.toLocaleString()}`
   }
 
 
-  // Only class_rep or financial_secretary can approve expenses
-  const canApprove = user?.admins?.some((admin: { role: string }) => 
-    admin.role === 'class_rep' || admin.role === 'finsec' || admin.role === 'admin'
+  // Only admins, class_reps, financial secretaries (finsec) can approve expenses
+  // Admin and Class Rep can do everything, Finsec can approve expenses but NOT manage students
+  const canApprove = user?.admins?.some((admin: { role?: string; can_approve_payments?: boolean }) => 
+    admin.role === 'class_rep' ||
+    admin.role === 'finsec' ||
+    admin.role === 'financial_secretary' ||
+    admin.role === 'admin' ||
+    admin.can_approve_payments === true
   )
 
   if (!canApprove) {
@@ -253,7 +258,7 @@ Balance After Approval: N${balanceAfterApproval.toLocaleString()}`
             }}
             disabled={loading}
           >
-            <span>Refresh</span>
+            <span>Refresh🔄</span>
           </button>
         </div>
 

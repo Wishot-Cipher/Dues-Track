@@ -26,9 +26,12 @@ import {
   ChevronLeft,
   ChevronRight,
   ChevronsLeft,
-  ChevronsRight
+  ChevronsRight,
+  ChevronDown,
+  FileSpreadsheet
 } from 'lucide-react';
 import Footer from '@/components/Footer';
+import { exportPaymentsToPDF, generatePaymentReceiptPDF } from '@/utils/pdfExport';
 
 interface Payment {
   id: string;
@@ -50,12 +53,14 @@ interface Payment {
 export default function PaymentHistoryPage() {
   const { user } = useAuth();
   const navigate = useNavigate();
-  const { error: showError } = useToast();
+  const { error: showError, success: showSuccess } = useToast();
   const [payments, setPayments] = useState<Payment[]>([]);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState<'all' | 'pending' | 'approved' | 'rejected'>('all');
   const [searchTerm, setSearchTerm] = useState('');
   const [currentPage, setCurrentPage] = useState(1);
+  const [showExportMenu, setShowExportMenu] = useState(false);
+  const [exporting, setExporting] = useState(false);
   const itemsPerPage = 10;
 
   // Scroll to top function
@@ -193,6 +198,125 @@ export default function PaymentHistoryPage() {
     totalAmount: payments
       .filter((p) => p.status === 'approved' && !p.transaction_ref?.startsWith('WAIVED-'))
       .reduce((sum, p) => sum + p.amount, 0),
+  };
+
+  // Export functions
+  const handleExportPDF = async () => {
+    if (filteredPayments.length === 0) {
+      showError('No payments to export');
+      return;
+    }
+    
+    setExporting(true);
+    try {
+      // Transform payments to match PDF export interface
+      const exportData = filteredPayments.map(payment => ({
+        id: payment.id,
+        student_id: user?.id || '',
+        amount: payment.amount,
+        status: payment.status,
+        payment_method: 'Transfer',
+        transaction_ref: payment.transaction_ref,
+        created_at: payment.created_at,
+        approved_at: payment.approved_at || undefined,
+        notes: payment.notes || undefined,
+        payment_type: {
+          title: payment.payment_types.title,
+          amount: payment.amount,
+        },
+      }));
+
+      exportPaymentsToPDF(
+        exportData,
+        {
+          full_name: user?.full_name || 'Student',
+          reg_number: user?.reg_number || '',
+          email: user?.email || undefined,
+          level: user?.level || undefined,
+          department: user?.department || undefined,
+        }
+      );
+      showSuccess('Payment history exported successfully!');
+    } catch (error) {
+      console.error('Export error:', error);
+      showError('Failed to export payments');
+    } finally {
+      setExporting(false);
+    }
+  };
+
+  const handleExportCSV = () => {
+    if (filteredPayments.length === 0) {
+      showError('No payments to export');
+      return;
+    }
+    
+    setExporting(true);
+    try {
+      const headers = ['Payment Type', 'Category', 'Amount', 'Transaction Ref', 'Status', 'Date', 'Notes'];
+      const rows = filteredPayments.map(payment => [
+        payment.payment_types.title,
+        payment.payment_types.category,
+        payment.amount.toString(),
+        payment.transaction_ref,
+        payment.status,
+        new Date(payment.created_at).toLocaleDateString(),
+        payment.notes || '',
+      ]);
+
+      const csvContent = [headers, ...rows]
+        .map(row => row.map(cell => `"${cell.replace(/"/g, '""')}"`).join(','))
+        .join('\n');
+
+      const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `payment_history_${new Date().toISOString().split('T')[0]}.csv`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+      showSuccess('Payment history exported to CSV!');
+    } catch (error) {
+      console.error('Export error:', error);
+      showError('Failed to export payments');
+    } finally {
+      setExporting(false);
+    }
+  };
+
+  const handleDownloadReceipt = (payment: Payment) => {
+    if (payment.status !== 'approved') {
+      showError('Only approved payments can have receipts');
+      return;
+    }
+
+    try {
+      generatePaymentReceiptPDF({
+        id: payment.id,
+        amount: payment.amount,
+        status: payment.status,
+        payment_method: 'Transfer',
+        transaction_ref: payment.transaction_ref,
+        created_at: payment.created_at,
+        approved_at: payment.approved_at || undefined,
+        payment_type: {
+          title: payment.payment_types.title,
+          amount: payment.amount,
+        },
+        student: {
+          full_name: user?.full_name || 'Student',
+          reg_number: user?.reg_number || '',
+          email: user?.email || undefined,
+          level: user?.level || undefined,
+        },
+      });
+      showSuccess('Receipt downloaded!');
+    } catch (error) {
+      console.error('Receipt error:', error);
+      showError('Failed to generate receipt');
+    }
   };
 
   return (
@@ -378,6 +502,73 @@ export default function PaymentHistoryPage() {
                   </motion.button>
                 );
               })}
+
+              {/* Export Button */}
+              <div className="relative ml-2 pl-2 border-l" style={{ borderColor: 'rgba(255, 255, 255, 0.1)' }}>
+                <motion.button
+                  whileHover={{ scale: 1.02 }}
+                  whileTap={{ scale: 0.98 }}
+                  onClick={() => setShowExportMenu(!showExportMenu)}
+                  disabled={exporting || filteredPayments.length === 0}
+                  className="flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium transition-all disabled:opacity-50"
+                  style={{
+                    background: `${colors.accentMint}15`,
+                    border: `1px solid ${colors.accentMint}30`,
+                    color: colors.accentMint,
+                  }}
+                >
+                  {exporting ? (
+                    <div className="w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin" />
+                  ) : (
+                    <Download className="w-4 h-4" />
+                  )}
+                  <span className="hidden sm:inline">Export</span>
+                  <ChevronDown className={`w-3 h-3 transition-transform ${showExportMenu ? 'rotate-180' : ''}`} />
+                </motion.button>
+
+                {/* Export Dropdown */}
+                <AnimatePresence>
+                  {showExportMenu && (
+                    <motion.div
+                      initial={{ opacity: 0, y: -10, scale: 0.95 }}
+                      animate={{ opacity: 1, y: 0, scale: 1 }}
+                      exit={{ opacity: 0, y: -10, scale: 0.95 }}
+                      className="absolute right-0 top-full mt-2 w-52 rounded-xl overflow-hidden shadow-2xl z-50"
+                      style={{
+                        background: 'linear-gradient(135deg, rgba(30, 20, 15, 0.98), rgba(20, 12, 8, 0.98))',
+                        border: '1px solid rgba(255, 255, 255, 0.1)',
+                        backdropFilter: 'blur(20px)',
+                      }}
+                    >
+                      <div className="p-2">
+                        <motion.button
+                          whileHover={{ x: 4 }}
+                          onClick={() => {
+                            setShowExportMenu(false);
+                            handleExportPDF();
+                          }}
+                          className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg hover:bg-white/5"
+                        >
+                          <FileText className="w-4 h-4" style={{ color: colors.statusUnpaid }} />
+                          <span className="text-sm text-white">PDF Report</span>
+                        </motion.button>
+                        <motion.button
+                          whileHover={{ x: 4 }}
+                          onClick={() => {
+                            setShowExportMenu(false);
+                            handleExportCSV();
+                          }}
+                          className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg hover:bg-white/5"
+                        >
+                          <FileSpreadsheet className="w-4 h-4" style={{ color: colors.accentMint }} />
+                          <span className="text-sm text-white">CSV Spreadsheet</span>
+                        </motion.button>
+                      </div>
+                    </motion.div>
+                  )}
+                </AnimatePresence>
+                {showExportMenu && <div className="fixed inset-0 z-40" onClick={() => setShowExportMenu(false)} />}
+              </div>
             </div>
           </div>
         </motion.div>
@@ -555,21 +746,22 @@ export default function PaymentHistoryPage() {
                               <Eye className="w-4 h-4" />
                               <span>View</span>
                             </motion.a>
-                            <motion.a
-                              href={payment.receipt_url}
-                              download
-                              className="flex-1 lg:flex-auto flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg font-medium text-sm transition-all"
-                              style={{ 
-                                background: 'rgba(255, 255, 255, 0.03)', 
-                                border: '1px solid rgba(255, 255, 255, 0.1)',
-                                color: colors.textSecondary
-                              }}
-                              whileHover={{ scale: 1.02, background: 'rgba(255, 255, 255, 0.08)' }}
-                              whileTap={{ scale: 0.98 }}
-                            >
-                              <Download className="w-4 h-4" />
-                              <span>Download</span>
-                            </motion.a>
+                            {payment.status === 'approved' && (
+                              <motion.button
+                                onClick={() => handleDownloadReceipt(payment)}
+                                className="flex-1 lg:flex-auto flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg font-medium text-sm transition-all"
+                                style={{ 
+                                  background: `${colors.accentMint}15`, 
+                                  border: `1px solid ${colors.accentMint}30`,
+                                  color: colors.accentMint
+                                }}
+                                whileHover={{ scale: 1.02, background: `${colors.accentMint}25` }}
+                                whileTap={{ scale: 0.98 }}
+                              >
+                                <FileText className="w-4 h-4" />
+                                <span>Receipt</span>
+                              </motion.button>
+                            )}
                           </div>
                         </div>
                       </div>

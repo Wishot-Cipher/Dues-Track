@@ -5,6 +5,7 @@ import { useAuth } from '@/hooks/useAuth';
 import { supabase } from '@/config/supabase';
 import { colors, gradients } from '@/config/colors';
 import GlassCard from '@/components/ui/GlassCard';
+import DashboardSwitcher from '@/components/DashboardSwitcher';
 import { formatCurrency, formatDate } from '@/utils/formatters';
 import { AdminDashboardSkeleton, PaymentCardSkeleton } from '@/components/ui/Skeleton';
 import AnimatedCounter from '@/components/ui/AnimatedCounter';
@@ -351,31 +352,43 @@ export default function AdminDashboardPage() {
             />
             
             <div className="relative z-10 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-              <div>
-                {/* Admin Badge */}
-                <motion.div 
-                  initial={{ opacity: 0, scale: 0.9 }}
-                  animate={{ opacity: 1, scale: 1 }}
-                  transition={{ delay: 0.1 }}
-                  className="inline-flex items-center gap-2 px-3 py-1 rounded-full text-xs font-semibold mb-3"
-                  style={{ 
-                    background: `linear-gradient(135deg, ${colors.primary}30, ${colors.primary}10)`,
-                    border: `1px solid ${colors.primary}40`,
-                    color: colors.primary,
-                  }}
-                >
-                  <Sparkles className="w-3 h-3" />
-                  ADMIN CONTROL CENTER
-                </motion.div>
-                
-                <h1 className="text-2xl sm:text-3xl font-bold text-white mb-2 flex items-center gap-3">
-                  <span>Dashboard</span>
-                  <Activity className="w-6 h-6" style={{ color: colors.accentMint }} />
-                </h1>
-                <p style={{ color: colors.textSecondary }} className="flex items-center gap-2">
-                  <BarChart3 className="w-4 h-4" />
-                  Manage payments and monitor class finances
-                </p>
+              {/* Mobile Dashboard Switcher - At Top */}
+              <div className="sm:hidden w-full mb-3">
+                <DashboardSwitcher variant="compact" />
+              </div>
+              
+              <div className="flex items-center gap-4">
+                <div>
+                  {/* Admin Badge */}
+                  <motion.div 
+                    initial={{ opacity: 0, scale: 0.9 }}
+                    animate={{ opacity: 1, scale: 1 }}
+                    transition={{ delay: 0.1 }}
+                    className="inline-flex items-center gap-2 px-3 py-1 rounded-full text-xs font-semibold mb-3"
+                    style={{ 
+                      background: `linear-gradient(135deg, ${colors.primary}30, ${colors.primary}10)`,
+                      border: `1px solid ${colors.primary}40`,
+                      color: colors.primary,
+                    }}
+                  >
+                    <Sparkles className="w-3 h-3" />
+                    ADMIN CONTROL CENTER
+                  </motion.div>
+                  
+                  <h1 className="text-2xl sm:text-3xl font-bold text-white mb-2 flex items-center gap-3">
+                    <span>Dashboard</span>
+                    <Activity className="w-6 h-6" style={{ color: colors.accentMint }} />
+                  </h1>
+                  <p style={{ color: colors.textSecondary }} className="flex items-center gap-2">
+                    <BarChart3 className="w-4 h-4" />
+                    Manage payments and monitor class finances
+                  </p>
+                </div>
+              </div>
+
+              {/* Dashboard Switcher */}
+              <div className="hidden sm:block">
+                <DashboardSwitcher />
               </div>
               
               <div className="flex flex-wrap gap-3">
@@ -453,9 +466,9 @@ export default function AdminDashboardPage() {
               initial={{ opacity: 0, scale: 0.9 }}
               animate={{ opacity: 1, scale: 1 }}
               transition={{ delay: 0.1 }}
-              whileHover={{ scale: 1.02, y: -4 }}
-              className="cursor-pointer"
-              onClick={() => navigate('/admin/manage-students')}
+              whileHover={{ scale: hasPermission('can_manage_students') ? 1.02 : 1, y: hasPermission('can_manage_students') ? -4 : 0 }}
+              className={hasPermission('can_manage_students') ? "cursor-pointer" : "cursor-default"}
+              onClick={() => hasPermission('can_manage_students') && navigate('/admin/manage-students')}
             >
               <GlassCard className="relative overflow-hidden group">
                 {/* Gradient border on hover */}
@@ -847,10 +860,11 @@ export default function AdminDashboardPage() {
             </div>
             
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+              {hasPermission('can_create_payments') && (
               <motion.button
                 whileHover={{ scale: 1.02, y: -2 }}
                 whileTap={{ scale: 0.98 }}
-                onClick={() => navigate('/dashboard')}
+                onClick={() => navigate('/admin/create-payment')}
                 className="flex items-center gap-3 p-4 rounded-xl transition-all group"
                 style={{ 
                   background: `linear-gradient(135deg, ${colors.primary}15, ${colors.primary}05)`,
@@ -859,27 +873,6 @@ export default function AdminDashboardPage() {
               >
                 <div className="w-10 h-10 rounded-lg flex items-center justify-center transition-transform group-hover:scale-110"
                      style={{ background: `${colors.primary}30` }}>
-                  <Wallet className="w-5 h-5" style={{ color: colors.primary }} />
-                </div>
-                <div className="text-left">
-                  <span className="text-white font-medium block">Student View</span>
-                  <span className="text-xs" style={{ color: colors.textSecondary }}>Switch to student dashboard</span>
-                </div>
-              </motion.button>
-              
-              {hasPermission('can_create_payments') && (
-              <motion.button
-                whileHover={{ scale: 1.02, y: -2 }}
-                whileTap={{ scale: 0.98 }}
-                onClick={() => navigate('/admin/create-payment')}
-                className="flex items-center gap-3 p-4 rounded-xl transition-all group"
-                style={{ 
-                  background: 'rgba(255, 255, 255, 0.03)',
-                  border: '1px solid rgba(255, 255, 255, 0.1)'
-                }}
-              >
-                <div className="w-10 h-10 rounded-lg flex items-center justify-center transition-transform group-hover:scale-110"
-                     style={{ background: `${colors.primary}20` }}>
                   <Plus className="w-5 h-5" style={{ color: colors.primary }} />
                 </div>
                 <div className="text-left">
@@ -1690,7 +1683,7 @@ export default function AdminDashboardPage() {
                   )}
 
                   {/* Quick Action to Review Page */}
-                  <div className="p-4 border-t border-white/10 bg-white/[0.02]">
+                  <div className="p-4 border-t border-white/10 bg-white/2">
                     <motion.button
                       whileHover={{ scale: 1.02 }}
                       whileTap={{ scale: 0.98 }}

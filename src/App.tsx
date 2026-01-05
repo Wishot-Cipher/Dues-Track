@@ -20,7 +20,7 @@ import PaymentDetailPage from '@/pages/PaymentDetailPage';
 import PaymentHistoryPage from '@/pages/student/PaymentHistoryPage';
 import AdminReviewPage from '@/pages/admin/AdminReviewPage';
 import WaivePaymentPage from '@/pages/admin/WaivePaymentPage';
-import ScanQRCodePage from '@/pages/admin/ScanQRCodePage';
+import ScanQRCodePage from '@/pages/admin/ScanQRCodePageNew';
 import ManageStudentsPage from '@/pages/admin/ManageStudentsPage';
 import AdminCollectedPage from '@/pages/admin/AdminCollectedPage';
 import ExpensesPage from '@/pages/admin/ExpensesPage';

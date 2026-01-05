@@ -5,9 +5,11 @@ import { colors, gradients } from '@/config/colors'
 import { useExpenses } from '@/hooks/useExpenses'
 import { useAuth } from '@/hooks/useAuth'
 import { getPublicUrl } from '@/config/supabase'
+import { useToast } from '@/hooks/useToast'
 import type { Expense } from '@/services/expenseService'
-import { CheckCircle, Clock, XCircle, Calendar, Tag, FileText, X, Download, Eye, User, ChevronLeft, ChevronRight } from 'lucide-react'
+import { CheckCircle, Clock, XCircle, Calendar, Tag, FileText, X, Download, Eye, User, ChevronLeft, ChevronRight, ChevronDown, FileSpreadsheet } from 'lucide-react'
 import * as LucideIcons from 'lucide-react'
+import { exportExpensesToPDF } from '@/utils/pdfExport'
 
 const ITEMS_PER_PAGE = 10
 
@@ -65,9 +67,12 @@ function StatusBadge({ status }: { status: 'pending' | 'approved' | 'rejected' }
 export default function ExpenseList() {
   const { expenses, loading, error } = useExpenses()
   const { hasPermission } = useAuth()
+  const { success: showSuccess, error: showError } = useToast()
   const [selected, setSelected] = useState<Expense | null>(null)
   const [imageModal, setImageModal] = useState<string | null>(null)
   const [currentPage, setCurrentPage] = useState(1)
+  const [showExportMenu, setShowExportMenu] = useState(false)
+  const [exporting, setExporting] = useState(false)
 
   // Sort expenses by newest first (created_at or expense_date)
   const sortedExpenses = useMemo(() => {
@@ -94,55 +99,89 @@ export default function ExpenseList() {
   }, [totalPages, currentPage])
 
   function exportToCSV() {
-    // Create detailed CSV with proper formatting
-    const csvRows = []
-    
-    // Add title and metadata
-    csvRows.push('EXPENSE REPORT')
-    csvRows.push(`Generated on: ${new Date().toLocaleString()}`)
-    csvRows.push('') // Empty line
-    
-    // Add headers
-    csvRows.push('Date,Title,Description,Category,Funded By,Amount (₦),Status,Recorded By,Approved/Rejected By,Notes')
-    
-    // Add data rows - use sortedExpenses to maintain newest first order
-    sortedExpenses.forEach(exp => {
-      const date = new Date(exp.expense_date || exp.created_at).toLocaleDateString()
-      const title = (exp.title || '').replace(/"/g, '""')
-      const description = (exp.description || 'N/A').replace(/"/g, '""')
-      const category = ((exp as unknown as { category?: { name?: string } }).category?.name || exp.category || 'N/A').replace(/"/g, '""')
-      const fundedBy = ((exp as unknown as { payment_types?: { title?: string } }).payment_types?.title || 'N/A').replace(/"/g, '""')
-      const amount = exp.amount || 0
-      const status = exp.status?.toUpperCase() || 'PENDING'
-      const recordedBy = ((exp as unknown as { admins?: { full_name?: string } }).admins?.full_name || 'N/A').replace(/"/g, '""')
-      const approvedBy = ((exp as unknown as { approved_by?: { full_name?: string } }).approved_by?.full_name || 'N/A').replace(/"/g, '""')
-      const notes = (exp.rejection_reason || '').replace(/"/g, '""')
+    setExporting(true)
+    try {
+      // Create detailed CSV with proper formatting
+      const csvRows = []
       
-      csvRows.push(`"${date}","${title}","${description}","${category}","${fundedBy}",${amount},"${status}","${recordedBy}","${approvedBy}","${notes}"`)
-    })
-    
-    // Add summary at the bottom
-    csvRows.push('') // Empty line
-    csvRows.push('SUMMARY')
-    const approvedExpenses = sortedExpenses.filter(e => e.status === 'approved')
-    const totalApproved = approvedExpenses.reduce((sum, e) => sum + (e.amount || 0), 0)
-    const pendingExpenses = sortedExpenses.filter(e => e.status === 'pending')
-    const totalPending = pendingExpenses.reduce((sum, e) => sum + (e.amount || 0), 0)
-    const rejectedExpenses = sortedExpenses.filter(e => e.status === 'rejected')
-    
-    csvRows.push(`Total Expenses,${sortedExpenses.length}`)
-    csvRows.push(`Approved Expenses,${approvedExpenses.length},"₦${totalApproved.toLocaleString()}"`)
-    csvRows.push(`Pending Expenses,${pendingExpenses.length},"₦${totalPending.toLocaleString()}"`)
-    csvRows.push(`Rejected Expenses,${rejectedExpenses.length}`)
-    
-    const csvContent = csvRows.join('\n')
-    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' })
-    const url = window.URL.createObjectURL(blob)
-    const a = document.createElement('a')
-    a.href = url
-    a.download = `expense-report-${new Date().toISOString().split('T')[0]}.csv`
-    a.click()
-    window.URL.revokeObjectURL(url)
+      // Add title and metadata
+      csvRows.push('EXPENSE REPORT')
+      csvRows.push(`Generated on: ${new Date().toLocaleString()}`)
+      csvRows.push('') // Empty line
+      
+      // Add headers
+      csvRows.push('Date,Title,Description,Category,Funded By,Amount (₦),Status,Recorded By,Approved/Rejected By,Notes')
+      
+      // Add data rows - use sortedExpenses to maintain newest first order
+      sortedExpenses.forEach(exp => {
+        const date = new Date(exp.expense_date || exp.created_at).toLocaleDateString()
+        const title = (exp.title || '').replace(/"/g, '""')
+        const description = (exp.description || 'N/A').replace(/"/g, '""')
+        const category = ((exp as unknown as { category?: { name?: string } }).category?.name || exp.category || 'N/A').replace(/"/g, '""')
+        const fundedBy = ((exp as unknown as { payment_types?: { title?: string } }).payment_types?.title || 'N/A').replace(/"/g, '""')
+        const amount = exp.amount || 0
+        const status = exp.status?.toUpperCase() || 'PENDING'
+        const recordedBy = ((exp as unknown as { admins?: { full_name?: string } }).admins?.full_name || 'N/A').replace(/"/g, '""')
+        const approvedBy = ((exp as unknown as { approved_by?: { full_name?: string } }).approved_by?.full_name || 'N/A').replace(/"/g, '""')
+        const notes = (exp.rejection_reason || '').replace(/"/g, '""')
+        
+        csvRows.push(`"${date}","${title}","${description}","${category}","${fundedBy}",${amount},"${status}","${recordedBy}","${approvedBy}","${notes}"`)
+      })
+      
+      // Add summary at the bottom
+      csvRows.push('') // Empty line
+      csvRows.push('SUMMARY')
+      const approvedExpenses = sortedExpenses.filter(e => e.status === 'approved')
+      const totalApproved = approvedExpenses.reduce((sum, e) => sum + (e.amount || 0), 0)
+      const pendingExpenses = sortedExpenses.filter(e => e.status === 'pending')
+      const totalPending = pendingExpenses.reduce((sum, e) => sum + (e.amount || 0), 0)
+      const rejectedExpenses = sortedExpenses.filter(e => e.status === 'rejected')
+      
+      csvRows.push(`Total Expenses,${sortedExpenses.length}`)
+      csvRows.push(`Approved Expenses,${approvedExpenses.length},"₦${totalApproved.toLocaleString()}"`)
+      csvRows.push(`Pending Expenses,${pendingExpenses.length},"₦${totalPending.toLocaleString()}"`)
+      csvRows.push(`Rejected Expenses,${rejectedExpenses.length}`)
+      
+      const csvContent = csvRows.join('\n')
+      const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' })
+      const url = window.URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `expense-report-${new Date().toISOString().split('T')[0]}.csv`
+      a.click()
+      window.URL.revokeObjectURL(url)
+      showSuccess('Expenses exported to CSV!')
+    } catch (err) {
+      console.error('Export error:', err)
+      showError('Failed to export expenses')
+    } finally {
+      setExporting(false)
+    }
+  }
+
+  function exportToPDF() {
+    setExporting(true)
+    try {
+      // Transform expenses data for PDF export
+      const expenseData = sortedExpenses.map(exp => ({
+        id: exp.id,
+        title: exp.title || 'Untitled',
+        description: exp.description || undefined,
+        amount: exp.amount || 0,
+        category: ((exp as unknown as { category?: { name?: string } }).category?.name || exp.category || 'Uncategorized'),
+        status: exp.status || 'pending',
+        created_at: exp.expense_date || exp.created_at,
+        approved_at: exp.approved_at || undefined,
+      }))
+
+      exportExpensesToPDF(expenseData)
+      showSuccess('Expenses exported to PDF!')
+    } catch (err) {
+      console.error('Export error:', err)
+      showError('Failed to export expenses')
+    } finally {
+      setExporting(false)
+    }
   }
 
   if (!hasPermission('can_manage_students') && !hasPermission('can_approve_payments')) {
@@ -190,19 +229,71 @@ export default function ExpenseList() {
           </div>
           {sortedExpenses.length > 0 && (
             <div className="flex flex-wrap items-center gap-2">
-              <button
-                onClick={exportToCSV}
-                className="flex items-center gap-1.5 px-4 py-2 rounded-xl transition-all hover:scale-105"
-                style={{ 
-                  background: `linear-gradient(135deg, ${colors.accentMint}20, ${colors.accentMint}10)`,
-                  border: `1px solid ${colors.accentMint}40`,
-                  color: colors.accentMint
-                }}
-                title="Export to CSV"
-              >
-                <Download className="w-4 h-4" />
-                <span className="text-sm font-medium">Export</span>
-              </button>
+              {/* Export Dropdown */}
+              <div className="relative">
+                <button
+                  onClick={() => setShowExportMenu(!showExportMenu)}
+                  disabled={exporting}
+                  className="flex items-center gap-1.5 px-4 py-2 rounded-xl transition-all hover:scale-105 disabled:opacity-50"
+                  style={{ 
+                    background: `linear-gradient(135deg, ${colors.accentMint}20, ${colors.accentMint}10)`,
+                    border: `1px solid ${colors.accentMint}40`,
+                    color: colors.accentMint
+                  }}
+                  title="Export Options"
+                >
+                  {exporting ? (
+                    <div className="w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin" />
+                  ) : (
+                    <Download className="w-4 h-4" />
+                  )}
+                  <span className="text-sm font-medium">Export</span>
+                  <ChevronDown className={`w-3 h-3 transition-transform ${showExportMenu ? 'rotate-180' : ''}`} />
+                </button>
+
+                <AnimatePresence>
+                  {showExportMenu && (
+                    <motion.div
+                      initial={{ opacity: 0, y: -10, scale: 0.95 }}
+                      animate={{ opacity: 1, y: 0, scale: 1 }}
+                      exit={{ opacity: 0, y: -10, scale: 0.95 }}
+                      className="absolute right-0 top-full mt-2 w-48 rounded-xl overflow-hidden shadow-2xl z-50"
+                      style={{
+                        background: 'linear-gradient(135deg, rgba(30, 20, 15, 0.98), rgba(20, 12, 8, 0.98))',
+                        border: '1px solid rgba(255, 255, 255, 0.1)',
+                        backdropFilter: 'blur(20px)',
+                      }}
+                    >
+                      <div className="p-2">
+                        <motion.button
+                          whileHover={{ x: 4 }}
+                          onClick={() => {
+                            setShowExportMenu(false)
+                            exportToPDF()
+                          }}
+                          className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg hover:bg-white/5"
+                        >
+                          <FileText className="w-4 h-4" style={{ color: colors.statusUnpaid }} />
+                          <span className="text-sm text-white">PDF Report</span>
+                        </motion.button>
+                        <motion.button
+                          whileHover={{ x: 4 }}
+                          onClick={() => {
+                            setShowExportMenu(false)
+                            exportToCSV()
+                          }}
+                          className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg hover:bg-white/5"
+                        >
+                          <FileSpreadsheet className="w-4 h-4" style={{ color: colors.accentMint }} />
+                          <span className="text-sm text-white">CSV Spreadsheet</span>
+                        </motion.button>
+                      </div>
+                    </motion.div>
+                  )}
+                </AnimatePresence>
+                {showExportMenu && <div className="fixed inset-0 z-40" onClick={() => setShowExportMenu(false)} />}
+              </div>
+
               <div className="flex items-center gap-2 px-4 py-2 rounded-xl" style={{ 
                 background: `${colors.statusPaid}10`, 
                 border: `1px solid ${colors.statusPaid}20` 
@@ -628,13 +719,19 @@ export default function ExpenseList() {
                               className="w-full h-auto object-contain"
                               style={{ maxHeight: '400px' }}
                               onError={(e) => {
-                                console.error('Failed to load receipt image:', receiptUrl)
                                 const target = e.target as HTMLImageElement
                                 target.style.display = 'none'
                                 const errorDiv = document.createElement('div')
                                 errorDiv.className = 'p-8 text-center'
                                 errorDiv.style.color = colors.textSecondary
-                                errorDiv.innerHTML = `<p>❌ Failed to load receipt image</p><p class="text-xs mt-2">${receiptUrl}</p>`
+                                // Safely create text content to prevent XSS
+                                const errorText = document.createElement('p')
+                                errorText.textContent = '❌ Failed to load receipt image'
+                                const urlText = document.createElement('p')
+                                urlText.className = 'text-xs mt-2'
+                                urlText.textContent = receiptUrl
+                                errorDiv.appendChild(errorText)
+                                errorDiv.appendChild(urlText)
                                 target.parentElement?.appendChild(errorDiv)
                               }}
                             />

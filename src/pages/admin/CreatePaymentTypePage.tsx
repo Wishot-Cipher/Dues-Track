@@ -1,10 +1,11 @@
 import { useState } from "react";
 import { motion } from "framer-motion";
-import { Building2, Users, Palette, Check, ArrowLeft, Plus, Sparkles, CreditCard, Calendar, CheckCircle } from "lucide-react";
+import { Building2, Users, Palette, Check, ArrowLeft, Plus, Sparkles, CreditCard, Calendar, CheckCircle, Tag } from "lucide-react";
 import { colors } from "@/config/colors";
 import { useNavigate } from "react-router-dom";
 import GlassCard from "@/components/ui/GlassCard";
 import Input from "@/components/ui/Input";
+import ProfessionalDropdown from "@/components/ui/ProfessionalDropdown";
 import { useAuth } from "@/hooks/useAuth";
 import { useToast } from "@/hooks/useToast";
 import { supabase } from "@/config/supabase";
@@ -376,49 +377,20 @@ export default function CreatePaymentTypePage() {
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-white mb-2">
-                    Category *
-                  </label>
-                  <div className="relative">
-                    <select
-                      value={formData.category}
-                      onChange={(e) =>
-                        setFormData({ ...formData, category: e.target.value })
-                      }
-                      className="w-full px-4 py-3 rounded-xl border text-white appearance-none cursor-pointer transition-all focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
-                      style={{
-                        background: "rgba(255, 255, 255, 0.05)",
-                        borderColor: "rgba(255, 104, 3, 0.2)",
-                      }}
-                      required
-                    >
-                      {CATEGORIES.map((cat) => (
-                        <option
-                          key={cat.value}
-                          value={cat.value}
-                          style={{ background: "#1A0E09" }}
-                        >
-                          {cat.icon} {cat.label}
-                        </option>
-                      ))}
-                    </select>
-                    <div className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none">
-                      <svg
-                        width="20"
-                        height="20"
-                        viewBox="0 0 20 20"
-                        fill="none"
-                      >
-                        <path
-                          d="M5 7.5L10 12.5L15 7.5"
-                          stroke="#FF6803"
-                          strokeWidth="2"
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                        />
-                      </svg>
-                    </div>
-                  </div>
+                  <ProfessionalDropdown
+                    label="Category *"
+                    placeholder="Select Category"
+                    icon={<Tag className="w-5 h-5" />}
+                    value={formData.category}
+                    onChange={(val) =>
+                      setFormData({ ...formData, category: val as string })
+                    }
+                    options={CATEGORIES.map((cat) => ({
+                      value: cat.value,
+                      label: cat.label,
+                      icon: <span>{cat.icon}</span>
+                    }))}
+                  />
                 </div>
 
                 <Input
@@ -522,49 +494,20 @@ export default function CreatePaymentTypePage() {
 
               <div className="space-y-4">
                 <div>
-                  <label className="block text-sm font-medium text-white mb-2">
-                    Bank Name *
-                  </label>
-                  <div className="relative">
-                    <select
-                      value={formData.bank_name}
-                      onChange={(e) =>
-                        setFormData({ ...formData, bank_name: e.target.value })
-                      }
-                      className="w-full px-4 py-3 rounded-xl border text-white appearance-none cursor-pointer transition-all focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
-                      style={{
-                        background: "rgba(255, 255, 255, 0.05)",
-                        borderColor: "rgba(255, 104, 3, 0.2)",
-                      }}
-                      required
-                    >
-                      {NIGERIAN_BANKS.map((bank) => (
-                        <option
-                          key={bank}
-                          value={bank}
-                          style={{ background: "#1A0E09" }}
-                        >
-                          {bank}
-                        </option>
-                      ))}
-                    </select>
-                    <div className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none">
-                      <svg
-                        width="20"
-                        height="20"
-                        viewBox="0 0 20 20"
-                        fill="none"
-                      >
-                        <path
-                          d="M5 7.5L10 12.5L15 7.5"
-                          stroke="#FF6803"
-                          strokeWidth="2"
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                        />
-                      </svg>
-                    </div>
-                  </div>
+                  <ProfessionalDropdown
+                    label="Bank Name *"
+                    placeholder="Select Bank"
+                    icon={<Building2 className="w-5 h-5" />}
+                    value={formData.bank_name}
+                    onChange={(val) =>
+                      setFormData({ ...formData, bank_name: val as string })
+                    }
+                    options={NIGERIAN_BANKS.map((bank) => ({
+                      value: bank,
+                      label: bank
+                    }))}
+                    searchable
+                  />
                 </div>
 
                 <Input

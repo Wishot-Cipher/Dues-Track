@@ -19,6 +19,7 @@ import { useSettings } from '@/contexts/SettingsContext';
 import GlassCard from '@/components/ui/GlassCard';
 import PageWrapper from '@/components/ui/PageWrapper';
 import Skeleton from '@/components/ui/Skeleton';
+import ProfessionalDropdown from '@/components/ui/ProfessionalDropdown';
 
 interface SettingSection {
   id: string;
@@ -162,22 +163,16 @@ function SettingItemRow({ item }: { item: SettingItem }) {
       )}
 
       {item.type === 'select' && item.options && (
-        <select
-          value={item.selectedValue}
-          onChange={(e) => item.onChange?.(e.target.value)}
-          disabled={item.disabled}
-          className="px-3 py-1.5 rounded-lg text-sm font-medium border-none outline-none cursor-pointer"
-          style={{ 
-            background: 'rgba(255, 255, 255, 0.1)',
-            color: colors.textPrimary
-          }}
-        >
-          {item.options.map((option) => (
-            <option key={option.value} value={option.value} style={{ background: colors.background }}>
-              {option.label}
-            </option>
-          ))}
-        </select>
+        <div className="min-w-[140px]">
+          <ProfessionalDropdown
+            value={item.selectedValue || ''}
+            onChange={(val) => item.onChange?.(val as string)}
+            disabled={item.disabled}
+            options={item.options}
+            variant="filled"
+            size="sm"
+          />
+        </div>
       )}
     </motion.div>
   );

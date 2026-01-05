@@ -146,7 +146,7 @@ export default function ScanQRCodePage() {
 
   // Ensure the scanner container exists in the DOM
   const ensureScannerContainer = async () => {
-    const maxAttempts = 8;
+    const maxAttempts = 20; // Increased from 8 to 20 for more retries
     let attempts = 0;
     while (attempts < maxAttempts) {
       const el = document.getElementById(scannerContainerId);
@@ -154,7 +154,7 @@ export default function ScanQRCodePage() {
         return el as HTMLElement;
       }
       attempts += 1;
-      await new Promise((r) => setTimeout(r, 100));
+      await new Promise((r) => setTimeout(r, 150)); // Increased delay from 100ms to 150ms
     }
     const final = document.getElementById(scannerContainerId) as HTMLElement | null;
     if (final && final.clientWidth > 0 && final.isConnected) return final;
@@ -753,6 +753,18 @@ export default function ScanQRCodePage() {
         return;
       }
       
+      // Wait for DOM to be ready and container to be present
+      await new Promise(r => setTimeout(r, 500));
+      
+      // Additional check - make sure container exists before proceeding
+      const container = await ensureScannerContainer();
+      if (!container) {
+        pushScannerError('Container not found after waiting - manual retry may be needed');
+        setCameraLoading(false);
+        setCameraError('Scanner container not ready. Please tap "Try Again" to initialize the camera.');
+        return;
+      }
+      
       scannerInitializedRef.current = true;
       
       try {
@@ -765,8 +777,10 @@ export default function ScanQRCodePage() {
             if (perm.state === 'granted') {
               await startScanner();
             } else if (perm.state === 'prompt') {
-              setCameraLoading(false);
+              // Show a helpful message and attempt to start (will prompt user)
+              setCameraLoading(true);
               setCameraError(null);
+              await startScanner();
             } else {
               setCameraLoading(false);
               setCameraError(isIOS() ?
@@ -785,6 +799,7 @@ export default function ScanQRCodePage() {
         }
       } catch (err) {
         console.debug('initScanner error', err);
+        pushScannerError(`initScanner error: ${String(err)}`);
       }
     };
 
@@ -796,7 +811,7 @@ export default function ScanQRCodePage() {
       mountedRef.current = false;
       scannerInitializedRef.current = false;
     };
-  }, [scanning, showManualInput, startScanner, stopScanner]);
+  }, [scanning, showManualInput, startScanner, stopScanner, pushScannerError]);
 
   // Check permissions
   useEffect(() => {

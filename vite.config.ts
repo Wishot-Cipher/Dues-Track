@@ -92,4 +92,47 @@ export default defineConfig({
       "@": path.resolve(__dirname, "./src"),
     },
   },
+  // Production Build Optimizations & Protection
+  build: {
+    // Minify with terser for better obfuscation
+    minify: 'terser',
+    terserOptions: {
+      compress: {
+        drop_console: true, // Remove console.log in production
+        drop_debugger: true, // Remove debugger statements
+        pure_funcs: ['console.log', 'console.info', 'console.debug'], // Remove specific functions
+        passes: 2, // Multiple compression passes
+      },
+      mangle: {
+        // Mangle variable and function names
+        properties: {
+          regex: /^_/, // Only mangle properties starting with underscore
+        },
+      },
+      format: {
+        comments: false, // Remove all comments
+      },
+    },
+    // Split code for better caching
+    rollupOptions: {
+      output: {
+        // Obfuscate chunk file names
+        chunkFileNames: 'assets/[hash].js',
+        entryFileNames: 'assets/[hash].js',
+        assetFileNames: 'assets/[hash].[ext]',
+        // Manual chunk splitting to hide module structure
+        manualChunks: {
+          vendor: ['react', 'react-dom', 'react-router-dom'],
+          ui: ['framer-motion', 'lucide-react'],
+          data: ['@supabase/supabase-js'],
+        },
+      },
+    },
+    // Increase chunk size warning threshold
+    chunkSizeWarningLimit: 1000,
+    // Source maps - disable in production for security
+    sourcemap: false,
+  },
+  // Environment variable prefix for safety
+  envPrefix: 'VITE_',
 })

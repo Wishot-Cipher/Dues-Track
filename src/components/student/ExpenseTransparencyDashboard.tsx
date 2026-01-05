@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react'
 import { motion } from 'framer-motion'
 import GlassCard from '@/components/ui/GlassCard'
 import { colors, gradients } from '@/config/colors'
-import { Package, TrendingUp, TrendingDown, DollarSign, Eye, PieChart } from 'lucide-react'
+import { Package, TrendingUp, TrendingDown, DollarSign, Eye, PieChart, HelpCircle } from 'lucide-react'
 import { supabase } from '@/config/supabase'
 import { useExpenseVisibility } from '@/hooks/useExpenseVisibility'
 
@@ -141,6 +141,16 @@ export default function ExpenseTransparencyDashboard() {
           <h3 className="text-base sm:text-xl font-bold text-white flex items-center gap-2">
             <Eye className="w-4 h-4 sm:w-5 sm:h-5 shrink-0" style={{ color: colors.accentMint }} />
             <span className="truncate">Class Funds Transparency</span>
+            <div className="relative group">
+              <HelpCircle className="w-4 h-4 cursor-help" style={{ color: colors.textSecondary }} />
+              <div className="absolute left-0 bottom-full mb-2 w-64 p-3 rounded-lg text-xs hidden group-hover:block z-50"
+                   style={{ background: colors.cardBg, border: `1px solid ${colors.borderLight}` }}>
+                <p className="font-medium text-white mb-1">How this works</p>
+                <p style={{ color: colors.textSecondary }}>
+                  This shows how your class dues are being used. All approved expenses by class reps are displayed here for transparency.
+                </p>
+              </div>
+            </div>
           </h3>
           <p className="text-xs sm:text-sm mt-1" style={{ color: colors.textSecondary }}>
             See how your contributions are being used

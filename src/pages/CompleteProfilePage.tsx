@@ -3,7 +3,7 @@ import { User, Mail, Phone, AlertCircle, UserCheck, Info } from 'lucide-react';
 import { colors, gradients } from '@/config/colors';
 import { SECTIONS } from '@/config/constants';
 import Input from '@/components/ui/Input';
-import Select from '@/components/ui/Select';
+import ProfessionalDropdown from '@/components/ui/ProfessionalDropdown';
 import Button from '@/components/ui/CustomButton';
 import { useAuth } from '@/hooks/useAuth';
 import { useNavigate } from 'react-router-dom';
@@ -315,18 +315,18 @@ export default function CompleteProfilePage() {
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ delay: 0.8 }}
               >
-                <Select
+                <ProfessionalDropdown
                   label="Section"
-                value={formData.section}
-                onChange={(e) => handleChange('section', e.target.value)}
-                required
-                fullWidth
-                error={errors.section}
-                options={SECTIONS.map((section: string) => ({
-                  value: section,
-                  label: section
-                }))}
+                  value={formData.section}
+                  onChange={(val) => handleChange('section', val as string)}
+                  error={errors.section}
+                  options={SECTIONS.map((section: string) => ({
+                    value: section,
+                    label: section
+                  }))}
                   placeholder="Select your section"
+                  variant="filled"
+                  size="lg"
                 />
               </motion.div>
 

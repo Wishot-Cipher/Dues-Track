@@ -4,12 +4,14 @@ import Input from '@/components/ui/Input'
 import FileUploader from '@/components/ui/FileUploader'
 import CustomButton from '@/components/ui/CustomButton'
 import ConfirmDialog from '@/components/ui/ConfirmDialog'
+import ProfessionalDropdown from '@/components/ui/ProfessionalDropdown'
 import { colors } from '@/config/colors'
 import { useExpenses } from '@/hooks/useExpenses'
 import { useAuth } from '@/hooks/useAuth'
 import { useToast } from '@/hooks/useToast'
 import { fetchExpenseCategories, type ExpenseCategory } from '@/services/expenseService'
 import * as LucideIcons from 'lucide-react'
+import { Wallet, Tag } from 'lucide-react'
 
 interface PaymentType {
   id: string
@@ -368,33 +370,24 @@ export default function RecordExpense() {
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
             <div>
-              <label className="block text-sm font-medium text-white mb-2">Deduct From (Payment Type) *</label>
-              <div className="relative">
-                <select 
-                  value={fundedBy} 
-                  onChange={(e) => setFundedBy(e.target.value)} 
-                  className="w-full px-4 py-3 rounded-xl border text-white appearance-none cursor-pointer transition-all focus:outline-none focus:ring-2 focus:ring-orange-500" 
-                  style={{ background: 'rgba(255,255,255,0.05)', borderColor: 'rgba(255,104,3,0.2)' }}
-                  required
-                  disabled={loadingData}
-                >
-                  <option value="" style={{ background: '#1a1a1a', color: 'white' }}>-- Select Payment Type --</option>
-                  {paymentTypes.map((pt) => {
-                    const balance = paymentTypeBalances.get(pt.id)
-                    const availableAmount = balance?.available || 0
-                    return (
-                      <option key={pt.id} value={pt.id} style={{ background: '#1a1a1a', color: 'white' }}>
-                        {pt.title} (Available: ₦{availableAmount.toLocaleString()})
-                      </option>
-                    )
-                  })}
-                </select>
-                <div className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none">
-                  <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
-                    <path d="M5 7.5L10 12.5L15 7.5" stroke="#FF6803" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-                  </svg>
-                </div>
-              </div>
+              <ProfessionalDropdown
+                label="Deduct From (Payment Type) *"
+                placeholder="Select Payment Type"
+                icon={<Wallet className="w-5 h-5" />}
+                value={fundedBy}
+                onChange={(val) => setFundedBy(val as string)}
+                disabled={loadingData}
+                options={paymentTypes.map((pt) => {
+                  const balance = paymentTypeBalances.get(pt.id)
+                  const availableAmount = balance?.available || 0
+                  return {
+                    value: pt.id,
+                    label: pt.title,
+                    description: `Available: ₦${availableAmount.toLocaleString()}`
+                  }
+                })}
+                searchable={paymentTypes.length > 5}
+              />
               {fundedBy && (() => {
                 const balance = paymentTypeBalances.get(fundedBy)
                 const selectedPaymentType = paymentTypes.find(pt => pt.id === fundedBy)
@@ -441,32 +434,22 @@ export default function RecordExpense() {
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-white mb-2">Expense Category (Optional)</label>
-              <div className="relative">
-                <select 
-                  value={categoryId} 
-                  onChange={(e) => setCategoryId(e.target.value)} 
-                  className="w-full px-4 py-3 rounded-xl border text-white appearance-none cursor-pointer transition-all focus:outline-none focus:ring-2 focus:ring-orange-500" 
-                  style={{ background: 'rgba(255,255,255,0.05)', borderColor: 'rgba(255,104,3,0.2)' }}
-                  disabled={loadingData}
-                >
-                  <option value="" style={{ background: '#1a1a1a', color: 'white' }}>-- Select Category --</option>
-                  {loadingData ? (
-                    <option style={{ background: '#1a1a1a', color: 'white' }}>Loading...</option>
-                  ) : (
-                    categories.map(cat => (
-                      <option key={cat.id} value={cat.id} style={{ background: '#1a1a1a', color: 'white' }}>
-                        {cat.name}
-                      </option>
-                    ))
-                  )}
-                </select>
-                <div className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none">
-                  <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
-                    <path d="M5 7.5L10 12.5L15 7.5" stroke="#FF6803" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-                  </svg>
-                </div>
-              </div>
+              <ProfessionalDropdown
+                label="Expense Category (Optional)"
+                placeholder="Select Category"
+                icon={<Tag className="w-5 h-5" />}
+                value={categoryId}
+                onChange={(val) => setCategoryId(val as string)}
+                disabled={loadingData}
+                clearable
+                options={categories.map(cat => ({
+                  value: cat.id,
+                  label: cat.name,
+                  description: cat.description || undefined,
+                  icon: <CategoryIcon iconName={cat.icon} className="w-4 h-4" />
+                }))}
+                searchable={categories.length > 5}
+              />
               {categoryId && categories.length > 0 && (() => {
                 const selected = categories.find(c => c.id === categoryId)
                 if (!selected) return null

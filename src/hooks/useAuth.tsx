@@ -110,23 +110,47 @@ export function AuthProvider({ children }: AuthProviderProps) {
     needsPasswordChange: user?.force_password_change || false,
     hasPermission: (permission: 'can_create_payments' | 'can_approve_payments' | 'can_manage_students' | 'can_view_analytics') => {
       if (!user) return false;
-      // Full admin always allowed
-      if (user.roles?.includes('admin')) return true;
-
-      // Keep manage-students restricted to explicit permission only
-      if (permission === 'can_manage_students') {
-        return Boolean(user.admin_permissions && user.admin_permissions.can_manage_students);
-      }
-
-      // Allow users who have explicit admin_permissions
-      if (user.admin_permissions && user.admin_permissions[permission]) return true;
-
-      // Allow certain admin roles (finsec, class_rep) to VIEW admin pages (but not manage students)
-      // This lets Finsec and Class Rep access admin pages even if they don't have the explicit permission.
+      
+      // Get all roles from admins array
       const adminRoles = user.admins?.map(a => a.role) || [];
-      if (adminRoles.includes('finsec') || adminRoles.includes('class_rep')) return true;
-
-      return false;
+      const userRoles = user.roles || [];
+      
+      // Check if user has specific role
+      const isAdmin = adminRoles.includes('admin') || userRoles.includes('admin');
+      const isClassRep = adminRoles.includes('class_rep') || userRoles.includes('class_rep');
+      const isFinsec = adminRoles.includes('finsec') || adminRoles.includes('financial_secretary') || userRoles.includes('finsec');
+      
+      // ADMIN: Full access to everything
+      if (isAdmin) return true;
+      
+      // CLASS REP: Full access to everything (same as admin)
+      if (isClassRep) return true;
+      
+      // FINSEC: Can do everything EXCEPT manage students
+      if (isFinsec) {
+        // Finsec cannot manage students
+        if (permission === 'can_manage_students') {
+          return false;
+        }
+        // Finsec can do all other things (payments, expenses, analytics)
+        return true;
+      }
+      
+      // For other users, check explicit permissions from admin_permissions
+      if (user.admin_permissions && user.admin_permissions[permission]) return true;
+      
+      // Check explicit permissions from admins array
+      const hasExplicitPermission = user.admins?.some(admin => {
+        switch (permission) {
+          case 'can_create_payments': return admin.can_create_payments;
+          case 'can_approve_payments': return admin.can_approve_payments;
+          case 'can_manage_students': return admin.can_manage_students;
+          case 'can_view_analytics': return admin.can_view_analytics;
+          default: return false;
+        }
+      });
+      
+      return hasExplicitPermission || false;
     },
     refreshSession: function (): Promise<void> {
       throw new Error('Function not implemented.');

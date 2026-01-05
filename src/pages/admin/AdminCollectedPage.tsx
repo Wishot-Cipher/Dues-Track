@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback } from 'react';
-import { motion } from 'framer-motion';
+import { motion, AnimatePresence } from 'framer-motion';
 import { useNavigate } from 'react-router-dom';
 import GlassCard from '@/components/ui/GlassCard';
 import AnimatedCounter from '@/components/ui/AnimatedCounter';
@@ -7,7 +7,9 @@ import { supabase } from '@/config/supabase';
 import { colors } from '@/config/colors';
 import Footer from '@/components/Footer';
 import { formatCurrency, formatDate } from '@/utils/formatters';
-import { ArrowLeft, Users, Wallet, TrendingUp, Filter, Search, Download, ChevronLeft, ChevronRight, Sparkles, PieChart, CheckCircle, XCircle, BarChart3 } from 'lucide-react';
+import { ArrowLeft, Users, Wallet, TrendingUp, Filter, Search, Download, ChevronLeft, ChevronRight, Sparkles, PieChart, CheckCircle, XCircle, BarChart3, FileText, FileSpreadsheet, ChevronDown } from 'lucide-react';
+import { exportCollectedPaymentsToPDF } from '@/utils/pdfExport';
+import { useToast } from '@/hooks/useToast';
 
 interface StudentPayment {
   id: string;
@@ -40,6 +42,7 @@ interface CategoryExpenses {
 
 export default function AdminCollectedPage() {
   const navigate = useNavigate();
+  const { success: showSuccess, error: showError } = useToast();
   const [loading, setLoading] = useState(true);
   const [studentPayments, setStudentPayments] = useState<StudentPayment[]>([]);
   const [allStudents, setAllStudents] = useState<StudentPayment[]>([]);
@@ -48,6 +51,8 @@ export default function AdminCollectedPage() {
   const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'inactive'>('all');
   const [paymentFilter, setPaymentFilter] = useState<'all' | 'paid' | 'unpaid'>('all');
   const [currentPage, setCurrentPage] = useState(1);
+  const [showExportMenu, setShowExportMenu] = useState(false);
+  const [exporting, setExporting] = useState(false);
   const itemsPerPage = 10;
 
   // Summary stats
@@ -369,23 +374,70 @@ export default function AdminCollectedPage() {
 
   // Export to CSV
   const exportToCSV = () => {
-    const headers = ['Student Name', 'Reg Number', 'Status', 'Total Paid', 'Payments', 'Categories'];
-    const rows = filteredStudents.map(s => [
-      s.student_name,
-      s.reg_number,
-      s.is_active ? 'Active' : 'Inactive',
-      s.total_paid,
-      s.payment_count,
-      s.categories_paid.join('; '),
-    ]);
+    setExporting(true);
+    try {
+      const headers = ['Student Name', 'Reg Number', 'Status', 'Total Paid', 'Payments', 'Categories'];
+      const rows = filteredStudents.map(s => [
+        s.student_name,
+        s.reg_number,
+        s.is_active ? 'Active' : 'Inactive',
+        s.total_paid.toString(),
+        s.payment_count.toString(),
+        s.categories_paid.join('; '),
+      ]);
 
-    const csv = [headers, ...rows].map(row => row.join(',')).join('\n');
-    const blob = new Blob([csv], { type: 'text/csv' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `student-payments-${new Date().toISOString().split('T')[0]}.csv`;
-    a.click();
+      const csv = [headers, ...rows].map(row => row.map(cell => `"${cell}"`).join(',')).join('\n');
+      const blob = new Blob([csv], { type: 'text/csv' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `student-payments-${new Date().toISOString().split('T')[0]}.csv`;
+      a.click();
+      URL.revokeObjectURL(url);
+      showSuccess('Exported to CSV successfully!');
+    } catch (error) {
+      console.error('Export error:', error);
+      showError('Failed to export data');
+    } finally {
+      setExporting(false);
+    }
+  };
+
+  // Export to PDF - Detailed Student Payment Report (matching CSV detail)
+  const exportToPDF = () => {
+    setExporting(true);
+    try {
+      exportCollectedPaymentsToPDF({
+        students: filteredStudents.map(s => ({
+          id: s.id,
+          student_name: s.student_name,
+          reg_number: s.reg_number,
+          is_active: s.is_active,
+          total_paid: s.total_paid,
+          payment_count: s.payment_count,
+          categories_paid: s.categories_paid,
+          payments: s.payments,
+        })),
+        totalCollected,
+        totalExpenses,
+        netBalance,
+        totalStudentsPaid,
+        totalStudentsUnpaid,
+        categoriesBreakdown,
+        filters: {
+          category: categoryFilter !== 'all' ? categoryFilter : undefined,
+          status: statusFilter !== 'all' ? statusFilter : undefined,
+          payment: paymentFilter !== 'all' ? paymentFilter : undefined,
+          search: searchTerm || undefined,
+        },
+      });
+      showSuccess('Exported to PDF successfully!');
+    } catch (error) {
+      console.error('Export error:', error);
+      showError('Failed to export data');
+    } finally {
+      setExporting(false);
+    }
   };
 
   return (
@@ -496,20 +548,85 @@ export default function AdminCollectedPage() {
                   </div>
                 </div>
 
-                <motion.button
-                  whileHover={{ scale: 1.05 }}
-                  whileTap={{ scale: 0.95 }}
-                  onClick={exportToCSV}
-                  className="flex items-center justify-center gap-2 px-5 py-3 rounded-xl transition-all text-sm font-semibold"
-                  style={{
-                    background: `linear-gradient(135deg, ${colors.statusPaid}, ${colors.accentMint})`,
-                    boxShadow: `0 4px 15px ${colors.statusPaid}40`,
-                    color: 'white'
-                  }}
-                >
-                  <Download className="w-4 h-4" />
-                  <span>Export CSV</span>
-                </motion.button>
+                {/* Export Dropdown Button */}
+                <div className="relative">
+                  <motion.button
+                    whileHover={{ scale: 1.05 }}
+                    whileTap={{ scale: 0.95 }}
+                    onClick={() => setShowExportMenu(!showExportMenu)}
+                    disabled={exporting}
+                    className="flex items-center justify-center gap-2 px-5 py-3 rounded-xl transition-all text-sm font-semibold disabled:opacity-50"
+                    style={{
+                      background: `linear-gradient(135deg, ${colors.statusPaid}, ${colors.accentMint})`,
+                      boxShadow: `0 4px 15px ${colors.statusPaid}40`,
+                      color: 'white'
+                    }}
+                  >
+                    {exporting ? (
+                      <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                    ) : (
+                      <Download className="w-4 h-4" />
+                    )}
+                    <span>Export</span>
+                    <ChevronDown className={`w-4 h-4 transition-transform ${showExportMenu ? 'rotate-180' : ''}`} />
+                  </motion.button>
+
+                  {/* Export Menu Dropdown */}
+                  <AnimatePresence>
+                    {showExportMenu && (
+                      <motion.div
+                        initial={{ opacity: 0, y: -10, scale: 0.95 }}
+                        animate={{ opacity: 1, y: 0, scale: 1 }}
+                        exit={{ opacity: 0, y: -10, scale: 0.95 }}
+                        className="absolute right-0 top-full mt-2 w-56 rounded-xl overflow-hidden shadow-2xl z-50"
+                        style={{
+                          background: 'linear-gradient(135deg, rgba(30, 20, 15, 0.98), rgba(20, 12, 8, 0.98))',
+                          border: '1px solid rgba(255, 255, 255, 0.15)',
+                          backdropFilter: 'blur(20px)',
+                        }}
+                      >
+                        <div className="p-2">
+                          <p className="px-3 py-1.5 text-xs font-medium" style={{ color: colors.textSecondary }}>
+                            Export Format
+                          </p>
+                          <motion.button
+                            whileHover={{ x: 4, background: 'rgba(255, 255, 255, 0.05)' }}
+                            onClick={() => {
+                              setShowExportMenu(false);
+                              exportToPDF();
+                            }}
+                            className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg"
+                          >
+                            <div className="w-8 h-8 rounded-lg flex items-center justify-center" style={{ background: `${colors.statusUnpaid}20` }}>
+                              <FileText className="w-4 h-4" style={{ color: colors.statusUnpaid }} />
+                            </div>
+                            <div className="text-left">
+                              <span className="text-sm font-medium text-white">PDF Report</span>
+                              <p className="text-xs" style={{ color: colors.textSecondary }}>Full financial summary</p>
+                            </div>
+                          </motion.button>
+                          <motion.button
+                            whileHover={{ x: 4, background: 'rgba(255, 255, 255, 0.05)' }}
+                            onClick={() => {
+                              setShowExportMenu(false);
+                              exportToCSV();
+                            }}
+                            className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg"
+                          >
+                            <div className="w-8 h-8 rounded-lg flex items-center justify-center" style={{ background: `${colors.accentMint}20` }}>
+                              <FileSpreadsheet className="w-4 h-4" style={{ color: colors.accentMint }} />
+                            </div>
+                            <div className="text-left">
+                              <span className="text-sm font-medium text-white">CSV Spreadsheet</span>
+                              <p className="text-xs" style={{ color: colors.textSecondary }}>For data analysis</p>
+                            </div>
+                          </motion.button>
+                        </div>
+                      </motion.div>
+                    )}
+                  </AnimatePresence>
+                  {showExportMenu && <div className="fixed inset-0 z-40" onClick={() => setShowExportMenu(false)} />}
+                </div>
               </div>
 
               {/* Summary Stats Cards */}

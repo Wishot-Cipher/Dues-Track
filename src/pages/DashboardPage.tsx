@@ -12,8 +12,7 @@ import {
   AlertCircle,
   Menu,
   X as CloseIcon,
-  Plus,
-  LayoutDashboard
+  Plus
 } from 'lucide-react';
 import { colors, gradients } from '@/config/colors';
 import { useAuth } from '@/hooks/useAuth';
@@ -28,6 +27,7 @@ import Footer from '@/components/Footer';
 import ExpenseTransparencyDashboard from '@/components/student/ExpenseTransparencyDashboard';
 import AchievementSystem from '@/components/student/AchievementSystem';
 import SmartDeadlineReminders from '@/components/student/SmartDeadlineReminders';
+import DashboardSwitcher from '@/components/DashboardSwitcher';
 import ClassProgressVisualization from '@/components/student/ClassProgressVisualization';
 import QuickPaymentSummary from '@/components/student/QuickPaymentSummary';
 import { useStudentFeatures } from '@/hooks/useStudentFeatures';
@@ -109,7 +109,7 @@ export default function DashboardPage() {
             
             if (isWaived) {
               status = 'waived';
-              progress = 100; // Show as complete
+              progress = 0; // Waived = no payment made, don't show as progress
             } else {
               // Sum up all APPROVED payments for this payment type
               amountPaid = paymentsForType
@@ -253,6 +253,11 @@ export default function DashboardPage() {
                 </div> 
             </div>
 
+            {/* Center - Dashboard Switcher for Admins */}
+            <div className="hidden md:flex flex-1 justify-center">
+              <DashboardSwitcher variant="full" />
+            </div>
+
             {/* Right Side - Desktop */}
             <div className="hidden md:flex items-center gap-4">
               {/* Notifications */}
@@ -302,20 +307,6 @@ export default function DashboardPage() {
                         <User size={18} />
                         <span>Profile</span>
                       </button>
-
-                      {/* Admin Dashboard Link - Only visible for admins */}
-                      {(user?.admins && user.admins.length > 0) && (
-                        <button
-                          onClick={() => navigate('/admin/dashboard')}
-                          className="w-full flex items-center gap-3 px-3 py-2 rounded-lg transition-colors text-left"
-                          style={{ color: colors.primary }}
-                          onMouseEnter={(e) => e.currentTarget.style.background = 'rgba(255, 104, 3, 0.1)'}
-                          onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
-                        >
-                          <LayoutDashboard size={18} />
-                          <span>Admin Dashboard</span>
-                        </button>
-                      )}
 
                       <button
                         onClick={() => navigate('/settings')}
@@ -394,6 +385,13 @@ export default function DashboardPage() {
                 </div>
               </div>
 
+              {/* Mobile Dashboard Switcher */}
+              {(user?.admins && user.admins.length > 0) && (
+                <div className="pb-3 border-b mb-2" style={{ borderColor: 'rgba(255, 255, 255, 0.1)' }}>
+                  <DashboardSwitcher variant="compact" />
+                </div>
+              )}
+
               <button
                 onClick={() => {
                   navigate('/profile');
@@ -407,22 +405,6 @@ export default function DashboardPage() {
                 <User size={18} />
                 <span>Profile</span>
               </button>
-
-              {(user?.admins && user.admins.length > 0) && (
-                <button
-                  onClick={() => {
-                    navigate('/admin/dashboard');
-                    setShowMobileMenu(false);
-                  }}
-                  className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg transition-colors text-left"
-                  style={{ color: colors.primary }}
-                  onMouseEnter={(e) => e.currentTarget.style.background = 'rgba(255, 104, 3, 0.1)'}
-                  onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
-                >
-                  <LayoutDashboard size={18} />
-                  <span>Admin Dashboard</span>
-                </button>
-              )}
 
               <button
                 onClick={() => { navigate('/settings'); setShowMobileMenu(false); }}
@@ -733,11 +715,11 @@ export default function DashboardPage() {
                             };
                           case 'waived':
                             return { 
-                              color: colors.accentMint, 
-                              bg: `linear-gradient(135deg, ${colors.accentMint}10 0%, ${colors.accentMint}05 100%)`,
-                              border: `${colors.accentMint}25`,
+                              color: '#9CA3AF', // Gray color to indicate no payment
+                              bg: `linear-gradient(135deg, rgba(156, 163, 175, 0.1) 0%, rgba(156, 163, 175, 0.05) 100%)`,
+                              border: 'rgba(156, 163, 175, 0.25)',
                               label: 'WAIVED',
-                              icon: '✨'
+                              icon: '🔓'
                             };
                           case 'partial':
                             return { 
@@ -875,13 +857,17 @@ export default function DashboardPage() {
                               </div>
                             )}
 
-                            {/* Amount and Actions */}
                             <div className="mt-3 flex items-center justify-between">
                               <div>
                                 {status === 'waived' ? (
-                                  <p className="text-sm" style={{ color: colors.accentMint }}>
-                                    No payment required
-                                  </p>
+                                  <div>
+                                    <p className="text-[10px] uppercase tracking-wider" style={{ color: colors.textSecondary }}>
+                                      Payment Status
+                                    </p>
+                                    <p className="text-sm font-medium" style={{ color: '#9CA3AF' }}>
+                                      Fee waived - ₦0 paid
+                                    </p>
+                                  </div>
                                 ) : (
                                   <>
                                     <p className="text-[10px] uppercase tracking-wider" style={{ color: colors.textSecondary }}>

@@ -6,6 +6,7 @@ import { colors, gradients } from '@/config/colors';
 import GlassCard from '@/components/ui/GlassCard';
 import AnimatedCounter from '@/components/ui/AnimatedCounter';
 import Modal from '@/components/ui/Modal';
+import ProfessionalDropdown from '@/components/ui/ProfessionalDropdown';
 import { useToast } from '@/hooks/useToast';
 import {
   Search,
@@ -23,12 +24,17 @@ import {
   Filter,
   ChevronLeft,
   ChevronRight,
+  ChevronDown,
   X,
   AlertTriangle,
+  Download,
+  FileText,
+  FileSpreadsheet,
 } from 'lucide-react';
 import Footer from '@/components/Footer';
 import { useAuth } from '@/hooks/useAuth';
 import authService from '@/services/authService';
+import { exportStudentsToPDF } from '@/utils/pdfExport';
 
 interface Student {
   id: string;
@@ -68,6 +74,8 @@ export default function ManageStudentsPage() {
   const [selectedStudent, setSelectedStudent] = useState<Student | null>(null);
   const [showEditModal, setShowEditModal] = useState(false);
   const [editLoading, setEditLoading] = useState(false);
+  const [showExportMenu, setShowExportMenu] = useState(false);
+  const [exporting, setExporting] = useState(false);
   
   // Pagination state
   const [currentPage, setCurrentPage] = useState(1);
@@ -192,46 +200,45 @@ export default function ManageStudentsPage() {
   const handleEditStudent = async () => {
     if (!selectedStudent) return;
 
+    // Check permission before proceeding
+    if (!hasPermission('can_manage_students')) {
+      showError('You do not have permission to edit students');
+      return;
+    }
+
     try {
       setEditLoading(true);
-      const { data: updated, error } = await supabase
-        .from('students')
-        .update({
-          full_name: selectedStudent.full_name,
-          reg_number: selectedStudent.reg_number,
-          email: selectedStudent.email,
-          phone: selectedStudent.phone,
-          level: selectedStudent.level,
-          department: selectedStudent.department,
-          section: selectedStudent.section,
-          force_password_change: selectedStudent.force_password_change ?? false,
-          is_active: selectedStudent.is_active,
-        })
-        .eq('id', selectedStudent.id)
-        .select()
-        .single();
+      
+      // Use the SECURITY DEFINER function to bypass RLS
+      const { data: result, error } = await supabase.rpc('admin_update_student', {
+        p_student_id: selectedStudent.id,
+        p_full_name: selectedStudent.full_name,
+        p_reg_number: selectedStudent.reg_number,
+        p_email: selectedStudent.email,
+        p_phone: selectedStudent.phone,
+        p_level: selectedStudent.level,
+        p_department: selectedStudent.department,
+        p_section: selectedStudent.section,
+        p_force_password_change: selectedStudent.force_password_change ?? false,
+        p_is_active: selectedStudent.is_active,
+        p_admin_id: user?.id
+      });
 
       if (error) {
-        // Handle unique constraint on reg_number gracefully
-        const msg = (error.message || '').toString().toLowerCase();
-        const details = (error.details || '').toString().toLowerCase();
-        if (
-          error.code === '23505' ||
-          msg.includes('duplicate') ||
-          msg.includes('unique') ||
-          details.includes('duplicate') ||
-          details.includes('already exist') ||
-          details.includes('already exists')
-        ) {
+        console.error('RPC error:', error);
+        throw error;
+      }
+
+      // Check the result
+      const response = result?.[0];
+      if (!response?.success) {
+        const msg = response?.message || 'Failed to update student';
+        if (msg.toLowerCase().includes('registration number already exists')) {
           showError('Registration number already exists. Choose another one.');
           setEditLoading(false);
           return;
         }
-        throw error;
-      }
-
-      if (!updated) {
-        throw new Error('No rows were updated. Check permissions or if the student exists.');
+        throw new Error(msg);
       }
 
       success('Student updated successfully');
@@ -262,18 +269,30 @@ export default function ManageStudentsPage() {
   };
 
   const toggleStudentStatus = async (student: Student) => {
+    // Check permission before proceeding
+    if (!hasPermission('can_manage_students')) {
+      showError('You do not have permission to change student status');
+      return;
+    }
+
     try {
-      const { data: updated, error } = await supabase
-        .from('students')
-        .update({ is_active: !student.is_active })
-        .eq('id', student.id)
-        .select()
-        .single();
+      // Use the SECURITY DEFINER function to bypass RLS
+      const { data: result, error } = await supabase.rpc('admin_toggle_student_status', {
+        p_student_id: student.id,
+        p_admin_id: user?.id
+      });
 
-      if (error) throw error;
-      if (!updated) throw new Error('No rows were updated. Permission may be denied.');
+      if (error) {
+        console.error('RPC error:', error);
+        throw error;
+      }
 
-      success(`Student ${student.is_active ? 'deactivated' : 'activated'} successfully`);
+      const response = result?.[0];
+      if (!response?.success) {
+        throw new Error(response?.message || 'Failed to update student status');
+      }
+
+      success(response.message);
       await fetchStudents();
     } catch (error) {
       console.error('Error toggling student status:', error);
@@ -502,12 +521,13 @@ export default function ManageStudentsPage() {
         });
       } else {
         // Add classrep role using RPC function
+        // Class Rep has FULL access (same as admin) - can manage students, payments, etc.
         const { error } = await supabase.rpc('add_admin_role', {
           p_student_id: student.id,
           p_role: 'class_rep',
-          p_can_create_payments: false,
-          p_can_approve_payments: false,
-          p_can_manage_students: false,
+          p_can_create_payments: true,
+          p_can_approve_payments: true,
+          p_can_manage_students: true,
           p_can_view_analytics: true,
         });
         
@@ -517,7 +537,7 @@ export default function ManageStudentsPage() {
           recipient_id: student.id,
           type: 'role_assigned',
           title: 'Class Rep Role Granted',
-          message: 'You have been granted Class Rep permissions. You can now view class analytics and represent your classmates.',
+          message: 'You have been granted Class Rep permissions with full admin access. You can now manage students, create and approve payments, and view analytics.',
           link: '/admin/dashboard',
         });
       }
@@ -546,30 +566,131 @@ export default function ManageStudentsPage() {
   };
 
   const executeDeleteStudent = async (student: Student) => {
+    // Check permission before proceeding
+    if (!hasPermission('can_manage_students')) {
+      showError('You do not have permission to delete students');
+      return;
+    }
+
     try {
-      // First delete from auth.users
-      const { error: authError } = await supabase.auth.admin.deleteUser(student.id);
-      if (authError) {
-        console.error('Auth deletion error:', authError);
-        // Continue even if auth deletion fails (user might not exist in auth)
+      // Use the SECURITY DEFINER function to bypass RLS
+      const { data: result, error } = await supabase.rpc('admin_delete_student', {
+        p_student_id: student.id,
+        p_admin_id: user?.id
+      });
+
+      if (error) {
+        console.error('RPC error:', error);
+        throw error;
       }
 
-      // Then delete from students table and return deleted row to verify
-      const { data: deleted, error: studentError } = await supabase
-        .from('students')
-        .delete()
-        .eq('id', student.id)
-        .select()
-        .single();
+      const response = result?.[0];
+      if (!response?.success) {
+        throw new Error(response?.message || 'Failed to delete student');
+      }
 
-      if (studentError) throw studentError;
-      if (!deleted) throw new Error('No rows were deleted. Permission may be denied.');
-
-      success('Student deleted successfully');
+      success(response.message);
       await fetchStudents();
     } catch (error) {
       console.error('Error deleting student:', error);
       showError('Failed to delete student');
+    }
+  };
+
+  // Export to CSV
+  const handleExportCSV = () => {
+    setExporting(true);
+    try {
+      const dataToExport = getFilteredStudents();
+      
+      // Helper function to escape CSV fields
+      const escapeCSV = (field: string | number | boolean | null | undefined): string => {
+        if (field === null || field === undefined) return '';
+        const str = String(field);
+        if (str.includes(',') || str.includes('"') || str.includes('\n') || str.includes('\r')) {
+          return `"${str.replace(/"/g, '""')}"`;
+        }
+        return str;
+      };
+
+      const lines: string[] = [];
+      
+      // Header info
+      lines.push('CLASS DUES TRACKER - STUDENT DIRECTORY');
+      lines.push('');
+      lines.push(`Generated Date,${new Date().toLocaleDateString('en-US', { dateStyle: 'full', timeStyle: 'short' })}`);
+      lines.push(`Total Students,${dataToExport.length}`);
+      lines.push(`Active Students,${dataToExport.filter(s => s.is_active).length}`);
+      lines.push(`Inactive Students,${dataToExport.filter(s => !s.is_active).length}`);
+      if (statusFilter !== 'all') lines.push(`Status Filter,${statusFilter}`);
+      if (roleFilter !== 'all') lines.push(`Role Filter,${roleFilter}`);
+      lines.push('');
+      lines.push('');
+      
+      // Column headers
+      lines.push('S/N,Full Name,Registration Number,Email,Phone,Level,Department,Section,Status,Roles,Created Date');
+      
+      // Data rows
+      dataToExport.forEach((student, index) => {
+        const roles = [
+          student.is_admin ? 'Admin' : '',
+          student.is_finsec ? 'FinSec' : '',
+          student.is_class_rep ? 'Class Rep' : ''
+        ].filter(Boolean).join(' | ') || 'Student';
+        
+        lines.push([
+          escapeCSV(index + 1),
+          escapeCSV(student.full_name),
+          escapeCSV(student.reg_number),
+          escapeCSV(student.email || 'N/A'),
+          escapeCSV(student.phone || 'N/A'),
+          escapeCSV(student.level || 'N/A'),
+          escapeCSV(student.department || 'N/A'),
+          escapeCSV(student.section || 'N/A'),
+          escapeCSV(student.is_active ? 'Active' : 'Inactive'),
+          escapeCSV(roles),
+          escapeCSV(new Date(student.created_at).toLocaleDateString()),
+        ].join(','));
+      });
+
+      // Create and download file
+      const csvContent = lines.join('\n');
+      const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.setAttribute('href', url);
+      link.setAttribute('download', `students_directory_${new Date().toISOString().split('T')[0]}.csv`);
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+      
+      success('CSV exported successfully!');
+      setShowExportMenu(false);
+    } catch (err) {
+      console.error('Export error:', err);
+      showError('Failed to export CSV');
+    } finally {
+      setExporting(false);
+    }
+  };
+
+  // Export to PDF
+  const handleExportPDF = () => {
+    setExporting(true);
+    try {
+      const dataToExport = getFilteredStudents();
+      exportStudentsToPDF(dataToExport, {
+        status: statusFilter !== 'all' ? statusFilter : undefined,
+        role: roleFilter !== 'all' ? roleFilter : undefined,
+      });
+      success('PDF exported successfully!');
+      setShowExportMenu(false);
+    } catch (err) {
+      console.error('Export error:', err);
+      showError('Failed to export PDF');
+    } finally {
+      setExporting(false);
     }
   };
 
@@ -997,10 +1118,126 @@ export default function ManageStudentsPage() {
           transition={{ delay: 0.2 }}
         >
           <GlassCard>
-            <div className="flex items-center justify-between mb-4">
+            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 mb-4">
               <h2 className="text-xl font-bold text-white">
                 {finalFilteredStudents.length} Student{finalFilteredStudents.length !== 1 ? 's' : ''}
               </h2>
+              
+              {/* Export Dropdown */}
+              <div className="relative">
+                <motion.button
+                  whileHover={{ scale: 1.02 }}
+                  whileTap={{ scale: 0.98 }}
+                  onClick={() => setShowExportMenu(!showExportMenu)}
+                  disabled={exporting || finalFilteredStudents.length === 0}
+                  className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-medium transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                  style={{
+                    background: `linear-gradient(135deg, ${colors.primary}20, ${colors.primary}10)`,
+                    border: `1px solid ${colors.primary}40`,
+                    color: colors.primary,
+                  }}
+                >
+                  {exporting ? (
+                    <>
+                      <div className="w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin" />
+                      <span>Exporting...</span>
+                    </>
+                  ) : (
+                    <>
+                      <Download className="w-4 h-4" />
+                      <span>Export</span>
+                      <ChevronDown className={`w-4 h-4 transition-transform ${showExportMenu ? 'rotate-180' : ''}`} />
+                    </>
+                  )}
+                </motion.button>
+
+                {/* Export Menu Dropdown */}
+                <AnimatePresence>
+                  {showExportMenu && (
+                    <motion.div
+                      initial={{ opacity: 0, y: -10, scale: 0.95 }}
+                      animate={{ opacity: 1, y: 0, scale: 1 }}
+                      exit={{ opacity: 0, y: -10, scale: 0.95 }}
+                      transition={{ duration: 0.15 }}
+                      className="absolute right-0 top-full mt-2 w-56 rounded-xl overflow-hidden shadow-2xl z-50"
+                      style={{
+                        background: 'linear-gradient(135deg, rgba(30, 20, 15, 0.98), rgba(20, 12, 8, 0.98))',
+                        border: '1px solid rgba(255, 255, 255, 0.1)',
+                        backdropFilter: 'blur(20px)',
+                      }}
+                    >
+                      <div className="p-2">
+                        <p className="text-xs font-semibold px-3 py-2 uppercase tracking-wider" style={{ color: colors.textSecondary }}>
+                          Export Format
+                        </p>
+                        
+                        {/* PDF Export */}
+                        <motion.button
+                          whileHover={{ x: 4 }}
+                          onClick={() => {
+                            setShowExportMenu(false);
+                            handleExportPDF();
+                          }}
+                          className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg transition-all hover:bg-white/5"
+                        >
+                          <div 
+                            className="w-9 h-9 rounded-lg flex items-center justify-center"
+                            style={{ background: `${colors.statusUnpaid}20` }}
+                          >
+                            <FileText className="w-4 h-4" style={{ color: colors.statusUnpaid }} />
+                          </div>
+                          <div className="text-left">
+                            <p className="text-sm font-medium text-white">PDF Document</p>
+                            <p className="text-xs" style={{ color: colors.textSecondary }}>Professional formatted report</p>
+                          </div>
+                        </motion.button>
+
+                        {/* CSV Export */}
+                        <motion.button
+                          whileHover={{ x: 4 }}
+                          onClick={() => {
+                            setShowExportMenu(false);
+                            handleExportCSV();
+                          }}
+                          className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg transition-all hover:bg-white/5"
+                        >
+                          <div 
+                            className="w-9 h-9 rounded-lg flex items-center justify-center"
+                            style={{ background: `${colors.accentMint}20` }}
+                          >
+                            <FileSpreadsheet className="w-4 h-4" style={{ color: colors.accentMint }} />
+                          </div>
+                          <div className="text-left">
+                            <p className="text-sm font-medium text-white">CSV Spreadsheet</p>
+                            <p className="text-xs" style={{ color: colors.textSecondary }}>Excel compatible format</p>
+                          </div>
+                        </motion.button>
+                      </div>
+
+                      {/* Info Footer */}
+                      <div 
+                        className="px-4 py-3 border-t"
+                        style={{ 
+                          background: 'rgba(255, 255, 255, 0.02)',
+                          borderColor: 'rgba(255, 255, 255, 0.08)' 
+                        }}
+                      >
+                        <p className="text-xs" style={{ color: colors.textSecondary }}>
+                          Exporting {finalFilteredStudents.length} student{finalFilteredStudents.length !== 1 ? 's' : ''}
+                        </p>
+                      </div>
+                    </motion.div>
+                  )}
+                </AnimatePresence>
+
+                {/* Click outside to close */}
+                {showExportMenu && (
+                  <div 
+                    className="fixed inset-0 z-40" 
+                    onClick={() => setShowExportMenu(false)}
+                  />
+                )}
+              </div>
             </div>
 
             {loading ? (
@@ -1632,40 +1869,36 @@ export default function ManageStudentsPage() {
 
                     <div className="grid grid-cols-2 gap-4">
                       <div>
-                        <label className="block text-sm font-medium mb-2 text-white">Level</label>
-                        <select
+                        <ProfessionalDropdown
+                          label="Level"
                           value={selectedStudent.level}
-                          onChange={(e) => setSelectedStudent({ ...selectedStudent, level: e.target.value })}
-                          className="w-full px-4 py-3 rounded-xl text-white focus:outline-none focus:ring-2 transition-all"
-                          style={{ 
-                            background: 'rgba(255, 255, 255, 0.05)', 
-                            border: '1px solid rgba(255, 255, 255, 0.1)' 
-                          }}
-                        >
-                          <option value="100L" style={{ background: colors.background }}>100 Level</option>
-                          <option value="200L" style={{ background: colors.background }}>200 Level</option>
-                          <option value="300L" style={{ background: colors.background }}>300 Level</option>
-                          <option value="400L" style={{ background: colors.background }}>400 Level</option>
-                          <option value="500L" style={{ background: colors.background }}>500 Level</option>
-                        </select>
+                          onChange={(val) => setSelectedStudent({ ...selectedStudent, level: val as string })}
+                          variant="filled"
+                          size="md"
+                          options={[
+                            { value: "100L", label: "100 Level" },
+                            { value: "200L", label: "200 Level" },
+                            { value: "300L", label: "300 Level" },
+                            { value: "400L", label: "400 Level" },
+                            { value: "500L", label: "500 Level" },
+                          ]}
+                        />
                       </div>
 
                       <div>
-                        <label className="block text-sm font-medium mb-2 text-white">Section</label>
-                        <select
+                        <ProfessionalDropdown
+                          label="Section"
                           value={selectedStudent.section}
-                          onChange={(e) => setSelectedStudent({ ...selectedStudent, section: e.target.value })}
-                          className="w-full px-4 py-3 rounded-xl text-white focus:outline-none focus:ring-2 transition-all"
-                          style={{ 
-                            background: 'rgba(255, 255, 255, 0.05)', 
-                            border: '1px solid rgba(255, 255, 255, 0.1)' 
-                          }}
-                        >
-                          <option value="A" style={{ background: colors.background }}>Section A</option>
-                          <option value="B" style={{ background: colors.background }}>Section B</option>
-                          <option value="C" style={{ background: colors.background }}>Section C</option>
-                          <option value="D" style={{ background: colors.background }}>Section D</option>
-                        </select>
+                          onChange={(val) => setSelectedStudent({ ...selectedStudent, section: val as string })}
+                          variant="filled"
+                          size="md"
+                          options={[
+                            { value: "A", label: "Section A" },
+                            { value: "B", label: "Section B" },
+                            { value: "C", label: "Section C" },
+                            { value: "D", label: "Section D" },
+                          ]}
+                        />
                       </div>
                     </div>
 
