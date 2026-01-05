@@ -287,7 +287,7 @@ export function exportStudentsToPDF(
       6: { cellWidth: 25 },
     },
     margin: { left: 15, right: 15 },
-    didDrawPage: (data) => {
+    didDrawPage: (data: { pageNumber: number }) => {
       // Add footer on each page
       const pageCount = doc.getNumberOfPages();
       addFooter(doc, data.pageNumber, pageCount);
@@ -407,7 +407,7 @@ export function exportPaymentsToPDF(
       6: { cellWidth: 35 },
     },
     margin: { left: 15, right: 15 },
-    didDrawPage: (data) => {
+    didDrawPage: (data: { pageNumber: number }) => {
       const pageCount = doc.getNumberOfPages();
       addFooter(doc, data.pageNumber, pageCount);
     },
@@ -549,7 +549,7 @@ export function exportExpensesToPDF(
       fillColor: [249, 250, 251],
     },
     margin: { left: 15, right: 15 },
-    didDrawPage: (data) => {
+    didDrawPage: (data: { pageNumber: number }) => {
       const pageCount = doc.getNumberOfPages();
       addFooter(doc, data.pageNumber, pageCount);
     },
@@ -739,7 +739,7 @@ export function exportCollectedPaymentsToPDF(data: CollectedPaymentsExportData):
       6: { cellWidth: 43 },
     },
     margin: { left: 15, right: 15 },
-    didDrawPage: (tableData) => {
+    didDrawPage: (tableData: { pageNumber: number }) => {
       const pageCount = doc.getNumberOfPages();
       addFooter(doc, tableData.pageNumber, pageCount);
     },
