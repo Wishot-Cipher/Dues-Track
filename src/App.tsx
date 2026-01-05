@@ -16,6 +16,7 @@ import ProfilePage from '@/pages/ProfilePage';
 import SettingsPage from '@/pages/student/SettingsPage';
 import AdminDashboardPage from '@/pages/admin/AdminDashboardPage';
 import CreatePaymentTypePage from '@/pages/admin/CreatePaymentTypePage';
+import ManageDuesPage from '@/pages/admin/ManageDuesPage';
 import PaymentDetailPage from '@/pages/PaymentDetailPage';
 import PaymentHistoryPage from '@/pages/student/PaymentHistoryPage';
 import AdminReviewPage from '@/pages/admin/AdminReviewPage';
@@ -135,6 +136,16 @@ function App() {
               element={
                 <ProtectedRoute requiredPermission="can_create_payments">
                   <CreatePaymentTypePage />
+                </ProtectedRoute>
+              }
+            />
+
+            {/* Protected - Admin: Manage Dues */}
+            <Route
+              path="/admin/manage-dues"
+              element={
+                <ProtectedRoute requiredPermission="can_create_payments">
+                  <ManageDuesPage />
                 </ProtectedRoute>
               }
             />

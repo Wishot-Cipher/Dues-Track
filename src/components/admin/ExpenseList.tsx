@@ -1,13 +1,16 @@
 import { useState, useMemo } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import GlassCard from '@/components/ui/GlassCard'
+import ConfirmDialog from '@/components/ui/ConfirmDialog'
+import Modal from '@/components/ui/Modal'
 import { colors, gradients } from '@/config/colors'
 import { useExpenses } from '@/hooks/useExpenses'
 import { useAuth } from '@/hooks/useAuth'
-import { getPublicUrl } from '@/config/supabase'
+import { getPublicUrl, supabase } from '@/config/supabase'
 import { useToast } from '@/hooks/useToast'
+import { deleteExpense, updateExpenseFields, fetchExpenseCategories, type ExpenseCategory } from '@/services/expenseService'
 import type { Expense } from '@/services/expenseService'
-import { CheckCircle, Clock, XCircle, Calendar, Tag, FileText, X, Download, Eye, User, ChevronLeft, ChevronRight, ChevronDown, FileSpreadsheet } from 'lucide-react'
+import { CheckCircle, Clock, XCircle, Calendar, Tag, FileText, X, Download, Eye, User, ChevronLeft, ChevronRight, ChevronDown, FileSpreadsheet, Trash2, Edit3, Save, Loader2 } from 'lucide-react'
 import * as LucideIcons from 'lucide-react'
 import { exportExpensesToPDF } from '@/utils/pdfExport'
 
@@ -65,7 +68,7 @@ function StatusBadge({ status }: { status: 'pending' | 'approved' | 'rejected' }
 }
 
 export default function ExpenseList() {
-  const { expenses, loading, error } = useExpenses()
+  const { expenses, loading, error, reload } = useExpenses()
   const { hasPermission } = useAuth()
   const { success: showSuccess, error: showError } = useToast()
   const [selected, setSelected] = useState<Expense | null>(null)
@@ -73,6 +76,29 @@ export default function ExpenseList() {
   const [currentPage, setCurrentPage] = useState(1)
   const [showExportMenu, setShowExportMenu] = useState(false)
   const [exporting, setExporting] = useState(false)
+  
+  // Edit/Delete state
+  const [showEditModal, setShowEditModal] = useState(false)
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
+  const [editingExpense, setEditingExpense] = useState<Partial<Expense> | null>(null)
+  const [editLoading, setEditLoading] = useState(false)
+  const [categories, setCategories] = useState<ExpenseCategory[]>([])
+  const [paymentTypes, setPaymentTypes] = useState<{ id: string; name: string }[]>([])
+
+  // Load categories and payment types for edit modal
+  useMemo(() => {
+    const loadData = async () => {
+      try {
+        const cats = await fetchExpenseCategories()
+        setCategories(cats)
+        const { data } = await supabase.from('payment_types').select('id, name').eq('is_active', true)
+        setPaymentTypes(data || [])
+      } catch (err) {
+        console.error('Failed to load categories/payment types:', err)
+      }
+    }
+    loadData()
+  }, [])
 
   // Sort expenses by newest first (created_at or expense_date)
   const sortedExpenses = useMemo(() => {
@@ -182,6 +208,70 @@ export default function ExpenseList() {
     } finally {
       setExporting(false)
     }
+  }
+
+  // Handle edit expense
+  async function handleEditExpense() {
+    if (!editingExpense || !editingExpense.id) return
+    
+    setEditLoading(true)
+    try {
+      await updateExpenseFields(editingExpense.id, {
+        title: editingExpense.title,
+        description: editingExpense.description || undefined,
+        amount: editingExpense.amount,
+        category_id: editingExpense.category_id || undefined,
+        funded_by: editingExpense.funded_by || undefined,
+        expense_date: editingExpense.expense_date,
+      })
+      showSuccess('Expense updated successfully!')
+      setShowEditModal(false)
+      setEditingExpense(null)
+      reload()
+    } catch (err) {
+      console.error('Failed to update expense:', err)
+      showError('Failed to update expense')
+    } finally {
+      setEditLoading(false)
+    }
+  }
+
+  // Handle delete expense
+  async function handleDeleteExpense() {
+    if (!selected) return
+    
+    try {
+      await deleteExpense(selected.id)
+      showSuccess('Expense deleted successfully!')
+      setShowDeleteConfirm(false)
+      setSelected(null)
+      reload()
+    } catch (err) {
+      console.error('Failed to delete expense:', err)
+      showError('Failed to delete expense')
+    }
+  }
+
+  // Open edit modal
+  function openEditModal(exp: Expense, e: React.MouseEvent) {
+    e.stopPropagation()
+    setEditingExpense({
+      id: exp.id,
+      title: exp.title,
+      description: exp.description,
+      amount: exp.amount,
+      category_id: exp.category_id,
+      funded_by: exp.funded_by,
+      expense_date: exp.expense_date,
+    })
+    setShowEditModal(true)
+  }
+
+  // Open delete confirmation
+  function openDeleteConfirm(exp: Expense, e: React.MouseEvent) {
+    e.stopPropagation()
+    setSelected(exp)
+    setShowDeleteConfirm(true)
   }
 
   if (!hasPermission('can_manage_students') && !hasPermission('can_approve_payments')) {
@@ -401,9 +491,9 @@ export default function ExpenseList() {
                         )}
                       </div>
 
-                      {/* Amount */}
-                      <div className="text-right">
-                        <div className="font-bold text-2xl mb-1" style={{ 
+                      {/* Amount and Actions */}
+                      <div className="text-right flex flex-col items-end gap-2">
+                        <div className="font-bold text-2xl" style={{ 
                           background: gradients.primary,
                           WebkitBackgroundClip: 'text',
                           WebkitTextFillColor: 'transparent',
@@ -411,7 +501,40 @@ export default function ExpenseList() {
                         }}>
                           ₦{Number(exp.amount || 0).toLocaleString()}
                         </div>
-                        {(hasPermission('can_manage_students') || expStatus === 'approved') && (
+                        
+                        {/* Action Buttons */}
+                        {hasPermission('can_manage_students') && (
+                          <div className="flex items-center gap-1.5 opacity-0 group-hover:opacity-100 transition-all">
+                            <button
+                              className="p-2 rounded-lg transition-all hover:scale-105"
+                              style={{ background: 'rgba(255,104,3,0.1)', color: colors.primary }}
+                              onClick={(e) => openEditModal(exp, e)}
+                              title="Edit expense"
+                            >
+                              <Edit3 className="w-3.5 h-3.5" />
+                            </button>
+                            <button
+                              className="p-2 rounded-lg transition-all hover:scale-105"
+                              style={{ background: 'rgba(239, 68, 68, 0.1)', color: '#EF4444' }}
+                              onClick={(e) => openDeleteConfirm(exp, e)}
+                              title="Delete expense"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                            <button
+                              className="p-2 rounded-lg transition-all hover:scale-105"
+                              style={{ background: 'rgba(34, 197, 94, 0.1)', color: '#22C55E' }}
+                              onClick={(e) => {
+                                e.stopPropagation()
+                                setSelected(exp)
+                              }}
+                              title="View details"
+                            >
+                              <Eye className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+                        )}
+                        {!hasPermission('can_manage_students') && expStatus === 'approved' && (
                           <button
                             className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all opacity-0 group-hover:opacity-100"
                             style={{ background: 'rgba(255,104,3,0.1)', color: colors.primary }}
@@ -775,6 +898,185 @@ export default function ExpenseList() {
           />
         </motion.div>
       )}
+
+      {/* Edit Expense Modal */}
+      <Modal
+        isOpen={showEditModal}
+        onClose={() => {
+          setShowEditModal(false)
+          setEditingExpense(null)
+        }}
+        title="Edit Expense"
+      >
+        {editingExpense && (
+          <div className="space-y-4">
+            {/* Title */}
+            <div>
+              <label className="block text-xs font-medium mb-1.5" style={{ color: colors.textSecondary }}>
+                Title *
+              </label>
+              <input
+                type="text"
+                value={editingExpense.title || ''}
+                onChange={(e) => setEditingExpense({ ...editingExpense, title: e.target.value })}
+                className="w-full px-4 py-2.5 rounded-lg text-white"
+                style={{
+                  background: 'rgba(255, 255, 255, 0.05)',
+                  border: `1px solid ${colors.borderLight}`,
+                }}
+                placeholder="Enter expense title"
+              />
+            </div>
+
+            {/* Amount */}
+            <div>
+              <label className="block text-xs font-medium mb-1.5" style={{ color: colors.textSecondary }}>
+                Amount (₦) *
+              </label>
+              <input
+                type="number"
+                value={editingExpense.amount || ''}
+                onChange={(e) => setEditingExpense({ ...editingExpense, amount: Number(e.target.value) })}
+                className="w-full px-4 py-2.5 rounded-lg text-white"
+                style={{
+                  background: 'rgba(255, 255, 255, 0.05)',
+                  border: `1px solid ${colors.borderLight}`,
+                }}
+                placeholder="Enter amount"
+                min="0"
+              />
+            </div>
+
+            {/* Category */}
+            <div>
+              <label className="block text-xs font-medium mb-1.5" style={{ color: colors.textSecondary }}>
+                Category
+              </label>
+              <select
+                value={editingExpense.category_id || ''}
+                onChange={(e) => setEditingExpense({ ...editingExpense, category_id: e.target.value })}
+                className="w-full px-4 py-2.5 rounded-lg text-white"
+                style={{
+                  background: 'rgba(255, 255, 255, 0.05)',
+                  border: `1px solid ${colors.borderLight}`,
+                }}
+              >
+                <option value="">Select category</option>
+                {categories.map((cat) => (
+                  <option key={cat.id} value={cat.id}>
+                    {cat.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            {/* Funded By */}
+            <div>
+              <label className="block text-xs font-medium mb-1.5" style={{ color: colors.textSecondary }}>
+                Funded By
+              </label>
+              <select
+                value={editingExpense.funded_by || ''}
+                onChange={(e) => setEditingExpense({ ...editingExpense, funded_by: e.target.value })}
+                className="w-full px-4 py-2.5 rounded-lg text-white"
+                style={{
+                  background: 'rgba(255, 255, 255, 0.05)',
+                  border: `1px solid ${colors.borderLight}`,
+                }}
+              >
+                <option value="">Select payment type</option>
+                {paymentTypes.map((pt) => (
+                  <option key={pt.id} value={pt.id}>
+                    {pt.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            {/* Date */}
+            <div>
+              <label className="block text-xs font-medium mb-1.5" style={{ color: colors.textSecondary }}>
+                Expense Date
+              </label>
+              <input
+                type="date"
+                value={editingExpense.expense_date ? new Date(editingExpense.expense_date).toISOString().split('T')[0] : ''}
+                onChange={(e) => setEditingExpense({ ...editingExpense, expense_date: e.target.value })}
+                className="w-full px-4 py-2.5 rounded-lg text-white"
+                style={{
+                  background: 'rgba(255, 255, 255, 0.05)',
+                  border: `1px solid ${colors.borderLight}`,
+                }}
+              />
+            </div>
+
+            {/* Description */}
+            <div>
+              <label className="block text-xs font-medium mb-1.5" style={{ color: colors.textSecondary }}>
+                Description
+              </label>
+              <textarea
+                value={editingExpense.description || ''}
+                onChange={(e) => setEditingExpense({ ...editingExpense, description: e.target.value })}
+                className="w-full px-4 py-2.5 rounded-lg text-white resize-none"
+                style={{
+                  background: 'rgba(255, 255, 255, 0.05)',
+                  border: `1px solid ${colors.borderLight}`,
+                }}
+                rows={3}
+                placeholder="Enter description"
+              />
+            </div>
+
+            {/* Actions */}
+            <div className="flex gap-3 pt-2">
+              <button
+                onClick={() => {
+                  setShowEditModal(false)
+                  setEditingExpense(null)
+                }}
+                className="flex-1 px-4 py-2.5 rounded-lg font-medium transition-all"
+                style={{
+                  background: 'rgba(255, 255, 255, 0.05)',
+                  border: `1px solid ${colors.borderLight}`,
+                  color: colors.textSecondary,
+                }}
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleEditExpense}
+                disabled={editLoading || !editingExpense.title || !editingExpense.amount}
+                className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg font-medium transition-all disabled:opacity-50"
+                style={{
+                  background: gradients.primary,
+                  color: 'white',
+                }}
+              >
+                {editLoading ? (
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                ) : (
+                  <Save className="w-4 h-4" />
+                )}
+                Save Changes
+              </button>
+            </div>
+          </div>
+        )}
+      </Modal>
+
+      {/* Delete Confirmation Dialog */}
+      <ConfirmDialog
+        isOpen={showDeleteConfirm}
+        onClose={() => {
+          setShowDeleteConfirm(false)
+          setSelected(null)
+        }}
+        onConfirm={handleDeleteExpense}
+        title="Delete Expense"
+        message={`Are you sure you want to delete "${selected?.title}"? This action cannot be undone.`}
+        type="danger"
+      />
     </>
   )
 }

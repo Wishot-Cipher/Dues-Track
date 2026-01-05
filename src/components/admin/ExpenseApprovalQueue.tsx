@@ -1,14 +1,31 @@
 /* eslint-disable @typescript-eslint/no-unused-vars */
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { useState, useEffect } from 'react'
+import { motion, AnimatePresence } from 'framer-motion'
 import GlassCard from '@/components/ui/GlassCard'
-import CustomButton from '@/components/ui/CustomButton'
 import ConfirmDialog from '@/components/ui/ConfirmDialog'
 import { colors } from '@/config/colors'
 import { useAuth } from '@/hooks/useAuth'
 import { useToast } from '@/hooks/useToast'
-import { fetchExpenses, approveExpense, type Expense } from '@/services/expenseService'
-import { getPublicUrl } from '@/config/supabase'
+import { fetchExpenses, approveExpense, deleteExpense, updateExpenseFields, fetchExpenseCategories, type Expense, type ExpenseCategory } from '@/services/expenseService'
+import { getPublicUrl, supabase } from '@/config/supabase'
+import { 
+  CheckCircle, 
+  XCircle, 
+  Clock, 
+  Trash2, 
+  Edit3, 
+  Eye, 
+  X, 
+  AlertTriangle,
+  DollarSign,
+  Calendar,
+  RefreshCw,
+  ChevronRight,
+  Sparkles,
+  TrendingDown,
+  Receipt
+} from 'lucide-react'
 
 export default function ExpenseApprovalQueue() {
   const { user } = useAuth()
@@ -20,6 +37,12 @@ export default function ExpenseApprovalQueue() {
   const [rejectionReason, setRejectionReason] = useState('')
   const [balanceMap, setBalanceMap] = useState<Map<string, number>>(new Map())
   const [imageModal, setImageModal] = useState<string | null>(null)
+  const [showRejectModal, setShowRejectModal] = useState(false)
+  const [showEditModal, setShowEditModal] = useState(false)
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
+  const [editingExpense, setEditingExpense] = useState<Partial<Expense> | null>(null)
+  const [categories, setCategories] = useState<ExpenseCategory[]>([])
+  const [paymentTypes, setPaymentTypes] = useState<{ id: string; name: string }[]>([])
   const [confirmDialog, setConfirmDialog] = useState<{
     isOpen: boolean
     title: string
@@ -30,8 +53,28 @@ export default function ExpenseApprovalQueue() {
 
   useEffect(() => {
     loadPendingExpenses()
+    loadCategories()
+    loadPaymentTypes()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
+
+  async function loadCategories() {
+    try {
+      const data = await fetchExpenseCategories()
+      setCategories(data)
+    } catch (err) {
+      console.error('Failed to load categories:', err)
+    }
+  }
+
+  async function loadPaymentTypes() {
+    try {
+      const { data } = await supabase.from('payment_types').select('id, name').eq('is_active', true)
+      setPaymentTypes(data || [])
+    } catch (err) {
+      console.error('Failed to load payment types:', err)
+    }
+  }
 
   async function loadPendingExpenses() {
     try {
@@ -48,8 +91,6 @@ export default function ExpenseApprovalQueue() {
 
   async function fetchAvailableBalances() {
     try {
-      const { supabase } = await import('@/config/supabase')
-
       const { data: paymentsData } = await supabase
         .from('payments')
         .select('amount, payment_type_id')
@@ -184,6 +225,7 @@ Balance After Approval: N${balanceAfterApproval.toLocaleString()}`
       success('Expense rejected')
       setPendingExpenses(prev => prev.filter(e => e.id !== expenseId))
       setSelectedExpense(null)
+      setShowRejectModal(false)
       setRejectionReason('')
     } catch (err) {
       showError('Failed to reject expense')
@@ -192,6 +234,44 @@ Balance After Approval: N${balanceAfterApproval.toLocaleString()}`
     }
   }
 
+  async function handleDelete(expenseId: string) {
+    try {
+      setApprovalLoading(true)
+      await deleteExpense(expenseId)
+      success('Expense deleted successfully')
+      setPendingExpenses(prev => prev.filter(e => e.id !== expenseId))
+      setShowDeleteConfirm(false)
+      setSelectedExpense(null)
+    } catch (err) {
+      showError('Failed to delete expense')
+    } finally {
+      setApprovalLoading(false)
+    }
+  }
+
+  async function handleEdit() {
+    if (!editingExpense?.id) return
+
+    try {
+      setApprovalLoading(true)
+      await updateExpenseFields(editingExpense.id, {
+        title: editingExpense.title,
+        description: editingExpense.description || undefined,
+        amount: editingExpense.amount,
+        category_id: editingExpense.category_id || undefined,
+        funded_by: editingExpense.funded_by || undefined,
+        expense_date: editingExpense.expense_date
+      })
+      success('Expense updated successfully')
+      setShowEditModal(false)
+      setEditingExpense(null)
+      await loadPendingExpenses()
+    } catch (err) {
+      showError('Failed to update expense')
+    } finally {
+      setApprovalLoading(false)
+    }
+  }
 
   // Only admins, class_reps, financial secretaries (finsec) can approve expenses
   // Admin and Class Rep can do everything, Finsec can approve expenses but NOT manage students
@@ -206,8 +286,11 @@ Balance After Approval: N${balanceAfterApproval.toLocaleString()}`
   if (!canApprove) {
     return (
       <GlassCard className="p-6">
-        <div className="text-white">
-          <h2 className="text-xl font-bold mb-2">Expense Approval Queue</h2>
+        <div className="text-center py-8">
+          <div className="w-16 h-16 mx-auto mb-4 rounded-2xl flex items-center justify-center" style={{ background: `${colors.warning}15` }}>
+            <AlertTriangle className="w-8 h-8" style={{ color: colors.warning }} />
+          </div>
+          <h2 className="text-xl font-bold text-white mb-2">Access Restricted</h2>
           <p className="text-sm" style={{ color: colors.textSecondary }}>
             Only Admins, Class Representatives, or Financial Secretaries can approve expenses.
           </p>
@@ -217,215 +300,640 @@ Balance After Approval: N${balanceAfterApproval.toLocaleString()}`
   }
 
   return (
-    <GlassCard className="p-6 relative overflow-hidden">
-      <div
-        className="absolute top-0 left-0 w-full h-1"
-        style={{ background: `linear-gradient(90deg, ${colors.warning}, ${colors.primary}, transparent)` }}
-      />
+    <motion.div
+      initial={{ opacity: 0, y: 20 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.5 }}
+    >
+      <GlassCard className="relative overflow-hidden">
+        {/* Gradient Header Line */}
+        <div
+          className="absolute top-0 left-0 w-full h-1"
+          style={{ background: `linear-gradient(90deg, ${colors.warning}, ${colors.primary}, ${colors.accentMint})` }}
+        />
 
-      <div className="text-white">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
-          <div className="flex items-center gap-3">
-            <div
-              className="w-12 h-12 rounded-xl flex items-center justify-center shrink-0 relative"
+        {/* Header Section */}
+        <div className="p-6 pb-4">
+          <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+            <div className="flex items-center gap-4">
+              <motion.div
+                initial={{ scale: 0.8 }}
+                animate={{ scale: 1 }}
+                className="relative"
+              >
+                <div
+                  className="w-14 h-14 rounded-2xl flex items-center justify-center shadow-lg"
+                  style={{
+                    background: `linear-gradient(135deg, ${colors.warning}30, ${colors.warning}10)`,
+                    border: `1px solid ${colors.warning}40`,
+                    boxShadow: `0 4px 20px ${colors.warning}20`
+                  }}
+                >
+                  <Receipt className="w-7 h-7" style={{ color: colors.warning }} />
+                </div>
+                {pendingExpenses.length > 0 && (
+                  <motion.div
+                    animate={{ scale: [1, 1.2, 1] }}
+                    transition={{ repeat: Infinity, duration: 2 }}
+                    className="absolute -top-1 -right-1 w-5 h-5 rounded-full flex items-center justify-center text-xs font-bold"
+                    style={{ background: colors.warning, color: '#000' }}
+                  >
+                    {pendingExpenses.length}
+                  </motion.div>
+                )}
+              </motion.div>
+              <div>
+                <div className="flex items-center gap-2 mb-1">
+                  <h2 className="text-xl lg:text-2xl font-bold text-white">Expense Approval Queue</h2>
+                  <motion.span
+                    initial={{ opacity: 0, x: -10 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    className="hidden sm:inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold"
+                    style={{ 
+                      background: `linear-gradient(135deg, ${colors.warning}30, ${colors.warning}10)`,
+                      border: `1px solid ${colors.warning}40`,
+                      color: colors.warning
+                    }}
+                  >
+                    <Sparkles className="w-3 h-3" />
+                    ADMIN PANEL
+                  </motion.span>
+                </div>
+                <p className="text-sm" style={{ color: colors.textSecondary }}>
+                  Review and manage pending expense requests
+                </p>
+              </div>
+            </div>
+            
+            <motion.button
+              whileHover={{ scale: 1.02 }}
+              whileTap={{ scale: 0.98 }}
+              onClick={loadPendingExpenses}
+              disabled={loading}
+              className="flex items-center gap-2 px-5 py-2.5 rounded-xl font-medium transition-all self-start lg:self-auto"
               style={{
-                background: `linear-gradient(135deg, ${colors.warning}30, ${colors.warning}10)`,
-                border: `1px solid ${colors.warning}40`
+                background: `linear-gradient(135deg, ${colors.primary}25, ${colors.primary}10)`,
+                border: `1px solid ${colors.primary}40`,
+                color: colors.primary
               }}
             >
-              <svg className="w-6 h-6" style={{ color: colors.warning }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-              </svg>
-              {pendingExpenses.length > 0 && (
-                <div className="absolute -top-1 -right-1 w-3 h-3 rounded-full animate-pulse"
-                  style={{ background: colors.warning, boxShadow: `0 0 8px ${colors.warning}` }} />
-              )}
+              <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
+              <span>Refresh</span>
+            </motion.button>
+          </div>
+
+          {/* Stats Row */}
+          <div className="grid grid-cols-3 gap-2 sm:gap-3 mt-6">
+            <div className="p-2 sm:p-3 rounded-xl text-center overflow-hidden" style={{ background: 'rgba(251, 191, 36, 0.1)', border: '1px solid rgba(251, 191, 36, 0.2)' }}>
+              <div className="flex flex-col items-center justify-center mb-0.5 sm:mb-1">
+                <Clock className="w-3.5 h-3.5 sm:w-4 sm:h-4 mb-0.5" style={{ color: colors.warning }} />
+                <span className="text-[11px] sm:text-base font-bold leading-tight" style={{ color: colors.warning }}>{pendingExpenses.length}</span>
+              </div>
+              <p className="text-[9px] sm:text-[10px] uppercase tracking-wider" style={{ color: colors.textSecondary }}>Pending</p>
             </div>
-            <div>
-              <h2 className="text-xl font-bold text-white">Expense Approval Queue</h2>
-              <p className="text-xs sm:text-sm" style={{ color: colors.textSecondary }}>
-                {pendingExpenses.length} expense{pendingExpenses.length !== 1 ? 's' : ''} awaiting approval
-              </p>
+            <div className="p-2 sm:p-3 rounded-xl text-center overflow-hidden" style={{ background: 'rgba(34, 197, 94, 0.1)', border: '1px solid rgba(34, 197, 94, 0.2)' }}>
+              <div className="flex flex-col items-center justify-center mb-0.5 sm:mb-1">
+                <DollarSign className="w-3.5 h-3.5 sm:w-4 sm:h-4 mb-0.5" style={{ color: '#22C55E' }} />
+                <span className="text-[11px] sm:text-base font-bold leading-tight truncate w-full" style={{ color: '#22C55E' }}>
+                  ₦{pendingExpenses.reduce((sum, e) => sum + (e.amount || 0), 0).toLocaleString()}
+                </span>
+              </div>
+              <p className="text-[9px] sm:text-[10px] uppercase tracking-wider" style={{ color: colors.textSecondary }}>Total</p>
+            </div>
+            <div className="p-2 sm:p-3 rounded-xl text-center overflow-hidden" style={{ background: `${colors.primary}10`, border: `1px solid ${colors.primary}20` }}>
+              <div className="flex flex-col items-center justify-center mb-0.5 sm:mb-1">
+                <TrendingDown className="w-3.5 h-3.5 sm:w-4 sm:h-4 mb-0.5" style={{ color: colors.primary }} />
+                <span className="text-[11px] sm:text-base font-bold leading-tight truncate w-full" style={{ color: colors.primary }}>
+                  ₦{pendingExpenses.length > 0 ? Math.round(pendingExpenses.reduce((sum, e) => sum + (e.amount || 0), 0) / pendingExpenses.length).toLocaleString() : 0}
+                </span>
+              </div>
+              <p className="text-[9px] sm:text-[10px] uppercase tracking-wider" style={{ color: colors.textSecondary }}>Average</p>
             </div>
           </div>
-          <button
-            onClick={loadPendingExpenses}
-            className="flex items-center gap-2 px-4 py-2.5 rounded-xl transition-all hover:scale-105"
-            style={{
-              background: `linear-gradient(135deg, ${colors.primary}20, ${colors.primary}10)`,
-              border: `1px solid ${colors.primary}40`,
-              color: colors.primary
-            }}
-            disabled={loading}
-          >
-            <span>Refresh🔄</span>
-          </button>
         </div>
 
-        {loading && (
-          <div className="text-center py-8" style={{ color: colors.textSecondary }}>
-            Loading pending expenses...
-          </div>
-        )}
+        {/* Content Section */}
+        <div className="px-6 pb-6">
+          {loading && (
+            <div className="text-center py-12">
+              <div className="w-12 h-12 mx-auto border-4 border-t-transparent rounded-full animate-spin mb-4"
+                   style={{ borderColor: `${colors.warning}30`, borderTopColor: 'transparent' }} />
+              <p style={{ color: colors.textSecondary }}>Loading pending expenses...</p>
+            </div>
+          )}
 
-        {!loading && pendingExpenses.length === 0 && (
-          <div className="text-center py-12">
-            <div className="text-6xl mb-4">✅</div>
-            <p className="text-lg font-semibold mb-2">All Clear!</p>
-            <p className="text-sm" style={{ color: colors.textSecondary }}>
-              No expenses pending approval at the moment.
-            </p>
-          </div>
-        )}
+          {!loading && pendingExpenses.length === 0 && (
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              className="text-center py-16"
+            >
+              <div className="w-20 h-20 mx-auto mb-6 rounded-3xl flex items-center justify-center"
+                   style={{ background: 'rgba(34, 197, 94, 0.1)', border: '1px solid rgba(34, 197, 94, 0.3)' }}>
+                <CheckCircle className="w-10 h-10" style={{ color: '#22C55E' }} />
+              </div>
+              <h3 className="text-xl font-bold text-white mb-2">All Clear!</h3>
+              <p className="text-sm max-w-sm mx-auto" style={{ color: colors.textSecondary }}>
+                No expenses pending approval. Great job keeping up with the queue!
+              </p>
+            </motion.div>
+          )}
 
-        {!loading && pendingExpenses.length > 0 && (
-          <div className="space-y-3">
-            {pendingExpenses.map((expense) => {
-              const categoryData = (expense as unknown as Record<string, unknown>).category as { name?: string; icon?: string; color?: string } | undefined
-              const categoryName = categoryData?.name || 'Uncategorized'
-              const categoryIcon = categoryData?.icon || '📦'
-              const categoryColor = categoryData?.color || colors.primary
+          {!loading && pendingExpenses.length > 0 && (
+            <div className="space-y-4">
+              {pendingExpenses.map((expense, index) => {
+                const categoryData = (expense as unknown as Record<string, unknown>).category as { name?: string; icon?: string; color?: string } | undefined
+                const categoryName = categoryData?.name || 'Uncategorized'
+                const categoryIcon = categoryData?.icon || '📦'
+                const categoryColor = categoryData?.color || colors.primary
+                const currentBalance = balanceMap.get(expense.funded_by || '') || 0
+                const balanceAfter = currentBalance - (expense.amount || 0)
 
-              return (
-                <div
-                  key={expense.id}
-                  className="border rounded-lg p-4 hover:border-orange-500/30 transition-all"
-                  style={{ borderColor: colors.borderLight, background: 'rgba(255,255,255,0.02)' }}
-                >
-                  <div className="flex justify-between items-start">
-                    <div className="flex-1">
-                      <div className="flex items-center gap-2 mb-2">
-                        <h3 className="font-semibold text-lg">{expense.title}</h3>
-                        <span className="px-2 py-1 rounded-full text-xs font-medium" style={{ background: 'rgba(251, 191, 36, 0.1)', color: '#FBBF24', border: '1px solid rgba(251, 191, 36, 0.3)' }}>
-                          Pending
-                        </span>
+                return (
+                  <motion.div
+                    key={expense.id}
+                    initial={{ opacity: 0, y: 20 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: index * 0.05 }}
+                    className="group rounded-2xl overflow-hidden transition-all hover:shadow-lg"
+                    style={{ 
+                      background: 'rgba(255, 255, 255, 0.03)',
+                      border: '1px solid rgba(255, 255, 255, 0.08)'
+                    }}
+                  >
+                    {/* Card Content */}
+                    <div className="p-4 sm:p-5">
+                      {/* Mobile: Stack vertically, Desktop: Row layout */}
+                      <div className="space-y-4 sm:space-y-0 sm:flex sm:items-start sm:justify-between sm:gap-4">
+                        {/* Left Section - Expense Info */}
+                        <div className="flex items-start gap-3 sm:gap-4 flex-1 min-w-0">
+                          <div
+                            className="w-10 h-10 sm:w-12 sm:h-12 rounded-xl flex items-center justify-center shrink-0 text-lg sm:text-xl"
+                            style={{ 
+                              background: `${categoryColor}20`,
+                              border: `1px solid ${categoryColor}40`
+                            }}
+                          >
+                            {categoryIcon}
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <h3 className="font-semibold text-white text-base sm:text-lg leading-tight mb-1">{expense.title}</h3>
+                            <div className="flex flex-wrap items-center gap-1.5 sm:gap-2 text-xs sm:text-sm" style={{ color: colors.textSecondary }}>
+                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md"
+                                    style={{ background: `${categoryColor}15`, color: categoryColor }}>
+                                {categoryName}
+                              </span>
+                              <span className="inline-flex items-center gap-1">
+                                <Calendar className="w-3 h-3 sm:w-3.5 sm:h-3.5" />
+                                {expense.expense_date ? new Date(expense.expense_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : '—'}
+                              </span>
+                            </div>
+                            {expense.description && (
+                              <p className="text-xs sm:text-sm mt-2 line-clamp-2" style={{ color: colors.textSecondary }}>
+                                {expense.description}
+                              </p>
+                            )}
+                          </div>
+                        </div>
+
+                        {/* Right Section - Amount & Status */}
+                        <div className="flex items-center justify-between sm:flex-col sm:items-end gap-2 sm:shrink-0 pl-13 sm:pl-0">
+                          <div className="text-left sm:text-right">
+                            <p className="text-xl sm:text-2xl font-bold" style={{ color: colors.primary }}>
+                              ₦{(expense.amount || 0).toLocaleString()}
+                            </p>
+                            <p className="text-[10px] sm:text-xs" style={{ color: colors.textSecondary }}>
+                              After: <span style={{ color: balanceAfter < 0 ? '#EF4444' : '#22C55E' }}>₦{balanceAfter.toLocaleString()}</span>
+                            </p>
+                          </div>
+                          <span
+                            className="inline-flex items-center gap-1 px-2 sm:px-3 py-1 sm:py-1.5 rounded-full text-[10px] sm:text-xs font-semibold whitespace-nowrap"
+                            style={{ 
+                              background: 'rgba(251, 191, 36, 0.15)', 
+                              color: '#FBBF24',
+                              border: '1px solid rgba(251, 191, 36, 0.3)'
+                            }}
+                          >
+                            <Clock className="w-3 h-3 sm:w-3.5 sm:h-3.5" />
+                            Pending
+                          </span>
+                        </div>
                       </div>
 
-                      <div className="flex items-center gap-3 text-sm mb-2" style={{ color: colors.textSecondary }}>
-                        <span className="inline-flex items-center gap-1">
-                          <span style={{ color: categoryColor }}>{categoryIcon}</span>
-                          <span>{categoryName}</span>
-                        </span>
-                        <span>•</span>
-                        <span>{expense.expense_date ? new Date(expense.expense_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : '—'}</span>
-                        <span>•</span>
-                        <span className="font-bold" style={{ color: colors.primary }}>N{Number(expense.amount || 0).toLocaleString()}</span>
-                      </div>
-
-                      {expense.description && (
-                        <p className="text-sm line-clamp-2 mb-3" style={{ color: colors.textSecondary }}>
-                          {expense.description}
-                        </p>
-                      )}
-
-                      <div className="flex items-center gap-2">
-                        <CustomButton
-                          variant="primary"
+                      {/* Action Buttons - Responsive grid on mobile */}
+                      <div className="grid grid-cols-2 sm:flex sm:flex-wrap items-center gap-2 mt-4 pt-4" style={{ borderTop: '1px solid rgba(255, 255, 255, 0.06)' }}>
+                        {/* Approve Button */}
+                        <motion.button
+                          whileHover={{ scale: 1.02 }}
+                          whileTap={{ scale: 0.98 }}
                           onClick={() => handleApprove(expense.id)}
-                          loading={approvalLoading && selectedExpense?.id === expense.id}
-                          className="px-4 py-2"
+                          disabled={approvalLoading && selectedExpense?.id === expense.id}
+                          className="flex items-center justify-center gap-1.5 sm:gap-2 px-3 sm:px-4 py-2 sm:py-2.5 rounded-xl text-xs sm:text-sm font-semibold transition-all disabled:opacity-50"
+                          style={{
+                            background: 'linear-gradient(135deg, #22C55E, #16A34A)',
+                            color: 'white',
+                            boxShadow: '0 4px 12px rgba(34, 197, 94, 0.3)'
+                          }}
                         >
-                          Approve
-                        </CustomButton>
-                        <CustomButton
-                          variant="secondary"
+                          {approvalLoading && selectedExpense?.id === expense.id ? (
+                            <div className="w-3.5 h-3.5 sm:w-4 sm:h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                          ) : (
+                            <CheckCircle className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+                          )}
+                          <span>Approve</span>
+                        </motion.button>
+
+                        {/* Reject Button */}
+                        <motion.button
+                          whileHover={{ scale: 1.02 }}
+                          whileTap={{ scale: 0.98 }}
                           onClick={() => {
                             setSelectedExpense(expense)
+                            setShowRejectModal(true)
                             setRejectionReason('')
                           }}
-                          className="px-4 py-2"
+                          className="flex items-center justify-center gap-1.5 sm:gap-2 px-3 sm:px-4 py-2 sm:py-2.5 rounded-xl text-xs sm:text-sm font-semibold transition-all"
+                          style={{
+                            background: 'rgba(239, 68, 68, 0.15)',
+                            color: '#EF4444',
+                            border: '1px solid rgba(239, 68, 68, 0.3)'
+                          }}
                         >
-                          Reject
-                        </CustomButton>
+                          <XCircle className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+                          <span>Reject</span>
+                        </motion.button>
+
+                        {/* Edit Button */}
+                        <motion.button
+                          whileHover={{ scale: 1.02 }}
+                          whileTap={{ scale: 0.98 }}
+                          onClick={() => {
+                            setEditingExpense({ ...expense })
+                            setShowEditModal(true)
+                          }}
+                          className="flex items-center justify-center gap-1.5 sm:gap-2 px-3 sm:px-4 py-2 sm:py-2.5 rounded-xl text-xs sm:text-sm font-medium transition-all"
+                          style={{
+                            background: 'rgba(255, 255, 255, 0.05)',
+                            color: colors.textSecondary,
+                            border: '1px solid rgba(255, 255, 255, 0.1)'
+                          }}
+                        >
+                          <Edit3 className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+                          <span>Edit</span>
+                        </motion.button>
+
+                        {/* Delete Button */}
+                        <motion.button
+                          whileHover={{ scale: 1.02 }}
+                          whileTap={{ scale: 0.98 }}
+                          onClick={() => {
+                            setSelectedExpense(expense)
+                            setShowDeleteConfirm(true)
+                          }}
+                          className="flex items-center justify-center gap-1.5 sm:gap-2 px-3 sm:px-4 py-2 sm:py-2.5 rounded-xl text-xs sm:text-sm font-medium transition-all"
+                          style={{
+                            background: 'rgba(239, 68, 68, 0.08)',
+                            color: '#EF4444',
+                            border: '1px solid rgba(239, 68, 68, 0.15)'
+                          }}
+                        >
+                          <Trash2 className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+                          <span>Delete</span>
+                        </motion.button>
+
+                        {/* View Receipt Button */}
                         {expense.receipt_url ? (
-                          <button
+                          <motion.button
+                            whileHover={{ scale: 1.02 }}
+                            whileTap={{ scale: 0.98 }}
                             onClick={() => {
                               if (expense.receipt_url) {
                                 let receiptPath = expense.receipt_url
-
                                 if (receiptPath.includes('expense-receipts/')) {
                                   receiptPath = receiptPath.split('expense-receipts/').pop() || receiptPath
                                 } else if (receiptPath.includes('/storage/v1/object/public/')) {
                                   receiptPath = receiptPath.split('/').pop() || receiptPath
                                 }
-
                                 try {
                                   receiptPath = decodeURIComponent(receiptPath)
-                                } catch (e) {
+                                } catch {
                                   // ignore decode errors
                                 }
-
                                 const fullUrl = getPublicUrl('expense-receipts', receiptPath)
                                 setImageModal(fullUrl)
                               }
                             }}
-                            className="px-4 py-2 rounded-lg transition-all hover:bg-white/10 text-sm"
-                            style={{ border: `1px solid ${colors.borderLight}` }}
+                            className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-medium transition-all ml-auto"
+                            style={{
+                              background: `${colors.primary}15`,
+                              color: colors.primary,
+                              border: `1px solid ${colors.primary}30`
+                            }}
                           >
-                            View Receipt
-                          </button>
+                            <Eye className="w-4 h-4" />
+                            <span>View Receipt</span>
+                            <ChevronRight className="w-4 h-4" />
+                          </motion.button>
                         ) : (
-                          <span className="px-4 py-2 text-xs" style={{ color: colors.textSecondary }}>
-                            No receipt uploaded
+                          <span className="text-xs ml-auto px-3 py-2" style={{ color: colors.textSecondary }}>
+                            No receipt attached
                           </span>
                         )}
                       </div>
                     </div>
-                  </div>
-                </div>
-              )
-            })}
-          </div>
-        )}
-
-        {selectedExpense && (
-          <div className="fixed inset-0 z-50 flex items-start justify-center bg-black bg-opacity-70 p-4 overflow-y-auto">
-            <div className="max-w-md w-full my-8">
-              <GlassCard className="p-6">
-                <h3 className="text-lg font-bold text-white mb-4">Reject Expense</h3>
-                <p className="text-sm mb-4" style={{ color: colors.textSecondary }}>
-                  You're about to reject <span className="font-semibold text-white">"{selectedExpense.title}"</span>
-                </p>
-
-                <div className="mb-4">
-                  <label className="block text-sm font-medium text-white mb-2">
-                    Rejection Reason *
-                  </label>
-                  <textarea
-                    value={rejectionReason}
-                    onChange={(e) => setRejectionReason(e.target.value)}
-                    placeholder="Please provide a clear reason for rejecting this expense..."
-                    rows={4}
-                    className="w-full px-4 py-3 rounded-xl bg-white/5 border border-white/10 text-white placeholder:text-gray-500 focus:outline-none focus:ring-2 focus:ring-red-500"
-                    required
-                  />
-                </div>
-
-                <div className="flex items-center gap-3">
-                  <CustomButton
-                    variant="primary"
-                    onClick={() => handleReject(selectedExpense.id)}
-                    loading={approvalLoading}
-                    className="flex-1 bg-red-500 hover:bg-red-600"
-                  >
-                    Confirm Rejection
-                  </CustomButton>
-                  <CustomButton
-                    variant="secondary"
-                    onClick={() => {
-                      setSelectedExpense(null)
-                      setRejectionReason('')
-                    }}
-                    className="flex-1"
-                  >
-                    Cancel
-                  </CustomButton>
-                </div>
-              </GlassCard>
+                  </motion.div>
+                )
+              })}
             </div>
-          </div>
-        )}
+          )}
+        </div>
 
+        {/* Reject Modal */}
+        <AnimatePresence>
+          {showRejectModal && selectedExpense && (
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4"
+              onClick={() => setShowRejectModal(false)}
+            >
+              <motion.div
+                initial={{ scale: 0.9, opacity: 0 }}
+                animate={{ scale: 1, opacity: 1 }}
+                exit={{ scale: 0.9, opacity: 0 }}
+                onClick={(e) => e.stopPropagation()}
+                className="w-full max-w-md"
+              >
+                <GlassCard className="relative overflow-hidden">
+                  <div className="absolute top-0 left-0 w-full h-1" style={{ background: '#EF4444' }} />
+                  <div className="p-6">
+                    <div className="flex items-center gap-3 mb-6">
+                      <div className="w-12 h-12 rounded-xl flex items-center justify-center" style={{ background: 'rgba(239, 68, 68, 0.15)' }}>
+                        <XCircle className="w-6 h-6" style={{ color: '#EF4444' }} />
+                      </div>
+                      <div>
+                        <h3 className="text-lg font-bold text-white">Reject Expense</h3>
+                        <p className="text-sm" style={{ color: colors.textSecondary }}>
+                          Rejecting "{selectedExpense.title}"
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="mb-6">
+                      <label className="block text-sm font-medium text-white mb-2">
+                        Reason for Rejection <span className="text-red-400">*</span>
+                      </label>
+                      <textarea
+                        value={rejectionReason}
+                        onChange={(e) => setRejectionReason(e.target.value)}
+                        placeholder="Please provide a clear reason for rejection..."
+                        rows={4}
+                        className="w-full px-4 py-3 rounded-xl bg-white/5 border text-white placeholder:text-gray-500 focus:outline-none focus:ring-2 focus:ring-red-500 resize-none"
+                        style={{ borderColor: 'rgba(255, 255, 255, 0.1)' }}
+                      />
+                    </div>
+
+                    <div className="flex gap-3">
+                      <motion.button
+                        whileHover={{ scale: 1.02 }}
+                        whileTap={{ scale: 0.98 }}
+                        onClick={() => setShowRejectModal(false)}
+                        className="flex-1 px-4 py-3 rounded-xl font-medium"
+                        style={{ background: 'rgba(255, 255, 255, 0.05)', color: colors.textSecondary }}
+                      >
+                        Cancel
+                      </motion.button>
+                      <motion.button
+                        whileHover={{ scale: 1.02 }}
+                        whileTap={{ scale: 0.98 }}
+                        onClick={() => handleReject(selectedExpense.id)}
+                        disabled={approvalLoading || !rejectionReason.trim()}
+                        className="flex-1 px-4 py-3 rounded-xl font-semibold text-white disabled:opacity-50"
+                        style={{ background: 'linear-gradient(135deg, #EF4444, #DC2626)' }}
+                      >
+                        {approvalLoading ? 'Rejecting...' : 'Confirm Rejection'}
+                      </motion.button>
+                    </div>
+                  </div>
+                </GlassCard>
+              </motion.div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        {/* Edit Modal */}
+        <AnimatePresence>
+          {showEditModal && editingExpense && (
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 overflow-y-auto"
+              onClick={() => setShowEditModal(false)}
+            >
+              <motion.div
+                initial={{ scale: 0.9, opacity: 0, y: 20 }}
+                animate={{ scale: 1, opacity: 1, y: 0 }}
+                exit={{ scale: 0.9, opacity: 0, y: 20 }}
+                onClick={(e) => e.stopPropagation()}
+                className="w-full max-w-lg my-8"
+              >
+                <GlassCard className="relative overflow-hidden">
+                  <div className="absolute top-0 left-0 w-full h-1" style={{ background: `linear-gradient(90deg, ${colors.primary}, ${colors.accentMint})` }} />
+                  <div className="p-6">
+                    <div className="flex items-center justify-between mb-6">
+                      <div className="flex items-center gap-3">
+                        <div className="w-12 h-12 rounded-xl flex items-center justify-center" style={{ background: `${colors.primary}20` }}>
+                          <Edit3 className="w-6 h-6" style={{ color: colors.primary }} />
+                        </div>
+                        <div>
+                          <h3 className="text-lg font-bold text-white">Edit Expense</h3>
+                          <p className="text-sm" style={{ color: colors.textSecondary }}>
+                            Modify expense details
+                          </p>
+                        </div>
+                      </div>
+                      <button onClick={() => setShowEditModal(false)} className="p-2 rounded-lg hover:bg-white/10">
+                        <X className="w-5 h-5" style={{ color: colors.textSecondary }} />
+                      </button>
+                    </div>
+
+                    <div className="space-y-4">
+                      <div>
+                        <label className="block text-sm font-medium text-white mb-2">Title</label>
+                        <input
+                          type="text"
+                          value={editingExpense.title || ''}
+                          onChange={(e) => setEditingExpense({ ...editingExpense, title: e.target.value })}
+                          className="w-full px-4 py-3 rounded-xl bg-white/5 border text-white focus:outline-none focus:ring-2"
+                          style={{ borderColor: 'rgba(255, 255, 255, 0.1)' }}
+                        />
+                      </div>
+
+                      <div>
+                        <label className="block text-sm font-medium text-white mb-2">Description</label>
+                        <textarea
+                          value={editingExpense.description || ''}
+                          onChange={(e) => setEditingExpense({ ...editingExpense, description: e.target.value })}
+                          rows={3}
+                          className="w-full px-4 py-3 rounded-xl bg-white/5 border text-white focus:outline-none focus:ring-2 resize-none"
+                          style={{ borderColor: 'rgba(255, 255, 255, 0.1)' }}
+                        />
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-4">
+                        <div>
+                          <label className="block text-sm font-medium text-white mb-2">Amount (₦)</label>
+                          <input
+                            type="number"
+                            value={editingExpense.amount || ''}
+                            onChange={(e) => setEditingExpense({ ...editingExpense, amount: parseFloat(e.target.value) || 0 })}
+                            className="w-full px-4 py-3 rounded-xl bg-white/5 border text-white focus:outline-none focus:ring-2"
+                            style={{ borderColor: 'rgba(255, 255, 255, 0.1)' }}
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-sm font-medium text-white mb-2">Date</label>
+                          <input
+                            type="date"
+                            value={editingExpense.expense_date?.split('T')[0] || ''}
+                            onChange={(e) => setEditingExpense({ ...editingExpense, expense_date: e.target.value })}
+                            className="w-full px-4 py-3 rounded-xl bg-white/5 border text-white focus:outline-none focus:ring-2"
+                            style={{ borderColor: 'rgba(255, 255, 255, 0.1)' }}
+                          />
+                        </div>
+                      </div>
+
+                      <div>
+                        <label className="block text-sm font-medium text-white mb-2">Category</label>
+                        <select
+                          value={editingExpense.category_id || ''}
+                          onChange={(e) => setEditingExpense({ ...editingExpense, category_id: e.target.value })}
+                          className="w-full px-4 py-3 rounded-xl bg-white/5 border text-white focus:outline-none focus:ring-2"
+                          style={{ borderColor: 'rgba(255, 255, 255, 0.1)' }}
+                        >
+                          <option value="">Select category</option>
+                          {categories.map((cat) => (
+                            <option key={cat.id} value={cat.id} style={{ background: '#1a1a1a' }}>
+                              {cat.name}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+
+                      <div>
+                        <label className="block text-sm font-medium text-white mb-2">Funded By</label>
+                        <select
+                          value={editingExpense.funded_by || ''}
+                          onChange={(e) => setEditingExpense({ ...editingExpense, funded_by: e.target.value })}
+                          className="w-full px-4 py-3 rounded-xl bg-white/5 border text-white focus:outline-none focus:ring-2"
+                          style={{ borderColor: 'rgba(255, 255, 255, 0.1)' }}
+                        >
+                          <option value="">Select funding source</option>
+                          {paymentTypes.map((pt) => (
+                            <option key={pt.id} value={pt.id} style={{ background: '#1a1a1a' }}>
+                              {pt.name}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                    </div>
+
+                    <div className="flex gap-3 mt-6">
+                      <motion.button
+                        whileHover={{ scale: 1.02 }}
+                        whileTap={{ scale: 0.98 }}
+                        onClick={() => setShowEditModal(false)}
+                        className="flex-1 px-4 py-3 rounded-xl font-medium"
+                        style={{ background: 'rgba(255, 255, 255, 0.05)', color: colors.textSecondary }}
+                      >
+                        Cancel
+                      </motion.button>
+                      <motion.button
+                        whileHover={{ scale: 1.02 }}
+                        whileTap={{ scale: 0.98 }}
+                        onClick={handleEdit}
+                        disabled={approvalLoading}
+                        className="flex-1 px-4 py-3 rounded-xl font-semibold text-white disabled:opacity-50"
+                        style={{ background: `linear-gradient(135deg, ${colors.primary}, ${colors.accentMint})` }}
+                      >
+                        {approvalLoading ? 'Saving...' : 'Save Changes'}
+                      </motion.button>
+                    </div>
+                  </div>
+                </GlassCard>
+              </motion.div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        {/* Delete Confirmation Modal */}
+        <AnimatePresence>
+          {showDeleteConfirm && selectedExpense && (
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4"
+              onClick={() => setShowDeleteConfirm(false)}
+            >
+              <motion.div
+                initial={{ scale: 0.9, opacity: 0 }}
+                animate={{ scale: 1, opacity: 1 }}
+                exit={{ scale: 0.9, opacity: 0 }}
+                onClick={(e) => e.stopPropagation()}
+                className="w-full max-w-md"
+              >
+                <GlassCard className="relative overflow-hidden">
+                  <div className="absolute top-0 left-0 w-full h-1" style={{ background: '#EF4444' }} />
+                  <div className="p-6">
+                    <div className="text-center mb-6">
+                      <div className="w-16 h-16 mx-auto mb-4 rounded-2xl flex items-center justify-center" style={{ background: 'rgba(239, 68, 68, 0.15)' }}>
+                        <Trash2 className="w-8 h-8" style={{ color: '#EF4444' }} />
+                      </div>
+                      <h3 className="text-xl font-bold text-white mb-2">Delete Expense</h3>
+                      <p className="text-sm" style={{ color: colors.textSecondary }}>
+                        Are you sure you want to delete "{selectedExpense.title}"? This action cannot be undone.
+                      </p>
+                    </div>
+
+                    <div className="p-4 rounded-xl mb-6" style={{ background: 'rgba(239, 68, 68, 0.08)', border: '1px solid rgba(239, 68, 68, 0.2)' }}>
+                      <div className="flex items-center gap-2 text-sm">
+                        <AlertTriangle className="w-4 h-4" style={{ color: '#EF4444' }} />
+                        <span style={{ color: '#EF4444' }}>This will permanently remove the expense record.</span>
+                      </div>
+                    </div>
+
+                    <div className="flex gap-3">
+                      <motion.button
+                        whileHover={{ scale: 1.02 }}
+                        whileTap={{ scale: 0.98 }}
+                        onClick={() => setShowDeleteConfirm(false)}
+                        className="flex-1 px-4 py-3 rounded-xl font-medium"
+                        style={{ background: 'rgba(255, 255, 255, 0.05)', color: colors.textSecondary }}
+                      >
+                        Cancel
+                      </motion.button>
+                      <motion.button
+                        whileHover={{ scale: 1.02 }}
+                        whileTap={{ scale: 0.98 }}
+                        onClick={() => handleDelete(selectedExpense.id)}
+                        disabled={approvalLoading}
+                        className="flex-1 px-4 py-3 rounded-xl font-semibold text-white disabled:opacity-50"
+                        style={{ background: 'linear-gradient(135deg, #EF4444, #DC2626)' }}
+                      >
+                        {approvalLoading ? 'Deleting...' : 'Delete Expense'}
+                      </motion.button>
+                    </div>
+                  </div>
+                </GlassCard>
+              </motion.div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        {/* Confirm Dialog */}
         <ConfirmDialog
           isOpen={confirmDialog.isOpen}
           onClose={() => setConfirmDialog({ ...confirmDialog, isOpen: false })}
@@ -440,34 +948,40 @@ Balance After Approval: N${balanceAfterApproval.toLocaleString()}`
           cancelText="Cancel"
         />
 
-        {imageModal && (
-          <div
-            className="fixed inset-0 z-100 flex items-center justify-center bg-black/90 p-4"
-            onClick={() => setImageModal(null)}
-          >
-            <button
+        {/* Image Modal */}
+        <AnimatePresence>
+          {imageModal && (
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="fixed inset-0 z-100 flex items-center justify-center bg-black/95 p-4"
               onClick={() => setImageModal(null)}
-              className="absolute top-4 right-4 text-white bg-black/50 hover:bg-black/70 rounded-full p-2 transition-colors"
             >
-              <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-              </svg>
-            </button>
-            <img
-              src={imageModal}
-              alt="Receipt"
-              className="max-w-full max-h-full object-contain rounded-lg"
-              onClick={(e) => e.stopPropagation()}
-              onError={(e) => {
-                console.error('Failed to load image:', imageModal)
-                // simple SVG data-uri placeholder
-                e.currentTarget.src =
-                  'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="400" height="300"><rect width="100%" height="100%" fill="%23222"/><text x="50%" y="50%" fill="white" font-size="16" text-anchor="middle" dominant-baseline="middle">Image not available</text></svg>'
-              }}
-            />
-          </div>
-        )}
-      </div>
-    </GlassCard>
+              <motion.button
+                whileHover={{ scale: 1.1 }}
+                whileTap={{ scale: 0.9 }}
+                onClick={() => setImageModal(null)}
+                className="absolute top-4 right-4 w-10 h-10 rounded-full flex items-center justify-center"
+                style={{ background: 'rgba(255, 255, 255, 0.1)' }}
+              >
+                <X className="w-6 h-6 text-white" />
+              </motion.button>
+              <motion.img
+                initial={{ scale: 0.9 }}
+                animate={{ scale: 1 }}
+                src={imageModal}
+                alt="Receipt"
+                className="max-w-full max-h-[85vh] object-contain rounded-lg shadow-2xl"
+                onClick={(e) => e.stopPropagation()}
+                onError={(e) => {
+                  e.currentTarget.src = 'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="400" height="300"><rect width="100%" height="100%" fill="%23222"/><text x="50%" y="50%" fill="white" font-size="16" text-anchor="middle" dominant-baseline="middle">Image not available</text></svg>'
+                }}
+              />
+            </motion.div>
+          )}
+        </AnimatePresence>
+      </GlassCard>
+    </motion.div>
   )
 }

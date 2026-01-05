@@ -115,6 +115,9 @@ export default function ManageStudentsPage() {
       filtered = filtered.filter(s => !s.is_admin && !s.is_finsec && !s.is_class_rep);
     }
     
+    // Sort alphabetically by name (A-Z)
+    filtered.sort((a, b) => (a.full_name || '').localeCompare(b.full_name || ''));
+    
     return filtered;
   };
   
@@ -1097,13 +1100,14 @@ export default function ManageStudentsPage() {
                     setSearchQuery('');
                     setCurrentPage(1);
                   }}
-                  className="w-full sm:w-auto px-4 py-2 rounded-lg text-sm font-medium transition-all"
+                  className="w-full sm:w-auto px-4 py-2 rounded-lg text-sm font-medium transition-all flex items-center gap-2"
                   style={{
                     background: `${colors.statusUnpaid}20`,
                     border: `1px solid ${colors.statusUnpaid}40`,
                     color: colors.statusUnpaid,
                   }}
                 >
+                  <X className="w-4 h-4" />
                   Clear All Filters
                 </button>
               )}

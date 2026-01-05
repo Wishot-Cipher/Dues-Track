@@ -380,7 +380,7 @@ export default function ScanQRCodePage() {
         return false;
       }
 
-      await stopScanner();
+      // Scanner is already stopped by the caller, no need to stop again
 
       const { data: payerData, error: payerError } = await supabase
         .from("students")
@@ -444,7 +444,7 @@ export default function ScanQRCodePage() {
       toast.error("Invalid QR code data - could not parse");
       return false;
     }
-  }, [toast, stopScanner]);
+  }, [toast]);
 
   // IMPROVED: Extracted retry function to avoid circular dependency
   const retryScanner = useCallback(async (cameraId?: string) => {
@@ -1770,64 +1770,64 @@ const switchCamera = async (newCameraId: string) => {
                   </div>
 
                   {/* Payment Details */}
-                  <div className="space-y-4 mb-6">
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div className="space-y-3 sm:space-y-4 mb-6">
+                    <div className="grid grid-cols-2 gap-2 sm:gap-4">
                       <motion.div
                         initial={{ opacity: 0, x: -20 }}
                         animate={{ opacity: 1, x: 0 }}
                         transition={{ delay: 0.1 }}
-                        className="p-4 rounded-xl"
+                        className="p-3 sm:p-4 rounded-xl"
                         style={{ background: "rgba(255,255,255,0.05)", border: '1px solid rgba(255,255,255,0.08)' }}
                       >
-                        <div className="flex items-center gap-2 mb-2">
-                          <User className="w-4 h-4" style={{ color: colors.primary }} />
-                          <p className="text-xs font-medium" style={{ color: colors.textSecondary }}>
-                            {qrData.totalStudents > 1 ? "Paid By" : "Student Name"}
+                        <div className="flex items-center gap-1.5 sm:gap-2 mb-1 sm:mb-2">
+                          <User className="w-3.5 h-3.5 sm:w-4 sm:h-4" style={{ color: colors.primary }} />
+                          <p className="text-[10px] sm:text-xs font-medium" style={{ color: colors.textSecondary }}>
+                            {qrData.totalStudents > 1 ? "Paid By" : "Student"}
                           </p>
                         </div>
-                        <p className="text-lg font-bold text-white">{qrData.paidByName}</p>
+                        <p className="text-sm sm:text-lg font-bold text-white truncate">{qrData.paidByName}</p>
                       </motion.div>
 
                       <motion.div
                         initial={{ opacity: 0, x: 20 }}
                         animate={{ opacity: 1, x: 0 }}
                         transition={{ delay: 0.15 }}
-                        className="p-4 rounded-xl"
+                        className="p-3 sm:p-4 rounded-xl"
                         style={{ background: "rgba(255,255,255,0.05)", border: '1px solid rgba(255,255,255,0.08)' }}
                       >
-                        <div className="flex items-center gap-2 mb-2">
-                          <User className="w-4 h-4" style={{ color: colors.primary }} />
-                          <p className="text-xs font-medium" style={{ color: colors.textSecondary }}>Reg Number</p>
+                        <div className="flex items-center gap-1.5 sm:gap-2 mb-1 sm:mb-2">
+                          <User className="w-3.5 h-3.5 sm:w-4 sm:h-4" style={{ color: colors.primary }} />
+                          <p className="text-[10px] sm:text-xs font-medium" style={{ color: colors.textSecondary }}>Reg No.</p>
                         </div>
-                        <p className="text-lg font-bold text-white">{qrData.paidByRegNumber}</p>
+                        <p className="text-sm sm:text-lg font-bold text-white truncate">{qrData.paidByRegNumber}</p>
                       </motion.div>
 
                       <motion.div
                         initial={{ opacity: 0, x: -20 }}
                         animate={{ opacity: 1, x: 0 }}
                         transition={{ delay: 0.2 }}
-                        className="p-4 rounded-xl"
+                        className="p-3 sm:p-4 rounded-xl"
                         style={{ background: "rgba(255,255,255,0.05)", border: '1px solid rgba(255,255,255,0.08)' }}
                       >
-                        <div className="flex items-center gap-2 mb-2">
-                          <FileText className="w-4 h-4" style={{ color: colors.accentMint }} />
-                          <p className="text-xs font-medium" style={{ color: colors.textSecondary }}>Payment Type</p>
+                        <div className="flex items-center gap-1.5 sm:gap-2 mb-1 sm:mb-2">
+                          <FileText className="w-3.5 h-3.5 sm:w-4 sm:h-4" style={{ color: colors.accentMint }} />
+                          <p className="text-[10px] sm:text-xs font-medium" style={{ color: colors.textSecondary }}>Type</p>
                         </div>
-                        <p className="text-lg font-bold text-white">{paymentType.title}</p>
+                        <p className="text-sm sm:text-lg font-bold text-white truncate">{paymentType.title}</p>
                       </motion.div>
 
                       <motion.div
                         initial={{ opacity: 0, x: 20 }}
                         animate={{ opacity: 1, x: 0 }}
                         transition={{ delay: 0.25 }}
-                        className="p-4 rounded-xl"
+                        className="p-3 sm:p-4 rounded-xl"
                         style={{ background: `${colors.accentMint}10`, border: `1px solid ${colors.accentMint}20` }}
                       >
-                        <div className="flex items-center gap-2 mb-2">
-                          <DollarSign className="w-4 h-4" style={{ color: colors.accentMint }} />
-                          <p className="text-xs font-medium" style={{ color: colors.textSecondary }}>Total Amount</p>
+                        <div className="flex items-center gap-1.5 sm:gap-2 mb-1 sm:mb-2">
+                          <DollarSign className="w-3.5 h-3.5 sm:w-4 sm:h-4" style={{ color: colors.accentMint }} />
+                          <p className="text-[10px] sm:text-xs font-medium" style={{ color: colors.textSecondary }}>Amount</p>
                         </div>
-                        <p className="text-2xl font-bold" style={{ color: colors.accentMint }}>
+                        <p className="text-lg sm:text-2xl font-bold" style={{ color: colors.accentMint }}>
                           {formatCurrency(qrData.totalAmount)}
                         </p>
                       </motion.div>
@@ -1838,28 +1838,28 @@ const switchCamera = async (newCameraId: string) => {
                             initial={{ opacity: 0, y: 20 }}
                             animate={{ opacity: 1, y: 0 }}
                             transition={{ delay: 0.3 }}
-                            className="p-4 rounded-xl"
+                            className="p-3 sm:p-4 rounded-xl"
                             style={{ background: "rgba(255,255,255,0.05)", border: '1px solid rgba(255,255,255,0.08)' }}
                           >
-                            <div className="flex items-center gap-2 mb-2">
-                              <User className="w-4 h-4" style={{ color: colors.primary }} />
-                              <p className="text-xs font-medium" style={{ color: colors.textSecondary }}>Total Students</p>
+                            <div className="flex items-center gap-1.5 sm:gap-2 mb-1 sm:mb-2">
+                              <User className="w-3.5 h-3.5 sm:w-4 sm:h-4" style={{ color: colors.primary }} />
+                              <p className="text-[10px] sm:text-xs font-medium" style={{ color: colors.textSecondary }}>Students</p>
                             </div>
-                            <p className="text-lg font-bold text-white">{qrData.totalStudents}</p>
+                            <p className="text-sm sm:text-lg font-bold text-white">{qrData.totalStudents}</p>
                           </motion.div>
 
                           <motion.div
                             initial={{ opacity: 0, y: 20 }}
                             animate={{ opacity: 1, y: 0 }}
                             transition={{ delay: 0.35 }}
-                            className="p-4 rounded-xl"
+                            className="p-3 sm:p-4 rounded-xl"
                             style={{ background: "rgba(255,255,255,0.05)", border: '1px solid rgba(255,255,255,0.08)' }}
                           >
-                            <div className="flex items-center gap-2 mb-2">
-                              <DollarSign className="w-4 h-4" style={{ color: colors.accentMint }} />
-                              <p className="text-xs font-medium" style={{ color: colors.textSecondary }}>Per Student</p>
+                            <div className="flex items-center gap-1.5 sm:gap-2 mb-1 sm:mb-2">
+                              <DollarSign className="w-3.5 h-3.5 sm:w-4 sm:h-4" style={{ color: colors.accentMint }} />
+                              <p className="text-[10px] sm:text-xs font-medium" style={{ color: colors.textSecondary }}>Per Student</p>
                             </div>
-                            <p className="text-lg font-bold" style={{ color: colors.accentMint }}>
+                            <p className="text-sm sm:text-lg font-bold" style={{ color: colors.accentMint }}>
                               {formatCurrency(qrData.amountPerStudent)}
                             </p>
                           </motion.div>
@@ -1873,19 +1873,18 @@ const switchCamera = async (newCameraId: string) => {
                         initial={{ opacity: 0, y: 20 }}
                         animate={{ opacity: 1, y: 0 }}
                         transition={{ delay: 0.4 }}
-                        className="p-4 rounded-xl"
+                        className="p-3 sm:p-4 rounded-xl"
                         style={{ background: "rgba(255,255,255,0.05)", border: '1px solid rgba(255,255,255,0.08)' }}
                       >
-                        <p className="text-xs font-semibold mb-3 uppercase tracking-wide" style={{ color: colors.textSecondary }}>
+                        <p className="text-[10px] sm:text-xs font-semibold mb-2 sm:mb-3 uppercase tracking-wide" style={{ color: colors.textSecondary }}>
                           Students ({qrData.students.length}):
                         </p>
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5 sm:gap-2">
                           {qrData.students.map((s, i) => (
-                            <div key={i} className="flex items-center gap-2 text-sm p-2 rounded-lg"
+                            <div key={i} className="flex items-center gap-1.5 sm:gap-2 text-xs sm:text-sm p-1.5 sm:p-2 rounded-lg"
                                  style={{ background: 'rgba(255,255,255,0.03)' }}>
-                              <CheckCircle2 className="w-4 h-4" style={{ color: colors.statusPaid }} />
-                              <span className="text-white font-medium">{s.name}</span>
-                              <span style={{ color: colors.textSecondary }}>({s.regNumber})</span>
+                              <CheckCircle2 className="w-3.5 h-3.5 sm:w-4 sm:h-4 shrink-0" style={{ color: colors.statusPaid }} />
+                              <span className="text-white font-medium truncate">{s.name}</span>
                             </div>
                           ))}
                         </div>

@@ -328,3 +328,40 @@ export async function getExpenseAuditLog(expenseId: string) {
   if (error) throw error
   return data || []
 }
+
+// Delete expense (admin only)
+export async function deleteExpense(expenseId: string) {
+  const { error } = await supabase
+    .from('expenses')
+    .delete()
+    .eq('id', expenseId)
+
+  if (error) throw error
+  return { success: true }
+}
+
+// Update expense fields (for editing)
+export async function updateExpenseFields(
+  expenseId: string,
+  updates: Partial<{
+    title: string
+    description: string
+    amount: number
+    category_id: string
+    funded_by: string
+    expense_date: string
+  }>
+) {
+  const { data, error } = await supabase
+    .from('expenses')
+    .update({
+      ...updates,
+      updated_at: new Date().toISOString()
+    })
+    .eq('id', expenseId)
+    .select()
+    .single()
+
+  if (error) throw error
+  return data
+}

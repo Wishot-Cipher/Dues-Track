@@ -204,7 +204,7 @@ export default function ProfessionalDropdown({
   const filteredOptions = getFilteredOptions();
 
   return (
-    <div className={`relative ${className}`} ref={dropdownRef}>
+    <div className={`relative ${className}`} ref={dropdownRef} style={{ zIndex: isOpen ? 9999 : 'auto' }}>
       {/* Label */}
       {label && (
         <label className="block text-sm font-medium text-white mb-2">
@@ -270,8 +270,9 @@ export default function ProfessionalDropdown({
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: -10, scale: 0.95 }}
             transition={{ duration: 0.15 }}
-            className="absolute z-50 w-full mt-2 rounded-xl overflow-hidden shadow-2xl"
+            className="absolute w-full mt-2 rounded-xl overflow-hidden shadow-2xl"
             style={{
+              zIndex: 9999,
               background: 'linear-gradient(180deg, #1A1A2E 0%, #16162A 100%)',
               border: '1px solid rgba(255, 107, 53, 0.2)',
               boxShadow: '0 20px 40px rgba(0, 0, 0, 0.4), 0 0 0 1px rgba(255, 107, 53, 0.1)',
