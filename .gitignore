@@ -22,9 +22,12 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
-blog/
 
-# Environment variables - NEVER COMMIT THESE
+# ==========================================
+# SECURITY - NEVER COMMIT THESE
+# ==========================================
+
+# Environment variables
 .env
 .env.local
 .env.development
@@ -32,12 +35,45 @@ blog/
 .env.test
 .env*.local
 
-# Supabase secrets
+# Supabase secrets and configuration
 .supabase/
 supabase/.env
 supabase/config.toml
 
+# ==========================================
+# SENSITIVE DOCUMENTATION
+# ==========================================
+TECHNICAL_DOCUMENTATION.md
+SECURITY_CHECKLIST.md
+SECURITY_AUDIT_REPORT.md
+RLS_SECURITY_GUIDE.md
+PRIVATE_NOTES.md
+TODO_PRIVATE.md
+blog/
+
+# ==========================================
+# DATABASE & SQL FILES (CRITICAL!)
+# ==========================================
+# These expose your database structure and security policies
+database/
+supabase/*.sql
+supabase/migrations/
+supabase/archive_old_sql/
+supabase/hashed_passwords/
+supabase-migrations/
+archive_sql_root/
+archive_docs/
+*.sql
+
+# ==========================================
+# SCRIPTS WITH SENSITIVE LOGIC
+# ==========================================
+scripts/
+api/
+
+# ==========================================
 # Database dumps and backups
+# ==========================================
 *.sql.backup
 *.dump
 *.db
@@ -45,6 +81,8 @@ supabase/config.toml
 *.sqlite3
 database/backups/
 db_backup/
+*.hash.txt
+*.hash
 
 # API keys and credentials
 credentials.json
@@ -81,8 +119,3 @@ temp/
 *.tmp
 *.bak
 *.cache
-
-# Sensitive documentation (if any)
-PRIVATE_NOTES.md
-TODO_PRIVATE.md
-TECHNICAL_DOCUMENTATION.md
