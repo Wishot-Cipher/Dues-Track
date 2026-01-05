@@ -104,10 +104,10 @@ export default defineConfig({
         passes: 2, // Multiple compression passes
       },
       mangle: {
-        // Mangle variable and function names
-        properties: {
-          regex: /^_/, // Only mangle properties starting with underscore
-        },
+        // Mangle variable and function names (but NOT properties - breaks React/framer-motion)
+        toplevel: true,
+        // IMPORTANT: Do NOT mangle properties - it breaks React, framer-motion, and other libraries
+        // that rely on specific property names like ._owner, .$$typeof, etc.
       },
       format: {
         comments: false, // Remove all comments
