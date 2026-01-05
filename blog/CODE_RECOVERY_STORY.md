@@ -25,9 +25,9 @@ I had just finished implementing some seriously cool features for my Class Dues 
 
 I was proud. These weren't just quick hacks — they were production-ready, beautifully crafted components.
 
-Then I said the fateful words to my AI coding assistant:
+Then I decided it was time to commit:
 
-> "Now let's commit all our changes and push to GitHub"
+> "Alright, let me commit all these changes and push to GitHub"
 
 Little did I know, those words would trigger a cascade of events that nearly cost me everything.
 
@@ -35,22 +35,22 @@ Little did I know, those words would trigger a cascade of events that nearly cos
 
 ## 💀 The Disaster: When Git Becomes Your Enemy
 
-Here's what happened when we tried to commit:
+Here's what happened when I tried to commit:
 
 ```bash
 $ git status
 interactive rebase in progress; onto d520815
 ```
 
-Wait, what? An interactive rebase was somehow in progress. We hadn't started one. Maybe it was from a previous session that got interrupted.
+Wait, what? An interactive rebase was somehow in progress. I hadn't started one. Maybe it was from a previous session that got interrupted.
 
-No problem, we thought. Let's just abort it:
+No problem, I thought. Let me just abort it:
 
 ```bash
 $ git rebase --abort
 ```
 
-Then we tried to sync with remote:
+Then I tried to sync with remote:
 
 ```bash
 $ git pull --rebase origin main
@@ -114,9 +114,9 @@ I was about to accept my fate and rewrite everything from memory...
 
 ## 💡 The Discovery: VS Code's Secret Weapon
 
-Then my AI assistant asked a question that changed everything:
+Then it hit me. I vaguely remembered reading something about VS Code having a local history feature. But where does it actually store those files?
 
-> "Let me check if VS Code has local history..."
+I started digging through VS Code's AppData folder:
 
 ```powershell
 Get-ChildItem -Path "$env:APPDATA\Code\User\History" -Recurse
@@ -125,7 +125,7 @@ Get-ChildItem -Path "$env:APPDATA\Code\User\History" -Recurse
 And there it was. **Hundreds of files.** VS Code had been silently saving versions of every file I edited — automatically, in the background, without me ever knowing.
 
 ```
-C:\Users\USER\AppData\Roaming\Code\User\History\
+C:\Users\YourUsername\AppData\Roaming\Code\User\History\
 ├── -33ad014b\          # ProfessionalDropdown.tsx
 │   ├── entries.json
 │   ├── H746.tsx        # 12:26 PM
@@ -137,6 +137,7 @@ C:\Users\USER\AppData\Roaming\Code\User\History\
 │   └── ...
 ├── 6319c950\           # security.ts
 └── ...
+```
 ```
 
 Each folder corresponded to a file I had edited. Each contained timestamped backups. The `entries.json` file mapped the folder to the original file path.
@@ -178,7 +179,7 @@ $latestFile = Get-ChildItem -Path $historyPath -File |
 Copy-Item -Path $latestFile.FullName -Destination "src/components/ui/ProfessionalDropdown.tsx" -Force
 ```
 
-We automated this for all affected files:
+I wrote a quick script to automate this for all affected files:
 
 ```powershell
 $mappings = @{
@@ -219,7 +220,7 @@ foreach ($folder in $mappings.Keys) {
 
 ## 📊 The Final Commit
 
-After restoration, here's what our git diff looked like:
+After restoration, here's what my git diff looked like:
 
 ```
 27 files changed, 5976 insertions(+), 552 deletions(-)
@@ -230,7 +231,7 @@ After restoration, here's what our git diff looked like:
  create mode 100644 src/utils/pdfExport.ts
 ```
 
-**5,976 lines of code saved.** Not rewritten from memory. Not approximated. The exact code we wrote.
+**5,976 lines of code saved.** Not rewritten from memory. Not approximated. The exact code I wrote.
 
 ---
 
@@ -375,9 +376,11 @@ The next time you're deep in a coding session, remember: **commit early, commit 
 
 ---
 
-## 🙏 Acknowledgments
+## 🙏 What I Learned
 
-Huge thanks to my AI coding assistant (GitHub Copilot with Claude) for discovering the VS Code Local History solution when I was ready to give up. Sometimes the best debugging partner is one who knows features you don't.
+This experience taught me that knowing your tools inside-out is just as important as knowing how to code. VS Code's Local History isn't a new feature — it's been there all along. I just never took the time to explore it until I desperately needed it.
+
+Sometimes the best solutions aren't complex — they're hidden features in tools you already use every day.
 
 ---
 
@@ -390,6 +393,6 @@ Huge thanks to my AI coding assistant (GitHub Copilot with Claude) for discoveri
 
 ---
 
-*Written by Dev_Wishot ([@wishotstudio](https://twitter.com/wishotstudio))*
+*Written by Dev_Wishot*
 
-*Originally experienced on January 5th, 2026, while building [Class Dues Tracker](https://github.com/Wishot-Cipher/Dues-Track) — a React + TypeScript + Supabase application for managing class payment dues.*
+*Originally experienced on January 5th, 2026, while building a React + TypeScript + Supabase application for managing class payment dues.*
