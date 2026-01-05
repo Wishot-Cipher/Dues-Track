@@ -9,11 +9,11 @@
 ## Phase Overview
 
 ```
-Phase 1: Database Foundation ◀── YOU ARE HERE
+Phase 1: Database Foundation ✅ COMPLETE
     ↓
-Phase 2: Backend Services
+Phase 2: Backend Services ✅ COMPLETE (core services)
     ↓
-Phase 3: Frontend Context
+Phase 3: Frontend Context ◀── YOU ARE HERE
     ↓
 Phase 4: UI Updates
     ↓
@@ -37,6 +37,7 @@ Phase 6: Production Migration
 | `migrations/004_rls_policies.sql` | Multi-tenant RLS policies | ✅ |
 | `types/index.ts` | TypeScript type definitions | ✅ |
 | `contexts/OrganizationContext.tsx` | React context for org data | ✅ |
+| `contexts/useOrganization.ts` | Custom hooks for org context | ✅ |
 
 ### Migration Order
 
@@ -50,29 +51,40 @@ Phase 6: Production Migration
 
 ---
 
-## Phase 2: Backend Services (TODO)
+## Phase 2: Backend Services ✅
 
-### Tasks
+### Completed Files
 
-- [ ] Create `organizationService.ts` - CRUD for organizations
-- [ ] Create `departmentService.ts` - CRUD for departments  
+| File | Description | Status |
+|------|-------------|--------|
+| `services/organizationService.ts` | CRUD for organizations | ✅ |
+| `services/departmentService.ts` | CRUD for departments | ✅ |
+| `services/auditService.ts` | Audit logging service | ✅ |
+| `services/index.ts` | Service exports | ✅ |
+
+### Remaining Tasks
+
 - [ ] Update `authService.ts` - Add org context to login
-- [ ] Update `studentService.ts` - Filter by org/dept
-- [ ] Update `paymentService.ts` - Filter by org/dept
-- [ ] Update `expenseService.ts` - Filter by org/dept
-- [ ] Create `auditService.ts` - Audit logging
+- [ ] Update `studentService.ts` - Filter by org/dept (create wrapper)
+- [ ] Update `paymentService.ts` - Filter by org/dept (create wrapper)
+- [ ] Update `expenseService.ts` - Filter by org/dept (create wrapper)
 - [ ] Update Supabase storage policies for multi-tenant buckets
 
 ---
 
 ## Phase 3: Frontend Context (TODO)
 
-### Tasks
+### Completed
+
+| File | Description | Status |
+|------|-------------|--------|
+| `hooks/useTenantData.ts` | Custom hooks for tenant queries | ✅ |
+| `index.ts` | Central exports | ✅ |
+
+### Remaining Tasks
 
 - [ ] Integrate `OrganizationProvider` in App.tsx
 - [ ] Update `AuthContext` to include org info
-- [ ] Create `useDepartment` hook
-- [ ] Create `useMultiTenantQuery` hook (auto-adds org filter)
 - [ ] Update route structure for org-aware URLs
 
 ### Route Structure
@@ -166,6 +178,7 @@ Multi-tenant:
 
 ```
 multi-tenant/
+├── index.ts                        # Central exports
 ├── README.md                       # This file
 ├── SCHEMA_DESIGN.md               # Database design documentation
 ├── migrations/
@@ -176,10 +189,16 @@ multi-tenant/
 ├── types/
 │   └── index.ts                   # TypeScript definitions
 ├── contexts/
-│   └── OrganizationContext.tsx    # React context
-├── services/                      # (TODO)
-│   ├── organizationService.ts
-│   └── departmentService.ts
+│   ├── OrganizationContext.tsx    # React context provider
+│   └── useOrganization.ts         # Context hooks
+├── hooks/
+│   └── useTenantData.ts           # Data fetching hooks
+├── services/
+│   ├── index.ts                   # Service exports
+│   ├── organizationService.ts     # Org CRUD
+│   ├── departmentService.ts       # Dept CRUD
+│   ├── auditService.ts            # Audit logging
+│   └── tenantQueries.ts           # Query helpers
 └── components/                    # (TODO)
     ├── OrgSwitcher.tsx
     └── DepartmentSwitcher.tsx

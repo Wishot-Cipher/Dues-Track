@@ -34,6 +34,7 @@ dist-ssr
 .env.production
 .env.test
 .env*.local
+.env.multitenant
 
 # Supabase secrets and configuration
 .supabase/
