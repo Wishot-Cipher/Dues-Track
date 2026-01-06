@@ -80,6 +80,7 @@ export default function CreatePaymentTypePage() {
     amount: "",
     allow_partial: false,
     is_mandatory: false,
+    is_public: false,
     deadline: "",
     bank_name: "First Bank of Nigeria",
     account_name: "",
@@ -146,7 +147,7 @@ export default function CreatePaymentTypePage() {
           icon: formData.icon,
           color: formData.color,
           is_active: true,
-          is_public: false,
+          is_public: formData.is_public,
         })
         .select()
         .single();
@@ -438,6 +439,23 @@ export default function CreatePaymentTypePage() {
                     />
                     <span className="text-white text-sm">
                       Make payment mandatory
+                    </span>
+                  </label>
+
+                  <label className="flex items-center gap-3 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={formData.is_public}
+                      onChange={(e) =>
+                        setFormData({
+                          ...formData,
+                          is_public: e.target.checked,
+                        })
+                      }
+                      className="w-5 h-5 rounded border-white/20 bg-white/5 text-orange-500 focus:ring-2 focus:ring-orange-500"
+                    />
+                    <span className="text-white text-sm">
+                      Allow public contributions (visible on /contribute page)
                     </span>
                   </label>
                 </div>

@@ -17,13 +17,9 @@ import {
   Trash2, 
   X, 
   AlertTriangle,
-  Calendar,
   RefreshCw,
   Sparkles,
   Plus,
-  Eye,
-  EyeOff,
-  Users,
   DollarSign,
   CheckCircle,
   ArrowLeft,
@@ -95,6 +91,8 @@ export default function ManageDuesPage() {
   // Modals
   const [showEditModal, setShowEditModal] = useState(false)
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
+  const [showDeactivateConfirm, setShowDeactivateConfirm] = useState(false)
+  const [showEditConfirm, setShowEditConfirm] = useState(false)
   const [editingPaymentType, setEditingPaymentType] = useState<Partial<PaymentType> | null>(null)
   const [selectedPaymentType, setSelectedPaymentType] = useState<PaymentType | null>(null)
   
@@ -558,133 +556,160 @@ export default function ManageDuesPage() {
                       key={pt.id}
                       initial={{ opacity: 0, y: 20 }}
                       animate={{ opacity: 1, y: 0 }}
-                      transition={{ delay: index * 0.05 }}
-                      className={`group rounded-2xl overflow-hidden transition-all hover:shadow-lg ${!pt.is_active ? 'opacity-60' : ''}`}
+                      transition={{ delay: Math.min(index * 0.02, 0.3) }}
+                      className="rounded-xl overflow-hidden"
                       style={{ 
-                        background: 'rgba(255, 255, 255, 0.03)',
-                        border: `1px solid ${pt.is_active ? 'rgba(255, 255, 255, 0.08)' : 'rgba(239, 68, 68, 0.2)'}`
+                        background: 'rgba(255, 255, 255, 0.05)',
+                        border: `1px solid ${pt.is_active ? 'rgba(255, 255, 255, 0.1)' : 'rgba(239, 68, 68, 0.3)'}`
                       }}
                     >
-                      <div className="p-4 sm:p-5">
-                        <div className="space-y-4 sm:space-y-0 sm:flex sm:items-start sm:justify-between sm:gap-4">
-                          {/* Left Section - Info */}
-                          <div className="flex items-start gap-3 sm:gap-4 flex-1 min-w-0">
-                            <div
-                              className="w-10 h-10 sm:w-12 sm:h-12 rounded-xl flex items-center justify-center shrink-0 text-lg sm:text-xl"
-                              style={{ 
-                                background: `${pt.color || colors.primary}20`,
-                                border: `1px solid ${pt.color || colors.primary}40`
-                              }}
-                            >
-                              {pt.icon || getCategoryIcon(pt.category)}
-                            </div>
-                            <div className="flex-1 min-w-0">
-                              <div className="flex items-center gap-2 flex-wrap">
-                                <h3 className="font-semibold text-white text-base sm:text-lg leading-tight">{pt.title}</h3>
-                                {!pt.is_active && (
-                                  <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold"
-                                        style={{ background: 'rgba(239, 68, 68, 0.15)', color: '#EF4444' }}>
-                                    Inactive
-                                  </span>
-                                )}
-                                {pt.is_mandatory && (
-                                  <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold"
-                                        style={{ background: `${colors.warning}15`, color: colors.warning }}>
-                                    Mandatory
-                                  </span>
-                                )}
-                              </div>
-                              <div className="flex flex-wrap items-center gap-1.5 sm:gap-2 text-xs sm:text-sm mt-1" style={{ color: colors.textSecondary }}>
-                                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md"
-                                      style={{ background: `${pt.color || colors.primary}15`, color: pt.color || colors.primary }}>
-                                  {getCategoryLabel(pt.category)}
-                                </span>
-                                <span className="inline-flex items-center gap-1">
-                                  <Calendar className="w-3 h-3 sm:w-3.5 sm:h-3.5" />
-                                  {formatDate(pt.deadline)}
-                                </span>
-                                <span className="inline-flex items-center gap-1">
-                                  <Users className="w-3 h-3 sm:w-3.5 sm:h-3.5" />
-                                  {pt.target_levels?.join(', ') || 'All levels'}
-                                </span>
-                              </div>
-                              {pt.description && (
-                                <p className="text-xs sm:text-sm mt-2 line-clamp-2" style={{ color: colors.textSecondary }}>
-                                  {pt.description}
-                                </p>
-                              )}
-                            </div>
-                          </div>
-
-                          {/* Right Section - Amount */}
-                          <div className="flex items-center justify-between sm:flex-col sm:items-end gap-2 sm:shrink-0 pl-13 sm:pl-0">
-                            <div className="text-left sm:text-right">
-                              <p className="text-xl sm:text-2xl font-bold" style={{ color: pt.color || colors.primary }}>
-                                ₦{(pt.amount || 0).toLocaleString()}
-                              </p>
-                              <p className="text-[10px] sm:text-xs" style={{ color: colors.textSecondary }}>
-                                {pt.allow_partial ? 'Partial allowed' : 'Full payment only'}
-                              </p>
-                            </div>
-                          </div>
+                      {/* Header with Icon and Title */}
+                      <div 
+                        className="p-4 flex items-center gap-4"
+                        style={{ 
+                          background: pt.is_active 
+                            ? `linear-gradient(135deg, ${pt.color || colors.primary}15, transparent)` 
+                            : 'linear-gradient(135deg, rgba(239, 68, 68, 0.1), transparent)'
+                        }}
+                      >
+                        <div
+                          className="w-14 h-14 rounded-full flex items-center justify-center text-2xl font-bold shrink-0"
+                          style={{ 
+                            background: `linear-gradient(135deg, ${pt.color || colors.primary}, ${pt.color || colors.primary}80)`
+                          }}
+                        >
+                          {pt.icon || getCategoryIcon(pt.category)}
                         </div>
+                        <div className="flex-1 min-w-0">
+                          <p className="font-semibold text-white text-base truncate">{pt.title}</p>
+                          <p className="text-2xl font-bold" style={{ color: pt.color || colors.primary }}>
+                            ₦{(pt.amount || 0).toLocaleString()}
+                          </p>
+                        </div>
+                        {/* Status Badge */}
+                        <div
+                          className="px-2 py-1 rounded-full text-[10px] font-medium shrink-0"
+                          style={{
+                            background: pt.is_active ? `${colors.statusPaid}20` : `${colors.statusUnpaid}20`,
+                            color: pt.is_active ? colors.statusPaid : colors.statusUnpaid,
+                            border: `1px solid ${pt.is_active ? `${colors.statusPaid}40` : `${colors.statusUnpaid}40`}`
+                          }}
+                        >
+                          {pt.is_active ? '● Active' : '○ Inactive'}
+                        </div>
+                      </div>
 
-                        {/* Action Buttons */}
-                        <div className="grid grid-cols-3 sm:flex sm:flex-wrap items-center gap-2 mt-4 pt-4" style={{ borderTop: '1px solid rgba(255, 255, 255, 0.06)' }}>
-                          {/* Toggle Active Button */}
-                          <motion.button
-                            whileHover={{ scale: 1.02 }}
-                            whileTap={{ scale: 0.98 }}
-                            onClick={() => handleToggleActive(pt)}
-                            disabled={actionLoading}
-                            className="flex items-center justify-center gap-1.5 sm:gap-2 px-3 sm:px-4 py-2 sm:py-2.5 rounded-xl text-xs sm:text-sm font-medium transition-all disabled:opacity-50"
-                            style={{
-                              background: pt.is_active ? 'rgba(239, 68, 68, 0.15)' : 'rgba(34, 197, 94, 0.15)',
-                              color: pt.is_active ? '#EF4444' : '#22C55E',
-                              border: `1px solid ${pt.is_active ? 'rgba(239, 68, 68, 0.3)' : 'rgba(34, 197, 94, 0.3)'}`
+                      {/* Category & Type Badges */}
+                      <div className="px-4 pb-3">
+                        <div className="flex flex-wrap gap-2">
+                          <span 
+                            className="px-3 py-1.5 rounded-full text-xs font-semibold flex items-center gap-1.5"
+                            style={{ 
+                              background: `${pt.color || colors.primary}25`, 
+                              color: pt.color || colors.primary,
+                              border: `1px solid ${pt.color || colors.primary}40`
                             }}
                           >
-                            {pt.is_active ? <EyeOff className="w-3.5 h-3.5 sm:w-4 sm:h-4" /> : <Eye className="w-3.5 h-3.5 sm:w-4 sm:h-4" />}
-                            <span>{pt.is_active ? 'Deactivate' : 'Activate'}</span>
-                          </motion.button>
+                            {getCategoryIcon(pt.category)}
+                            {getCategoryLabel(pt.category)}
+                          </span>
+                          <span 
+                            className="px-3 py-1.5 rounded-full text-xs font-medium flex items-center gap-1.5"
+                            style={{ 
+                              background: 'rgba(255, 255, 255, 0.05)', 
+                              color: colors.textSecondary,
+                              border: '1px solid rgba(255, 255, 255, 0.1)'
+                            }}
+                          >
+                            {pt.allow_partial ? '✓ Partial OK' : '⨉ Full Only'}
+                          </span>
+                          {pt.is_mandatory && (
+                            <span 
+                              className="px-3 py-1.5 rounded-full text-xs font-semibold flex items-center gap-1.5"
+                              style={{ 
+                                background: `${colors.warning}25`, 
+                                color: colors.warning,
+                                border: `1px solid ${colors.warning}40`
+                              }}
+                            >
+                              ★ Required
+                            </span>
+                          )}
+                        </div>
+                      </div>
 
-                          {/* Edit Button */}
-                          <motion.button
-                            whileHover={{ scale: 1.02 }}
-                            whileTap={{ scale: 0.98 }}
+                      {/* Description */}
+                      {pt.description && (
+                        <div className="px-4 pb-3">
+                          <p className="text-sm leading-relaxed line-clamp-2" style={{ color: colors.textSecondary }}>
+                            {pt.description}
+                          </p>
+                        </div>
+                      )}
+
+                      {/* Details Grid */}
+                      <div className="px-4 pb-3">
+                        <div className="grid grid-cols-2 gap-2">
+                          <div className="p-2.5 rounded-lg text-center" style={{ background: 'rgba(255, 255, 255, 0.03)' }}>
+                            <p className="text-[10px] uppercase tracking-wider mb-0.5" style={{ color: colors.textSecondary }}>Deadline</p>
+                            <p className="text-white font-semibold text-sm">{formatDate(pt.deadline)}</p>
+                          </div>
+                          <div className="p-2.5 rounded-lg text-center" style={{ background: 'rgba(255, 255, 255, 0.03)' }}>
+                            <p className="text-[10px] uppercase tracking-wider mb-0.5" style={{ color: colors.textSecondary }}>Target</p>
+                            <p className="text-white font-semibold text-sm">{pt.target_levels?.join(', ') || 'All Levels'}</p>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Actions */}
+                      <div className="p-4 pt-2 space-y-3" style={{ borderTop: '1px solid rgba(255, 255, 255, 0.05)' }}>
+                        {/* Activate/Deactivate Button */}
+                        <button
+                          onClick={() => {
+                            setSelectedPaymentType(pt)
+                            setShowDeactivateConfirm(true)
+                          }}
+                          disabled={actionLoading}
+                          className="w-full px-4 py-2.5 rounded-lg text-sm font-medium transition-all active:scale-[0.98] disabled:opacity-50"
+                          style={{
+                            background: pt.is_active ? `${colors.statusUnpaid}15` : `${colors.statusPaid}15`,
+                            color: pt.is_active ? colors.statusUnpaid : colors.statusPaid,
+                            border: `1px solid ${pt.is_active ? `${colors.statusUnpaid}30` : `${colors.statusPaid}30`}`
+                          }}
+                        >
+                          {pt.is_active ? '⏸ Deactivate Payment Type' : '▶ Activate Payment Type'}
+                        </button>
+
+                        {/* Edit/Delete Buttons */}
+                        <div className="grid grid-cols-2 gap-2">
+                          <button
                             onClick={() => {
                               setEditingPaymentType({ ...pt })
-                              setShowEditModal(true)
+                              setShowEditConfirm(true)
                             }}
-                            className="flex items-center justify-center gap-1.5 sm:gap-2 px-3 sm:px-4 py-2 sm:py-2.5 rounded-xl text-xs sm:text-sm font-medium transition-all"
-                            style={{
+                            className="p-3 rounded-xl transition-all active:scale-[0.95] flex items-center justify-center gap-2"
+                            style={{ 
                               background: `${colors.primary}15`,
-                              color: colors.primary,
                               border: `1px solid ${colors.primary}30`
                             }}
                           >
-                            <Edit3 className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
-                            <span>Edit</span>
-                          </motion.button>
-
-                          {/* Delete Button */}
-                          <motion.button
-                            whileHover={{ scale: 1.02 }}
-                            whileTap={{ scale: 0.98 }}
+                            <Edit3 className="w-4 h-4" style={{ color: colors.primary }} />
+                            <span className="text-xs font-medium" style={{ color: colors.primary }}>Edit Details</span>
+                          </button>
+                          <button
                             onClick={() => {
                               setSelectedPaymentType(pt)
                               setShowDeleteConfirm(true)
                             }}
-                            className="flex items-center justify-center gap-1.5 sm:gap-2 px-3 sm:px-4 py-2 sm:py-2.5 rounded-xl text-xs sm:text-sm font-medium transition-all"
-                            style={{
-                              background: 'rgba(239, 68, 68, 0.08)',
-                              color: '#EF4444',
-                              border: '1px solid rgba(239, 68, 68, 0.15)'
+                            className="p-3 rounded-xl transition-all active:scale-[0.95] flex items-center justify-center gap-2"
+                            style={{ 
+                              background: 'rgba(239, 68, 68, 0.1)',
+                              border: '1px solid rgba(239, 68, 68, 0.2)'
                             }}
                           >
-                            <Trash2 className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
-                            <span>Delete</span>
-                          </motion.button>
+                            <Trash2 className="w-4 h-4 text-red-400" />
+                            <span className="text-xs font-medium text-red-400">Delete</span>
+                          </button>
                         </div>
                       </div>
                     </motion.div>
@@ -960,6 +985,47 @@ export default function ManageDuesPage() {
         message={`Are you sure you want to delete "${selectedPaymentType?.title}"? This action cannot be undone. If there are payments associated with this type, deletion will fail.`}
         type="danger"
         confirmText="Delete"
+        cancelText="Cancel"
+      />
+
+      {/* Deactivate/Activate Confirmation */}
+      <ConfirmDialog
+        isOpen={showDeactivateConfirm}
+        onClose={() => {
+          setShowDeactivateConfirm(false)
+          setSelectedPaymentType(null)
+        }}
+        onConfirm={() => {
+          if (selectedPaymentType) {
+            handleToggleActive(selectedPaymentType)
+            setShowDeactivateConfirm(false)
+          }
+        }}
+        title={selectedPaymentType?.is_active ? "Deactivate Payment Type" : "Activate Payment Type"}
+        message={selectedPaymentType?.is_active 
+          ? `Are you sure you want to deactivate "${selectedPaymentType?.title}"? Students will no longer be able to make payments for this due.`
+          : `Are you sure you want to activate "${selectedPaymentType?.title}"? This will make it available for students to pay.`
+        }
+        type={selectedPaymentType?.is_active ? "warning" : "info"}
+        confirmText={selectedPaymentType?.is_active ? "Deactivate" : "Activate"}
+        cancelText="Cancel"
+      />
+
+      {/* Edit Confirmation */}
+      <ConfirmDialog
+        isOpen={showEditConfirm}
+        onClose={() => {
+          setShowEditConfirm(false)
+          // Keep editingPaymentType so modal can open properly
+        }}
+        onConfirm={() => {
+          setShowEditConfirm(false)
+          setShowEditModal(true)
+        }}
+        title="Edit Payment Type"
+        message={`You are about to edit "${editingPaymentType?.title}". Changes will affect all future and existing references to this payment type. Continue?`}
+        type="info"
+        confirmText="Continue to Edit"
         cancelText="Cancel"
       />
     </div>

@@ -81,16 +81,43 @@ export default function QRScanner({ onScan, onError, scanning }: QRScannerProps)
       let deviceList: CameraDevice[] = [];
       try {
         const cameraDevices = await Html5Qrcode.getCameras();
-        deviceList = cameraDevices.map(d => ({
-          id: d.id,
-          label: d.label || `Camera ${d.id.slice(0, 6)}`
-        }));
+        
+        // Filter out duplicate cameras (same id) and prefer back camera
+        const uniqueCameras = new Map<string, CameraDevice>();
+        cameraDevices.forEach(d => {
+          // Skip if we already have this camera id
+          if (uniqueCameras.has(d.id)) return;
+          
+          const label = d.label?.toLowerCase() || '';
+          // Determine friendly label
+          let friendlyLabel = d.label || `Camera ${d.id.slice(0, 6)}`;
+          if (label.includes('back') || label.includes('rear') || label.includes('environment')) {
+            friendlyLabel = '📷 Back Camera';
+          } else if (label.includes('front') || label.includes('user') || label.includes('selfie')) {
+            friendlyLabel = '🤳 Front Camera';
+          }
+          
+          uniqueCameras.set(d.id, {
+            id: d.id,
+            label: friendlyLabel
+          });
+        });
+        
+        deviceList = Array.from(uniqueCameras.values());
+        
+        // Sort to put back camera first (preferred for QR scanning)
+        deviceList.sort((a, b) => {
+          if (a.label.includes('Back')) return -1;
+          if (b.label.includes('Back')) return 1;
+          return 0;
+        });
+        
         setCameras(deviceList);
       } catch (camErr) {
         console.debug('Get cameras error:', camErr);
         // On iOS, try with facingMode
         if (isIOS()) {
-          deviceList = [{ id: 'environment', label: 'Back Camera' }];
+          deviceList = [{ id: 'environment', label: '📷 Back Camera' }];
           setCameras(deviceList);
         } else {
           throw camErr;
@@ -112,14 +139,31 @@ export default function QRScanner({ onScan, onError, scanning }: QRScannerProps)
       const cameraToUse = cameraId || selectedCamera || deviceList[0].id;
       setSelectedCamera(cameraToUse);
 
+      // Enhanced config for better QR detection
       const config = {
-        fps: 10,
-        qrbox: { width: 250, height: 250 },
+        fps: 15, // Increased FPS for smoother scanning
+        qrbox: { width: 280, height: 280 }, // Slightly larger scan area
         aspectRatio: 1.0,
+        disableFlip: false, // Allow mirrored QR codes
+        experimentalFeatures: {
+          useBarCodeDetectorIfSupported: true // Use native barcode API when available
+        }
       };
 
-      // iOS uses facingMode, others use cameraId
-      const cameraConfig = isIOS() ? { facingMode: 'environment' } : cameraToUse;
+      // iOS uses facingMode, Android uses cameraId
+      // For Android, also try facingMode if cameraId doesn't indicate front camera
+      let cameraConfig: string | { facingMode: string };
+      if (isIOS()) {
+        cameraConfig = { facingMode: 'environment' };
+      } else {
+        // On Android, prefer facingMode for back camera to get better autofocus
+        const selectedCameraLabel = deviceList.find(c => c.id === cameraToUse)?.label || '';
+        if (selectedCameraLabel.includes('Back') || selectedCameraLabel.includes('environment')) {
+          cameraConfig = { facingMode: 'environment' };
+        } else {
+          cameraConfig = cameraToUse;
+        }
+      }
 
       await scannerRef.current.start(
         cameraConfig,

@@ -31,7 +31,8 @@ import {
   FileSpreadsheet
 } from 'lucide-react';
 import Footer from '@/components/Footer';
-import { exportPaymentsToPDF, generatePaymentReceiptPDF } from '@/utils/pdfExport';
+import { exportPaymentsToPDF } from '@/utils/htmlPrintExports';
+import { generatePaymentReceiptPDF } from '@/utils/pdfExport';
 
 interface Payment {
   id: string;
@@ -253,19 +254,29 @@ export default function PaymentHistoryPage() {
     
     setExporting(true);
     try {
-      const headers = ['Payment Type', 'Category', 'Amount', 'Transaction Ref', 'Status', 'Date', 'Notes'];
+      // Add header info
+      const headerInfo = [
+        ['PAYMENT HISTORY EXPORT'],
+        ['Developed by Dev_Wishot | @wishotstudio'],
+        [`Generated: ${new Date().toLocaleString()}`],
+        [`Student: ${user?.full_name || 'N/A'}`],
+        [`Reg Number: ${user?.reg_number || 'N/A'}`],
+        [''],
+      ];
+      
+      const headers = ['Payment Type', 'Category', 'Amount (₦)', 'Transaction Ref', 'Status', 'Date', 'Notes'];
       const rows = filteredPayments.map(payment => [
         payment.payment_types.title,
         payment.payment_types.category,
-        payment.amount.toString(),
+        `₦${payment.amount.toLocaleString()}`,
         payment.transaction_ref,
         payment.status,
         new Date(payment.created_at).toLocaleDateString(),
         payment.notes || '',
       ]);
 
-      const csvContent = [headers, ...rows]
-        .map(row => row.map(cell => `"${cell.replace(/"/g, '""')}"`).join(','))
+      const csvContent = [...headerInfo, headers, ...rows]
+        .map(row => row.map(cell => `"${String(cell).replace(/"/g, '""')}"`).join(','))
         .join('\n');
 
       const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });

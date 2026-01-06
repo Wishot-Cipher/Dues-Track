@@ -25,6 +25,9 @@ import ScanQRCodePage from '@/pages/admin/ScanQRCodePageNew';
 import ManageStudentsPage from '@/pages/admin/ManageStudentsPage';
 import AdminCollectedPage from '@/pages/admin/AdminCollectedPage';
 import ExpensesPage from '@/pages/admin/ExpensesPage';
+import PublicContributionsPage from '@/pages/admin/PublicContributionsPage';
+import DonationSettingsPage from '@/pages/admin/DonationSettingsPage';
+import ContributePage from '@/pages/ContributePage';
 import NotFoundPage from '@/pages/NotFoundPage';
 
 function App() {
@@ -39,6 +42,8 @@ function App() {
             <Routes>
               {/* Public Routes */}
               <Route path="/login" element={<LoginPage />} />
+              <Route path="/contribute" element={<ContributePage />} />
+              <Route path="/donate" element={<ContributePage />} />
 
             {/* Protected - Password Change (First Priority) */}
             <Route
@@ -196,6 +201,24 @@ function App() {
               element={
                 <ProtectedRoute requiredPermission="can_approve_payments">
                   <ExpensesPage />
+                </ProtectedRoute>
+              }
+            />
+            {/* Protected - Admin: Public Contributions */}
+            <Route
+              path="/admin/contributions"
+              element={
+                <ProtectedRoute requiredPermission="can_approve_payments">
+                  <PublicContributionsPage />
+                </ProtectedRoute>
+              }
+            />
+            {/* Protected - Admin: Donation Settings */}
+            <Route
+              path="/admin/donation-settings"
+              element={
+                <ProtectedRoute requiredPermission="can_approve_payments">
+                  <DonationSettingsPage />
                 </ProtectedRoute>
               }
             />

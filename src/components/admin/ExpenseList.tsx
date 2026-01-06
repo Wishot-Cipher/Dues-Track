@@ -12,7 +12,7 @@ import { deleteExpense, updateExpenseFields, fetchExpenseCategories, type Expens
 import type { Expense } from '@/services/expenseService'
 import { CheckCircle, Clock, XCircle, Calendar, Tag, FileText, X, Download, Eye, User, ChevronLeft, ChevronRight, ChevronDown, FileSpreadsheet, Trash2, Edit3, Save, Loader2 } from 'lucide-react'
 import * as LucideIcons from 'lucide-react'
-import { exportExpensesToPDF } from '@/utils/pdfExport'
+import { exportExpensesToPDF } from '@/utils/htmlPrintExports'
 
 const ITEMS_PER_PAGE = 10
 
@@ -133,6 +133,7 @@ export default function ExpenseList() {
       // Add title and metadata
       csvRows.push('EXPENSE REPORT')
       csvRows.push(`Generated on: ${new Date().toLocaleString()}`)
+      csvRows.push('Developed by Dev_Wishot | @wishotstudio')
       csvRows.push('') // Empty line
       
       // Add headers
@@ -145,13 +146,13 @@ export default function ExpenseList() {
         const description = (exp.description || 'N/A').replace(/"/g, '""')
         const category = ((exp as unknown as { category?: { name?: string } }).category?.name || exp.category || 'N/A').replace(/"/g, '""')
         const fundedBy = ((exp as unknown as { payment_types?: { title?: string } }).payment_types?.title || 'N/A').replace(/"/g, '""')
-        const amount = exp.amount || 0
+        const amount = `₦${(exp.amount || 0).toLocaleString()}`
         const status = exp.status?.toUpperCase() || 'PENDING'
         const recordedBy = ((exp as unknown as { admins?: { full_name?: string } }).admins?.full_name || 'N/A').replace(/"/g, '""')
         const approvedBy = ((exp as unknown as { approved_by?: { full_name?: string } }).approved_by?.full_name || 'N/A').replace(/"/g, '""')
         const notes = (exp.rejection_reason || '').replace(/"/g, '""')
         
-        csvRows.push(`"${date}","${title}","${description}","${category}","${fundedBy}",${amount},"${status}","${recordedBy}","${approvedBy}","${notes}"`)
+        csvRows.push(`"${date}","${title}","${description}","${category}","${fundedBy}","${amount}","${status}","${recordedBy}","${approvedBy}","${notes}"`)
       })
       
       // Add summary at the bottom

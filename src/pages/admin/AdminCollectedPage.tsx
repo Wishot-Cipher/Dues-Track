@@ -8,7 +8,7 @@ import { colors } from '@/config/colors';
 import Footer from '@/components/Footer';
 import { formatCurrency, formatDate } from '@/utils/formatters';
 import { ArrowLeft, Users, Wallet, TrendingUp, Filter, Search, Download, ChevronLeft, ChevronRight, Sparkles, PieChart, CheckCircle, XCircle, BarChart3, FileText, FileSpreadsheet, ChevronDown } from 'lucide-react';
-import { exportCollectedPaymentsToPDF } from '@/utils/pdfExport';
+import { exportCollectedPaymentsToPDF } from '@/utils/htmlPrintExports';
 import { useToast } from '@/hooks/useToast';
 
 interface StudentPayment {

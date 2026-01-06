@@ -277,7 +277,7 @@ export default function LoginPage() {
 
             {/* Footer Text */}
             <motion.div 
-              className="mt-6 text-center"
+              className="mt-6 text-center space-y-3"
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               transition={{ delay: 1.0 }}
@@ -292,6 +292,18 @@ export default function LoginPage() {
                 >
                   Get help
                 </button>
+              </p>
+              <p className="text-[10px]" style={{ color: colors.textSecondary }}>
+                Developed by{' '}
+                <a 
+                  href="https://x.com/wishotstudio?s=21" 
+                  target="_blank" 
+                  rel="noopener noreferrer"
+                  className="font-bold hover:underline"
+                  style={{ color: colors.primary }}
+                >
+                  Dev_Wishot
+                </a>
               </p>
             </motion.div>
           </motion.div>

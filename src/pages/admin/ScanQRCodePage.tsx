@@ -473,7 +473,12 @@ export default function ScanQRCodePage() {
         await stopScanner();
       }
 
-      const config = { fps: 5, qrbox: { width: 200, height: 200 } };
+      const config = { 
+        fps: 15, 
+        qrbox: { width: 250, height: 250 },
+        formatsToSupport: [0], // QR_CODE only
+        experimentalFeatures: { useBarCodeDetectorIfSupported: true }
+      };
       
         await withScannerLock(async () => {
           const currentContainer = document.getElementById(scannerContainerId);
@@ -571,9 +576,13 @@ export default function ScanQRCodePage() {
       setSelectedCamera(cameraToUse);
 
       const config = {
-        fps: 10,
-        qrbox: { width: 250, height: 250 },
+        fps: 15, // Higher FPS for faster detection
+        qrbox: { width: 280, height: 280 }, // Slightly larger scan area
         aspectRatio: 1.0,
+        formatsToSupport: [0], // 0 = QR_CODE format only - faster scanning
+        experimentalFeatures: {
+          useBarCodeDetectorIfSupported: true // Use native BarcodeDetector API if available
+        }
       };
 
       const cameraConfig = isIOS() 
@@ -806,10 +815,44 @@ export default function ScanQRCodePage() {
     initScanner();
 
     return () => {
-      // Ensure scanner stop starts first while DOM still present
-      stopScanner();
       mountedRef.current = false;
       scannerInitializedRef.current = false;
+      
+      // CRITICAL: Force stop all camera tracks immediately on unmount
+      const forceStopAllCameras = async () => {
+        try {
+          // First try to stop via library
+          await stopScanner();
+        } catch (e) {
+          console.debug('stopScanner during unmount error:', e);
+        }
+        
+        // Force stop all video tracks regardless
+        try {
+          const videos = document.querySelectorAll('video');
+          videos.forEach(video => {
+            try {
+              const stream = video.srcObject as MediaStream | null;
+              if (stream) {
+                stream.getTracks().forEach(track => {
+                  try { track.stop(); } catch { /* ignore */ }
+                });
+              }
+              video.srcObject = null;
+            } catch { /* ignore */ }
+          });
+        } catch { /* ignore */ }
+        
+        // Also try navigator.mediaDevices to stop any active streams
+        try {
+          const streams = await navigator.mediaDevices.getUserMedia({ video: true }).catch(() => null);
+          if (streams) {
+            streams.getTracks().forEach(track => track.stop());
+          }
+        } catch { /* ignore */ }
+      };
+      
+      forceStopAllCameras();
     };
   }, [scanning, showManualInput, startScanner, stopScanner, pushScannerError]);
 
@@ -1086,60 +1129,56 @@ const handleMultiPayCode = async (codeInput: string) => {
   }
 };
 
-const formatPaymentCode = (input: string): string => {
-  const value = input.toUpperCase().replace(/[^A-Z0-9.-]/g, '');
+/**
+ * Format payment code as user types
+ * Single payment: ABC-DEF-1234 (3 chars - 3 chars - 4 chars)
+ * Multi payment: MP-XXX-YYYY-NNN.NNN... (MP - payer - payment - student IDs)
+ */
+const formatPaymentCode = (value: string): string => {
+  // Get only alphanumeric characters
+  const chars = value.replace(/[^A-Za-z0-9]/g, '').toUpperCase();
   
-  if (value.startsWith('MP')) {
-    if (value.includes('-') && value.split('-').length >= 3) {
-      return value;
+  if (!chars) return '';
+  
+  // Check if it starts with MP (multi-payment)
+  if (chars.startsWith('MP')) {
+    // Format: MP-XXX-YYYY-NNN.NNN
+    let result = 'MP';
+    const rest = chars.slice(2);
+    
+    if (rest.length > 0) {
+      result += '-' + rest.slice(0, 3); // Payer prefix
     }
-    
-    const stripped = value.replace(/[^A-Z0-9]/g, '').substring(2);
-    
-    if (stripped.length <= 3) return `MP-${stripped}`;
-    
-    const paymentPart = stripped.slice(0, 3);
-    const rest = stripped.slice(3);
-    
-    if (rest.length === 0) return `MP-${paymentPart}`;
-    
-    if (rest.startsWith('P')) {
-      if (rest.length <= 4) return `MP-${paymentPart}-${rest}`;
-      
-      const payerPart = rest.slice(0, 4);
-      const otherPart = rest.slice(4);
-      
-      if (otherPart.length === 0) return `MP-${paymentPart}-${payerPart}`;
-      
-      const otherSuffixes: string[] = [];
-      for (let i = 0; i < otherPart.length; i += 3) {
-        otherSuffixes.push(otherPart.slice(i, i + 3));
-      }
-      
-      return `MP-${paymentPart}-${payerPart}-${otherSuffixes.join('.')}`;
-    } else {
-      if (rest.length <= 3) return `MP-${paymentPart}-P${rest}`;
-      
-      const payerPart = `P${rest.slice(0, 3)}`;
-      const otherPart = rest.slice(3);
-      
-      if (otherPart.length === 0) return `MP-${paymentPart}-${payerPart}`;
-      
-      const otherSuffixes: string[] = [];
-      for (let i = 0; i < otherPart.length; i += 3) {
-        otherSuffixes.push(otherPart.slice(i, i + 3));
-      }
-      
-      return `MP-${paymentPart}-${payerPart}-${otherSuffixes.join('.')}`;
+    if (rest.length > 3) {
+      result += '-' + rest.slice(3, 7); // Payment suffix
     }
+    if (rest.length > 7) {
+      // Student IDs in groups of 3 with dots
+      const students = rest.slice(7);
+      const groups = [];
+      for (let i = 0; i < students.length; i += 3) {
+        groups.push(students.slice(i, i + 3));
+      }
+      result += '-' + groups.join('.');
+    }
+    return result;
   }
   
-  const stripped = value.replace(/[^A-Z0-9]/g, '');
-  if (stripped.length <= 3) return stripped;
-  if (stripped.length <= 6) return `${stripped.slice(0, 3)}-${stripped.slice(3)}`;
-  return `${stripped.slice(0, 3)}-${stripped.slice(3, 6)}-${stripped.slice(6, 10)}`;
+  // Single payment: ABC-DEF-1234
+  let result = chars.slice(0, 3);
+  if (chars.length > 3) {
+    result += '-' + chars.slice(3, 6);
+  }
+  if (chars.length > 6) {
+    result += '-' + chars.slice(6, 10);
+  }
+  return result;
 };
 
+// Ref for payment code input element
+const paymentCodeInputRef = useRef<HTMLInputElement>(null);
+
+// Handler with formatting on every keystroke
 const handlePaymentCodeChange = (e: React.ChangeEvent<HTMLInputElement>) => {
   const formatted = formatPaymentCode(e.target.value);
   setPaymentCodeInput(formatted);
@@ -1152,20 +1191,30 @@ const handlePaymentCodeSubmit = async () => {
   try {
     const codeInput = paymentCodeInput.trim().toUpperCase();
     
+    // Handle multi-payment codes (start with MP-)
     if (codeInput.startsWith('MP-')) {
       await handleMultiPayCode(codeInput);
       return;
     }
     
+    // Single payment validation: must be XXX-YYY-NNNN format
     const codeParts = codeInput.split('-');
     
+    // Validate format: exactly 3 parts
     if (codeParts.length !== 3) {
-      toast.error("Invalid code format. Single: ABC-DEF-1234 | Multi: MP-XXX-P123-456");
+      toast.error("Invalid format! Expected: ABC-DEF-1234 (for single) or MP-XXX-YYYY-NNN (for multi-student)");
       setProcessingManual(false);
       return;
     }
-
-    const [studentPart, paymentPart] = codeParts;
+    
+    const [studentPart, paymentPart, sequencePart] = codeParts;
+    
+    // Validate each part has correct length
+    if (studentPart.length !== 3 || paymentPart.length !== 3 || sequencePart.length < 1) {
+      toast.error("Invalid code! Format should be ABC-DEF-1234 where ABC=student, DEF=payment type, 1234=sequence");
+      setProcessingManual(false);
+      return;
+    }
     
     const { data: allStudents, error: studentError } = await supabase
       .from("students")
@@ -1181,6 +1230,12 @@ const handlePaymentCodeSubmit = async () => {
       toast.error("No student found matching this payment code. Please verify the code or ask student to regenerate.");
       setProcessingManual(false);
       return;
+    }
+
+    // If multiple students match, show warning
+    if (matchingStudents.length > 1) {
+      console.warn(`Multiple students match code prefix ${studentPart}:`, matchingStudents.map(s => s.full_name));
+      toast.warning(`Multiple students match this code. Using: ${matchingStudents[0].full_name}. If incorrect, ask student to regenerate QR code.`, 5000);
     }
 
     const { data: allPaymentTypes, error: ptError } = await supabase
@@ -1243,7 +1298,7 @@ const handlePaymentCodeSubmit = async () => {
     setScanning(false);
     setShowManualInput(false);
 
-    toast.success(`Found payment for ${matchedStudent.full_name} - please confirm`);
+    toast.success(`Found: ${matchedStudent.full_name} (${matchedStudent.reg_number}) - ${matchingPT.title}. Please verify and confirm.`, 4000);
   } catch (error) {
     console.error("Error looking up payment code:", error);
     toast.error("Failed to lookup payment code. Please try again.");
@@ -1390,7 +1445,26 @@ const switchCamera = async (newCameraId: string) => {
                 <motion.button
                   whileHover={{ scale: 1.02 }}
                   whileTap={{ scale: 0.98 }}
-                  onClick={() => { setShowManualInput(true); stopScanner(); }}
+                  onClick={async () => { 
+                    setShowManualInput(true); 
+                    // Force stop camera immediately
+                    try {
+                      await stopScanner();
+                      // Also force stop any lingering video tracks
+                      const videos = document.querySelectorAll('video');
+                      videos.forEach(video => {
+                        try {
+                          const stream = video.srcObject as MediaStream | null;
+                          if (stream) {
+                            stream.getTracks().forEach(track => track.stop());
+                          }
+                          video.srcObject = null;
+                        } catch { /* ignore */ }
+                      });
+                    } catch (e) {
+                      console.debug('Error stopping scanner:', e);
+                    }
+                  }}
                   className="flex items-center gap-2 px-4 py-2.5 rounded-xl font-medium transition-all"
                   style={{ 
                     background: showManualInput ? `${colors.accentMint}20` : 'rgba(255, 255, 255, 0.05)',
@@ -1454,7 +1528,21 @@ const switchCamera = async (newCameraId: string) => {
                       <motion.button
                         whileHover={{ scale: 1.02 }}
                         whileTap={{ scale: 0.98 }}
-                        onClick={async () => { setShowManualInput(true); await stopScanner(); }}
+                        onClick={async () => { 
+                          setShowManualInput(true); 
+                          await stopScanner();
+                          // Force stop any lingering video tracks
+                          const videos = document.querySelectorAll('video');
+                          videos.forEach(video => {
+                            try {
+                              const stream = video.srcObject as MediaStream | null;
+                              if (stream) {
+                                stream.getTracks().forEach(track => track.stop());
+                              }
+                              video.srcObject = null;
+                            } catch { /* ignore */ }
+                          });
+                        }}
                         className="flex items-center gap-2 px-5 py-2.5 rounded-xl font-medium"
                         style={{ 
                           background: `${colors.accentMint}20`,
@@ -1679,10 +1767,15 @@ const switchCamera = async (newCameraId: string) => {
                       Payment Code
                     </label>
                     <input
+                      ref={paymentCodeInputRef}
                       type="text"
                       value={paymentCodeInput}
                       onChange={handlePaymentCodeChange}
-                      placeholder="Enter code (auto-formats)"
+                      placeholder="ABC-DEF-1234"
+                      autoComplete="off"
+                      autoCorrect="off"
+                      autoCapitalize="characters"
+                      spellCheck={false}
                       className="w-full px-4 py-4 rounded-xl text-white font-mono text-lg text-center tracking-widest focus:outline-none focus:ring-2 uppercase"
                       style={{ 
                         background: 'rgba(255, 255, 255, 0.05)', 
@@ -1691,7 +1784,7 @@ const switchCamera = async (newCameraId: string) => {
                       }}
                     />
                     <p className="text-xs text-center mt-2" style={{ color: 'rgba(255, 255, 255, 0.5)' }}>
-                      Single: ABC-DEF-1234 | Multi: MP-XXX-P123-456.789
+                      Single: ABC-DEF-1234 | Multi: MP-XXX-YYYY-NNN.NNN
                     </p>
                   </div>
 

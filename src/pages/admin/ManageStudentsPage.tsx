@@ -34,7 +34,7 @@ import {
 import Footer from '@/components/Footer';
 import { useAuth } from '@/hooks/useAuth';
 import authService from '@/services/authService';
-import { exportStudentsToPDF } from '@/utils/pdfExport';
+import { exportStudentsToPDF } from '@/utils/htmlPrintExports';
 
 interface Student {
   id: string;
@@ -620,6 +620,7 @@ export default function ManageStudentsPage() {
       
       // Header info
       lines.push('CLASS DUES TRACKER - STUDENT DIRECTORY');
+      lines.push('Developed by Dev_Wishot | @wishotstudio');
       lines.push('');
       lines.push(`Generated Date,${new Date().toLocaleDateString('en-US', { dateStyle: 'full', timeStyle: 'short' })}`);
       lines.push(`Total Students,${dataToExport.length}`);

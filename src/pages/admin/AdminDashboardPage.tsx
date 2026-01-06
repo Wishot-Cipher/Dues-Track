@@ -32,6 +32,7 @@ import {
   BarChart3,
   Receipt,
   Calendar,
+  Heart,
 } from 'lucide-react';
 import Footer from '@/components/Footer';
 import StudentFeatureSettings from '@/components/admin/StudentFeatureSettings';
@@ -994,6 +995,28 @@ export default function AdminDashboardPage() {
                 <div className="text-left">
                   <span className="text-white font-medium block">Waive Payment</span>
                   <span className="text-xs" style={{ color: colors.textSecondary }}>Grant payment exemptions</span>
+                </div>
+              </motion.button>
+              )}
+              
+              {hasPermission('can_approve_payments') && (
+              <motion.button
+                whileHover={{ scale: 1.02, y: -2 }}
+                whileTap={{ scale: 0.98 }}
+                onClick={() => navigate('/admin/donation-settings')}
+                className="flex items-center gap-3 p-4 rounded-xl transition-all group"
+                style={{ 
+                  background: `linear-gradient(135deg, ${colors.accentMint}10, transparent)`,
+                  border: `1px solid ${colors.accentMint}30`
+                }}
+              >
+                <div className="w-10 h-10 rounded-lg flex items-center justify-center transition-transform group-hover:scale-110"
+                     style={{ background: `${colors.accentMint}30` }}>
+                  <Heart className="w-5 h-5" style={{ color: colors.accentMint }} />
+                </div>
+                <div className="text-left">
+                  <span className="text-white font-medium block">Public Donations</span>
+                  <span className="text-xs" style={{ color: colors.textSecondary }}>Manage contributions & settings</span>
                 </div>
               </motion.button>
               )}
