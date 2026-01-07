@@ -45,10 +45,17 @@ const STYLES = {
 };
 
 /**
- * Format currency with Naira symbol
+ * Format currency with Naira symbol (for display)
  */
 function formatNaira(amount: number): string {
   return `₦${Number(amount).toLocaleString('en-NG', { minimumFractionDigits: 0, maximumFractionDigits: 2 })}`;
+}
+
+/**
+ * Format currency for PDF (uses NGN since jsPDF standard fonts don't support ₦)
+ */
+function formatNairaPDF(amount: number): string {
+  return `NGN ${Number(amount).toLocaleString('en-NG', { minimumFractionDigits: 0, maximumFractionDigits: 2 })}`;
 }
 
 /**
@@ -394,9 +401,9 @@ export function exportPaymentsToPDF(
   
   // Stats boxes - Row 1: Amounts
   const boxWidth = (pageWidth - 50) / 3;
-  addInfoBox(doc, 'Net Amount Paid', formatNaira(totalApproved), 15, yPos, boxWidth);
-  addInfoBox(doc, 'Pending Amount', formatNaira(totalPending), 15 + boxWidth + 5, yPos, boxWidth);
-  addInfoBox(doc, 'Total Submitted', formatNaira(totalApproved + totalPending + totalRejected), 15 + (boxWidth + 5) * 2, yPos, boxWidth);
+  addInfoBox(doc, 'Net Amount Paid', formatNairaPDF(totalApproved), 15, yPos, boxWidth);
+  addInfoBox(doc, 'Pending Amount', formatNairaPDF(totalPending), 15 + boxWidth + 5, yPos, boxWidth);
+  addInfoBox(doc, 'Total Submitted', formatNairaPDF(totalApproved + totalPending + totalRejected), 15 + (boxWidth + 5) * 2, yPos, boxWidth);
   
   yPos += 32;
   
@@ -461,9 +468,9 @@ export function exportPaymentsToPDF(
       return [
         type,
         data.count.toString(),
-        formatNaira(data.paid),
-        formatNaira(data.expected),
-        formatNaira(difference),
+        formatNairaPDF(data.paid),
+        formatNairaPDF(data.expected),
+        formatNairaPDF(difference),
         status
       ];
     });
@@ -512,7 +519,7 @@ export function exportPaymentsToPDF(
         year: '2-digit'
       }),
       payment.payment_type?.title || 'N/A',
-      formatNaira(Number(payment.amount || 0)),
+      formatNairaPDF(Number(payment.amount || 0)),
       payment.payment_method || 'N/A',
       payment.transaction_ref?.slice(0, 12) || 'N/A',
       `${statusEmoji} ${payment.status.charAt(0).toUpperCase() + payment.status.slice(1)}`,
@@ -601,8 +608,8 @@ export function exportExpensesToPDF(
   
   // Stats boxes
   const boxWidth = (pageWidth - 50) / 4;
-  addInfoBox(doc, 'Total Spent', formatNaira(totalApproved), 15, yPos, boxWidth);
-  addInfoBox(doc, 'Pending', formatNaira(totalPending), 15 + boxWidth + 5, yPos, boxWidth);
+  addInfoBox(doc, 'Total Spent', formatNairaPDF(totalApproved), 15, yPos, boxWidth);
+  addInfoBox(doc, 'Pending', formatNairaPDF(totalPending), 15 + boxWidth + 5, yPos, boxWidth);
   addInfoBox(doc, 'Approved', approvedExpenses.length.toString(), 15 + (boxWidth + 5) * 2, yPos, boxWidth);
   addInfoBox(doc, 'Total Records', expenses.length.toString(), 15 + (boxWidth + 5) * 3, yPos, boxWidth);
   
@@ -632,7 +639,7 @@ export function exportExpensesToPDF(
       .sort(([, a], [, b]) => b - a)
       .map(([category, amount]) => [
         formatCategory(category),
-        formatNaira(amount),
+        formatNairaPDF(amount),
         `${((amount / totalApproved) * 100).toFixed(1)}%`
       ]);
     
@@ -674,7 +681,7 @@ export function exportExpensesToPDF(
       (index + 1).toString(),
       expense.title,
       formatCategory(expense.category),
-      formatNaira(Number(expense.amount || 0)),
+      formatNairaPDF(Number(expense.amount || 0)),
       `${statusEmoji} ${expense.status.charAt(0).toUpperCase() + expense.status.slice(1)}`,
       new Date(expense.created_at).toLocaleDateString('en-US', { 
         year: 'numeric', 
@@ -793,9 +800,9 @@ export function exportCollectedPaymentsToPDF(data: CollectedPaymentsExportData):
   
   // Main stats boxes - 3 columns
   const boxWidth = (pageWidth - 45) / 3;
-  addInfoBox(doc, 'Total Collected', formatNaira(data.totalCollected), 15, yPos, boxWidth);
-  addInfoBox(doc, 'Total Expenses', formatNaira(data.totalExpenses), 15 + boxWidth + 5, yPos, boxWidth);
-  addInfoBox(doc, 'Net Balance', formatNaira(data.netBalance), 15 + (boxWidth + 5) * 2, yPos, boxWidth);
+  addInfoBox(doc, 'Total Collected', formatNairaPDF(data.totalCollected), 15, yPos, boxWidth);
+  addInfoBox(doc, 'Total Expenses', formatNairaPDF(data.totalExpenses), 15 + boxWidth + 5, yPos, boxWidth);
+  addInfoBox(doc, 'Net Balance', formatNairaPDF(data.netBalance), 15 + (boxWidth + 5) * 2, yPos, boxWidth);
   
   yPos += 35;
   
@@ -837,9 +844,9 @@ export function exportCollectedPaymentsToPDF(data: CollectedPaymentsExportData):
     
     const categoryData = data.categoriesBreakdown.map(cat => [
       formatCategory(cat.category),
-      formatNaira(cat.total_collected),
-      formatNaira(cat.total_expenses),
-      formatNaira(cat.net_balance),
+      formatNairaPDF(cat.total_collected),
+      formatNairaPDF(cat.total_expenses),
+      formatNairaPDF(cat.net_balance),
       cat.payment_count.toString()
     ]);
     
@@ -882,7 +889,7 @@ export function exportCollectedPaymentsToPDF(data: CollectedPaymentsExportData):
     student.student_name,
     student.reg_number,
     student.is_active ? '✓ Active' : '✗ Inactive',
-    formatNaira(student.total_paid),
+    formatNairaPDF(student.total_paid),
     student.payment_count.toString(),
     student.categories_paid.join('; ') || 'None'
   ]);
@@ -1153,7 +1160,8 @@ export function exportFinancialSummaryToPDF(data: {
 }
 
 /**
- * Generate professional student payment receipt PDF
+ * Generate professional payment receipt PDF
+ * Matches the well-formatted style of other exports with dark header and proper sections
  */
 export function generatePaymentReceiptPDF(payment: {
   id: string;
@@ -1169,116 +1177,116 @@ export function generatePaymentReceiptPDF(payment: {
   const doc = new jsPDF();
   const pageWidth = doc.internal.pageSize.getWidth();
   const pageHeight = doc.internal.pageSize.getHeight();
+  const margin = 15;
+  const contentWidth = pageWidth - (margin * 2);
   
+  const isWaived = payment.transaction_ref?.startsWith('WAIVED-');
+  const isApproved = payment.status === 'approved';
+  const isPending = payment.status === 'pending';
+  
+  // Status configuration
+  const statusConfig = isWaived 
+    ? { color: [99, 102, 241], label: 'WAIVED', icon: '✓' }
+    : isApproved 
+      ? { color: [34, 197, 94], label: 'APPROVED', icon: '✓' }
+      : isPending 
+        ? { color: [245, 158, 11], label: 'PENDING', icon: '⏳' }
+        : { color: [239, 68, 68], label: 'REJECTED', icon: '✗' };
+
   // ═══════════════════════════════════════════════════════════════
-  // HEADER SECTION - Premium dark header with branding
+  // HEADER - Professional dark header with branding
   // ═══════════════════════════════════════════════════════════════
   
-  // Main header background - dark theme
+  // Header background
   doc.setFillColor(26, 14, 9);
   doc.rect(0, 0, pageWidth, 55, 'F');
   
-  // Accent stripe - orange
+  // Orange accent stripe
   doc.setFillColor(255, 107, 53);
   doc.rect(0, 55, pageWidth, 4, 'F');
   
-  // Receipt title
-  doc.setFont(STYLES.headerFont, 'bold');
-  doc.setFontSize(26);
-  doc.setTextColor(255, 255, 255);
-  doc.text('PAYMENT RECEIPT', 20, 28);
-  
-  // Branding
-  doc.setFont(STYLES.bodyFont, 'normal');
-  doc.setFontSize(10);
-  doc.setTextColor(255, 107, 53);
-  doc.text('Class Dues Tracker', 20, 40);
-  
-  doc.setFontSize(8);
-  doc.setTextColor(150, 150, 150);
-  doc.text('ECE Department - Official Document', 20, 48);
-  
-  // Receipt number on right
+  // Official Receipt badge
+  doc.setFillColor(255, 107, 53);
+  doc.roundedRect(margin, 10, 80, 14, 3, 3, 'F');
   doc.setFont(STYLES.headerFont, 'bold');
   doc.setFontSize(9);
   doc.setTextColor(255, 255, 255);
-  doc.text('Receipt No.', pageWidth - 20, 25, { align: 'right' });
+  doc.text('OFFICIAL RECEIPT', margin + 40, 19, { align: 'center' });
   
+  // Main title
+  doc.setFont(STYLES.headerFont, 'bold');
+  doc.setFontSize(20);
+  doc.setTextColor(255, 255, 255);
+  doc.text('PAYMENT RECEIPT', margin, 42);
+  
+  // ECE subtitle
   doc.setFont(STYLES.bodyFont, 'normal');
-  doc.setFontSize(11);
+  doc.setFontSize(9);
   doc.setTextColor(255, 107, 53);
-  doc.text(`#${payment.id.slice(0, 8).toUpperCase()}`, pageWidth - 20, 35, { align: 'right' });
+  doc.text('Class Dues Tracker • ECE Department', margin, 50);
   
+  // Right side - Receipt ID
+  doc.setFont(STYLES.headerFont, 'bold');
   doc.setFontSize(8);
   doc.setTextColor(150, 150, 150);
-  doc.text(new Date(payment.created_at).toLocaleDateString('en-US', {
-    year: 'numeric', month: 'short', day: 'numeric'
-  }), pageWidth - 20, 45, { align: 'right' });
+  doc.text('Receipt No.', pageWidth - margin, 15, { align: 'right' });
   
-  let yPos = 70;
-  
-  // ═══════════════════════════════════════════════════════════════
-  // STATUS BADGE - Prominent status indicator
-  // ═══════════════════════════════════════════════════════════════
-  
-  const isWaived = payment.transaction_ref?.startsWith('WAIVED-');
-  const statusColor = isWaived ? [80, 200, 120] : 
-                     payment.status === 'approved' ? [80, 200, 120] : 
-                     payment.status === 'pending' ? [245, 158, 11] : [239, 68, 68];
-  
-  const statusLabel = isWaived ? 'WAIVED' : payment.status.toUpperCase();
-  const statusIcon = isWaived ? '✓ ' : payment.status === 'approved' ? '✓ ' : 
-                     payment.status === 'pending' ? '⏳ ' : '✗ ';
-  
-  // Status badge background
-  doc.setFillColor(statusColor[0], statusColor[1], statusColor[2]);
-  doc.roundedRect(pageWidth / 2 - 35, yPos - 8, 70, 22, 6, 6, 'F');
-  
-  doc.setFont(STYLES.headerFont, 'bold');
-  doc.setFontSize(13);
+  doc.setFont('courier', 'bold');
+  doc.setFontSize(12);
   doc.setTextColor(255, 255, 255);
-  doc.text(`${statusIcon}${statusLabel}`, pageWidth / 2, yPos + 5, { align: 'center' });
+  doc.text(`#${payment.id.slice(0, 8).toUpperCase()}`, pageWidth - margin, 28, { align: 'right' });
   
-  yPos += 30;
-  
+  // Date generated
+  doc.setFont(STYLES.bodyFont, 'normal');
+  doc.setFontSize(8);
+  doc.setTextColor(150, 150, 150);
+  doc.text(new Date(payment.created_at).toLocaleDateString('en-NG', {
+    year: 'numeric', month: 'long', day: 'numeric'
+  }), pageWidth - margin, 40, { align: 'right' });
+
+  let yPos = 70;
+
   // ═══════════════════════════════════════════════════════════════
-  // AMOUNT BOX - Large, prominent amount display
+  // STATUS & AMOUNT BOXES - Side by side
   // ═══════════════════════════════════════════════════════════════
   
-  doc.setFillColor(255, 107, 53);
-  doc.roundedRect(20, yPos, pageWidth - 40, 50, 8, 8, 'F');
+  const boxWidth = (contentWidth - 10) / 2;
+  
+  // Status Box
+  doc.setFillColor(statusConfig.color[0], statusConfig.color[1], statusConfig.color[2]);
+  doc.roundedRect(margin, yPos, boxWidth, 50, 5, 5, 'F');
   
   doc.setFont(STYLES.bodyFont, 'normal');
-  doc.setFontSize(10);
+  doc.setFontSize(9);
   doc.setTextColor(255, 255, 255);
-  doc.text('AMOUNT PAID', pageWidth / 2, yPos + 15, { align: 'center' });
+  doc.text('PAYMENT STATUS', margin + boxWidth / 2, yPos + 15, { align: 'center' });
   
   doc.setFont(STYLES.headerFont, 'bold');
-  doc.setFontSize(28);
-  doc.text(formatNaira(payment.amount), pageWidth / 2, yPos + 38, { align: 'center' });
+  doc.setFontSize(18);
+  doc.text(`${statusConfig.icon} ${statusConfig.label}`, margin + boxWidth / 2, yPos + 35, { align: 'center' });
   
-  yPos += 65;
+  // Amount Box
+  doc.setFillColor(255, 107, 53);
+  doc.roundedRect(margin + boxWidth + 10, yPos, boxWidth, 50, 5, 5, 'F');
   
+  doc.setFont(STYLES.bodyFont, 'normal');
+  doc.setFontSize(9);
+  doc.setTextColor(255, 255, 255);
+  doc.text(isWaived ? 'AMOUNT WAIVED' : 'AMOUNT PAID', margin + boxWidth + 10 + boxWidth / 2, yPos + 15, { align: 'center' });
+  
+  doc.setFont(STYLES.headerFont, 'bold');
+  doc.setFontSize(18);
+  doc.text(formatNairaPDF(payment.amount), margin + boxWidth + 10 + boxWidth / 2, yPos + 35, { align: 'center' });
+
+  yPos += 60;
+
   // ═══════════════════════════════════════════════════════════════
   // STUDENT INFORMATION SECTION
   // ═══════════════════════════════════════════════════════════════
   
-  // Section header
-  doc.setFillColor(249, 250, 251);
-  doc.roundedRect(20, yPos, pageWidth - 40, 12, 3, 3, 'F');
+  const colWidth = contentWidth / 2;
   
-  doc.setFont(STYLES.headerFont, 'bold');
-  doc.setFontSize(10);
-  doc.setTextColor(255, 107, 53);
-  doc.text('👤 STUDENT INFORMATION', 28, yPos + 8);
-  
-  yPos += 20;
-  
-  // Student details box
-  doc.setFillColor(255, 255, 255);
-  doc.setDrawColor(229, 231, 235);
-  doc.roundedRect(20, yPos, pageWidth - 40, 45, 5, 5, 'FD');
-  
+  // Helper to add field
   const addField = (label: string, value: string, x: number, y: number) => {
     doc.setFont(STYLES.bodyFont, 'normal');
     doc.setFontSize(8);
@@ -1286,105 +1294,141 @@ export function generatePaymentReceiptPDF(payment: {
     doc.text(label, x, y);
     
     doc.setFont(STYLES.headerFont, 'bold');
-    doc.setFontSize(11);
+    doc.setFontSize(10);
     doc.setTextColor(COLORS.text);
-    doc.text(value, x, y + 10);
+    const lines = doc.splitTextToSize(value || 'N/A', colWidth - 15);
+    doc.text(lines[0], x, y + 8);
   };
   
-  addField('Full Name', payment.student.full_name, 30, yPos + 12);
-  addField('Reg. Number', payment.student.reg_number, pageWidth / 2 + 10, yPos + 12);
-  
-  if (payment.student.email || payment.student.level) {
-    addField('Email', payment.student.email || 'N/A', 30, yPos + 32);
-    addField('Level', payment.student.level || 'N/A', pageWidth / 2 + 10, yPos + 32);
-  }
-  
-  yPos += 55;
-  
+  // Section header with orange accent bar and curved left accent
+  // Draw orange accent (curved) at the left
+  doc.setFillColor(255, 107, 53);
+  doc.roundedRect(margin, yPos, 18, 38, 10, 10, 'F');
+  // Section header bar
+  doc.setFillColor(255, 107, 53);
+  doc.roundedRect(margin, yPos, contentWidth, 16, 3, 3, 'F');
+  doc.setFont(STYLES.headerFont, 'bold');
+  doc.setFontSize(10);
+  doc.setTextColor(255, 255, 255);
+  doc.text('STUDENT INFORMATION', margin + 28, yPos + 11);
+
+  yPos += 20;
+
+  // Student details box (overlapping the accent)
+  doc.setFillColor(255, 255, 255);
+  doc.setDrawColor(229, 231, 235);
+  doc.setLineWidth(0.5);
+  doc.roundedRect(margin, yPos, contentWidth, 38, 4, 4, 'FD');
+
+  // Watermark inside student details box (light grey, drawn before fields so fields overlay it)
+  const wmX = margin + contentWidth / 2;
+  const wmY = yPos + 22;
+  doc.setFont(STYLES.headerFont, 'bold');
+  doc.setFontSize(30);
+  doc.setTextColor(240, 240, 240);
+  doc.text('Class Dues Tracker By Wishot', wmX, wmY, { align: 'center', angle: -9 });
+
+  addField('Full Name', payment.student.full_name, margin + 28, yPos + 10);
+  addField('Reg. Number', payment.student.reg_number, margin + colWidth + 5, yPos + 10);
+  addField('Email', payment.student.email || 'Not provided', margin + 28, yPos + 26);
+  addField('Level', payment.student.level || 'Not specified', margin + colWidth + 5, yPos + 26);
+
+  yPos += 46;
+
   // ═══════════════════════════════════════════════════════════════
   // PAYMENT DETAILS SECTION
   // ═══════════════════════════════════════════════════════════════
   
-  // Section header
-  doc.setFillColor(249, 250, 251);
-  doc.roundedRect(20, yPos, pageWidth - 40, 12, 3, 3, 'F');
-  
+  // Section header with orange accent bar
+  doc.setFillColor(255, 107, 53);
+  doc.roundedRect(margin, yPos, contentWidth, 16, 3, 3, 'F');
   doc.setFont(STYLES.headerFont, 'bold');
   doc.setFontSize(10);
-  doc.setTextColor(255, 107, 53);
-  doc.text('💳 PAYMENT DETAILS', 28, yPos + 8);
+  doc.setTextColor(255, 255, 255);
+  doc.text('PAYMENT DETAILS', margin + 10, yPos + 11);
   
   yPos += 20;
   
   // Payment details box
   doc.setFillColor(255, 255, 255);
   doc.setDrawColor(229, 231, 235);
-  doc.roundedRect(20, yPos, pageWidth - 40, 65, 5, 5, 'FD');
+  doc.roundedRect(margin, yPos, contentWidth, 54, 4, 4, 'FD');
   
-  addField('Payment Type', payment.payment_type.title, 30, yPos + 12);
-  addField('Payment Method', payment.payment_method, pageWidth / 2 + 10, yPos + 12);
-  
-  addField('Transaction Reference', payment.transaction_ref || 'N/A', 30, yPos + 35);
-  addField('Target Amount', formatNaira(payment.payment_type.amount), pageWidth / 2 + 10, yPos + 35);
-  
-  addField('Submitted On', new Date(payment.created_at).toLocaleString('en-US', {
+  addField('Payment Type', payment.payment_type.title, margin + 8, yPos + 10);
+  addField('Target Amount', formatNairaPDF(payment.payment_type.amount), margin + colWidth + 5, yPos + 10);
+  addField('Payment Method', payment.payment_method || 'Bank Transfer', margin + 8, yPos + 26);
+  addField('Transaction Ref', (payment.transaction_ref || 'N/A').slice(0, 20), margin + colWidth + 5, yPos + 26);
+  addField('Submitted On', new Date(payment.created_at).toLocaleString('en-NG', {
     year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit'
-  }), 30, yPos + 55);
+  }), margin + 8, yPos + 42);
   
   if (payment.approved_at) {
-    addField('Approved On', new Date(payment.approved_at).toLocaleString('en-US', {
+    addField(isWaived ? 'Waived On' : 'Approved On', new Date(payment.approved_at).toLocaleString('en-NG', {
       year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit'
-    }), pageWidth / 2 + 10, yPos + 55);
+    }), margin + colWidth + 5, yPos + 42);
   }
-  
-  yPos += 80;
-  
+
+  yPos += 62;
+
   // ═══════════════════════════════════════════════════════════════
   // VERIFICATION SECTION
   // ═══════════════════════════════════════════════════════════════
   
   doc.setFillColor(26, 14, 9);
-  doc.roundedRect(20, yPos, pageWidth - 40, 35, 5, 5, 'F');
+  doc.roundedRect(margin, yPos, contentWidth, 35, 4, 4, 'F');
   
   doc.setFont(STYLES.bodyFont, 'normal');
   doc.setFontSize(8);
   doc.setTextColor(150, 150, 150);
-  doc.text('VERIFICATION CODE', 30, yPos + 12);
+  doc.text('VERIFICATION CODE', margin + 10, yPos + 12);
   
   doc.setFont('courier', 'bold');
-  doc.setFontSize(14);
+  doc.setFontSize(12);
   doc.setTextColor(255, 107, 53);
-  doc.text(`CDT-${payment.id.slice(0, 12).toUpperCase()}`, 30, yPos + 26);
+  doc.text(`CDT-${payment.id.slice(0, 12).toUpperCase()}`, margin + 10, yPos + 24);
   
-  // Valid stamp for approved
-  if (payment.status === 'approved') {
-    doc.setFillColor(80, 200, 120);
-    doc.roundedRect(pageWidth - 70, yPos + 5, 45, 25, 4, 4, 'F');
+  // Valid/Waived stamp
+  if (isApproved || isWaived) {
+    const stampColor = isWaived ? statusConfig.color : [34, 197, 94];
+    doc.setFillColor(stampColor[0], stampColor[1], stampColor[2]);
+    doc.roundedRect(pageWidth - margin - 50, yPos + 6, 45, 22, 4, 4, 'F');
     
     doc.setFont(STYLES.headerFont, 'bold');
-    doc.setFontSize(10);
+    doc.setFontSize(9);
     doc.setTextColor(255, 255, 255);
-    doc.text('VALID', pageWidth - 47.5, yPos + 21, { align: 'center' });
+    doc.text(isWaived ? 'WAIVED' : 'VALID', pageWidth - margin - 27.5, yPos + 20, { align: 'center' });
   }
-  
+
+  yPos += 45;
+
   // ═══════════════════════════════════════════════════════════════
-  // FOOTER SECTION
+  // FOOTER NOTES
   // ═══════════════════════════════════════════════════════════════
   
-  doc.setDrawColor(229, 231, 235);
-  doc.setLineWidth(0.5);
-  doc.line(20, pageHeight - 45, pageWidth - 20, pageHeight - 45);
-  
+  // Footer notes
   doc.setFont(STYLES.bodyFont, 'normal');
   doc.setFontSize(7);
   doc.setTextColor(COLORS.textLight);
-  doc.text('This is an electronically generated receipt. No signature required.', pageWidth / 2, pageHeight - 35, { align: 'center' });
-  doc.text('For verification, contact your class administration with the verification code above.', pageWidth / 2, pageHeight - 28, { align: 'center' });
-  doc.text('Keep this receipt for your records.', pageWidth / 2, pageHeight - 21, { align: 'center' });
+  doc.text('This is an electronically generated receipt. No signature required.', pageWidth / 2, yPos, { align: 'center' });
+  doc.text('For verification, contact your class administration with the code above.', pageWidth / 2, yPos + 8, { align: 'center' });
   
-  // Developer credit
+  // ═══════════════════════════════════════════════════════════════
+  // BOTTOM BRANDING BAR
+  // ═══════════════════════════════════════════════════════════════
+  
+  doc.setFillColor(26, 14, 9);
+  doc.rect(0, pageHeight - 18, pageWidth, 18, 'F');
+  
+  doc.setFont(STYLES.bodyFont, 'normal');
   doc.setFontSize(7);
-  doc.text('Developed by Dev_Wishot | @wishotstudio', pageWidth / 2, pageHeight - 10, { align: 'center' });
+  doc.setTextColor(150, 150, 150);
+  doc.text('Class Dues Tracker', margin, pageHeight - 7);
+  
+  doc.setTextColor(255, 107, 53);
+  doc.text('Developed by Dev_Wishot | @wishotstudio', pageWidth / 2, pageHeight - 7, { align: 'center' });
+  
+  doc.setTextColor(150, 150, 150);
+  doc.text('Official Document', pageWidth - margin, pageHeight - 7, { align: 'right' });
   
   doc.save(`receipt_${payment.transaction_ref || payment.id.slice(0, 8)}.pdf`);
 }

@@ -118,6 +118,10 @@ export default function PaymentDetailPage() {
   const hasPendingPayment = existingPayments.some(
     (p) => p.status === "pending"
   );
+  // Check if payment was waived (has WAIVED- prefix in transaction_ref)
+  const isWaived = existingPayments.some(
+    (p) => p.status === "approved" && p.transaction_ref?.startsWith("WAIVED-")
+  );
   const progressPercentage =
     paymentTypeAmount > 0 ? (totalPaid / paymentTypeAmount) * 100 : 0;
 
@@ -645,18 +649,26 @@ export default function PaymentDetailPage() {
                   Payment History
                 </h3>
                 <div className="space-y-3">
-                  {existingPayments.map((payment) => (
+                  {existingPayments.map((payment) => {
+                    const paymentIsWaived = payment.transaction_ref?.startsWith("WAIVED-");
+                    const statusColor = paymentIsWaived 
+                      ? '#6366F1' // Indigo for waived
+                      : payment.status === "approved"
+                        ? colors.statusPaid
+                        : payment.status === "rejected"
+                          ? colors.statusUnpaid
+                          : colors.warning;
+                    const statusLabel = paymentIsWaived 
+                      ? 'WAIVED' 
+                      : payment.status.toUpperCase();
+                    
+                    return (
                     <div
                       key={payment.id}
                       className="p-4 rounded-lg border"
                       style={{
                         background: "rgba(255, 255, 255, 0.03)",
-                        borderColor:
-                          payment.status === "approved"
-                            ? `${colors.statusPaid}40`
-                            : payment.status === "rejected"
-                            ? `${colors.statusUnpaid}40`
-                            : `${colors.warning}40`,
+                        borderColor: `${statusColor}40`,
                       }}
                     >
                       <div className="flex items-start justify-between gap-4">
@@ -665,7 +677,7 @@ export default function PaymentDetailPage() {
                             {payment.status === "approved" && (
                               <CheckCircle
                                 className="w-5 h-5"
-                                style={{ color: colors.statusPaid }}
+                                style={{ color: statusColor }}
                               />
                             )}
                             {payment.status === "rejected" && (
@@ -680,27 +692,23 @@ export default function PaymentDetailPage() {
                                 style={{ color: colors.warning }}
                               />
                             )}
-                            <span className="font-bold text-white">
+                            <span 
+                              className="font-bold"
+                              style={{ 
+                                color: paymentIsWaived ? '#6366F1' : 'white',
+                                textDecoration: paymentIsWaived ? 'line-through' : 'none'
+                              }}
+                            >
                               {formatCurrency(payment.amount)}
                             </span>
                             <span
                               className="px-2 py-1 rounded-full text-xs font-medium"
                               style={{
-                                background:
-                                  payment.status === "approved"
-                                    ? `${colors.statusPaid}20`
-                                    : payment.status === "rejected"
-                                    ? `${colors.statusUnpaid}20`
-                                    : `${colors.warning}20`,
-                                color:
-                                  payment.status === "approved"
-                                    ? colors.statusPaid
-                                    : payment.status === "rejected"
-                                    ? colors.statusUnpaid
-                                    : colors.warning,
+                                background: `${statusColor}20`,
+                                color: statusColor,
                               }}
                             >
-                              {payment.status.toUpperCase()}
+                              {statusLabel}
                             </span>
                           </div>
                           <p
@@ -713,7 +721,7 @@ export default function PaymentDetailPage() {
                             className="text-sm"
                             style={{ color: colors.textSecondary }}
                           >
-                            Submitted:{" "}
+                            {paymentIsWaived ? 'Waived' : 'Submitted'}:{" "}
                             {formatDate(payment.submitted_at, "long")}
                           </p>
                           {payment.rejection_reason && (
@@ -742,13 +750,14 @@ export default function PaymentDetailPage() {
                         )}
                       </div>
                     </div>
-                  ))}
+                    );
+                  })}
                 </div>
               </GlassCard>
             </motion.div>
           )}
 
-          {/* Fully Paid Message */}
+          {/* Fully Paid or Waived Message */}
           {isFullyPaid && (
             <motion.div
               initial={{ opacity: 0, scale: 0.9 }}
@@ -759,13 +768,15 @@ export default function PaymentDetailPage() {
                 <div className="text-center p-8">
                   <CheckCircle
                     className="w-16 h-16 mx-auto mb-4"
-                    style={{ color: colors.statusPaid }}
+                    style={{ color: isWaived ? '#6366F1' : colors.statusPaid }}
                   />
                   <h2 className="text-2xl font-bold text-white mb-2">
-                    Payment Complete! 🎉
+                    {isWaived ? 'Payment Waived! 🔓' : 'Payment Complete! 🎉'}
                   </h2>
                   <p style={{ color: colors.textSecondary }}>
-                    You have fully paid for this requirement.
+                    {isWaived 
+                      ? 'This payment has been waived by the class administration.'
+                      : 'You have fully paid for this requirement.'}
                   </p>
                 </div>
               </GlassCard>

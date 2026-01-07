@@ -137,12 +137,12 @@ export default function PaymentHistoryPage() {
   };
 
   const getStatusBadge = (status: string, transactionRef?: string) => {
-    // Check if payment was waived
+    // Check if payment was waived - use professional indigo color
     if (status === 'approved' && transactionRef?.startsWith('WAIVED-')) {
       return {
-        bg: `${colors.accentMint}20`,
-        border: `${colors.accentMint}40`,
-        color: colors.accentMint,
+        bg: 'rgba(99, 102, 241, 0.15)',
+        border: 'rgba(99, 102, 241, 0.30)',
+        color: '#6366F1', // Professional Indigo
         label: 'WAIVED'
       };
     }
@@ -413,7 +413,7 @@ export default function PaymentHistoryPage() {
             { label: 'Total', value: stats.total, icon: FileText, color: colors.primary },
             { label: 'Pending', value: stats.pending, icon: Clock, color: colors.warning },
             { label: 'Approved', value: stats.approved, icon: CheckCircle, color: colors.statusPaid },
-            { label: 'Waived', value: stats.waived, icon: Sparkles, color: colors.accentMint },
+            { label: 'Waived', value: stats.waived, icon: Sparkles, color: '#6366F1' }, // Professional Indigo for waived
           ].map((stat, index) => (
             <motion.div
               key={stat.label}
@@ -734,6 +734,23 @@ export default function PaymentHistoryPage() {
                                 <div>
                                   <p className="text-xs font-medium mb-0.5" style={{ color: colors.statusUnpaid }}>Rejection Reason</p>
                                   <p className="text-xs" style={{ color: colors.statusUnpaid }}>{payment.rejection_reason}</p>
+                                </div>
+                              </div>
+                            )}
+
+                            {/* Pending payment info message */}
+                            {payment.status === 'pending' && !payment.rejection_reason && (
+                              <div 
+                                className="mt-3 p-3 rounded-lg flex items-start gap-2"
+                                style={{ background: `${colors.warning}10`, border: `1px solid ${colors.warning}30` }}
+                              >
+                                <Clock className="w-4 h-4 shrink-0 mt-0.5" style={{ color: colors.warning }} />
+                                <div>
+                                  <p className="text-xs font-medium mb-1" style={{ color: colors.warning }}>Payment Under Review</p>
+                                  <p className="text-xs" style={{ color: colors.textSecondary }}>
+                                    Your payment is being reviewed. This may take up to <span className="font-semibold text-white">24 hours</span> to validate. 
+                                    If not reviewed within this time, please contact any class executive (Class Rep or Financial Secretary) for assistance.
+                                  </p>
                                 </div>
                               </div>
                             )}

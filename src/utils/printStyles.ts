@@ -245,6 +245,7 @@ export const PRINT_STYLES = `
   .status.approved { background: #dcfce7; color: #166534; }
   .status.pending { background: #fef3c7; color: #92400e; }
   .status.rejected { background: #fee2e2; color: #991b1b; }
+  .status.waived { background: #e0e7ff; color: #4338ca; }
   .status.active { background: #dcfce7; color: #166534; }
   .status.inactive { background: #fee2e2; color: #991b1b; }
   .status.complete { background: #dcfce7; color: #166534; }

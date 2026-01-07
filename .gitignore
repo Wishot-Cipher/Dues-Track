@@ -70,7 +70,8 @@ archive_docs/
 # SCRIPTS WITH SENSITIVE LOGIC
 # ==========================================
 scripts/
-api/
+# Note: api/ folder is NOT ignored - needed for Vercel serverless functions
+# api/keep-alive.ts is required to prevent Supabase database sleep
 
 # ==========================================
 # Database dumps and backups

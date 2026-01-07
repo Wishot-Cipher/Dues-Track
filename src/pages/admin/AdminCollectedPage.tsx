@@ -191,18 +191,24 @@ export default function AdminCollectedPage() {
 
         if (studentMap.has(studentId)) {
           const studentData = studentMap.get(studentId)!;
-          studentData.has_paid = true;
+          const paymentStatus = payment.status || 'pending';
+          
+          // Only mark as paid if payment is approved (not pending)
+          if (paymentStatus === 'approved') {
+            studentData.has_paid = true;
+            studentData.total_paid += Number(payment.amount || 0);
+            studentData.payment_count += 1;
+          }
+          
           studentData.payments.push({
             id: payment.id,
             amount: Number(payment.amount || 0),
             category,
             payment_type: paymentTypeName,
             transaction_ref: payment.transaction_ref || '',
-            status: payment.status || 'pending',
+            status: paymentStatus,
             created_at: payment.created_at,
           });
-          studentData.total_paid += Number(payment.amount || 0);
-          studentData.payment_count += 1;
           
           if (!studentData.categories_paid.includes(category)) {
             studentData.categories_paid.push(category);

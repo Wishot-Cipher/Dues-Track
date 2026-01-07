@@ -983,9 +983,9 @@ export default function DashboardPage() {
                             };
                           case 'waived':
                             return { 
-                              color: '#9CA3AF', // Gray color to indicate no payment
-                              bg: `linear-gradient(135deg, rgba(156, 163, 175, 0.1) 0%, rgba(156, 163, 175, 0.05) 100%)`,
-                              border: 'rgba(156, 163, 175, 0.25)',
+                              color: '#6366F1', // Professional Indigo for waived
+                              bg: `linear-gradient(135deg, rgba(99, 102, 241, 0.1) 0%, rgba(99, 102, 241, 0.05) 100%)`,
+                              border: 'rgba(99, 102, 241, 0.25)',
                               label: 'WAIVED',
                               icon: '🔓'
                             };

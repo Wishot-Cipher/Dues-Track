@@ -276,7 +276,7 @@ export function exportPaymentsToPrint(
       p.payment_type?.title || 'Unknown',
       `<span class="amount">${formatNaira(p.amount)}</span>`,
       p.transaction_ref || '-',
-      isWaived ? '<span class="status approved">✓ Waived</span>' : generateStatusBadge(p.status),
+      isWaived ? '<span class="status waived">✓ Waived</span>' : generateStatusBadge(p.status),
       p.notes || '-',
     ];
   });

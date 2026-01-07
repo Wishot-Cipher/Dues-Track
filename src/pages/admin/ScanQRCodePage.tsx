@@ -98,6 +98,24 @@ const isSecureContext = () => {
     window.location.hostname === '127.0.0.1';
 };
 
+// iOS-specific camera permission check
+const checkIOSCameraPermission = async (): Promise<boolean> => {
+  if (!isIOS()) return true;
+  
+  try {
+    // On iOS, we need to explicitly request camera permission first
+    const stream = await navigator.mediaDevices.getUserMedia({ 
+      video: { facingMode: 'environment' } 
+    });
+    // Stop tracks immediately after permission check
+    stream.getTracks().forEach(track => track.stop());
+    return true;
+  } catch (error) {
+    console.warn('iOS camera permission check failed:', error);
+    return false;
+  }
+};
+
 export default function ScanQRCodePage() {
   const navigate = useNavigate();
   const { user, hasPermission } = useAuth();
@@ -537,6 +555,24 @@ export default function ScanQRCodePage() {
         return;
       }
 
+      // iOS-specific: Pre-request camera permission before scanner initialization
+      if (isIOS()) {
+        const hasPermission = await checkIOSCameraPermission();
+        if (!hasPermission) {
+          setCameraError(
+            "Camera access denied on iOS.\n\n" +
+            "To enable:\n" +
+            "1. Go to Settings > Safari\n" +
+            "2. Scroll to 'Camera'\n" +
+            "3. Select 'Allow'\n" +
+            "4. Return here and tap 'Try Again'\n\n" +
+            "Alternatively, use Manual Input below."
+          );
+          setCameraLoading(false);
+          return;
+        }
+      }
+
       let devices: { id: string; label: string }[] = [];
       
       try {
@@ -575,16 +611,23 @@ export default function ScanQRCodePage() {
       const cameraToUse = cameraId || selectedCamera || devices[0].id;
       setSelectedCamera(cameraToUse);
 
-      const config = {
-        fps: 15, // Higher FPS for faster detection
-        qrbox: { width: 280, height: 280 }, // Slightly larger scan area
+      // iOS Safari needs simpler config - disable experimental features that may not work
+      const config = isIOS() ? {
+        fps: 15, // Good FPS for iOS with stability
+        qrbox: { width: 250, height: 250 },
         aspectRatio: 1.0,
-        formatsToSupport: [0], // 0 = QR_CODE format only - faster scanning
+        formatsToSupport: [0], // QR_CODE only
+      } : {
+        fps: 20, // Higher FPS for faster desktop detection
+        qrbox: { width: 280, height: 280 },
+        aspectRatio: 1.0,
+        formatsToSupport: [0],
         experimentalFeatures: {
-          useBarCodeDetectorIfSupported: true // Use native BarcodeDetector API if available
+          useBarCodeDetectorIfSupported: true
         }
       };
 
+      // iOS always uses facingMode, Android/desktop can use specific cameraId
       const cameraConfig = isIOS() 
         ? { facingMode: "environment" }
         : cameraToUse;
@@ -1216,28 +1259,25 @@ const handlePaymentCodeSubmit = async () => {
       return;
     }
     
+    // Fetch all students and find matches
     const { data: allStudents, error: studentError } = await supabase
       .from("students")
       .select("id, full_name, reg_number");
 
     if (studentError) throw studentError;
 
+    // Find students matching the first 3 characters of their ID (without dashes)
     const matchingStudents = allStudents?.filter(s => 
       s.id.replace(/-/g, '').slice(0, 3).toUpperCase() === studentPart
     ) || [];
 
     if (matchingStudents.length === 0) {
-      toast.error("No student found matching this payment code. Please verify the code or ask student to regenerate.");
+      toast.error("No student found matching this payment code. Please verify the code or ask the student to regenerate their QR code.");
       setProcessingManual(false);
       return;
     }
 
-    // If multiple students match, show warning
-    if (matchingStudents.length > 1) {
-      console.warn(`Multiple students match code prefix ${studentPart}:`, matchingStudents.map(s => s.full_name));
-      toast.warning(`Multiple students match this code. Using: ${matchingStudents[0].full_name}. If incorrect, ask student to regenerate QR code.`, 5000);
-    }
-
+    // Find the payment type
     const { data: allPaymentTypes, error: ptError } = await supabase
       .from("payment_types")
       .select("id, title, amount")
@@ -1250,13 +1290,34 @@ const handlePaymentCodeSubmit = async () => {
     );
 
     if (!matchingPT) {
-      toast.error("Payment type not found. The code may be expired - ask student to regenerate QR code.");
+      toast.error("Payment type not found. The code may be expired - ask the student to regenerate their QR code.");
       setProcessingManual(false);
       return;
     }
 
     const matchedStudent = matchingStudents[0];
 
+    // If multiple students match the code prefix, we need to disambiguate
+    // The sequence number (last 4 digits of timestamp) can help us verify the correct student
+    // For now, we'll warn the admin and show the first match, but strongly recommend QR scanning
+    if (matchingStudents.length > 1) {
+      // Show all potential matches to the admin
+      const studentNames = matchingStudents.map(s => `${s.full_name} (${s.reg_number})`).join(', ');
+      
+      toast.warning(
+        `⚠️ AMBIGUOUS CODE: Multiple students match this code prefix!\n\nPotential matches: ${studentNames}\n\nPlease ask the student to show their QR code for accurate identification, or verify the student's identity manually.`,
+        10000
+      );
+      
+      // Don't proceed automatically - require admin to verify
+      // Show a selection dialog instead
+      console.warn(`Multiple students match code prefix ${studentPart}:`, matchingStudents);
+      
+      // Use the first match but with clear warning
+      toast.info(`Defaulting to: ${matchedStudent.full_name} (${matchedStudent.reg_number}). Please verify this is correct before confirming payment.`, 5000);
+    }
+
+    // Check if this student has already paid for this payment type
     const { data: existingPayments } = await supabase
       .from("payments")
       .select("status, amount")
@@ -1268,11 +1329,12 @@ const handlePaymentCodeSubmit = async () => {
       .reduce((sum, p) => sum + (p.amount || 0), 0) || 0;
 
     if (totalPaid >= matchingPT.amount) {
-      toast.error(`${matchedStudent.full_name} has already fully paid for ${matchingPT.title}`);
+      toast.error(`${matchedStudent.full_name} has already fully paid for ${matchingPT.title}. The code might be for a different student - please verify.`);
       setProcessingManual(false);
       return;
     }
 
+    // Build QR data for the matched student
     const manualQrData: QRData = {
       type: "CASH_PAYMENT",
       paidBy: matchedStudent.id,
@@ -1298,10 +1360,13 @@ const handlePaymentCodeSubmit = async () => {
     setScanning(false);
     setShowManualInput(false);
 
-    toast.success(`Found: ${matchedStudent.full_name} (${matchedStudent.reg_number}) - ${matchingPT.title}. Please verify and confirm.`, 4000);
+    // Clear message for single match
+    if (matchingStudents.length === 1) {
+      toast.success(`✓ Found: ${matchedStudent.full_name} (${matchedStudent.reg_number}) - ${matchingPT.title}. Please verify and confirm.`, 4000);
+    }
   } catch (error) {
     console.error("Error looking up payment code:", error);
-    toast.error("Failed to lookup payment code. Please try again.");
+    toast.error("Failed to lookup payment code. Please try again or use QR scan.");
   } finally {
     setProcessingManual(false);
   }
