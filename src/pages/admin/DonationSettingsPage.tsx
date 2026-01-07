@@ -1,11 +1,12 @@
 import { useState, useEffect, useCallback } from 'react'
 import { motion } from 'framer-motion'
-import { ArrowLeft, Heart, Building2, Save, Loader2, Settings, Info, ExternalLink, Users, DollarSign, CheckCircle, RefreshCw, Edit3, Sparkles } from 'lucide-react'
-import { Link } from 'react-router-dom'
+import { ArrowLeft, Heart, Building2, Save, Loader2, Settings, Info, ExternalLink, Users, DollarSign, CheckCircle, RefreshCw, Edit3, Sparkles, AlertTriangle } from 'lucide-react'
+import { Link, useNavigate } from 'react-router-dom'
 import { colors, gradients } from '@/config/colors'
 import { supabase } from '@/config/supabase'
 import { useToast } from '@/hooks/useToast'
 import GlassCard from '@/components/ui/GlassCard'
+import Modal from '@/components/ui/Modal'
 
 interface BankDetails {
   bank_name: string
@@ -39,6 +40,7 @@ const NIGERIAN_BANKS = [
 
 export default function DonationSettingsPage() {
   const toast = useToast()
+  const navigate = useNavigate()
   
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
@@ -107,6 +109,43 @@ export default function DonationSettingsPage() {
       setLoading(false)
     }
   }, [toast])
+
+  // Confirmation modal states
+  const [showConfirmModal, setShowConfirmModal] = useState(false)
+  const [modalConfig, setModalConfig] = useState<{
+    title: string
+    message: string
+    action: () => Promise<void>
+    variant: 'primary' | 'danger' | 'warning'
+  }>({
+    title: '',
+    message: '',
+    action: async () => {},
+    variant: 'primary'
+  })
+
+  // Open confirmation modal helper
+  const openConfirmModal = (
+    title: string,
+    message: string,
+    action: () => Promise<void>,
+    variant: 'primary' | 'danger' | 'warning' = 'primary'
+  ) => {
+    setModalConfig({ title, message, action, variant })
+    setShowConfirmModal(true)
+  }
+
+  const handleConfirm = async () => {
+    setSaving(true)
+    try {
+      await modalConfig.action()
+    } catch (err) {
+      console.error('Action failed:', err)
+    } finally {
+      setSaving(false)
+      setShowConfirmModal(false)
+    }
+  }
 
   useEffect(() => {
     fetchData()
@@ -181,80 +220,113 @@ export default function DonationSettingsPage() {
   return (
     <div className="min-h-screen py-6 px-4" style={{ background: 'radial-gradient(ellipse at top, #1A0E09 0%, #0F0703 100%)' }}>
       <div className="max-w-4xl mx-auto">
-        {/* Header */}
-        <motion.div initial={{ opacity: 0, y: -20 }} animate={{ opacity: 1, y: 0 }} className="flex items-center justify-between mb-6">
-          <div className="flex items-center gap-4">
-            <Link to="/dashboard" className="p-2 rounded-xl hover:bg-white/10 transition-colors" style={{ background: 'rgba(255, 255, 255, 0.05)' }}>
-              <ArrowLeft className="w-5 h-5 text-white" />
-            </Link>
-            <div>
-              <h1 className="text-2xl font-bold text-white flex items-center gap-2">
-                <Settings className="w-6 h-6" style={{ color: colors.primary }} />
-                Donation Settings
-              </h1>
-              <p className="text-sm" style={{ color: colors.textSecondary }}>Configure public donation page</p>
-            </div>
+        {/* Header - Mobile Responsive */}
+        <motion.div 
+          initial={{ opacity: 0, y: -20 }} 
+          animate={{ opacity: 1, y: 0 }} 
+          className="mb-6"
+        >
+          {/* Back Button - Full Width on Mobile */}
+          <button
+            type="button"
+            onClick={() => navigate('/admin/dashboard')}
+            className="inline-flex items-center gap-2 p-2 rounded-xl hover:bg-white/10 transition-colors mb-4"
+            style={{ background: 'rgba(255, 255, 255, 0.05)' }}
+          >
+            <ArrowLeft className="w-5 h-5 text-white" />
+            <span className="text-sm text-white">Back</span>
+          </button>
+
+          {/* Title Section */}
+          <div className="mb-4">
+            <h1 className="text-xl sm:text-2xl font-bold text-white flex items-center gap-2 mb-1">
+              <Settings className="w-5 h-5 sm:w-6 sm:h-6" style={{ color: colors.primary }} />
+              Donation Settings
+            </h1>
+            <p className="text-xs sm:text-sm" style={{ color: colors.textSecondary }}>
+              Configure public donation page
+            </p>
           </div>
-          <div className="flex items-center gap-3">
-            <Link to="/admin/contributions">
-              <motion.button whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }} className="px-4 py-2.5 rounded-xl flex items-center gap-2 text-white font-medium text-sm" style={{ background: 'rgba(255, 255, 255, 0.05)', border: '1px solid rgba(255, 255, 255, 0.1)' }}>
-                <Users className="w-4 h-4" />View Contributions
+
+          {/* Action Buttons - Stack on Mobile */}
+          <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
+            <Link to="/admin/contributions" className="flex-1 sm:flex-none">
+              <motion.button 
+                whileHover={{ scale: 1.02 }} 
+                whileTap={{ scale: 0.98 }} 
+                className="w-full px-4 py-2.5 rounded-xl flex items-center justify-center gap-2 text-white font-medium text-sm" 
+                style={{ background: 'rgba(255, 255, 255, 0.05)', border: '1px solid rgba(255, 255, 255, 0.1)' }}
+              >
+                <Users className="w-4 h-4" />
+                <span>View Contributions</span>
               </motion.button>
             </Link>
-            <Link to="/contribute" target="_blank">
-              <motion.button whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }} className="px-4 py-2.5 rounded-xl flex items-center gap-2 text-white font-medium text-sm" style={{ background: gradients.primary }}>
-                <ExternalLink className="w-4 h-4" />Preview Page
+            
+            <Link to="/contribute" target="_blank" className="flex-1 sm:flex-none">
+              <motion.button 
+                whileHover={{ scale: 1.02 }} 
+                whileTap={{ scale: 0.98 }} 
+                className="w-full px-4 py-2.5 rounded-xl flex items-center justify-center gap-2 text-white font-medium text-sm" 
+                style={{ background: gradients.primary }}
+              >
+                <ExternalLink className="w-4 h-4" />
+                <span>Preview Page</span>
               </motion.button>
             </Link>
           </div>
         </motion.div>
 
-        {/* Stats Cards */}
-        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }} className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
-          <div className="rounded-xl p-4" style={{ background: 'rgba(255, 255, 255, 0.03)', border: '1px solid rgba(255, 255, 255, 0.1)' }}>
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-lg flex items-center justify-center" style={{ background: `${colors.primary}20` }}>
-                <Heart className="w-5 h-5" style={{ color: colors.primary }} />
+        {/* Stats Cards - Better Mobile Layout */}
+        <motion.div 
+          initial={{ opacity: 0, y: 20 }} 
+          animate={{ opacity: 1, y: 0 }} 
+          transition={{ delay: 0.1 }} 
+          className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4 mb-6"
+        >
+          <div className="rounded-xl p-3 sm:p-4" style={{ background: 'rgba(255, 255, 255, 0.03)', border: '1px solid rgba(255, 255, 255, 0.1)' }}>
+            <div className="flex items-center gap-2 sm:gap-3">
+              <div className="w-8 h-8 sm:w-10 sm:h-10 rounded-lg flex items-center justify-center" style={{ background: `${colors.primary}20` }}>
+                <Heart className="w-4 h-4 sm:w-5 sm:h-5" style={{ color: colors.primary }} />
               </div>
               <div>
-                <p className="text-xs" style={{ color: colors.textSecondary }}>Total</p>
-                <p className="text-xl font-bold text-white">{stats.totalContributions}</p>
+                <p className="text-[10px] sm:text-xs" style={{ color: colors.textSecondary }}>Total</p>
+                <p className="text-lg sm:text-xl font-bold text-white">{stats.totalContributions}</p>
               </div>
             </div>
           </div>
           
-          <div className="rounded-xl p-4" style={{ background: 'rgba(255, 255, 255, 0.03)', border: '1px solid rgba(255, 255, 255, 0.1)' }}>
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-lg flex items-center justify-center" style={{ background: `${colors.warning}20` }}>
-                <RefreshCw className="w-5 h-5" style={{ color: colors.warning }} />
+          <div className="rounded-xl p-3 sm:p-4" style={{ background: 'rgba(255, 255, 255, 0.03)', border: '1px solid rgba(255, 255, 255, 0.1)' }}>
+            <div className="flex items-center gap-2 sm:gap-3">
+              <div className="w-8 h-8 sm:w-10 sm:h-10 rounded-lg flex items-center justify-center" style={{ background: `${colors.warning}20` }}>
+                <RefreshCw className="w-4 h-4 sm:w-5 sm:h-5" style={{ color: colors.warning }} />
               </div>
               <div>
-                <p className="text-xs" style={{ color: colors.textSecondary }}>Pending</p>
-                <p className="text-xl font-bold text-white">{stats.pendingContributions}</p>
+                <p className="text-[10px] sm:text-xs" style={{ color: colors.textSecondary }}>Pending</p>
+                <p className="text-lg sm:text-xl font-bold text-white">{stats.pendingContributions}</p>
               </div>
             </div>
           </div>
           
-          <div className="rounded-xl p-4" style={{ background: 'rgba(255, 255, 255, 0.03)', border: '1px solid rgba(255, 255, 255, 0.1)' }}>
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-lg flex items-center justify-center" style={{ background: `${colors.accentMint}20` }}>
-                <CheckCircle className="w-5 h-5" style={{ color: colors.accentMint }} />
+          <div className="rounded-xl p-3 sm:p-4" style={{ background: 'rgba(255, 255, 255, 0.03)', border: '1px solid rgba(255, 255, 255, 0.1)' }}>
+            <div className="flex items-center gap-2 sm:gap-3">
+              <div className="w-8 h-8 sm:w-10 sm:h-10 rounded-lg flex items-center justify-center" style={{ background: `${colors.accentMint}20` }}>
+                <CheckCircle className="w-4 h-4 sm:w-5 sm:h-5" style={{ color: colors.accentMint }} />
               </div>
               <div>
-                <p className="text-xs" style={{ color: colors.textSecondary }}>Verified</p>
-                <p className="text-lg font-bold" style={{ color: colors.accentMint }}>{formatCurrency(stats.verifiedAmount)}</p>
+                <p className="text-[10px] sm:text-xs" style={{ color: colors.textSecondary }}>Verified</p>
+                <p className="text-lg sm:text-xl font-bold" style={{ color: colors.accentMint }}>{formatCurrency(stats.verifiedAmount)}</p>
               </div>
             </div>
           </div>
           
-          <div className="rounded-xl p-4" style={{ background: 'rgba(255, 255, 255, 0.03)', border: '1px solid rgba(255, 255, 255, 0.1)' }}>
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-lg flex items-center justify-center" style={{ background: `${colors.accentCyan}20` }}>
-                <DollarSign className="w-5 h-5" style={{ color: colors.accentCyan }} />
+          <div className="rounded-xl p-3 sm:p-4" style={{ background: 'rgba(255, 255, 255, 0.03)', border: '1px solid rgba(255, 255, 255, 0.1)' }}>
+            <div className="flex items-center gap-2 sm:gap-3">
+              <div className="w-8 h-8 sm:w-10 sm:h-10 rounded-lg flex items-center justify-center" style={{ background: `${colors.accentCyan}20` }}>
+                <DollarSign className="w-4 h-4 sm:w-5 sm:h-5" style={{ color: colors.accentCyan }} />
               </div>
               <div>
-                <p className="text-xs" style={{ color: colors.textSecondary }}>Total Amount</p>
-                <p className="text-lg font-bold" style={{ color: colors.accentCyan }}>{formatCurrency(stats.totalAmount)}</p>
+                <p className="text-[10px] sm:text-xs" style={{ color: colors.textSecondary }}>Total Amount</p>
+                <p className="text-lg sm:text-xl font-bold" style={{ color: colors.accentCyan }}>{formatCurrency(stats.totalAmount)}</p>
               </div>
             </div>
           </div>
@@ -303,8 +375,8 @@ export default function DonationSettingsPage() {
                   </div>
                   
                   <div className="flex gap-3 pt-2">
-                    <button onClick={() => setEditMode(null)} className="flex-1 py-2.5 rounded-xl font-medium text-sm" style={{ background: 'rgba(255, 255, 255, 0.05)', color: colors.textSecondary }}>Cancel</button>
-                    <motion.button whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }} onClick={saveBankDetails} disabled={saving} className="flex-1 py-2.5 rounded-xl font-medium text-sm text-white flex items-center justify-center gap-2" style={{ background: gradients.primary }}>
+                    <button onClick={() => openConfirmModal('Discard changes?', 'Are you sure you want to discard your edits?', async () => { setEditMode(null) }, 'warning')} className="flex-1 py-2.5 rounded-xl font-medium text-sm" style={{ background: 'rgba(255, 255, 255, 0.05)', color: colors.textSecondary }}>Cancel</button>
+                    <motion.button whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }} onClick={() => openConfirmModal('Save bank details?', 'Save the bank details you entered?', saveBankDetails, 'primary')} disabled={saving} className="flex-1 py-2.5 rounded-xl font-medium text-sm text-white flex items-center justify-center gap-2" style={{ background: gradients.primary }}>
                       {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <><Save className="w-4 h-4" />Save</>}
                     </motion.button>
                   </div>
@@ -366,8 +438,8 @@ export default function DonationSettingsPage() {
                   </div>
                   
                   <div className="flex gap-3 pt-2">
-                    <button onClick={() => setEditMode(null)} className="flex-1 py-2.5 rounded-xl font-medium text-sm" style={{ background: 'rgba(255, 255, 255, 0.05)', color: colors.textSecondary }}>Cancel</button>
-                    <motion.button whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }} onClick={saveClassInfo} disabled={saving} className="flex-1 py-2.5 rounded-xl font-medium text-sm text-white flex items-center justify-center gap-2" style={{ background: gradients.primary }}>
+                    <button onClick={() => openConfirmModal('Discard changes?', 'Are you sure you want to discard your edits?', async () => { setEditMode(null) }, 'warning')} className="flex-1 py-2.5 rounded-xl font-medium text-sm" style={{ background: 'rgba(255, 255, 255, 0.05)', color: colors.textSecondary }}>Cancel</button>
+                    <motion.button whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }} onClick={() => openConfirmModal('Save class info?', 'Save the class information you entered?', saveClassInfo, 'primary')} disabled={saving} className="flex-1 py-2.5 rounded-xl font-medium text-sm text-white flex items-center justify-center gap-2" style={{ background: gradients.primary }}>
                       {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <><Save className="w-4 h-4" />Save</>}
                     </motion.button>
                   </div>
@@ -407,6 +479,28 @@ export default function DonationSettingsPage() {
             </div>
           </div>
         </motion.div>
+
+        {showConfirmModal && (
+          <Modal isOpen={showConfirmModal} onClose={() => setShowConfirmModal(false)} title={modalConfig.title} footer={
+            <>
+              <button onClick={() => setShowConfirmModal(false)} className="py-2 px-4 rounded-xl" style={{ background: 'rgba(255,255,255,0.05)', color: colors.textSecondary }}>Cancel</button>
+              <motion.button onClick={handleConfirm} whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }} disabled={saving} className="py-2 px-4 rounded-xl font-medium text-white" style={{ background: gradients.primary }}>
+                {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Confirm'}
+              </motion.button>
+            </>
+          }>
+            <div className="flex items-start gap-4">
+              <div className="p-3 rounded-lg" style={{ background: `${colors.warning}10`, border: `1px solid ${colors.warning}30` }}>
+                <AlertTriangle className="w-6 h-6" style={{ color: colors.warning }} />
+              </div>
+              <div>
+                <p className="font-semibold text-lg text-white">{modalConfig.title}</p>
+                <p className="text-sm" style={{ color: colors.textSecondary }}>{modalConfig.message}</p>
+              </div>
+            </div>
+          </Modal>
+        )}
+
       </div>
     </div>
   )

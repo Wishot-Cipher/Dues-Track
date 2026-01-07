@@ -1,11 +1,13 @@
 import { useState, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { ArrowLeft, Heart, Users, Search, Check, X, Eye, Clock, Loader2, Gift, Filter, ChevronDown, Mail, Phone, MessageSquare, DollarSign, RefreshCw, CheckCircle, XCircle, ExternalLink } from 'lucide-react'
-import { Link } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
 import { colors, gradients } from '@/config/colors'
 import { supabase } from '@/config/supabase'
 import { useToast } from '@/hooks/useToast'
 import { useAuth } from '@/hooks/useAuth'
+import { formatNaira } from '@/utils/printStyles'
+import ConfirmDialog from '@/components/ui/ConfirmDialog'
 
 interface PublicContribution {
   id: string
@@ -30,7 +32,8 @@ interface PublicContribution {
 type StatusFilter = 'all' | 'pending' | 'verified' | 'rejected'
 
 export default function PublicContributionsPage() {
-  const { hasPermission } = useAuth()
+  const { hasPermission, user } = useAuth()
+  const navigate = useNavigate()
   const toast = useToast()
   
   const [contributions, setContributions] = useState<PublicContribution[]>([])
@@ -41,6 +44,21 @@ export default function PublicContributionsPage() {
   const [showFilterDropdown, setShowFilterDropdown] = useState(false)
   const [selectedContribution, setSelectedContribution] = useState<PublicContribution | null>(null)
   const [actionLoading, setActionLoading] = useState<string | null>(null)
+  
+  // Confirmation dialog states
+  const [confirmDialog, setConfirmDialog] = useState<{
+    isOpen: boolean
+    title: string
+    message: string
+    type: 'info' | 'warning' | 'danger' | 'success'
+    onConfirm: () => void
+  }>({
+    isOpen: false,
+    title: '',
+    message: '',
+    type: 'info',
+    onConfirm: () => {}
+  })
 
   // Stats
   const [stats, setStats] = useState({
@@ -112,46 +130,93 @@ export default function PublicContributionsPage() {
 
     setActionLoading(id)
     try {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const payload: any = {
+        status: newStatus,
+        verified_at: new Date().toISOString()
+      }
+
+      // Only set `verified_by` if the current user's id exists in the `users` table
+      // to avoid foreign-key violations (Postgres 23503).
+      if (user?.id) {
+        const { data: existing, error: checkErr } = await supabase
+          .from('users')
+          .select('id')
+          .eq('id', user.id)
+          .maybeSingle()
+
+        if (checkErr) {
+          console.warn('Error checking users table for verifier id:', checkErr)
+        } else if (existing && existing.id) {
+          payload.verified_by = user.id
+        } else {
+          console.warn('Current user id not found in users table; skipping verified_by to avoid FK error')
+        }
+      }
+
       const { error } = await supabase
         .from('public_payments')
-        .update({
-          status: newStatus,
-          verified_at: new Date().toISOString()
-        })
+        .update(payload)
         .eq('id', id)
 
       if (error) throw error
 
-      toast.success(`Contribution ${newStatus === 'verified' ? 'verified' : 'rejected'}!`)
+      if (newStatus === 'verified') {
+        toast.success('Contribution verified!')
+      } else {
+        toast.error('Contribution rejected')
+      }
       setSelectedContribution(null)
       fetchContributions()
     } catch (err) {
       console.error('Error updating status:', err)
-      toast.error('Failed to update status')
+      // Detect Postgres foreign-key violation and show actionable message
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      if (err && typeof err === 'object' && (err as any).code === '23503') {
+        toast.error('Failed to update status: verifier id not present in users table (foreign-key violation). Use an admin/staff account.')
+      } else {
+        toast.error('Failed to update status')
+      }
     } finally {
       setActionLoading(null)
     }
   }
 
-  const filteredContributions = contributions.filter(c => {
-    if (!searchQuery) return true
-    const query = searchQuery.toLowerCase()
-    return (
-      c.contributor_name.toLowerCase().includes(query) ||
-      c.transaction_ref.toLowerCase().includes(query) ||
-      c.contributor_email?.toLowerCase().includes(query) ||
-      c.contributor_phone?.includes(query)
-    )
-  })
+  const confirmStatusChange = (id: string, newStatus: 'verified' | 'rejected') => {
+    setConfirmDialog({
+      isOpen: true,
+      title: newStatus === 'verified' ? 'Verify Contribution?' : 'Reject Contribution?',
+      message: newStatus === 'verified' 
+        ? 'This will mark the contribution as verified and include it in the verified amount.'
+        : 'This will mark the contribution as rejected. This action can be reversed later.',
+      type: newStatus === 'verified' ? 'success' : 'danger',
+      onConfirm: () => {
+        handleStatusChange(id, newStatus)
+      }
+    })
+  }
 
-  const formatCurrency = (amount: number) => `₦${amount.toLocaleString()}`
-  const formatDate = (date: string) => new Date(date).toLocaleDateString('en-NG', {
-    day: 'numeric',
-    month: 'short',
-    year: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit'
-  })
+  const formatDate = (iso: string) => {
+    try {
+      return new Date(iso).toLocaleString(undefined, {
+        year: 'numeric',
+        month: 'short',
+        day: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit'
+      })
+    } catch {
+      return iso
+    }
+  }
+
+  const formatCurrency = (value: number) => {
+    try {
+      return formatNaira(value)
+    } catch {
+      return `₦${value}`
+    }
+  }
 
   const getStatusColor = (status: string) => {
     switch (status) {
@@ -169,30 +234,73 @@ export default function PublicContributionsPage() {
     }
   }
 
+  const filteredContributions = contributions.filter((c) => {
+    const q = searchQuery.trim().toLowerCase()
+    if (!q) return true
+    return (
+      c.contributor_name?.toLowerCase().includes(q) ||
+      c.transaction_ref?.toLowerCase().includes(q) ||
+      (c.contributor_email || '').toLowerCase().includes(q) ||
+      (c.contributor_phone || '').toLowerCase().includes(q)
+    )
+  })
+
   return (
     <div className="min-h-screen py-6 px-4" style={{ background: 'radial-gradient(ellipse at top, #1A0E09 0%, #0F0703 100%)' }}>
       <div className="max-w-6xl mx-auto">
-        {/* Header */}
-        <motion.div initial={{ opacity: 0, y: -20 }} animate={{ opacity: 1, y: 0 }} className="flex items-center justify-between mb-6">
-          <div className="flex items-center gap-4">
-            <Link to="/dashboard" className="p-2 rounded-xl hover:bg-white/10 transition-colors" style={{ background: 'rgba(255, 255, 255, 0.05)' }}>
-              <ArrowLeft className="w-5 h-5 text-white" />
-            </Link>
-            <div>
-              <h1 className="text-2xl font-bold text-white flex items-center gap-2">
-                <Heart className="w-6 h-6" style={{ color: colors.primary }} />
-                Public Contributions
-              </h1>
-              <p className="text-sm" style={{ color: colors.textSecondary }}>Manage donations from the public</p>
-            </div>
+        {/* Header - Mobile Responsive */}
+        <motion.div 
+          initial={{ opacity: 0, y: -20 }} 
+          animate={{ opacity: 1, y: 0 }} 
+          className="mb-6"
+        >
+          {/* Back Button - Full Width on Mobile */}
+          <button
+            type="button"
+            onClick={() => navigate('/admin/dashboard')}
+            className="inline-flex items-center gap-2 p-2 rounded-xl hover:bg-white/10 transition-colors mb-4"
+            style={{ background: 'rgba(255, 255, 255, 0.05)' }}
+          >
+            <ArrowLeft className="w-5 h-5 text-white" />
+            <span className="text-sm text-white">Back</span>
+          </button>
+
+          {/* Title Section */}
+          <div className="mb-4">
+            <h1 className="text-xl sm:text-2xl font-bold text-white flex items-center gap-2 mb-1">
+              <Heart className="w-5 h-5 sm:w-6 sm:h-6" style={{ color: colors.primary }} />
+              Public Contributions
+            </h1>
+            <p className="text-xs sm:text-sm" style={{ color: colors.textSecondary }}>
+              Manage donations from the public
+            </p>
           </div>
-          <div className="flex items-center gap-3">
-            <motion.button whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }} onClick={handleRefresh} disabled={refreshing} className="p-2.5 rounded-xl flex items-center gap-2" style={{ background: 'rgba(255, 255, 255, 0.05)', border: '1px solid rgba(255, 255, 255, 0.1)' }}>
-              <RefreshCw className={`w-5 h-5 text-white ${refreshing ? 'animate-spin' : ''}`} />
-            </motion.button>
-            <Link to="/contribute" target="_blank">
-              <motion.button whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }} className="px-4 py-2.5 rounded-xl flex items-center gap-2 text-white font-medium text-sm" style={{ background: gradients.primary }}>
-                <ExternalLink className="w-4 h-4" />View Page
+
+          {/* Action Buttons - Stack on Mobile */}
+          <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
+            <div className="w-full sm:w-auto">
+              <motion.button 
+                whileHover={{ scale: 1.02 }} 
+                whileTap={{ scale: 0.98 }} 
+                onClick={handleRefresh}
+                disabled={refreshing}
+                className="w-full px-4 py-2.5 rounded-xl flex items-center justify-center gap-2 text-white font-medium text-sm"
+                style={{ background: 'rgba(255, 255, 255, 0.05)', border: '1px solid rgba(255, 255, 255, 0.1)' }}
+              >
+                <RefreshCw className={`w-4 h-4 text-white ${refreshing ? 'animate-spin' : ''}`} />
+                <span>Refresh</span>
+              </motion.button>
+            </div>
+
+            <Link to="/contribute" target="_blank" className="w-full sm:w-auto">
+              <motion.button 
+                whileHover={{ scale: 1.02 }} 
+                whileTap={{ scale: 0.98 }} 
+                className="w-full px-4 py-2.5 rounded-xl flex items-center justify-center gap-2 text-white font-medium text-sm" 
+                style={{ background: gradients.primary }}
+              >
+                <ExternalLink className="w-4 h-4" />
+                <span>View Page</span>
               </motion.button>
             </Link>
           </div>
@@ -339,10 +447,10 @@ export default function PublicContributionsPage() {
                           </motion.button>
                           {contribution.status === 'pending' && hasPermission('can_approve_payments') && (
                             <>
-                              <motion.button whileHover={{ scale: 1.1 }} whileTap={{ scale: 0.9 }} onClick={() => handleStatusChange(contribution.id, 'verified')} disabled={actionLoading === contribution.id} className="p-2 rounded-lg" style={{ background: `${colors.accentMint}20` }}>
+                              <motion.button whileHover={{ scale: 1.1 }} whileTap={{ scale: 0.9 }} onClick={() => confirmStatusChange(contribution.id, 'verified')} disabled={actionLoading === contribution.id} className="p-2 rounded-lg" style={{ background: `${colors.accentMint}20` }}>
                                 {actionLoading === contribution.id ? <Loader2 className="w-4 h-4 animate-spin" style={{ color: colors.accentMint }} /> : <Check className="w-4 h-4" style={{ color: colors.accentMint }} />}
                               </motion.button>
-                              <motion.button whileHover={{ scale: 1.1 }} whileTap={{ scale: 0.9 }} onClick={() => handleStatusChange(contribution.id, 'rejected')} disabled={actionLoading === contribution.id} className="p-2 rounded-lg" style={{ background: `${colors.error}20` }}>
+                              <motion.button whileHover={{ scale: 1.1 }} whileTap={{ scale: 0.9 }} onClick={() => confirmStatusChange(contribution.id, 'rejected')} disabled={actionLoading === contribution.id} className="p-2 rounded-lg" style={{ background: `${colors.error}20` }}>
                                 <X className="w-4 h-4" style={{ color: colors.error }} />
                               </motion.button>
                             </>
@@ -370,8 +478,8 @@ export default function PublicContributionsPage() {
         <AnimatePresence>
           {selectedContribution && (
             <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={() => setSelectedContribution(null)}>
-              <motion.div initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.9, opacity: 0 }} onClick={(e) => e.stopPropagation()} className="w-full max-w-md rounded-2xl overflow-hidden" style={{ background: '#1a1a1a', border: '1px solid rgba(255, 255, 255, 0.1)' }}>
-                <div className="p-5" style={{ background: `linear-gradient(135deg, ${getStatusColor(selectedContribution.status)}15, transparent)` }}>
+              <motion.div initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.9, opacity: 0 }} onClick={(e) => e.stopPropagation()} className="w-full max-w-md rounded-2xl overflow-hidden max-h-[90vh] flex flex-col" style={{ background: '#1a1a1a', border: '1px solid rgba(255, 255, 255, 0.1)' }}>
+                  <div className="p-5 sticky top-0 z-10" style={{ background: `linear-gradient(135deg, ${getStatusColor(selectedContribution.status)}15, transparent)` }}>
                   <div className="flex items-center justify-between mb-4">
                     <h2 className="text-lg font-bold text-white">Contribution Details</h2>
                     <button onClick={() => setSelectedContribution(null)} className="p-2 rounded-lg hover:bg-white/10">
@@ -390,7 +498,7 @@ export default function PublicContributionsPage() {
                   </div>
                 </div>
                 
-                <div className="p-5 space-y-4">
+                <div className="p-5 space-y-4" style={{ overflowY: 'auto', maxHeight: 'calc(90vh - 120px)' }}>
                   <div className="grid grid-cols-2 gap-4">
                     <div className="p-3 rounded-lg" style={{ background: 'rgba(255, 255, 255, 0.05)' }}>
                       <p className="text-xs mb-1" style={{ color: colors.textSecondary }}>Status</p>
@@ -447,10 +555,10 @@ export default function PublicContributionsPage() {
                   
                   {selectedContribution.status === 'pending' && hasPermission('can_approve_payments') && (
                     <div className="grid grid-cols-2 gap-3 pt-2">
-                      <motion.button whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }} onClick={() => handleStatusChange(selectedContribution.id, 'rejected')} disabled={actionLoading === selectedContribution.id} className="py-3 rounded-xl font-medium flex items-center justify-center gap-2" style={{ background: `${colors.error}20`, color: colors.error }}>
+                      <motion.button whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }} onClick={() => confirmStatusChange(selectedContribution.id, 'rejected')} disabled={actionLoading === selectedContribution.id} className="py-3 rounded-xl font-medium flex items-center justify-center gap-2" style={{ background: `${colors.error}20`, color: colors.error }}>
                         <XCircle className="w-5 h-5" />Reject
                       </motion.button>
-                      <motion.button whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }} onClick={() => handleStatusChange(selectedContribution.id, 'verified')} disabled={actionLoading === selectedContribution.id} className="py-3 rounded-xl font-medium flex items-center justify-center gap-2 text-white" style={{ background: colors.accentMint }}>
+                      <motion.button whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }} onClick={() => confirmStatusChange(selectedContribution.id, 'verified')} disabled={actionLoading === selectedContribution.id} className="py-3 rounded-xl font-medium flex items-center justify-center gap-2 text-white" style={{ background: colors.accentMint }}>
                         {actionLoading === selectedContribution.id ? <Loader2 className="w-5 h-5 animate-spin" /> : <><CheckCircle className="w-5 h-5" />Verify</>}
                       </motion.button>
                     </div>
@@ -460,6 +568,18 @@ export default function PublicContributionsPage() {
             </motion.div>
           )}
         </AnimatePresence>
+
+        {/* Confirmation Dialog */}
+        <ConfirmDialog
+          isOpen={confirmDialog.isOpen}
+          onClose={() => setConfirmDialog({ ...confirmDialog, isOpen: false })}
+          onConfirm={confirmDialog.onConfirm}
+          title={confirmDialog.title}
+          message={confirmDialog.message}
+          type={confirmDialog.type}
+          confirmText="Continue"
+          cancelText="Cancel"
+        />
       </div>
     </div>
   )
