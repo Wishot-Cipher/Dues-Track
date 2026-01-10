@@ -11,6 +11,8 @@ import UpdateNotification from '@/components/UpdateNotification';
 import LoginPage from '@/pages/LoginPage';
 import ChangePasswordPage from '@/pages/ChangePasswordPage';
 import CompleteProfilePage from '@/pages/CompleteProfilePage';
+import ForgotPasswordPage from '@/pages/student/ForgotPasswordPage';
+import ResetPasswordPage from '@/pages/student/ResetPasswordPage';
 import DashboardPage from '@/pages/DashboardPage';
 import ProfilePage from '@/pages/ProfilePage';
 import SettingsPage from '@/pages/student/SettingsPage';
@@ -42,6 +44,8 @@ function App() {
             <Routes>
               {/* Public Routes */}
               <Route path="/login" element={<LoginPage />} />
+              <Route path="/forgot-password" element={<ForgotPasswordPage />} />
+              <Route path="/reset-password" element={<ResetPasswordPage />} />
               <Route path="/contribute" element={<ContributePage />} />
               <Route path="/donate" element={<ContributePage />} />
 
