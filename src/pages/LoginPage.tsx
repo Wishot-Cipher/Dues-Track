@@ -4,7 +4,7 @@ import { colors, gradients } from '@/config/colors';
 import CustomButton from '@/components/ui/CustomButton';
 import Input from '@/components/ui/Input';
 import { useAuth } from '@/hooks/useAuth';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, Link } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import PageWrapper from '@/components/ui/PageWrapper';
 
@@ -255,6 +255,11 @@ export default function LoginPage() {
                   fullWidth
                   autoComplete="current-password"
                 />
+                <div className="text-right mt-2">
+                  <Link to="/forgot-password" className="text-sm underline hover:no-underline" style={{ color: colors.primary }}>
+                    Forgot password?
+                  </Link>
+                </div>
               </motion.div>
 
               <motion.div
