@@ -35,7 +35,7 @@ const NIGERIAN_BANKS = [
   'Palmpay', 'Parallex Bank', 'Polaris Bank', 'Providus Bank', 'Stanbic IBTC Bank',
   'Standard Chartered Bank', 'Sterling Bank', 'SunTrust Bank', 'Titan Trust Bank',
   'Union Bank of Nigeria', 'United Bank for Africa (UBA)', 'Unity Bank', 'VFD Microfinance Bank',
-  'Wema Bank', 'Zenith Bank', 'Other'
+  'Wema Bank', 'Zenith Bank','Moniepoint', 'Other'
 ]
 
 export default function DonationSettingsPage() {
