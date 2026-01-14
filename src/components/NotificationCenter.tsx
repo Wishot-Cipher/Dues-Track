@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Bell, X, AlertCircle, DollarSign, CheckCircle, BellOff, Sparkles } from 'lucide-react';
 import { supabase } from '@/config/supabase';
+import notificationService from '@/services/notificationService';
 import { useAuth } from '@/hooks/useAuth';
 import { formatCurrency } from '@/utils/formatters';
 import { colors, gradients } from '@/config/colors';
@@ -67,6 +68,7 @@ export const NotificationCenter = () => {
       if (error) throw error;
 
       setNotifications(data || []);
+      setNotifications(data || []);
       setUnreadCount(data?.filter(n => !n.is_read).length || 0);
     } catch (error) {
       console.error('Error fetching notifications:', error);
@@ -75,6 +77,11 @@ export const NotificationCenter = () => {
     }
   }, [user?.id]);
 
+  // Keep unread count in sync with local notifications state
+  useEffect(() => {
+    setUnreadCount(notifications.filter(n => !n.is_read).length);
+  }, [notifications]);
+
   useEffect(() => {
     if (user?.id) {
       fetchNotifications();
@@ -82,7 +89,7 @@ export const NotificationCenter = () => {
       // Pre-initialize audio context for notifications
       void notificationSound.forceInit();
       
-      // Subscribe to new notifications
+      // Subscribe to new notifications and updates (keeps read state in sync across clients)
       const channel = supabase
         .channel('notifications')
         .on(
@@ -95,7 +102,7 @@ export const NotificationCenter = () => {
           },
           (payload) => {
             console.log('🔔 New notification received:', payload.new);
-            
+
             // Play sound for new notification (respects user settings)
             const notification = payload.new as Notification;
             if (notification.type === 'payment_approved') {
@@ -107,8 +114,26 @@ export const NotificationCenter = () => {
             } else {
               playNotificationSound('info');
             }
-            
+
             fetchNotifications();
+          }
+        )
+        .on(
+          'postgres_changes',
+          {
+            event: 'UPDATE',
+            schema: 'public',
+            table: 'notifications',
+            filter: `recipient_id=eq.${user.id}`,
+          },
+          (payload) => {
+            console.log('🔔 Notification updated:', payload.new);
+            const updated = payload.new as Notification;
+            setNotifications(prev => {
+              const next = prev.map(n => n.id === updated.id ? { ...n, ...updated } : n);
+              setUnreadCount(next.filter(n => !n.is_read).length);
+              return next;
+            });
           }
         )
         .subscribe();
@@ -133,36 +158,29 @@ export const NotificationCenter = () => {
 
   const markAsRead = async (notificationId: string) => {
     try {
-      const { error } = await supabase
-        .from('notifications')
-        .update({ is_read: true })
-        .eq('id', notificationId);
-
-      if (error) throw error;
-
-      setNotifications(prev =>
-        prev.map(n => n.id === notificationId ? { ...n, is_read: true } : n)
-      );
-      setUnreadCount(prev => Math.max(0, prev - 1));
+      const ok = await notificationService.markAsRead(notificationId);
+      if (!ok) throw new Error('Failed to mark read');
+      return true;
     } catch (error) {
-      console.error('Error marking notification as read:', error);
+      console.error('Failed to mark notification as read:', error);
+      return false;
     }
   };
 
   const markAllAsRead = async () => {
     try {
-      const { error } = await supabase
-        .from('notifications')
-        .update({ is_read: true })
-        .eq('recipient_id', user?.id)
-        .eq('is_read', false);
+      const userId = user?.id;
+      if (!userId) throw new Error('Not authenticated');
 
-      if (error) throw error;
+      const ok = await notificationService.markAllAsRead(userId);
+      if (!ok) throw new Error('Failed to mark all as read');
 
       setNotifications(prev => prev.map(n => ({ ...n, is_read: true })));
       setUnreadCount(0);
+      return true;
     } catch (error) {
       console.error('Error marking all as read:', error);
+      return false;
     }
   };
 
@@ -386,12 +404,18 @@ export const NotificationCenter = () => {
                             ? '1px solid transparent' 
                             : `1px solid ${getNotificationColor(notification.type)}20`,
                         }}
-                        onClick={async () => {
+                          onClick={async () => {
                           try {
                             if (!notification.is_read) {
-                              await markAsRead(notification.id);
+                              // Optimistic UI update
+                              setNotifications(prev => prev.map(n => n.id === notification.id ? { ...n, is_read: true } : n));
+                              const ok = await markAsRead(notification.id);
+                              if (!ok) {
+                                // Revert if DB update failed
+                                setNotifications(prev => prev.map(n => n.id === notification.id ? { ...n, is_read: false } : n));
+                              }
                             }
-                            
+
                             // Handle navigation based on notification type
                             let targetLink = notification.link;
                             

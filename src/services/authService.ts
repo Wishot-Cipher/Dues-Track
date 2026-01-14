@@ -159,9 +159,9 @@ export const authService = {
    */
   async logout(): Promise<boolean> {
     try {
-      // Clear session from localStorage
+      // Clear session from localStorage (only storing id now)
       localStorage.removeItem('auth_session');
-      localStorage.removeItem('current_user');
+      localStorage.removeItem('current_user_id');
       
       // For Supabase Auth (if using in future):
       // const { error } = await supabase.auth.signOut();
@@ -179,8 +179,11 @@ export const authService = {
    */
   saveSession(student: Student): void {
     try {
+      // Only persist a minimal, non-PII identifier in localStorage
       localStorage.setItem('auth_session', 'active');
-      localStorage.setItem('current_user', JSON.stringify(student));
+      if (student && student.id) {
+        localStorage.setItem('current_user_id', student.id);
+      }
     } catch (error) {
       console.error('Error saving session:', error);
     }
@@ -195,11 +198,9 @@ export const authService = {
       const session = localStorage.getItem('auth_session');
       if (session !== 'active') return null;
 
-      // Get stored user data
-      const userDataStr = localStorage.getItem('current_user');
-      if (!userDataStr) return null;
-
-      const student = JSON.parse(userDataStr) as Student;
+      // Only storing user id in localStorage for privacy
+      const userId = localStorage.getItem('current_user_id');
+      if (!userId) return null;
 
       // Verify student still exists and is active in database
       // Also fetch admin roles
@@ -216,7 +217,7 @@ export const authService = {
             can_view_analytics
           )
         `)
-        .eq('id', student.id)
+        .eq('id', userId)
         .single();
 
       if (error || !data || !data.is_active) {
@@ -244,8 +245,8 @@ export const authService = {
         admin_permissions,
       };
 
-      // Update stored session with latest data including roles
-  this.saveSession(studentWithRoles as LoginResponse['student']);
+        // Persist minimal session info (id) only
+        this.saveSession(studentWithRoles as LoginResponse['student']);
 
       // Return fresh data from database
       return {

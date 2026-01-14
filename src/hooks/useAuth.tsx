@@ -20,14 +20,9 @@ export function AuthProvider({ children }: AuthProviderProps) {
       if (e.key === 'auth_session' && e.newValue === null) {
         // User logged out in another tab
         setUser(null);
-      } else if (e.key === 'current_user' && e.newValue) {
-        // User data updated in another tab
-        try {
-          const updatedUser = JSON.parse(e.newValue) as Student;
-          setUser(updatedUser);
-        } catch (error) {
-          console.error('Error parsing user data from storage:', error);
-        }
+      } else if (e.key === 'current_user_id' && e.newValue) {
+        // User id updated in another tab; re-check session and refresh user data
+        checkUser();
       }
     };
 

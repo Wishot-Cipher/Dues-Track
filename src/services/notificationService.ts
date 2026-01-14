@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-unused-vars */
 import { supabase } from '@/config/supabase';
 
 export type NotificationType = 'welcome' | 'payment_approved' | 'payment_rejected' | 'payment_pending' | 'payment_waived' | 'system';
@@ -128,17 +129,62 @@ class NotificationService {
   }
 
   /**
+   * Notify all approvers (admins/finsec) that a new payment was submitted
+   */
+  async notifyApproversOfNewPayment(paymentId: string, studentId: string, amount: number, paymentTypeId: string): Promise<boolean> {
+    try {
+      // Call server API which uses Supabase service role to insert notifications
+      const res = await fetch('/api/notify-approvers', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ paymentId, studentId, amount, paymentTypeId }),
+      });
+
+      if (!res.ok) {
+        const txt = await res.text();
+        console.error('notify-approvers API failed:', txt);
+        return false;
+      }
+
+      return true;
+    } catch (error) {
+      console.error('Error calling notify-approvers API:', error);
+      return false;
+    }
+  }
+
+  /**
    * Mark notification as read
    */
   async markAsRead(notificationId: string): Promise<boolean> {
     try {
-      const { error } = await supabase
-        .from('notifications')
-        .update({ is_read: true })
-        .eq('id', notificationId);
+      const userId = localStorage.getItem('current_user_id');
+      if (!userId) throw new Error('Not authenticated');
 
-      if (error) {
-        console.error('Error marking notification as read:', error);
+      const res = await fetch('/api/notifications/mark-read', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ notificationId, userId }),
+      });
+
+      if (!res.ok) {
+        // If serverless API isn't available in dev (Vite), fall back to direct Supabase update
+        if (res.status === 404) {
+          console.warn('mark-read endpoint not found (404). Falling back to direct Supabase update for local dev.');
+          const { error } = await supabase
+            .from('notifications')
+            .update({ is_read: true })
+            .eq('id', notificationId)
+            .eq('recipient_id', userId);
+          if (error) {
+            console.error('Supabase fallback error marking as read:', error);
+            return false;
+          }
+          return true;
+        }
+
+        const txt = await res.text();
+        console.error('mark-read API error:', txt);
         return false;
       }
 
@@ -154,14 +200,35 @@ class NotificationService {
    */
   async markAllAsRead(userId: string): Promise<boolean> {
     try {
-      const { error } = await supabase
-        .from('notifications')
-        .update({ is_read: true })
-        .eq('recipient_id', userId)
-        .eq('is_read', false);
+      const currentUserId = localStorage.getItem('current_user_id');
+      if (!currentUserId || currentUserId !== userId) {
+        throw new Error('Not authenticated or mismatched user');
+      }
 
-      if (error) {
-        console.error('Error marking all notifications as read:', error);
+      const res = await fetch('/api/notifications/mark-all-read', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId }),
+      });
+
+      if (!res.ok) {
+        // Fallback for local dev when serverless API routes are not present
+        if (res.status === 404) {
+          console.warn('mark-all-read endpoint not found (404). Falling back to direct Supabase update for local dev.');
+          const { error } = await supabase
+            .from('notifications')
+            .update({ is_read: true })
+            .eq('recipient_id', userId)
+            .eq('is_read', false);
+          if (error) {
+            console.error('Supabase fallback error marking all as read:', error);
+            return false;
+          }
+          return true;
+        }
+
+        const txt = await res.text();
+        console.error('mark-all-read API error:', txt);
         return false;
       }
 
