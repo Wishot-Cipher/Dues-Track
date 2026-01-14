@@ -132,7 +132,7 @@ export default function PaymentHistoryPage() {
       case 'rejected':
         return <XCircle className="w-5 h-5" style={{ color: colors.statusUnpaid }} />;
       default:
-        return <Clock className="w-5 h-5" style={{ color: colors.warning }} />;
+        return <Clock className="w-5 h-5" style={{ color: colors.statusPending }} />;
     }
   };
 
@@ -164,9 +164,9 @@ export default function PaymentHistoryPage() {
         };
       default:
         return {
-          bg: `${colors.warning}20`,
-          border: `${colors.warning}40`,
-          color: colors.warning,
+          bg: `${colors.statusPending}20`,
+          border: `${colors.statusPending}40`,
+          color: colors.statusPending,
           label: 'PENDING'
         };
     }

@@ -1,5 +1,6 @@
 import { supabase } from '@/config/supabase';
 import type { Payment, PaymentType, PaymentStats } from '@/types';
+import notificationService from '@/services/notificationService';
 
 /**
  * Payment Service
@@ -293,6 +294,18 @@ class PaymentService {
         .single();
 
       if (error) throw error;
+
+      // Notify approvers (admins / finsec) that a new payment was submitted
+      try {
+        await notificationService.notifyApproversOfNewPayment(
+          data.id,
+          paymentData.studentId,
+          Number(paymentData.amountPaid || 0),
+          paymentData.paymentTypeId
+        );
+      } catch (e) {
+        console.error('Failed to notify approvers of new payment:', e);
+      }
 
       return data;
     } catch (error) {

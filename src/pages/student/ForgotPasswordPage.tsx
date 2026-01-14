@@ -160,7 +160,7 @@ export default function ForgotPasswordPage() {
                 <br />
                 • Check browser console (F12) for errors
                 <br />
-                • Email from: noreply@mail.app.supabase.io
+                • Email from: onboarding@resend.dev
               </p>
             </div>
 

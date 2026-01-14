@@ -385,7 +385,7 @@ export default function PublicContributionsPage() {
                 {(['all', 'pending', 'verified', 'rejected'] as StatusFilter[]).map((status) => (
                   <button key={status} onClick={() => { setStatusFilter(status); setShowFilterDropdown(false); }} className={`w-full px-4 py-2.5 text-left text-sm hover:bg-white/10 transition-colors flex items-center gap-2 ${statusFilter === status ? 'bg-white/10' : ''}`} style={{ color: statusFilter === status ? colors.primary : 'white' }}>
                     {status === 'all' && <Users className="w-4 h-4" />}
-                    {status === 'pending' && <Clock className="w-4 h-4" style={{ color: colors.warning }} />}
+                    {status === 'pending' && <Clock className="w-4 h-4" style={{ color: colors.statusPending }} />}
                     {status === 'verified' && <CheckCircle className="w-4 h-4" style={{ color: colors.accentMint }} />}
                     {status === 'rejected' && <XCircle className="w-4 h-4" style={{ color: colors.error }} />}
                     <span className="capitalize">{status === 'all' ? 'All Status' : status}</span>

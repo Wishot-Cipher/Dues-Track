@@ -166,6 +166,27 @@ VITE_SUPABASE_URL=your_supabase_project_url
 VITE_SUPABASE_ANON_KEY=your_supabase_anon_key
 ```
 
+#### Server service role key (required for server APIs)
+
+This project uses a server-side API (`/api/notify-approvers`) that needs the Supabase "service role" key to insert notifications for admins/finsec. The service role key is a highly privileged secret — do NOT commit it to the repository.
+
+Add the following to your local `.env.local` for local development (or set it in your hosting provider):
+
+```env
+SUPABASE_SERVICE_ROLE_KEY=your_supabase_service_role_key
+# alternative name used in some environments
+SUPABASE_SERVICE_ROLE=your_supabase_service_role_key
+```
+
+If you deploy to Vercel:
+
+- Go to your project in the Vercel dashboard → Settings → Environment Variables
+- Add `SUPABASE_SERVICE_ROLE_KEY` (and optionally `SUPABASE_SERVICE_ROLE`) with the service role value
+- Set the variable to be available for the appropriate environments (Production/Preview/Development)
+
+Important: treat this key as a secret. Never expose it in client-side code or commit it to Git.
+
+
 ### 4. Set Up Supabase Database
 
 1. Create a new Supabase project

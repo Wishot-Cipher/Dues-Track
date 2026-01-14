@@ -998,10 +998,10 @@ export default function DashboardPage() {
                               icon: '🟠'
                             };
                           case 'pending':
-                            return { 
-                              color: colors.accentMint, 
-                              bg: `linear-gradient(135deg, ${colors.accentMint}08 0%, transparent 100%)`,
-                              border: `${colors.accentMint}20`,
+                            return {
+                              color: colors.statusPending,
+                              bg: `linear-gradient(135deg, ${colors.statusPending}08 0%, transparent 100%)`,
+                              border: `${colors.statusPending}20`,
                               label: 'PENDING',
                               icon: '⏳'
                             };
