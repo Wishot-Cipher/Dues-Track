@@ -1,17 +1,17 @@
-/* eslint-disable @typescript-eslint/no-unused-vars */
+ 
 import { useState, useEffect } from "react";
 import { Lock, CheckCircle, AlertCircle, Shield } from "lucide-react";
 import { colors, gradients } from "@/config/colors";
 import CustomButton from "@/components/ui/CustomButton";
 import Input from "@/components/ui/Input";
-import { useNavigate } from "react-router-dom";
+import { useNavigate} from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import PageWrapper from "@/components/ui/PageWrapper";
-import { supabase } from "@/config/supabase";
 
 export default function ResetPasswordPage() {
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
+  const [token, setToken] = useState<string | null>(null);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -19,25 +19,16 @@ export default function ResetPasswordPage() {
   const navigate = useNavigate();
 
   useEffect(() => {
-    // Check if we have a valid recovery token
-    const checkToken = async () => {
-      try {
-        const { data: { session } } = await supabase.auth.getSession();
-        
-        if (!session) {
-          setError("Invalid or expired reset link. Please request a new one.");
-          setValidatingToken(false);
-          return;
-        }
-        
-        setValidatingToken(false);
-      } catch (err) {
-        setError("Failed to validate reset link. Please try again.");
-        setValidatingToken(false);
-      }
-    };
-
-    checkToken();
+    // Read token from URL
+    const params = new URLSearchParams(window.location.search);
+    const t = params.get('token');
+    if (!t) {
+      setError('Invalid reset link. No token provided.');
+      setValidatingToken(false);
+      return;
+    }
+    setToken(t);
+    setValidatingToken(false);
   }, []);
 
   const validatePassword = () => {
@@ -68,19 +59,24 @@ export default function ResetPasswordPage() {
 
     setLoading(true);
     try {
-      // Update password using Supabase Auth
-      const { error: updateError } = await supabase.auth.updateUser({
-        password: newPassword,
+      if (!token) {
+        setError('Missing reset token.');
+        return;
+      }
+
+      const resp = await fetch('/api/password/reset', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ token, newPassword }),
       });
 
-      if (updateError) throw updateError;
+      const body = await resp.json().catch(() => ({}));
+      if (!resp.ok) {
+        throw new Error(body.error || 'Failed to reset password');
+      }
 
       setSuccess(true);
-      
-      // Redirect to login after 3 seconds
-      setTimeout(() => {
-        navigate("/login");
-      }, 3000);
+      setTimeout(() => navigate('/login'), 2500);
     } catch (err: unknown) {
       const errorMessage =
         err instanceof Error

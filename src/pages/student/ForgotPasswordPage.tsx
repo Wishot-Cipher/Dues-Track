@@ -56,22 +56,19 @@ export default function ForgotPasswordPage() {
       console.log("✅ Found student:", studentData.full_name);
       setDebugInfo(`Found student: ${studentData.full_name}. Sending reset email...`);
 
-      // Send password reset email
-      const { data: resetData, error: resetError } = await supabase.auth.resetPasswordForEmail(
-        emailLower,
-        {
-          redirectTo: `${window.location.origin}/reset-password`,
-        }
-      );
+      // Call server endpoint to create token and send reset email
+      const resp = await fetch('/api/password/send-reset-email', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: emailLower }),
+      });
 
-      console.log("📤 Reset email result:", { resetData, resetError });
-
-      if (resetError) {
-        console.error("❌ Reset email error:", resetError);
-        throw new Error(`Failed to send reset email: ${resetError.message}`);
+      const body = await resp.json().catch(() => ({}));
+      if (!resp.ok) {
+        console.error('Reset email endpoint error:', body);
+        throw new Error(body.error || 'Failed to send reset email');
       }
 
-      console.log("✅ Reset email sent successfully!");
       setSuccess(true);
     } catch (err: unknown) {
       console.error("❌ Error in password reset:", err);

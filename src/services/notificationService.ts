@@ -1,4 +1,4 @@
-/* eslint-disable @typescript-eslint/no-unused-vars */
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import { supabase } from '@/config/supabase';
 
 export type NotificationType = 'welcome' | 'payment_approved' | 'payment_rejected' | 'payment_pending' | 'payment_waived' | 'system';
