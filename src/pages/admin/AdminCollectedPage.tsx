@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import { useEffect, useState, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useNavigate } from 'react-router-dom';
@@ -25,6 +26,7 @@ interface StudentPayment {
     transaction_ref: string;
     status: string;
     created_at: string;
+    waived?: boolean;
   }[];
   total_paid: number;
   payment_count: number;
@@ -98,7 +100,7 @@ export default function AdminCollectedPage() {
           )
         `)
         .in('status', ['approved', 'pending', 'partial'])
-        .not('transaction_ref', 'like', 'WAIVED-%')
+        .limit(1000)
         .order('created_at', { ascending: false });
 
       if (error) throw error;
@@ -111,6 +113,7 @@ export default function AdminCollectedPage() {
           id,
           amount,
           payment_type_id,
+          funded_by,
           status,
           title,
           description,
@@ -118,7 +121,8 @@ export default function AdminCollectedPage() {
             id,
             category,
             title
-          )
+          ),
+          category:expense_categories(id, name)
         `)
         .eq('status', 'approved'); // Only count approved expenses in net balance
 
@@ -179,27 +183,43 @@ export default function AdminCollectedPage() {
         } | null;
       }
 
+      // Ensure we have payment type info for payments missing the relation
+      const missingPaymentTypeIds = (paymentsData || [])
+        .filter((p: any) => !p.payment_types && p.payment_type_id)
+        .map((p: any) => p.payment_type_id)
+        .filter(Boolean);
+
+      const paymentTypesFallback = new Map<string, { id: string; title: string; category: string }>();
+      if (missingPaymentTypeIds.length > 0) {
+        const { data: paymentTypesData } = await supabase
+          .from('payment_types')
+          .select('id, title, category')
+          .in('id', missingPaymentTypeIds);
+        paymentTypesData?.forEach((pt: any) => paymentTypesFallback.set(pt.id, pt));
+      }
+
       paymentsData?.forEach((payment: PaymentData) => {
         const student = Array.isArray(payment.students) ? payment.students[0] : payment.students;
-        const paymentType = Array.isArray(payment.payment_types) ? payment.payment_types[0] : payment.payment_types;
+        const paymentType = Array.isArray(payment.payment_types) ? payment.payment_types[0] : payment.payment_types || paymentTypesFallback.get((payment as any).payment_type_id || '') || null;
         
         if (!student) return;
 
         const studentId = student.id;
-        const category = paymentType?.category || 'Other';
+        const paymentStatus = payment.status || 'pending';
+        const isWaived = String(payment.transaction_ref || '').startsWith('WAIVED-');
+        const category = (paymentType && paymentType.category) ? String(paymentType.category).trim() : 'Other';
         const paymentTypeName = paymentType?.title || 'Unknown';
 
         if (studentMap.has(studentId)) {
           const studentData = studentMap.get(studentId)!;
-          const paymentStatus = payment.status || 'pending';
-          
-          // Only mark as paid if payment is approved (not pending)
-          if (paymentStatus === 'approved') {
+
+          // Only count toward paid totals if approved and not waived
+          if (paymentStatus === 'approved' && !isWaived) {
             studentData.has_paid = true;
             studentData.total_paid += Number(payment.amount || 0);
             studentData.payment_count += 1;
           }
-          
+
           studentData.payments.push({
             id: payment.id,
             amount: Number(payment.amount || 0),
@@ -208,8 +228,9 @@ export default function AdminCollectedPage() {
             transaction_ref: payment.transaction_ref || '',
             status: paymentStatus,
             created_at: payment.created_at,
-          });
-          
+            waived: isWaived,
+          } as any);
+
           if (!studentData.categories_paid.includes(category)) {
             studentData.categories_paid.push(category);
           }
@@ -270,38 +291,37 @@ export default function AdminCollectedPage() {
         payment_types?: { id?: string; category?: string; title?: string }[] | { id?: string; category?: string; title?: string } | null;
       }
 
-      // Fetch payment types for expenses that don't have the relation
-      const expensePaymentTypeIds = expenses
-        .filter((e: ExpenseRecord) => e.payment_type_id && !e.payment_types)
-        .map((e: ExpenseRecord) => e.payment_type_id)
-        .filter(Boolean) as string[];
-
+      // Fetch all payment types (used to attribute payments and expenses to categories)
       const paymentTypesMap = new Map<string, { category: string; title: string }>();
-      if (expensePaymentTypeIds.length > 0) {
+      try {
         const { data: paymentTypesData } = await supabase
           .from('payment_types')
-          .select('id, category, title')
-          .in('id', expensePaymentTypeIds);
-        
+          .select('id, category, title');
         if (paymentTypesData) {
           paymentTypesData.forEach(pt => {
             paymentTypesMap.set(pt.id, { category: pt.category, title: pt.title });
           });
         }
+      } catch (e) {
+        console.warn('Failed to fetch payment types:', e);
       }
 
       expenses.forEach((expense: ExpenseRecord) => {
-        const pt = Array.isArray(expense.payment_types) ? expense.payment_types[0] : expense.payment_types;
-        let category = pt?.category || 'Other';
-        
-        // Fallback to payment_type_id lookup if relation is missing
-        if (!category || category === 'Other') {
-          if (expense.payment_type_id && paymentTypesMap.has(expense.payment_type_id)) {
-            category = paymentTypesMap.get(expense.payment_type_id)!.category;
-          }
+        // Prefer the funding source's category (funded_by or payment_type_id -> payment_types)
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const fundId = (expense as any).funded_by || (expense as any).payment_type_id
+        let category = 'Other'
+
+        if (fundId && paymentTypesMap.has(fundId)) {
+          category = paymentTypesMap.get(fundId)!.category || 'Other'
+        } else {
+          // Fallbacks: expense's own category relation, then payment_types relation
+          const catRel = (expense as any).category?.name
+          const pt = Array.isArray(expense.payment_types) ? expense.payment_types[0] : expense.payment_types
+          category = catRel || pt?.category || 'Other'
         }
-        
-        const amount = Number(expense.amount || 0);
+
+        const amount = Number(expense.amount || 0)
 
         if (!categoryMap.has(category)) {
           categoryMap.set(category, {
@@ -310,11 +330,11 @@ export default function AdminCollectedPage() {
             total_expenses: 0,
             net_balance: 0,
             payment_count: 0,
-          });
+          })
         }
-        const cat = categoryMap.get(category)!;
-        cat.total_expenses += amount;
-      });
+        const cat = categoryMap.get(category)!
+        cat.total_expenses += amount
+      })
 
       if (import.meta.env.DEV) {
         // Debug logs removed for production security
@@ -1010,6 +1030,12 @@ export default function AdminCollectedPage() {
                       <div className="text-center">
                         <p className="text-[10px] sm:text-sm" style={{ color: colors.textSecondary }}>Payments</p>
                         <p className="text-sm sm:text-xl font-bold" style={{ color: colors.accentMint }}>{student.payment_count}</p>
+                        {student.payments && student.payments.filter(p => p.waived).length > 0 && (
+                          <p className="text-xs mt-1 inline-flex items-center gap-2" style={{ color: colors.statusWaived }}>
+                            <span className="w-2 h-2 rounded-full" style={{ background: colors.statusWaived }} />
+                            {student.payments.filter(p => p.waived).length} waived
+                          </p>
+                        )}
                       </div>
                       <div className="text-center">
                         <p className="text-[10px] sm:text-sm" style={{ color: colors.textSecondary }}>Categories</p>
@@ -1049,6 +1075,9 @@ export default function AdminCollectedPage() {
                       <p className="text-xs font-semibold uppercase tracking-wide" style={{ color: colors.textSecondary }}>
                         Payment History
                       </p>
+                      <p className="text-xs mt-1" style={{ color: colors.textSecondary }}>
+                        Waived payments are marked and excluded from totals.
+                      </p>
                       <div className="space-y-1.5">
                         {student.payments.slice(0, 3).map((payment) => (
                           <div
@@ -1064,19 +1093,37 @@ export default function AdminCollectedPage() {
                             </div>
                             <div className="text-right">
                               <p className="text-sm font-semibold text-white">{formatCurrency(payment.amount)}</p>
-                              <span
-                                className="text-xs px-2 py-0.5 rounded-full"
-                                style={{
-                                  background: payment.status === 'approved'
-                                    ? colors.statusPaid
-                                    : payment.status === 'pending'
-                                    ? 'rgba(255,165,0,0.2)'
-                                    : 'rgba(59,130,246,0.2)',
-                                  color: payment.status === 'approved' ? 'white' : colors.primary,
-                                }}
-                              >
-                                {payment.status.toUpperCase()}
-                              </span>
+                              <div className="flex items-center justify-end gap-2">
+                                <span
+                                  className="text-xs px-2 py-0.5 rounded-full"
+                                  style={{
+                                    background: payment.status === 'approved'
+                                      ? colors.statusPaid
+                                      : payment.status === 'pending'
+                                      ? 'rgba(255,165,0,0.2)'
+                                      : 'rgba(59,130,246,0.2)',
+                                    color: payment.status === 'approved' ? 'white' : colors.primary,
+                                  }}
+                                >
+                                  {payment.status.toUpperCase()}
+                                </span>
+
+                                {payment.waived && (
+                                  <span
+                                    className="inline-flex items-center gap-2 text-xs px-2 py-0.5 rounded-full"
+                                    title="Waived — excluded from totals"
+                                    style={{
+                                      background: `linear-gradient(135deg, ${colors.statusWaived}10, rgba(255,255,255,0.02))`,
+                                      color: colors.statusWaived,
+                                      border: `1px solid ${colors.statusWaived}30`,
+                                      boxShadow: `0 2px 8px rgba(0,0,0,0.18)`
+                                    }}
+                                  >
+                                    <span className="w-2 h-2 rounded-full" style={{ background: colors.statusWaived }} />
+                                    Waived
+                                  </span>
+                                )}
+                              </div>
                             </div>
                           </div>
                         ))}

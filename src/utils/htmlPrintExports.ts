@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 /**
  * HTML-Based Print Exports
  * Beautiful, professional print layouts using the QuickPaymentSummary style
@@ -455,16 +456,26 @@ export function exportCollectedPaymentsToPrint(data: CollectedPaymentsData): voi
     );
   }
   
-  // Prepare student table rows
+  // Prepare student table rows (show waived summary below Total Paid)
   const tableHeaders = ['Student Name', 'Reg Number', 'Status', 'Payments', 'Total Paid', 'Categories'];
   const tableRows = students.map(s => {
     const statusClass = s.is_active ? 'active' : 'inactive';
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const waivedPayments = (s.payments || []).filter(p => Boolean((p as any).waived));
+    const waivedCount = waivedPayments.length;
+    const waivedTotal = waivedPayments.reduce((sum, p) => sum + Number((p as any).amount || 0), 0);
+
+    const totalPaidCell = `
+      <div class="amount positive">${formatNaira(s.total_paid)}</div>
+      ${waivedCount > 0 ? `<div class="amount waived" style="font-size:11px;margin-top:6px">${waivedCount} waived (${formatNaira(waivedTotal)})</div>` : ''}
+    `;
+
     return [
       s.student_name,
       s.reg_number,
       `<span class="status ${statusClass}">${s.is_active ? '✓ Active' : '✗ Inactive'}</span>`,
       s.payment_count.toString(),
-      `<span class="amount positive">${formatNaira(s.total_paid)}</span>`,
+      totalPaidCell,
       s.categories_paid.map(c => formatCategory(c)).join(', ') || '-',
     ];
   });

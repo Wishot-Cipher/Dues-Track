@@ -133,29 +133,33 @@ export default function ExpenseApprovalQueue() {
 
   async function fetchAvailableBalances() {
     try {
+      // Compute balances per category (collected - expenses)
       const { data: paymentsData } = await supabase
         .from('payments')
-        .select('amount, payment_type_id')
+        .select('amount, payment_type_id, payment_types ( id, category )')
         .eq('status', 'approved')
         .not('transaction_ref', 'like', 'WAIVED-%')
 
       const { data: expensesData } = await supabase
         .from('expenses')
-        .select('amount, funded_by')
+        .select('amount, category, category_id, payment_type_id, payment_types ( id, category )')
         .eq('status', 'approved')
 
       const balances = new Map<string, number>()
 
+      // Add collected payments to their payment type's category
       paymentsData?.forEach((p: any) => {
-        if (p.payment_type_id) {
-          balances.set(p.payment_type_id, (balances.get(p.payment_type_id) || 0) + Number(p.amount || 0))
-        }
+        const cat = Array.isArray(p.payment_types) ? p.payment_types[0]?.category : p.payment_types?.category
+        const categoryKey = cat || 'Other'
+        balances.set(categoryKey, (balances.get(categoryKey) || 0) + Number(p.amount || 0))
       })
 
+      // Subtract approved expenses from their category
       expensesData?.forEach((e: any) => {
-        if (e.funded_by) {
-          balances.set(e.funded_by, (balances.get(e.funded_by) || 0) - Number(e.amount || 0))
-        }
+        // expense may have relation or a raw category field
+        const catFromRel = Array.isArray(e.payment_types) ? e.payment_types[0]?.category : e.payment_types?.category
+        const categoryKey = e.category || catFromRel || 'Other'
+        balances.set(categoryKey, (balances.get(categoryKey) || 0) - Number(e.amount || 0))
       })
 
       setBalanceMap(balances)
@@ -171,7 +175,9 @@ export default function ExpenseApprovalQueue() {
     // mark selected so loading state can be shown per-item
     setSelectedExpense(expense)
 
-    const currentBalance = balanceMap.get(expense.funded_by || '') || 0
+    // Determine expense category (support relation or plain string)
+    const expenseCategory = (expense as any).category?.name || (expense as any).category || (expense as any).payment_types?.[0]?.category || 'Other'
+    const currentBalance = balanceMap.get(expenseCategory) || 0
     const balanceAfterApproval = currentBalance - (expense.amount || 0)
     const LOW_BALANCE_THRESHOLD = 15000
 

@@ -253,6 +253,7 @@ export const PRINT_STYLES = `
   .amount { font-weight: 600; color: #1e293b; }
   .amount.positive { color: #22c55e; }
   .amount.negative { color: #ef4444; }
+  .amount.waived { color: #4338ca; }
   .note-box {
     background: linear-gradient(135deg, #fef3c7 0%, #fef9c3 100%);
     border-radius: 12px;
