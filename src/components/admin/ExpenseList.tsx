@@ -177,6 +177,16 @@ export default function ExpenseList({ categoryFilter = 'all' }: { categoryFilter
     })
   }, [filteredExpenses])
 
+  // Pre-calculate expense stats to avoid repeated filter/reduce in render
+  const expenseStats = useMemo(() => {
+    const approved = sortedExpenses.filter(e => e.status === 'approved')
+    const pending = sortedExpenses.filter(e => e.status === 'pending')
+    const totalApproved = approved.reduce((sum, e) => sum + (e.amount || 0), 0)
+    const totalPending = pending.reduce((sum, e) => sum + (e.amount || 0), 0)
+    const netBalance = collectedAmount - totalApproved
+    return { approved, pending, totalApproved, totalPending, netBalance }
+  }, [sortedExpenses, collectedAmount])
+
   // Pagination
   const totalPages = Math.ceil(sortedExpenses.length / ITEMS_PER_PAGE)
   const paginatedExpenses = useMemo(() => {
@@ -411,13 +421,19 @@ export default function ExpenseList({ categoryFilter = 'all' }: { categoryFilter
                   <div className="font-semibold ml-2 whitespace-nowrap" style={{ color: colors.statusPaid }}>₦{collectedAmount.toLocaleString()}</div>
                 </div>
                 <div className="flex items-center gap-2 px-4 py-2 rounded-xl" style={{ background: 'rgba(255,255,255,0.03)', border: `1px solid rgba(255,255,255,0.04)` }}>
-                  <div className="text-xs" style={{ color: colors.textSecondary }}>Expenses</div>
-                  <div className="font-semibold ml-2 whitespace-nowrap" style={{ color: colors.statusFailed }}>₦{sortedExpenses.filter(e => e.status === 'approved').reduce((s, e) => s + (e.amount || 0), 0).toLocaleString()}</div>
+                  <div className="text-xs" style={{ color: colors.textSecondary }}>Spent</div>
+                  <div className="font-semibold ml-2 whitespace-nowrap" style={{ color: colors.statusFailed }}>₦{expenseStats.totalApproved.toLocaleString()}</div>
                 </div>
-                <div className="flex items-center gap-2 px-4 py-2 rounded-xl" style={{ background: 'rgba(255,255,255,0.03)', border: `1px solid rgba(255,255,255,0.04)` }}>
-                  <div className="text-xs" style={{ color: colors.textSecondary }}>Net</div>
-                  <div className="font-semibold ml-2 whitespace-nowrap" style={{ color: collectedAmount - sortedExpenses.filter(e => e.status === 'approved').reduce((s, e) => s + (e.amount || 0), 0) >= 0 ? colors.statusPaid : colors.statusFailed }}>₦{(collectedAmount - sortedExpenses.filter(e => e.status === 'approved').reduce((s, e) => s + (e.amount || 0), 0)).toLocaleString()}</div>
+                <div className="flex items-center gap-2 px-4 py-2 rounded-xl" style={{ background: expenseStats.netBalance >= 0 ? 'rgba(34, 197, 94, 0.08)' : 'rgba(239, 68, 68, 0.08)', border: `1px solid ${expenseStats.netBalance >= 0 ? 'rgba(34, 197, 94, 0.2)' : 'rgba(239, 68, 68, 0.2)'}` }}>
+                  <div className="text-xs" style={{ color: colors.textSecondary }}>Available</div>
+                  <div className="font-semibold ml-2 whitespace-nowrap" style={{ color: expenseStats.netBalance >= 0 ? colors.statusPaid : colors.statusFailed }}>₦{expenseStats.netBalance.toLocaleString()}</div>
                 </div>
+                {expenseStats.pending.length > 0 && (
+                  <div className="flex items-center gap-2 px-3 py-2 rounded-xl" style={{ background: 'rgba(251, 191, 36, 0.08)', border: '1px solid rgba(251, 191, 36, 0.2)' }}>
+                    <Clock className="w-3.5 h-3.5" style={{ color: '#FBBF24' }} />
+                    <div className="text-xs whitespace-nowrap" style={{ color: '#FBBF24' }}>{expenseStats.pending.length} pending (₦{expenseStats.totalPending.toLocaleString()})</div>
+                  </div>
+                )}
               </div>
 
               {/* Export Dropdown */}
@@ -444,55 +460,50 @@ export default function ExpenseList({ categoryFilter = 'all' }: { categoryFilter
 
                 <AnimatePresence>
                   {showExportMenu && (
-                    <motion.div
-                      initial={{ opacity: 0, y: -10, scale: 0.95 }}
-                      animate={{ opacity: 1, y: 0, scale: 1 }}
-                      exit={{ opacity: 0, y: -10, scale: 0.95 }}
-                      className="absolute right-0 top-full mt-2 w-48 rounded-xl overflow-hidden shadow-2xl z-50"
-                      style={{
-                        background: 'linear-gradient(135deg, rgba(30, 20, 15, 0.98), rgba(20, 12, 8, 0.98))',
-                        border: '1px solid rgba(255, 255, 255, 0.1)',
-                        backdropFilter: 'blur(20px)',
-                      }}
-                    >
-                      <div className="p-2">
-                        <motion.button
-                          whileHover={{ x: 4 }}
-                          onClick={() => {
-                            setShowExportMenu(false)
-                            exportToPDF()
-                          }}
-                          className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg hover:bg-white/5"
-                        >
-                          <FileText className="w-4 h-4" style={{ color: colors.statusUnpaid }} />
-                          <span className="text-sm text-white">PDF Report</span>
-                        </motion.button>
-                        <motion.button
-                          whileHover={{ x: 4 }}
-                          onClick={() => {
-                            setShowExportMenu(false)
-                            exportToCSV()
-                          }}
-                          className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg hover:bg-white/5"
-                        >
-                          <FileSpreadsheet className="w-4 h-4" style={{ color: colors.accentMint }} />
-                          <span className="text-sm text-white">CSV Spreadsheet</span>
-                        </motion.button>
-                      </div>
-                    </motion.div>
+                    <>
+                      {/* Backdrop */}
+                      <div className="fixed inset-0 z-40" onClick={() => setShowExportMenu(false)} />
+                      
+                      {/* Dropdown Menu */}
+                      <motion.div
+                        initial={{ opacity: 0, y: -10, scale: 0.95 }}
+                        animate={{ opacity: 1, y: 0, scale: 1 }}
+                        exit={{ opacity: 0, y: -10, scale: 0.95 }}
+                        className="fixed sm:absolute left-3 right-4 sm:left-auto sm:right-0 bottom-4 sm:bottom-auto sm:top-full sm:mt-2 w-auto sm:w-48 rounded-xl overflow-hidden shadow-2xl z-50"
+                        style={{
+                          background: 'linear-gradient(135deg, rgba(30, 20, 15, 0.98), rgba(20, 12, 8, 0.98))',
+                          border: '1px solid rgba(255, 255, 255, 0.1)',
+                          backdropFilter: 'blur(20px)',
+                        }}
+                      >
+                        <div className="p-2">
+                          <motion.button
+                            whileHover={{ x: 4 }}
+                            onClick={() => {
+                              setShowExportMenu(false)
+                              exportToPDF()
+                            }}
+                            className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg hover:bg-white/5"
+                          >
+                            <FileText className="w-4 h-4" style={{ color: colors.statusUnpaid }} />
+                            <span className="text-sm text-white">PDF Report</span>
+                          </motion.button>
+                          <motion.button
+                            whileHover={{ x: 4 }}
+                            onClick={() => {
+                              setShowExportMenu(false)
+                              exportToCSV()
+                            }}
+                            className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg hover:bg-white/5"
+                          >
+                            <FileSpreadsheet className="w-4 h-4" style={{ color: colors.accentMint }} />
+                            <span className="text-sm text-white">CSV Spreadsheet</span>
+                          </motion.button>
+                        </div>
+                      </motion.div>
+                    </>
                   )}
                 </AnimatePresence>
-                {showExportMenu && <div className="fixed inset-0 z-40" onClick={() => setShowExportMenu(false)} />}
-              </div>
-
-              <div className="flex items-center gap-2 px-4 py-2 rounded-xl" style={{ 
-                background: `${colors.statusPaid}10`, 
-                border: `1px solid ${colors.statusPaid}20` 
-              }}>
-                <CheckCircle className="w-4 h-4" style={{ color: colors.statusPaid }} />
-                <span className="text-sm font-medium" style={{ color: colors.statusPaid }}>
-                  ₦{sortedExpenses.filter(exp => exp.status === 'approved').reduce((sum, exp) => sum + (exp.amount || 0), 0).toLocaleString()}
-                </span>
               </div>
             </div>
           )}

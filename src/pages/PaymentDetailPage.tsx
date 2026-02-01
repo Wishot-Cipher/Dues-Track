@@ -5,14 +5,11 @@ import { useParams, useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
 import {
   ArrowLeft,
-  Copy,
   AlertCircle,
   CheckCircle,
   Clock,
   XCircle,
-  Loader2,
   Calendar,
-  Building2,
   RefreshCw,
   Info,
   Sparkles,
@@ -29,9 +26,9 @@ import { formatCurrency, formatDate } from "@/utils/formatters";
 import PaymentMethodSelector from "@/components/student/PaymentMethodSelector";
 import QRCodeGenerator from "@/components/student/QRCodeGenerator";
 import PayForOthersModal from "@/components/student/PayForOthersModal";
+import PaymentSubmissionFlow from "@/components/student/PaymentSubmissionFlow";
 import Footer from "@/components/Footer";
 import notificationService from "@/services/notificationService";
-import FileUploader from "@/components/ui/FileUploader";
 import { SuccessCelebration } from "@/components/ui/Confetti";
 import PageWrapper from "@/components/ui/PageWrapper";
 
@@ -206,13 +203,6 @@ export default function PaymentDetailPage() {
       toast.error("Failed to load payment details");
     } finally {
       setLoading(false);
-    }
-  };
-
-  const copyAccountNumber = () => {
-    if (paymentType?.account_number) {
-      navigator.clipboard.writeText(paymentType.account_number);
-      toast.success("Account number copied!");
     }
   };
 
@@ -959,364 +949,35 @@ export default function PaymentDetailPage() {
               {step === "upload" &&
                 (selectedMethod === "bank_transfer" ||
                   selectedMethod === "pos") && (
-                  <motion.div
-                    initial={{ opacity: 0, y: 20 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    className="space-y-6"
-                  >
-                    {/* Back Button */}
-                    <button
-                      onClick={() => setStep("method")}
-                      className="flex items-center justify-center sm:justify-start gap-2 px-4 py-2 rounded-lg transition-colors w-full sm:w-auto"
-                      style={{
-                        color: colors.textPrimary,
-                        background: "rgba(255, 255, 255, 0.05)",
-                      }}
-                    >
-                      <ArrowLeft size={20} />
-                      <span>Change Payment Method</span>
-                    </button>
-
-                    {/* Bank Account Details */}
-                    {selectedMethod === "bank_transfer" && (
-                      <GlassCard className="w-full overflow-hidden">
-                        <div className="flex flex-col sm:flex-row items-start gap-4 mb-4">
-                          <Building2
-                            className="w-6 h-6 shrink-0"
-                            style={{ color: colors.primary }}
-                          />
-                          <div className="flex-1 w-full">
-                            <h3 className="text-lg font-bold text-white mb-1">
-                              Bank Account Details
-                            </h3>
-                            <p
-                              className="text-sm"
-                              style={{ color: colors.textSecondary }}
-                            >
-                              Transfer to this account and upload proof of
-                              payment
-                            </p>
-                          </div>
-                        </div>
-
-                        <div className="space-y-3 w-full">
-                          <div className="w-full">
-                            <p
-                              className="text-sm mb-1"
-                              style={{ color: colors.textSecondary }}
-                            >
-                              Bank Name
-                            </p>
-                            <p className="font-medium text-white wrap-break-words">
-                              {paymentType.bank_name}
-                            </p>
-                          </div>
-                          <div className="w-full">
-                            <p
-                              className="text-sm mb-1"
-                              style={{ color: colors.textSecondary }}
-                            >
-                              Account Name
-                            </p>
-                            <p className="font-medium text-white wrap-break-word">
-                              {paymentType.account_name}
-                            </p>
-                          </div>
-                          <div className="w-full">
-                            <p
-                              className="text-sm mb-1"
-                              style={{ color: colors.textSecondary }}
-                            >
-                              Account Number
-                            </p>
-                            <div className="flex items-center gap-2 w-full">
-                              <p className="font-bold text-lg sm:text-xl text-white flex-1 min-w-0 break-all">
-                                {paymentType.account_number}
-                              </p>
-                              <button
-                                onClick={copyAccountNumber}
-                                className="p-2 rounded-lg transition-colors shrink-0"
-                                style={{
-                                  background: "rgba(255, 255, 255, 0.1)",
-                                }}
-                                title="Copy account number"
-                              >
-                                <Copy
-                                  className="w-4 h-4"
-                                  style={{ color: colors.primary }}
-                                />
-                              </button>
-                            </div>
-                          </div>
-                        </div>
-                      </GlassCard>
-                    )}
-
-                    {/* Payment Options - Full or Partial */}
-                    {/* Disable partial payment when paying for others */}
-                    {paymentType.allow_partial && remainingAmount > 0 && selectedStudents.length === 0 && (
-                      <GlassCard>
-                        <h3 className="text-lg font-bold text-white mb-4">
-                          Payment Amount
-                        </h3>
-
-                        {/* Info Box */}
-                        <div
-                          className="mb-4 p-3 rounded-lg"
-                          style={{ background: `${colors.accentMint}15` }}
-                        >
-                          <p
-                            className="text-sm"
-                            style={{ color: colors.accentMint }}
-                          >
-                            💡 This payment type allows partial payments. You
-                            can pay the full amount or any amount you're
-                            comfortable with.
-                          </p>
-                        </div>
-
-                        <div className="space-y-3">
-                          <button
-                            onClick={() => setPaymentOption("full")}
-                            className="w-full p-4 rounded-lg border-2 transition-all text-left"
-                            style={{
-                              borderColor:
-                                paymentOption === "full"
-                                  ? colors.primary
-                                  : "rgba(255, 255, 255, 0.1)",
-                              background:
-                                paymentOption === "full"
-                                  ? `${colors.primary}10`
-                                  : "rgba(255, 255, 255, 0.03)",
-                            }}
-                          >
-                            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2">
-                              <div>
-                                <p className="font-bold text-white">
-                                  Pay Remaining Balance
-                                </p>
-                                <p
-                                  className="text-sm mt-1"
-                                  style={{ color: colors.textSecondary }}
-                                >
-                                  Complete payment in one transaction
-                                </p>
-                              </div>
-                              <p
-                                className="text-lg sm:text-xl font-bold"
-                                style={{ color: colors.primary }}
-                              >
-                                {formatCurrency(Math.max(0, currentUserOutstanding))}
-                              </p>
-                            </div>
-                          </button>
-
-                          <button
-                            onClick={() => setPaymentOption("partial")}
-                            className="w-full p-4 rounded-lg border-2 transition-all text-left"
-                            style={{
-                              borderColor:
-                                paymentOption === "partial"
-                                  ? colors.primary
-                                  : "rgba(255, 255, 255, 0.1)",
-                              background:
-                                paymentOption === "partial"
-                                  ? `${colors.primary}10`
-                                  : "rgba(255, 255, 255, 0.03)",
-                            }}
-                          >
-                            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2">
-                              <div>
-                                <p className="font-bold text-white">
-                                  Pay Partial Amount
-                                </p>
-                                <p
-                                  className="text-sm mt-1"
-                                  style={{ color: colors.textSecondary }}
-                                >
-                                  Pay what you can afford now, remaining later
-                                </p>
-                              </div>
-                            </div>
-                          </button>
-
-                          {paymentOption === "partial" && (
-                            <motion.div
-                              initial={{ opacity: 0, height: 0 }}
-                              animate={{ opacity: 1, height: "auto" }}
-                              className="mt-4"
-                            >
-                              <label className="block text-sm font-medium mb-2 text-white">
-                                Enter Amount (Max:{" "}
-                                {formatCurrency(Math.max(0, currentUserOutstanding))})
-                              </label>
-                              <input
-                                type="number"
-                                value={amount || ""}
-                                onChange={(e) =>
-                                  setAmount(
-                                    Math.min(
-                                      parseFloat(e.target.value) || 0,
-                                      currentUserOutstanding
-                                    )
-                                  )
-                                }
-                                max={currentUserOutstanding}
-                                min={0}
-                                step="0.01"
-                                className="w-full px-4 py-3 rounded-lg text-white focus:outline-none focus:ring-2"
-                                style={{
-                                  background: "rgba(255, 255, 255, 0.05)",
-                                  border: "1px solid rgba(255, 255, 255, 0.1)",
-                                }}
-                                placeholder="0.00"
-                              />
-                              <p
-                                className="text-xs mt-1"
-                                style={{ color: colors.textSecondary }}
-                              >
-                                You'll be able to pay the remaining{" "}
-                                {formatCurrency(
-                                  Math.max(0, currentUserOutstanding - amount)
-                                )}{" "}
-                                later
-                              </p>
-                            </motion.div>
-                          )}
-                        </div>
-                      </GlassCard>
-                    )}
-
-                    {/* Upload Form */}
-                    <form onSubmit={handleSubmitPayment}>
-                      <GlassCard>
-                        <h3 className="text-lg font-bold text-white mb-4">
-                          Upload Payment Proof
-                        </h3>
-
-                        <div className="space-y-4">
-                          {/* Transaction Reference */}
-                          <div className="w-full overflow-hidden">
-                            <label className="block text-sm font-medium mb-2 text-white">
-                              Transaction Reference *
-                            </label>
-                            <input
-                              type="text"
-                              value={transactionRef}
-                              onChange={(e) =>
-                                setTransactionRef(e.target.value)
-                              }
-                              className="w-full px-4 py-3 rounded-lg text-white focus:outline-none focus:ring-2 break-all"
-                              style={{
-                                background: "rgba(255, 255, 255, 0.05)",
-                                border: "1px solid rgba(255, 255, 255, 0.1)",
-                                maxWidth: "100%",
-                              }}
-                              placeholder="e.g., TRF/2024/11/12345"
-                              required
-                            />
-                          </div>
-
-                          {/* Receipt Upload */}
-                          <div>
-                            <FileUploader
-                              onFileSelect={(file) => {
-                                if (file && !Array.isArray(file)) {
-                                  setReceiptFile(file);
-                                }
-                              }}
-                              accept="image/jpeg,image/jpg,image/png,application/pdf"
-                              maxSize={5 * 1024 * 1024}
-                              label="Upload Receipt *"
-                              description="Accepted: JPG, PNG, PDF (Max 5MB)"
-                              showPreview={true}
-                              multiple={false}
-                            />
-                          </div>
-
-                          {/* Notes */}
-                          <div>
-                            <label className="block text-sm font-medium mb-2 text-white">
-                              Additional Notes (Optional)
-                            </label>
-                            <textarea
-                              value={notes}
-                              onChange={(e) => setNotes(e.target.value)}
-                              rows={3}
-                              className="w-full px-4 py-3 rounded-lg text-white focus:outline-none focus:ring-2"
-                              style={{
-                                background: "rgba(255, 255, 255, 0.05)",
-                                border: "1px solid rgba(255, 255, 255, 0.1)",
-                              }}
-                              placeholder="Any additional information..."
-                            />
-                          </div>
-
-                          {/* Selected Students Summary */}
-                          {selectedStudents.length > 0 && (
-                            <div
-                              className="p-4 rounded-lg"
-                              style={{
-                                background: `${colors.primary}10`,
-                                border: `1px solid ${colors.primary}40`,
-                              }}
-                            >
-                              <p className="font-bold text-white mb-2">
-                                Paying for {selectedStudents.length + (includeSelf ? 1 : 0)}{" "}
-                                student(s):
-                              </p>
-                              <ul
-                                className="text-sm space-y-1"
-                                style={{ color: colors.textSecondary }}
-                              >
-                                {includeSelf && <li>• You</li>}
-                                {selectedStudents.map((s) => (
-                                  <li key={s.id}>
-                                    • {s.full_name} ({s.reg_number})
-                                  </li>
-                                ))}
-                              </ul>
-                              <p
-                                className="text-lg font-bold mt-3"
-                                style={{ color: colors.primary }}
-                              >
-                                Total:{" "}
-                                {formatCurrency(
-                                  (selectedStudents.length + (includeSelf ? 1 : 0)) *
-                                    (paymentOption === "full"
-                                      ? remainingAmount
-                                      : amount)
-                                )}
-                              </p>
-                            </div>
-                          )}
-
-                          {/* Submit Button */}
-                          <button
-                            type="submit"
-                            disabled={submitting}
-                            className="w-full py-3 px-6 rounded-lg font-medium text-white transition-all disabled:opacity-50 disabled:cursor-not-allowed"
-                            style={{ background: gradients.primary }}
-                          >
-                            {submitting ? (
-                              <span className="flex items-center justify-center gap-2">
-                                <Loader2 className="w-5 h-5 animate-spin" />
-                                Submitting...
-                              </span>
-                            ) : (
-                              `Submit Payment${
-                                selectedStudents.length > 0
-                                  ? ` for ${
-                                      selectedStudents.length + (includeSelf ? 1 : 0)
-                                    } Student(s)`
-                                  : ""
-                              }`
-                            )}
-                          </button>
-                        </div>
-                      </GlassCard>
-                    </form>
-                  </motion.div>
+                  <PaymentSubmissionFlow
+                    paymentMethod={selectedMethod as "bank_transfer" | "pos"}
+                    paymentType={paymentType}
+                    currentUserOutstanding={currentUserOutstanding}
+                    accumulatedLateFees={currentUserAccumulatedLate}
+                    allowPartial={paymentType.allow_partial}
+                    selectedStudents={selectedStudents}
+                    includeSelf={includeSelf}
+                    currentUser={{
+                      id: user?.id || "",
+                      full_name: user?.full_name || "",
+                      reg_number: user?.reg_number || "",
+                      level: user?.level,
+                    }}
+                    onBack={() => setStep("method")}
+                    onSubmit={async (data) => {
+                      // Create a synthetic form event to reuse existing logic
+                      setTransactionRef(data.transactionRef);
+                      setReceiptFile(data.receiptFile);
+                      setNotes(data.notes);
+                      setPaymentOption(data.paymentOption);
+                      setAmount(data.amount);
+                      
+                      // Trigger submit with validated data
+                      const fakeEvent = { preventDefault: () => {} } as React.FormEvent;
+                      await handleSubmitPayment(fakeEvent);
+                    }}
+                    submitting={submitting}
+                  />
                 )}
             </>
           )}

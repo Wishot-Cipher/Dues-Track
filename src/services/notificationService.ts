@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
 import { supabase } from '@/config/supabase';
 
 export type NotificationType = 'welcome' | 'payment_approved' | 'payment_rejected' | 'payment_pending' | 'payment_waived' | 'system';
@@ -9,6 +8,42 @@ interface CreateNotificationParams {
   title: string;
   message: string;
   relatedPaymentId?: string;
+}
+
+/**
+ * Send a push notification to a user via the server API
+ */
+async function sendPushNotification(
+  userId: string,
+  title: string,
+  body: string,
+  url?: string,
+  tag?: string
+): Promise<boolean> {
+  try {
+    const res = await fetch('/api/notifications/send-push', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        userId,
+        title,
+        body,
+        url: url || '/',
+        tag: tag || 'general',
+      }),
+    });
+
+    if (!res.ok) {
+      console.log('Push notification not sent (API unavailable or user not subscribed)');
+      return false;
+    }
+
+    const result = await res.json();
+    return result.sent > 0;
+  } catch (error) {
+    console.log('Push notification failed:', error);
+    return false;
+  }
 }
 
 class NotificationService {
@@ -62,13 +97,28 @@ class NotificationService {
     amount: number,
     paymentId: string
   ): Promise<boolean> {
-    return this.createNotification({
+    const title = 'Payment Approved ✅';
+    const message = `Great news ${userName}! Your payment of ₦${amount.toLocaleString()} for "${paymentTypeName}" has been approved by the admin. Keep up the good work!`;
+    
+    // Send in-app notification
+    const inAppResult = await this.createNotification({
       recipientId: userId,
       type: 'payment_approved',
-      title: 'Payment Approved ✅',
-      message: `Great news ${userName}! Your payment of ₦${amount.toLocaleString()} for "${paymentTypeName}" has been approved by the admin. Keep up the good work!`,
+      title,
+      message,
       relatedPaymentId: paymentId,
     });
+
+    // Also send push notification (non-blocking)
+    sendPushNotification(
+      userId,
+      title,
+      `Your payment of ₦${amount.toLocaleString()} for "${paymentTypeName}" has been approved!`,
+      `/payment/${paymentId}`,
+      'payment-approved'
+    ).catch(() => {}); // Ignore push failures
+
+    return inAppResult;
   }
 
   /**
@@ -82,13 +132,28 @@ class NotificationService {
     rejectionReason: string,
     paymentId: string
   ): Promise<boolean> {
-    return this.createNotification({
+    const title = 'Payment Rejected ❌';
+    const message = `Hi ${userName}, your payment of ₦${amount.toLocaleString()} for "${paymentTypeName}" was rejected. Reason: ${rejectionReason}. You can resubmit your payment from the payment details page.`;
+    
+    // Send in-app notification
+    const inAppResult = await this.createNotification({
       recipientId: userId,
       type: 'payment_rejected',
-      title: 'Payment Rejected ❌',
-      message: `Hi ${userName}, your payment of ₦${amount.toLocaleString()} for "${paymentTypeName}" was rejected. Reason: ${rejectionReason}. You can resubmit your payment from the payment details page.`,
+      title,
+      message,
       relatedPaymentId: paymentId,
     });
+
+    // Also send push notification (non-blocking)
+    sendPushNotification(
+      userId,
+      title,
+      `Your payment of ₦${amount.toLocaleString()} for "${paymentTypeName}" was rejected. Reason: ${rejectionReason}`,
+      `/payment/${paymentId}`,
+      'payment-rejected'
+    ).catch(() => {}); // Ignore push failures
+
+    return inAppResult;
   }
 
   /**
@@ -101,13 +166,20 @@ class NotificationService {
     amount: number,
     paymentId: string
   ): Promise<boolean> {
-    return this.createNotification({
+    const title = 'Payment Submitted ⏳';
+    const message = `Hi ${userName}! Your payment of ₦${amount.toLocaleString()} for "${paymentTypeName}" has been submitted successfully and is awaiting admin review. You'll be notified once it's processed.`;
+    
+    // Send in-app notification
+    const inAppResult = await this.createNotification({
       recipientId: userId,
       type: 'payment_pending',
-      title: 'Payment Submitted ⏳',
-      message: `Hi ${userName}! Your payment of ₦${amount.toLocaleString()} for "${paymentTypeName}" has been submitted successfully and is awaiting admin review. You'll be notified once it's processed.`,
+      title,
+      message,
       relatedPaymentId: paymentId,
     });
+
+    // Push notification is optional for pending (less urgent)
+    return inAppResult;
   }
 
   /**
@@ -120,12 +192,27 @@ class NotificationService {
     amount: number,
     waiverReason: string
   ): Promise<boolean> {
-    return this.createNotification({
+    const title = 'Payment Waived 🎁';
+    const message = `Hi ${userName}! Your payment of ₦${amount.toLocaleString()} for "${paymentTypeName}" has been waived. Reason: ${waiverReason}. You don't need to make this payment.`;
+    
+    // Send in-app notification
+    const inAppResult = await this.createNotification({
       recipientId: userId,
       type: 'payment_waived',
-      title: 'Payment Waived 🎁',
-      message: `Hi ${userName}! Your payment of ₦${amount.toLocaleString()} for "${paymentTypeName}" has been waived. Reason: ${waiverReason}. You don't need to make this payment.`,
+      title,
+      message,
     });
+
+    // Also send push notification for waived payments (good news!)
+    sendPushNotification(
+      userId,
+      title,
+      `Your payment of ₦${amount.toLocaleString()} for "${paymentTypeName}" has been waived!`,
+      '/dashboard',
+      'payment-waived'
+    ).catch(() => {}); // Ignore push failures
+
+    return inAppResult;
   }
 
   /**

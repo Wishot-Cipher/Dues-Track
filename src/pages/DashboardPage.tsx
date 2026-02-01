@@ -17,7 +17,8 @@ import {
   Eye,
   EyeOff,
   Gift,
-  Star
+  Star,
+  AlertTriangle
 } from 'lucide-react';
 import { colors, gradients } from '@/config/colors';
 import { useAuth } from '@/hooks/useAuth';
@@ -28,6 +29,7 @@ import paymentService from '@/services/paymentService';
 import type { Payment, PaymentType, PaymentStats } from '@/types';
 import { StatCard } from '@/components/dashboard/StatCard';
 import { NotificationCenter } from '@/components/NotificationCenter';
+import PushNotificationPrompt from '@/components/PushNotificationPrompt';
 import Footer from '@/components/Footer';
 import ExpenseTransparencyDashboard from '@/components/student/ExpenseTransparencyDashboard';
 import AchievementSystem from '@/components/student/AchievementSystem';
@@ -48,6 +50,7 @@ export default function DashboardPage() {
   const location = useLocation();
   const [showProfileMenu, setShowProfileMenu] = useState(false);
   const [showMobileMenu, setShowMobileMenu] = useState(false);
+  const [showLogoutModal, setShowLogoutModal] = useState(false);
   const [loading, setLoading] = useState(true);
   const [refreshKey, setRefreshKey] = useState(0);
   
@@ -254,6 +257,12 @@ export default function DashboardPage() {
     }
   };
 
+  const confirmLogout = () => {
+    setShowLogoutModal(true);
+    setShowProfileMenu(false);
+    setShowMobileMenu(false);
+  };
+
   return (
     <div 
       className="min-h-screen relative overflow-x-hidden"
@@ -407,7 +416,7 @@ export default function DashboardPage() {
                       <div className="my-1 border-t" style={{ borderColor: 'rgba(255, 255, 255, 0.1)' }} />
 
                       <button
-                        onClick={handleLogout}
+                        onClick={confirmLogout}
                         className="w-full flex items-center gap-3 px-3 py-2 rounded-lg transition-colors text-left"
                         style={{ color: colors.statusUnpaid }}
                         onMouseEnter={(e) => e.currentTarget.style.background = 'rgba(255, 68, 68, 0.1)'}
@@ -505,7 +514,7 @@ export default function DashboardPage() {
               <div className="my-1 border-t" style={{ borderColor: 'rgba(255, 255, 255, 0.1)' }} />
 
               <button
-                onClick={handleLogout}
+                onClick={confirmLogout}
                 className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg transition-colors text-left"
                 style={{ color: colors.statusUnpaid }}
                 onMouseEnter={(e) => e.currentTarget.style.background = 'rgba(255, 68, 68, 0.1)'}
@@ -1143,7 +1152,7 @@ export default function DashboardPage() {
                                 <div className="flex items-center justify-between text-xs mb-1.5">
                                   <span style={{ color: colors.textSecondary }}>Progress</span>
                                   <span className="font-semibold" style={{ color: colors.warning }}>
-                                    {formatCurrency(amountPaid)} / {formatCurrency(paymentType.amount)}
+                                    {formatCurrency(amountPaid)} / {formatCurrency(item.totalDue ?? paymentType.amount)}
                                   </span>
                                 </div>
                                 <div 
@@ -1188,8 +1197,13 @@ export default function DashboardPage() {
                                       {status === 'paid' ? 'Amount Paid' : 'Total Amount'}
                                     </p>
                                     <span className="text-lg font-bold text-white">
-                                      {formatCurrency(status === 'paid' ? amountPaid || paymentType.amount : paymentType.amount)}
+                                      {formatCurrency(status === 'paid' ? amountPaid || paymentType.amount : (item.totalDue ?? paymentType.amount))}
                                     </span>
+                                    {status !== 'paid' && (item.accumulatedLateFees ?? 0) > 0 && (
+                                      <p className="text-xs mt-0.5" style={{ color: colors.statusUnpaid }}>
+                                        +{formatCurrency(item.accumulatedLateFees ?? 0)} late fee
+                                      </p>
+                                    )}
                                   </>
                                 )}
                               </div>
@@ -1314,6 +1328,100 @@ export default function DashboardPage() {
           <Plus size={28} className="text-white" />
         </motion.button>
       )}
+
+      {/* Push Notification Prompt */}
+      <PushNotificationPrompt mode="banner" />
+
+      {/* Logout Confirmation Modal */}
+      <AnimatePresence>
+        {showLogoutModal && (
+          <motion.div
+            className="fixed inset-0 z-[100] flex items-center justify-center p-4"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+          >
+            {/* Backdrop */}
+            <motion.div 
+              className="absolute inset-0 bg-black/70 backdrop-blur-sm"
+              onClick={() => setShowLogoutModal(false)}
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+            />
+            
+            {/* Modal */}
+            <motion.div
+              className="relative w-full max-w-sm rounded-2xl overflow-hidden"
+              style={{
+                background: 'linear-gradient(145deg, #1A1A1A 0%, #0D0D0D 100%)',
+                border: '1px solid rgba(255, 68, 68, 0.3)',
+                boxShadow: '0 25px 50px rgba(255, 68, 68, 0.15)'
+              }}
+              initial={{ opacity: 0, scale: 0.9, y: 20 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.9, y: 20 }}
+            >
+              {/* Header with danger icon */}
+              <div 
+                className="p-6 text-center"
+                style={{ 
+                  background: 'linear-gradient(180deg, rgba(255, 68, 68, 0.15) 0%, transparent 100%)'
+                }}
+              >
+                <div 
+                  className="w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4"
+                  style={{ 
+                    background: 'rgba(255, 68, 68, 0.15)',
+                    border: '2px solid rgba(255, 68, 68, 0.3)'
+                  }}
+                >
+                  <AlertTriangle className="w-8 h-8" style={{ color: colors.statusUnpaid }} />
+                </div>
+                
+                <h3 className="text-xl font-bold text-white mb-2">
+                  Logout Confirmation
+                </h3>
+                <p className="text-sm" style={{ color: colors.textSecondary }}>
+                  Are you sure you want to logout? You'll need to sign in again to access your account.
+                </p>
+              </div>
+              
+              {/* Actions */}
+              <div className="p-4 flex gap-3">
+                <motion.button
+                  className="flex-1 py-3 px-4 rounded-xl font-semibold text-sm transition-all"
+                  style={{
+                    background: 'rgba(255, 255, 255, 0.08)',
+                    color: colors.textPrimary,
+                    border: '1px solid rgba(255, 255, 255, 0.1)'
+                  }}
+                  onClick={() => setShowLogoutModal(false)}
+                  whileHover={{ scale: 1.02, background: 'rgba(255, 255, 255, 0.12)' }}
+                  whileTap={{ scale: 0.98 }}
+                >
+                  Cancel
+                </motion.button>
+                
+                <motion.button
+                  className="flex-1 py-3 px-4 rounded-xl font-semibold text-sm transition-all flex items-center justify-center gap-2"
+                  style={{
+                    background: 'linear-gradient(135deg, #FF4444, #CC3333)',
+                    color: 'white',
+                    boxShadow: '0 4px 15px rgba(255, 68, 68, 0.3)'
+                  }}
+                  onClick={handleLogout}
+                  whileHover={{ scale: 1.02, boxShadow: '0 6px 20px rgba(255, 68, 68, 0.4)' }}
+                  whileTap={{ scale: 0.98 }}
+                >
+                  <LogOut className="w-4 h-4" />
+                  Yes, Logout
+                </motion.button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* Footer */}
       <Footer />

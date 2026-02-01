@@ -20,6 +20,7 @@ import {
   Check,
   Hash,
   MessageSquare,
+  ArrowLeft,
 } from "lucide-react";
 import { formatCurrency } from "@/utils/formatters";
 
@@ -88,6 +89,7 @@ export default function QRCodeGenerator({
   totalStudents = 1,
   selectedStudents = [],
   includeSelf = true,
+  onBack,
 }: QRCodeGeneratorProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [qrDataUrl, setQrDataUrl] = useState<string>("");
@@ -259,7 +261,32 @@ export default function QRCodeGenerator({
 
   return (
     <div className="space-y-6 w-full flex flex-col items-center justify-center px-4 overflow-hidden">
-      {/* Header */}
+      {/* Header with Back Button */}
+      <motion.div
+        initial={{ opacity: 0, y: -20 }}
+        animate={{ opacity: 1, y: 0 }}
+        className="w-full max-w-lg"
+      >
+        <div className="flex items-center gap-4 mb-4">
+          <motion.button
+            onClick={onBack}
+            className="flex items-center justify-center w-10 h-10 rounded-xl"
+            style={{ background: 'rgba(255, 255, 255, 0.05)', border: '1px solid rgba(255, 255, 255, 0.1)' }}
+            whileHover={{ scale: 1.05 }}
+            whileTap={{ scale: 0.95 }}
+          >
+            <ArrowLeft className="w-5 h-5" style={{ color: colors.textSecondary }} />
+          </motion.button>
+          <div className="flex-1">
+            <h2 className="text-xl font-bold text-white">Cash Payment</h2>
+            <p className="text-sm" style={{ color: colors.textSecondary }}>
+              {paymentTypeName}
+            </p>
+          </div>
+        </div>
+      </motion.div>
+
+      {/* Instant Verification Badge */}
       <motion.div
         initial={{ opacity: 0, y: -20 }}
         animate={{ opacity: 1, y: 0 }}

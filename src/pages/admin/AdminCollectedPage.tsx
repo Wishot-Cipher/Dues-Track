@@ -1,14 +1,16 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useNavigate } from 'react-router-dom';
 import GlassCard from '@/components/ui/GlassCard';
 import AnimatedCounter from '@/components/ui/AnimatedCounter';
+import DateRangeFilter, { type DateRange } from '@/components/ui/DateRangeFilter';
+import FinancialChart from '@/components/admin/FinancialChart';
 import { supabase } from '@/config/supabase';
 import { colors } from '@/config/colors';
 import Footer from '@/components/Footer';
 import { formatCurrency, formatDate } from '@/utils/formatters';
-import { ArrowLeft, Users, Wallet, TrendingUp, Filter, Search, Download, ChevronLeft, ChevronRight, Sparkles, PieChart, CheckCircle, XCircle, BarChart3, FileText, FileSpreadsheet, ChevronDown } from 'lucide-react';
+import { ArrowLeft, Users, Wallet, TrendingUp, Filter, Search, Download, ChevronLeft, ChevronRight, Sparkles, PieChart, CheckCircle, XCircle, BarChart3, FileText, FileSpreadsheet, ChevronDown, LineChart } from 'lucide-react';
 import { exportCollectedPaymentsToPDF } from '@/utils/htmlPrintExports';
 import { useToast } from '@/hooks/useToast';
 
@@ -46,7 +48,8 @@ export default function AdminCollectedPage() {
   const navigate = useNavigate();
   const { success: showSuccess, error: showError } = useToast();
   const [loading, setLoading] = useState(true);
-  const [studentPayments, setStudentPayments] = useState<StudentPayment[]>([]);
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  const [_studentPayments, setStudentPayments] = useState<StudentPayment[]>([]);
   const [allStudents, setAllStudents] = useState<StudentPayment[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [categoryFilter, setCategoryFilter] = useState<string>('all');
@@ -55,6 +58,8 @@ export default function AdminCollectedPage() {
   const [currentPage, setCurrentPage] = useState(1);
   const [showExportMenu, setShowExportMenu] = useState(false);
   const [exporting, setExporting] = useState(false);
+  const [showCharts, setShowCharts] = useState(true);
+  const [dateRange, setDateRange] = useState<DateRange>({ start: null, end: null, label: 'All Time' });
   const itemsPerPage = 10;
 
   // Summary stats
@@ -308,7 +313,6 @@ export default function AdminCollectedPage() {
 
       expenses.forEach((expense: ExpenseRecord) => {
         // Prefer the funding source's category (funded_by or payment_type_id -> payment_types)
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const fundId = (expense as any).funded_by || (expense as any).payment_type_id
         let category = 'Other'
 
@@ -360,12 +364,63 @@ export default function AdminCollectedPage() {
     fetchStudentPayments();
   }, [fetchStudentPayments]);
 
-  // Filter students
-  const studentsToFilter = paymentFilter === 'unpaid' 
-    ? allStudents.filter(s => !s.has_paid)
-    : paymentFilter === 'paid'
-    ? allStudents.filter(s => s.has_paid)
-    : allStudents;
+  // Filter students with date range
+  // When date range is applied: show ONLY students who paid within that range
+  // The "Unpaid" filter is only available when no date range is set
+  const studentsToFilter = useMemo(() => {
+    // If date range is set, filter to only show students with payments in that range
+    if (dateRange.start || dateRange.end) {
+      // Process all students and filter their payments by date
+      const studentsWithFilteredPayments = allStudents.map(student => {
+        const filteredPayments = student.payments.filter(p => {
+          const paymentDate = new Date(p.created_at);
+          if (dateRange.start && paymentDate < dateRange.start) return false;
+          if (dateRange.end && paymentDate > dateRange.end) return false;
+          return true;
+        });
+
+        const approvedPayments = filteredPayments.filter(p => p.status === 'approved' && !p.waived);
+        const totalPaid = approvedPayments.reduce((sum, p) => sum + p.amount, 0);
+
+        return {
+          ...student,
+          payments: filteredPayments,
+          total_paid: totalPaid,
+          payment_count: approvedPayments.length,
+          has_paid: totalPaid > 0,
+          categories_paid: [...new Set(filteredPayments.map(p => p.category))]
+        };
+      });
+
+      // Only show students who have payments in the selected date range
+      return studentsWithFilteredPayments.filter(s => s.has_paid);
+    }
+
+    // No date range: use normal payment filter
+    if (paymentFilter === 'unpaid') {
+      return allStudents.filter(s => !s.has_paid);
+    } else if (paymentFilter === 'paid') {
+      return allStudents.filter(s => s.has_paid);
+    }
+    
+    return allStudents;
+  }, [allStudents, paymentFilter, dateRange]);
+
+  // Calculate filtered totals based on date range
+  const filteredTotals = useMemo(() => {
+    // When date range is active, all students shown are those who paid
+    const isDateFiltered = dateRange.start || dateRange.end;
+    const totalCollectedFiltered = studentsToFilter.reduce((sum, s) => sum + s.total_paid, 0);
+    const paidCount = studentsToFilter.length; // All shown are paid when date filtered
+
+    return {
+      totalCollected: totalCollectedFiltered,
+      totalStudentsPaid: paidCount,
+      // When date filtered, we don't show unpaid count (irrelevant)
+      totalStudentsUnpaid: isDateFiltered ? 0 : allStudents.filter(s => !s.has_paid).length,
+      isDateFiltered
+    };
+  }, [studentsToFilter, dateRange, allStudents]);
 
   const filteredStudents = studentsToFilter.filter(student => {
     // Search filter
@@ -574,84 +629,117 @@ export default function AdminCollectedPage() {
                   </div>
                 </div>
 
-                {/* Export Dropdown Button */}
-                <div className="relative">
+                {/* Export Dropdown Button and Date Range Filter */}
+                <div className="flex flex-wrap items-center gap-3">
+                  {/* Date Range Filter */}
+                  <DateRangeFilter
+                    value={dateRange}
+                    onChange={(range) => {
+                      setDateRange(range);
+                      setCurrentPage(1);
+                    }}
+                  />
+
+                  {/* Toggle Charts Button */}
                   <motion.button
-                    whileHover={{ scale: 1.05 }}
-                    whileTap={{ scale: 0.95 }}
-                    onClick={() => setShowExportMenu(!showExportMenu)}
-                    disabled={exporting}
-                    className="flex items-center justify-center gap-2 px-5 py-3 rounded-xl transition-all text-sm font-semibold disabled:opacity-50"
+                    whileHover={{ scale: 1.02 }}
+                    whileTap={{ scale: 0.98 }}
+                    onClick={() => setShowCharts(!showCharts)}
+                    className="flex items-center gap-2 px-4 py-2.5 rounded-xl transition-all"
                     style={{
-                      background: `linear-gradient(135deg, ${colors.statusPaid}, ${colors.accentMint})`,
-                      boxShadow: `0 4px 15px ${colors.statusPaid}40`,
-                      color: 'white'
+                      background: showCharts ? `${colors.primary}20` : 'rgba(255,255,255,0.05)',
+                      border: `1px solid ${showCharts ? colors.primary : 'rgba(255,255,255,0.1)'}`,
+                      color: showCharts ? colors.primary : colors.textSecondary
                     }}
                   >
-                    {exporting ? (
-                      <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                    ) : (
-                      <Download className="w-4 h-4" />
-                    )}
-                    <span>Export</span>
-                    <ChevronDown className={`w-4 h-4 transition-transform ${showExportMenu ? 'rotate-180' : ''}`} />
+                    <LineChart className="w-4 h-4" />
+                    <span className="text-sm font-medium hidden sm:inline">Charts</span>
                   </motion.button>
+
+                  {/* Export Button */}
+                  <div className="relative">
+                    <motion.button
+                      whileHover={{ scale: 1.05 }}
+                      whileTap={{ scale: 0.95 }}
+                      onClick={() => setShowExportMenu(!showExportMenu)}
+                      disabled={exporting}
+                      className="flex items-center justify-center gap-2 px-5 py-3 rounded-xl transition-all text-sm font-semibold disabled:opacity-50"
+                      style={{
+                        background: `linear-gradient(135deg, ${colors.statusPaid}, ${colors.accentMint})`,
+                        boxShadow: `0 4px 15px ${colors.statusPaid}40`,
+                        color: 'white'
+                      }}
+                    >
+                      {exporting ? (
+                        <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                      ) : (
+                        <Download className="w-4 h-4" />
+                      )}
+                      <span>Export</span>
+                      <ChevronDown className={`w-4 h-4 transition-transform ${showExportMenu ? 'rotate-180' : ''}`} />
+                    </motion.button>
 
                   {/* Export Menu Dropdown */}
                   <AnimatePresence>
                     {showExportMenu && (
-                      <motion.div
-                        initial={{ opacity: 0, y: -10, scale: 0.95 }}
-                        animate={{ opacity: 1, y: 0, scale: 1 }}
-                        exit={{ opacity: 0, y: -10, scale: 0.95 }}
-                        className="absolute right-0 top-full mt-2 w-56 rounded-xl overflow-hidden shadow-2xl z-50"
-                        style={{
-                          background: 'linear-gradient(135deg, rgba(30, 20, 15, 0.98), rgba(20, 12, 8, 0.98))',
-                          border: '1px solid rgba(255, 255, 255, 0.15)',
-                          backdropFilter: 'blur(20px)',
-                        }}
-                      >
-                        <div className="p-2">
-                          <p className="px-3 py-1.5 text-xs font-medium" style={{ color: colors.textSecondary }}>
-                            Export Format
-                          </p>
-                          <motion.button
-                            whileHover={{ x: 4, background: 'rgba(255, 255, 255, 0.05)' }}
-                            onClick={() => {
-                              setShowExportMenu(false);
-                              exportToPDF();
-                            }}
-                            className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg"
-                          >
-                            <div className="w-8 h-8 rounded-lg flex items-center justify-center" style={{ background: `${colors.statusUnpaid}20` }}>
-                              <FileText className="w-4 h-4" style={{ color: colors.statusUnpaid }} />
-                            </div>
-                            <div className="text-left">
-                              <span className="text-sm font-medium text-white">PDF Report</span>
-                              <p className="text-xs" style={{ color: colors.textSecondary }}>Full financial summary</p>
-                            </div>
-                          </motion.button>
-                          <motion.button
-                            whileHover={{ x: 4, background: 'rgba(255, 255, 255, 0.05)' }}
-                            onClick={() => {
-                              setShowExportMenu(false);
-                              exportToCSV();
-                            }}
-                            className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg"
-                          >
-                            <div className="w-8 h-8 rounded-lg flex items-center justify-center" style={{ background: `${colors.accentMint}20` }}>
-                              <FileSpreadsheet className="w-4 h-4" style={{ color: colors.accentMint }} />
-                            </div>
-                            <div className="text-left">
-                              <span className="text-sm font-medium text-white">CSV Spreadsheet</span>
-                              <p className="text-xs" style={{ color: colors.textSecondary }}>For data analysis</p>
-                            </div>
-                          </motion.button>
-                        </div>
-                      </motion.div>
+                      <>
+                        {/* Backdrop */}
+                        <div className="fixed inset-0 z-40" onClick={() => setShowExportMenu(false)} />
+                        
+                        {/* Dropdown Menu */}
+                        <motion.div
+                          initial={{ opacity: 0, y: -10, scale: 0.95 }}
+                          animate={{ opacity: 1, y: 0, scale: 1 }}
+                          exit={{ opacity: 0, y: -10, scale: 0.95 }}
+                          className="fixed sm:absolute left-4 right-4 sm:left-auto sm:right-0 bottom-4 sm:bottom-auto sm:top-full sm:mt-2 w-auto sm:w-56 rounded-xl overflow-hidden shadow-2xl z-50"
+                          style={{
+                            background: 'linear-gradient(135deg, rgba(30, 20, 15, 0.98), rgba(20, 12, 8, 0.98))',
+                            border: '1px solid rgba(255, 255, 255, 0.15)',
+                            backdropFilter: 'blur(20px)',
+                          }}
+                        >
+                          <div className="p-2">
+                            <p className="px-3 py-1.5 text-xs font-medium" style={{ color: colors.textSecondary }}>
+                              Export Format
+                            </p>
+                            <motion.button
+                              whileHover={{ x: 4, background: 'rgba(255, 255, 255, 0.05)' }}
+                              onClick={() => {
+                                setShowExportMenu(false);
+                                exportToPDF();
+                              }}
+                              className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg"
+                            >
+                              <div className="w-8 h-8 rounded-lg flex items-center justify-center" style={{ background: `${colors.statusUnpaid}20` }}>
+                                <FileText className="w-4 h-4" style={{ color: colors.statusUnpaid }} />
+                              </div>
+                              <div className="text-left">
+                                <span className="text-sm font-medium text-white">PDF Report</span>
+                                <p className="text-xs" style={{ color: colors.textSecondary }}>Full financial summary</p>
+                              </div>
+                            </motion.button>
+                            <motion.button
+                              whileHover={{ x: 4, background: 'rgba(255, 255, 255, 0.05)' }}
+                              onClick={() => {
+                                setShowExportMenu(false);
+                                exportToCSV();
+                              }}
+                              className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg"
+                            >
+                              <div className="w-8 h-8 rounded-lg flex items-center justify-center" style={{ background: `${colors.accentMint}20` }}>
+                                <FileSpreadsheet className="w-4 h-4" style={{ color: colors.accentMint }} />
+                              </div>
+                              <div className="text-left">
+                                <span className="text-sm font-medium text-white">CSV Spreadsheet</span>
+                                <p className="text-xs" style={{ color: colors.textSecondary }}>For data analysis</p>
+                              </div>
+                            </motion.button>
+                          </div>
+                        </motion.div>
+                      </>
                     )}
                   </AnimatePresence>
-                  {showExportMenu && <div className="fixed inset-0 z-40" onClick={() => setShowExportMenu(false)} />}
+                  </div>
                 </div>
               </div>
 
@@ -670,12 +758,14 @@ export default function AdminCollectedPage() {
                   <div className="absolute top-0 right-0 w-12 h-12 opacity-10">
                     <Wallet className="w-full h-full" style={{ color: colors.statusPaid }} />
                   </div>
-                  <p className="text-[10px] sm:text-xs font-medium mb-1" style={{ color: colors.textSecondary }}>Total Collected</p>
+                  <p className="text-[10px] sm:text-xs font-medium mb-1" style={{ color: colors.textSecondary }}>
+                    {filteredTotals.isDateFiltered ? 'Collected (Filtered)' : 'Total Collected'}
+                  </p>
                   <p className="text-lg sm:text-2xl font-bold text-white">
-                    <AnimatedCounter value={totalCollected} prefix="₦" />
+                    <AnimatedCounter value={filteredTotals.isDateFiltered ? filteredTotals.totalCollected : totalCollected} prefix="₦" />
                   </p>
                   <p className="text-[10px] sm:text-xs mt-1" style={{ color: colors.statusPaid }}>
-                    <AnimatedCounter value={studentPayments.reduce((sum, s) => sum + s.payment_count, 0)} /> payments
+                    <AnimatedCounter value={studentsToFilter.reduce((sum, s) => sum + s.payment_count, 0)} /> payments
                   </p>
                 </motion.div>
 
@@ -734,36 +824,62 @@ export default function AdminCollectedPage() {
                   <div className="absolute top-0 right-0 w-12 h-12 opacity-10">
                     <CheckCircle className="w-full h-full" style={{ color: colors.statusPaid }} />
                   </div>
-                  <p className="text-[10px] sm:text-xs font-medium mb-1" style={{ color: colors.textSecondary }}>Paid Students</p>
-                  <p className="text-lg sm:text-2xl font-bold text-white">
-                    <AnimatedCounter value={totalStudentsPaid} />
+                  <p className="text-[10px] sm:text-xs font-medium mb-1" style={{ color: colors.textSecondary }}>
+                    {filteredTotals.isDateFiltered ? 'Students in Range' : 'Paid Students'}
                   </p>
-                  <p className="text-[10px] sm:text-xs mt-1" style={{ color: colors.statusPaid }}>Completed</p>
+                  <p className="text-lg sm:text-2xl font-bold text-white">
+                    <AnimatedCounter value={filteredTotals.totalStudentsPaid} />
+                  </p>
+                  <p className="text-[10px] sm:text-xs mt-1" style={{ color: colors.statusPaid }}>
+                    {filteredTotals.isDateFiltered ? 'With Payments' : 'Completed'}
+                  </p>
                 </motion.div>
 
-                <motion.div
-                  initial={{ opacity: 0, scale: 0.9 }}
-                  animate={{ opacity: 1, scale: 1 }}
-                  transition={{ delay: 0.3 }}
-                  className="p-4 rounded-xl relative overflow-hidden"
-                  style={{ 
-                    background: `${colors.statusFailed}08`,
-                    border: `1px solid ${colors.statusFailed}15`
-                  }}
-                >
-                  <div className="absolute top-0 right-0 w-12 h-12 opacity-10">
-                    <XCircle className="w-full h-full" style={{ color: colors.statusFailed }} />
-                  </div>
-                  <p className="text-[10px] sm:text-xs font-medium mb-1" style={{ color: colors.textSecondary }}>Unpaid Students</p>
-                  <p className="text-lg sm:text-2xl font-bold" style={{ color: colors.statusFailed }}>
-                    <AnimatedCounter value={totalStudentsUnpaid} />
-                  </p>
-                  <p className="text-[10px] sm:text-xs mt-1" style={{ color: colors.textSecondary }}>Pending</p>
-                </motion.div>
+                {/* Only show unpaid card when no date range filter */}
+                {!filteredTotals.isDateFiltered && (
+                  <motion.div
+                    initial={{ opacity: 0, scale: 0.9 }}
+                    animate={{ opacity: 1, scale: 1 }}
+                    transition={{ delay: 0.3 }}
+                    className="p-4 rounded-xl relative overflow-hidden"
+                    style={{ 
+                      background: `${colors.statusFailed}08`,
+                      border: `1px solid ${colors.statusFailed}15`
+                    }}
+                  >
+                    <div className="absolute top-0 right-0 w-12 h-12 opacity-10">
+                      <XCircle className="w-full h-full" style={{ color: colors.statusFailed }} />
+                    </div>
+                    <p className="text-[10px] sm:text-xs font-medium mb-1" style={{ color: colors.textSecondary }}>Unpaid Students</p>
+                    <p className="text-lg sm:text-2xl font-bold" style={{ color: colors.statusFailed }}>
+                      <AnimatedCounter value={totalStudentsUnpaid} />
+                    </p>
+                    <p className="text-[10px] sm:text-xs mt-1" style={{ color: colors.textSecondary }}>Pending</p>
+                  </motion.div>
+                )}
               </div>
             </div>
           </GlassCard>
         </motion.div>
+
+        {/* Financial Chart Section */}
+        <AnimatePresence>
+          {showCharts && (
+            <motion.div
+              initial={{ opacity: 0, height: 0 }}
+              animate={{ opacity: 1, height: 'auto' }}
+              exit={{ opacity: 0, height: 0 }}
+              transition={{ duration: 0.3 }}
+            >
+              <FinancialChart
+                categoriesBreakdown={categoriesBreakdown}
+                totalCollected={dateRange.start || dateRange.end ? filteredTotals.totalCollected : totalCollected}
+                totalExpenses={totalExpenses}
+                netBalance={(dateRange.start || dateRange.end ? filteredTotals.totalCollected : totalCollected) - totalExpenses}
+              />
+            </motion.div>
+          )}
+        </AnimatePresence>
 
         {/* Enhanced Category Breakdown */}
         <motion.div
@@ -815,18 +931,45 @@ export default function AdminCollectedPage() {
                   <p className="text-xs sm:text-sm font-semibold capitalize mb-1" style={{ color: categoryFilter === cat.category ? colors.primary : colors.textSecondary }}>
                     {cat.category.replace(/_/g, ' ')}
                   </p>
-                  <p className="text-lg sm:text-xl font-bold text-white mt-1">{formatCurrency(cat.total_collected)}</p>
+                  <div className="flex items-center gap-2 mt-1">
+                    <p className="text-lg sm:text-xl font-bold text-white">{formatCurrency(cat.total_collected)}</p>
+                    {totalCollected > 0 && (
+                      <span className="text-[10px] sm:text-xs px-1.5 py-0.5 rounded-full" 
+                            style={{ background: 'rgba(255,255,255,0.08)', color: colors.textSecondary }}>
+                        {Math.round((cat.total_collected / totalCollected) * 100)}%
+                      </span>
+                    )}
+                  </div>
                   {cat.total_expenses > 0 || cat.total_collected > 0 ? (
-                    <div className="text-[10px] sm:text-xs mt-2 space-y-1">
+                    <div className="text-[10px] sm:text-xs mt-2 space-y-1.5">
+                      {/* Visual progress bar showing spend ratio */}
+                      {cat.total_collected > 0 && (
+                        <div className="w-full h-1.5 rounded-full overflow-hidden" style={{ background: 'rgba(255,255,255,0.1)' }}>
+                          <div 
+                            className="h-full rounded-full transition-all duration-500"
+                            style={{ 
+                              width: `${Math.min(100, Math.round((cat.total_expenses / cat.total_collected) * 100))}%`,
+                              background: cat.total_expenses > cat.total_collected 
+                                ? colors.statusFailed 
+                                : cat.total_expenses > cat.total_collected * 0.8 
+                                  ? '#FBBF24' 
+                                  : colors.statusPaid
+                            }}
+                          />
+                        </div>
+                      )}
                       {cat.total_expenses > 0 && (
                         <p className="flex items-center gap-1" style={{ color: colors.statusFailed }}>
                           <span className="w-1.5 h-1.5 rounded-full" style={{ background: colors.statusFailed }} />
                           -{formatCurrency(cat.total_expenses)} spent
+                          {cat.total_collected > 0 && (
+                            <span className="opacity-70">({Math.round((cat.total_expenses / cat.total_collected) * 100)}%)</span>
+                          )}
                         </p>
                       )}
                       <p className="font-semibold flex items-center gap-1" style={{ color: cat.net_balance >= 0 ? colors.statusPaid : colors.statusFailed }}>
                         <span className="w-1.5 h-1.5 rounded-full" style={{ background: cat.net_balance >= 0 ? colors.statusPaid : colors.statusFailed }} />
-                        {formatCurrency(cat.net_balance)} net
+                        {formatCurrency(cat.net_balance)} available
                       </p>
                     </div>
                   ) : (
@@ -873,17 +1016,17 @@ export default function AdminCollectedPage() {
                 />
               </div>
 
-              {/* Payment Filter */}
+              {/* Payment Filter - Hide 'unpaid' when date range is active */}
               <div className="flex flex-wrap items-center gap-2">
                 <div className="flex items-center gap-1 text-xs sm:text-sm" style={{ color: colors.textSecondary }}>
                   <Filter className="w-3 h-3 sm:w-4 sm:h-4" />
                   <span className="hidden sm:inline">Payment:</span>
                 </div>
-                {(['all', 'paid', 'unpaid'] as const).map((filter) => (
+                {(['all', 'paid', ...(filteredTotals.isDateFiltered ? [] : ['unpaid'] as const)] as const).map((filter) => (
                   <button
                     key={filter}
                     onClick={() => {
-                      setPaymentFilter(filter);
+                      setPaymentFilter(filter as 'all' | 'paid' | 'unpaid');
                       setCurrentPage(1);
                     }}
                     className={`px-3 sm:px-4 py-1.5 sm:py-2 rounded-lg text-xs sm:text-sm font-medium transition-all hover:shadow-md ${
@@ -900,7 +1043,7 @@ export default function AdminCollectedPage() {
                     }}
                   >
                     {filter === 'all' ? 'All' : filter === 'paid' ? 'Paid' : 'Not Paid'}
-                    {filter === 'paid' && ` (${totalStudentsPaid})`}
+                    {filter === 'paid' && ` (${filteredTotals.totalStudentsPaid})`}
                     {filter === 'unpaid' && ` (${totalStudentsUnpaid})`}
                   </button>
                 ))}

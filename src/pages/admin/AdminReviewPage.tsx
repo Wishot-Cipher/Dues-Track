@@ -8,7 +8,7 @@ import { colors, gradients } from "@/config/colors";
 import GlassCard from "@/components/ui/GlassCard";
 import { formatCurrency, formatDate } from "@/utils/formatters";
 import AnimatedCounter from "@/components/ui/AnimatedCounter";
-import { NotificationCenter } from "@/components/NotificationCenter";
+// AdminNotificationCenter removed - using push notifications instead
 import {
   CheckCircle,
   XCircle,
@@ -408,8 +408,6 @@ export default function AdminReviewPage() {
                 </div>
               </motion.div>
               
-              {/* Notification Center for Admins */}
-              <NotificationCenter />
             </div>
           </GlassCard>
         </motion.div>

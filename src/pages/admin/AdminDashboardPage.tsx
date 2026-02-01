@@ -9,7 +9,7 @@ import DashboardSwitcher from '@/components/DashboardSwitcher';
 import { formatCurrency, formatDate } from '@/utils/formatters';
 import { AdminDashboardSkeleton, PaymentCardSkeleton } from '@/components/ui/Skeleton';
 import AnimatedCounter from '@/components/ui/AnimatedCounter';
-import { NotificationCenter } from '@/components/NotificationCenter';
+// AdminNotificationCenter removed - using push notifications instead
 import {
   Users,
   Clock,
@@ -454,8 +454,6 @@ export default function AdminDashboardPage() {
                 </motion.button>
                 )}
                 
-                {/* Notification Center for Admins */}
-                <NotificationCenter />
               </div>
             </div>
           </GlassCard>

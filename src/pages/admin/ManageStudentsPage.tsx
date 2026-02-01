@@ -631,85 +631,49 @@ export default function ManageStudentsPage() {
     }
 
     try {
-      // Generate a random temporary password
-      const chars = 'abcdefghjkmnpqrstuvwxyz23456789';
-      let tempPassword = '';
-      for (let i = 0; i < 8; i++) {
-        tempPassword += chars.charAt(Math.floor(Math.random() * chars.length));
+      // Use the PostgreSQL RPC function to reset password
+      // This ensures the password is hashed correctly with pgcrypto
+      const { data: result, error: rpcError } = await supabase
+        .rpc('admin_reset_student_password', { p_student_id: student.id });
+
+      if (rpcError) {
+        // If RPC doesn't exist, show error with instructions
+        if (rpcError.message.includes('function') || rpcError.code === '42883') {
+          showError('Password reset function not found. Please run the SQL migration in Supabase.');
+          console.error('Run this SQL in Supabase SQL Editor:', 
+            'See: supabase/migrations/admin_reset_password_function.sql');
+          return;
+        }
+        throw new Error(rpcError.message);
       }
 
-      // Try API first (works in production), fallback to direct Supabase (works locally)
-      let useDirectMethod = false;
-      
+      if (!result || !result.success) {
+        throw new Error(result?.error || 'Password reset failed');
+      }
+
+      // Create notification for the student
       try {
-        const resp = await fetch('/api/password/admin-reset', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            studentId: student.id,
-            adminId: user?.id
-          })
+        await supabase.from('notifications').insert({
+          recipient_id: student.id,
+          type: 'force_password',
+          title: 'Password Reset by Admin',
+          message: 'Your password was reset by an administrator. Please use the temporary password provided to you and change it immediately upon login.',
+          link: '/login',
         });
-
-        const contentType = resp.headers.get('content-type');
-        if (contentType && contentType.includes('application/json')) {
-          const body = await resp.json();
-          if (resp.ok && body.success) {
-            setPasswordResetResult({
-              isOpen: true,
-              studentName: body.studentName || student.full_name,
-              tempPassword: body.tempPassword
-            });
-            success(`Password reset for ${student.full_name}`);
-            return;
-          }
-        }
-        // API didn't work, use direct method
-        useDirectMethod = true;
       } catch {
-        useDirectMethod = true;
+        // Non-fatal
       }
 
-      if (useDirectMethod) {
-        // Direct method: Update password in Supabase
-        // Note: This requires the password to be hashed server-side
-        // For now, we'll set force_password_change and show the temp password
-        const { error: updateError } = await supabase
-          .from('students')
-          .update({
-            force_password_change: true,
-            updated_at: new Date().toISOString()
-          })
-          .eq('id', student.id);
+      setPasswordResetResult({
+        isOpen: true,
+        studentName: result.student_name || student.full_name,
+        tempPassword: result.temp_password
+      });
 
-        if (updateError) {
-          throw new Error('Failed to update student: ' + updateError.message);
-        }
-
-        // Create notification for the student
-        try {
-          await supabase.from('notifications').insert({
-            recipient_id: student.id,
-            type: 'force_password',
-            title: 'Password Reset Required',
-            message: 'An administrator has required you to change your password. Please update it on next login.',
-            link: '/change-password',
-          });
-        } catch {
-          // Non-fatal
-        }
-
-        setPasswordResetResult({
-          isOpen: true,
-          studentName: student.full_name,
-          tempPassword: tempPassword
-        });
-
-        success(`Password reset initiated for ${student.full_name}`);
-      }
-    } catch (error) {
-      console.error('Error resetting password:', error);
-      showError(error instanceof Error ? error.message : 'Failed to reset password');
+      success(`Password reset for ${student.full_name}`);
+    } catch (err) {
+      console.error('Error resetting password:', err);
+      showError(err instanceof Error ? err.message : 'Failed to reset password');
     }
   };
 

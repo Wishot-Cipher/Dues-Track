@@ -9,8 +9,7 @@ import {
   User, 
   Shield,
   ChevronDown,
-  Sparkles,
-  Bell
+  Sparkles
 } from 'lucide-react';
 
 interface DashboardSwitcherProps {
@@ -123,21 +122,29 @@ export default function DashboardSwitcher({ variant = 'full' }: DashboardSwitche
         >
           <CurrentIcon className="w-4 h-4" style={{ color: currentModeData.color }} />
           
-          {/* Mobile: Show bell icon with count when there are pending payments */}
-          {adminPendingBadge ? (
-            <span className="flex items-center gap-1 text-xs sm:text-sm font-semibold" style={{ color: colors.warning }}>
-              <Bell className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
-              <span>{pendingCount}</span>
-            </span>
-          ) : (
-            <span className="text-xs sm:text-sm font-medium hidden sm:inline" style={{ color: currentModeData.color }}>
-              {currentModeData.label}
-            </span>
+          {/* Badge for pending payments */}
+          {adminPendingBadge && (
+            <motion.span 
+              initial={{ scale: 0 }}
+              animate={{ scale: 1 }}
+              className="flex items-center justify-center w-5 h-5 rounded-full text-[10px] font-bold"
+              style={{ 
+                background: colors.statusUnpaid,
+                color: 'white',
+                boxShadow: `0 0 0 2px ${colors.background}`
+              }}
+            >
+              {pendingCount > 99 ? '99+' : pendingCount}
+            </motion.span>
           )}
+          
+          <span className="text-xs sm:text-sm font-medium hidden sm:inline" style={{ color: currentModeData.color }}>
+            {currentModeData.label}
+          </span>
           
           <ChevronDown 
             className={`w-3.5 h-3.5 sm:w-4 sm:h-4 transition-transform ${isOpen ? 'rotate-180' : ''}`} 
-            style={{ color: adminPendingBadge ? colors.warning : currentModeData.color }} 
+            style={{ color: currentModeData.color }} 
           />
         </motion.button>
 
@@ -211,27 +218,25 @@ export default function DashboardSwitcher({ variant = 'full' }: DashboardSwitche
                           <p className="font-medium text-white flex items-center gap-2">
                             {mode.label}
                             {isActive && (
-                              <span className="text-xs px-1.5 py-0.5 rounded-full" 
-                                style={{ background: `${mode.color}30`, color: mode.color }}>
+                              <span className="text-[10px] px-2 py-0.5 rounded-full font-semibold uppercase tracking-wide" 
+                                style={{ background: `${mode.color}20`, color: mode.color }}>
                                 Active
                               </span>
                             )}
                             {/* Show pending badge for admin option */}
                             {mode.id === 'admin' && mode.badge && mode.badge > 0 && !isActive && (
-                              <span 
-                                className="text-xs px-1.5 py-0.5 rounded-full font-bold flex items-center gap-1"
+                              <motion.span 
+                                initial={{ scale: 0 }}
+                                animate={{ scale: 1 }}
+                                className="flex items-center justify-center min-w-[20px] h-5 px-1.5 rounded-full text-[10px] font-bold"
                                 style={{ background: colors.statusUnpaid, color: 'white' }}
                               >
-                                <Bell className="w-3 h-3" />
-                                {mode.badge}
-                              </span>
+                                {mode.badge > 99 ? '99+' : mode.badge}
+                              </motion.span>
                             )}
                           </p>
-                          <p className="text-xs" style={{ color: colors.textSecondary }}>
+                          <p className="text-xs mt-0.5" style={{ color: colors.textSecondary }}>
                             {mode.description}
-                            {mode.id === 'admin' && mode.badge && mode.badge > 0 && !isActive && (
-                              <span style={{ color: colors.warning }}> • {mode.badge} pending</span>
-                            )}
                           </p>
                         </div>
                       </motion.button>

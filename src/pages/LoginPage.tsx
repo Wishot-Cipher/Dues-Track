@@ -34,8 +34,14 @@ export default function LoginPage() {
     setLoading(true);
 
     try {
-      await login(regNumber, password);
-      navigate('/dashboard');
+      const result = await login(regNumber, password);
+      
+      // If user needs to change password (admin reset), redirect there
+      if (result.mustChangePassword) {
+        navigate('/change-password', { replace: true });
+      } else {
+        navigate('/dashboard', { replace: true });
+      }
     } catch (err: unknown) {
       const errorMessage = err instanceof Error ? err.message : 'Invalid credentials. Please try again.';
       setError(errorMessage);

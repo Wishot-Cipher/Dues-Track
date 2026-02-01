@@ -121,14 +121,88 @@ export default async function handler(req: any, res: any) {
         'Content-Type': 'application/json'
       },
       body: JSON.stringify({
-        from: 'onboarding@resend.dev',
+        from: process.env.FROM_EMAIL || 'onboarding@resend.dev',
         to: student.email,
-        subject: 'Reset Your Password',
+        subject: 'ECE Class Dues - Reset Your Password',
         html: `
-          <p>Hi <strong>${student.full_name}</strong>,</p>
-          <p>We received a request to reset your password. Click the link below to reset it (expires in 1 hour):</p>
-          <p><a href="${resetUrl}">Reset Password</a></p>
-          <p>If the button doesn't work, copy and paste: ${resetUrl}</p>
+          <!DOCTYPE html>
+          <html>
+          <head>
+            <meta charset="utf-8">
+            <meta name="viewport" content="width=device-width, initial-scale=1.0">
+            <title>Reset Your Password</title>
+          </head>
+          <body style="margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; background-color: #0F0703;">
+            <table width="100%" cellpadding="0" cellspacing="0" style="background-color: #0F0703; padding: 40px 20px;">
+              <tr>
+                <td align="center">
+                  <table width="600" cellpadding="0" cellspacing="0" style="background: linear-gradient(135deg, #1A0E09 0%, #0F0703 100%); border-radius: 16px; border: 1px solid rgba(255, 107, 53, 0.2); overflow: hidden;">
+                    <!-- Header -->
+                    <tr>
+                      <td style="background: linear-gradient(90deg, #FF6B35, #F59E0B); padding: 3px 0;"></td>
+                    </tr>
+                    <tr>
+                      <td style="padding: 40px 30px; text-align: center;">
+                        <h1 style="color: #FFFFFF; margin: 0 0 10px 0; font-size: 28px; font-weight: 700;">Reset Your Password</h1>
+                        <p style="color: rgba(255, 255, 255, 0.6); margin: 0; font-size: 14px;">ECE Class Dues Tracker</p>
+                      </td>
+                    </tr>
+                    
+                    <!-- Body -->
+                    <tr>
+                      <td style="padding: 0 30px 30px 30px;">
+                        <p style="color: #FFFFFF; font-size: 16px; line-height: 1.6; margin: 0 0 20px 0;">
+                          Hi <strong>${student.full_name}</strong>,
+                        </p>
+                        <p style="color: rgba(255, 255, 255, 0.8); font-size: 15px; line-height: 1.6; margin: 0 0 25px 0;">
+                          We received a request to reset your password for the ECE Class Dues Tracker. Click the button below to create a new password:
+                        </p>
+                        
+                        <!-- Reset Button -->
+                        <table width="100%" cellpadding="0" cellspacing="0" style="margin: 30px 0;">
+                          <tr>
+                            <td align="center">
+                              <a href="${resetUrl}" style="display: inline-block; padding: 14px 32px; background: linear-gradient(135deg, #FF6B35, #F59E0B); color: #FFFFFF; text-decoration: none; border-radius: 8px; font-weight: 600; font-size: 16px;">Reset Password</a>
+                            </td>
+                          </tr>
+                        </table>
+                        
+                        <p style="color: rgba(255, 255, 255, 0.6); font-size: 13px; line-height: 1.6; margin: 25px 0 0 0;">
+                          Or copy and paste this link into your browser:
+                        </p>
+                        <p style="color: #FF6B35; font-size: 13px; word-break: break-all; margin: 10px 0 0 0;">
+                          ${resetUrl}
+                        </p>
+                        
+                        <!-- Warning Box -->
+                        <table width="100%" cellpadding="0" cellspacing="0" style="margin: 30px 0; background: rgba(245, 158, 11, 0.1); border-left: 3px solid #F59E0B; border-radius: 4px;">
+                          <tr>
+                            <td style="padding: 15px;">
+                              <p style="color: #F59E0B; font-size: 13px; margin: 0; line-height: 1.5;">
+                                <strong>⚠️ Security Notice:</strong><br>
+                                This link expires in 1 hour. If you didn't request this reset, please ignore this email or contact your class admin.
+                              </p>
+                            </td>
+                          </tr>
+                        </table>
+                      </td>
+                    </tr>
+                    
+                    <!-- Footer -->
+                    <tr>
+                      <td style="padding: 20px 30px; background: rgba(255, 255, 255, 0.03); border-top: 1px solid rgba(255, 255, 255, 0.1);">
+                        <p style="color: rgba(255, 255, 255, 0.5); font-size: 12px; margin: 0; text-align: center; line-height: 1.5;">
+                          ECE Class Dues Tracker<br>
+                          Federal University of Technology, Owerri
+                        </p>
+                      </td>
+                    </tr>
+                  </table>
+                </td>
+              </tr>
+            </table>
+          </body>
+          </html>
         `
       })
     })
