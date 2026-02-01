@@ -168,17 +168,49 @@ export default function PaymentSubmissionFlow({
   };
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 relative">
+      {/* Loading Overlay */}
+      <AnimatePresence>
+        {submitting && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-50 flex items-center justify-center"
+            style={{ background: 'rgba(0, 0, 0, 0.8)', backdropFilter: 'blur(8px)' }}
+          >
+            <motion.div
+              initial={{ scale: 0.9, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              className="flex flex-col items-center gap-4 p-8 rounded-2xl"
+              style={{ background: colors.card, border: `1px solid ${colors.border}` }}
+            >
+              <motion.div
+                className="w-12 h-12 border-3 rounded-full"
+                style={{ borderColor: `${colors.primary}30`, borderTopColor: colors.primary }}
+                animate={{ rotate: 360 }}
+                transition={{ duration: 1, repeat: Infinity, ease: 'linear' }}
+              />
+              <div className="text-center">
+                <p className="font-semibold text-lg" style={{ color: colors.text }}>Processing Payment</p>
+                <p className="text-sm mt-1" style={{ color: colors.textSecondary }}>Please wait while we submit your payment...</p>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
       {/* Header with Back Button */}
       <div className="flex items-center gap-4">
         <motion.button
           onClick={onBack}
-          className="flex items-center justify-center w-10 h-10 rounded-xl"
+          disabled={submitting}
+          className="flex items-center justify-center w-10 h-10 rounded-xl disabled:opacity-50 disabled:cursor-not-allowed"
           style={{ background: 'rgba(255, 255, 255, 0.05)', border: '1px solid rgba(255, 255, 255, 0.1)' }}
-          whileHover={{ scale: 1.05 }}
-          whileTap={{ scale: 0.95 }}
+          whileHover={submitting ? {} : { scale: 1.05 }}
+          whileTap={submitting ? {} : { scale: 0.95 }}
         >
-          <ArrowLeft className="w-5 h-5" style={{ color: colors.textSecondary }} />
+          <ArrowLeft className="w-5 h-5" style={{ color: submitting ? colors.textSecondary + '50' : colors.textSecondary }} />
         </motion.button>
         <div>
           <h2 className="text-xl font-bold text-white">
@@ -824,14 +856,15 @@ export default function PaymentSubmissionFlow({
               setValidationError('');
               setCurrentStep(currentStep - 1);
             }}
-            className="flex-1 py-4 px-6 rounded-xl font-semibold"
+            disabled={submitting}
+            className="flex-1 py-4 px-6 rounded-xl font-semibold disabled:opacity-50 disabled:cursor-not-allowed"
             style={{
               background: 'rgba(255, 255, 255, 0.05)',
               border: '1px solid rgba(255, 255, 255, 0.1)',
               color: colors.textSecondary,
             }}
-            whileHover={{ scale: 1.02 }}
-            whileTap={{ scale: 0.98 }}
+            whileHover={submitting ? {} : { scale: 1.02 }}
+            whileTap={submitting ? {} : { scale: 0.98 }}
           >
             Back
           </motion.button>

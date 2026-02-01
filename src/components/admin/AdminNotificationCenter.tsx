@@ -1,4 +1,5 @@
-import { useState, useEffect, useCallback } from 'react';
+/* eslint-disable @typescript-eslint/no-explicit-any */
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
@@ -57,6 +58,10 @@ export const AdminNotificationCenter = () => {
   const [unreadCount, setUnreadCount] = useState(0);
   const [showPanel, setShowPanel] = useState(false);
   const [loading, setLoading] = useState(false);
+
+  // Refs to store latest callbacks for stable subscription
+  const fetchStatsRef = useRef<(() => Promise<void>) | null>(null);
+  const playNotificationSoundRef = useRef<((type?: 'success' | 'info' | 'warning' | 'ding') => void) | null>(null);
 
   const fetchPendingPayments = useCallback(async () => {
     try {
@@ -136,26 +141,59 @@ export const AdminNotificationCenter = () => {
     }
   }, [user?.id]);
 
+  // Keep refs updated with latest callbacks
+  useEffect(() => {
+    fetchStatsRef.current = fetchStats;
+    playNotificationSoundRef.current = playNotificationSound;
+  }, [fetchStats, playNotificationSound]);
+
   useEffect(() => {
     if (user?.id) {
       fetchStats();
       void notificationSound.forceInit();
+      
+      // Create a stable subscription that doesn't depend on changing values
       const channel = supabase
-        .channel('admin-payment-notifications')
-        .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'payments', filter: 'status=eq.pending' }, () => {
-          playNotificationSound('info');
-          fetchStats();
-          if (showPanel) fetchPendingPayments();
+        .channel('admin-payment-notifications-' + user.id)
+        .on('postgres_changes', { 
+          event: 'INSERT', 
+          schema: 'public', 
+          table: 'payments'
+        }, (payload) => {
+          console.log('🔔 New payment inserted:', payload);
+          // Play sound for any new payment (we'll check status in the callback)
+          if (payload.new && (payload.new as { status?: string }).status === 'pending') {
+            playNotificationSoundRef.current?.('info');
+          }
+          fetchStatsRef.current?.();
         })
-        .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'payments' }, () => {
-          fetchStats();
-          if (showPanel) fetchPendingPayments();
+        .on('postgres_changes', { 
+          event: 'UPDATE', 
+          schema: 'public', 
+          table: 'payments' 
+        }, (payload) => {
+          console.log('🔔 Payment updated:', payload);
+          // Play sound when a payment becomes pending (e.g., submitted for review)
+          const newData = payload.new as { status?: string } | undefined;
+          const oldData = payload.old as { status?: string } | undefined;
+          if (newData?.status === 'pending' && oldData?.status !== 'pending') {
+            playNotificationSoundRef.current?.('info');
+          }
+          fetchStatsRef.current?.();
         })
-        .subscribe();
-      return () => { supabase.removeChannel(channel); };
+        .subscribe((status) => {
+          console.log('🔔 Realtime subscription status:', status);
+        });
+        
+      return () => { 
+        console.log('🔔 Cleaning up realtime subscription');
+        supabase.removeChannel(channel); 
+      };
     }
-  }, [user?.id, fetchStats, fetchPendingPayments, playNotificationSound, showPanel]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user?.id]); // Only depend on user.id - callbacks accessed via refs to keep subscription stable
 
+  // Separate effect for fetching pending payments and handling body scroll when panel is open
   useEffect(() => {
     if (showPanel) {
       document.body.style.overflow = 'hidden';
