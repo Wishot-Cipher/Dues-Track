@@ -67,18 +67,27 @@ export default async function handler(req: any, res: any) {
       diagnostics.admins = { error: adminError.message };
     } else {
       // Check which admins have push subscriptions
-      const adminIds = admins?.map(a => a.student_id) || [];
-      const { data: adminSubs } = await supabase
-        .from('push_subscriptions')
-        .select('user_id')
-        .in('user_id', adminIds);
+      const adminIds = (admins || []).map(a => a.student_id).filter(Boolean);
+      
+      if (adminIds.length === 0) {
+        diagnostics.admins = {
+          total_approvers: 0,
+          approvers_with_push: 0,
+          message: 'No admins with approval permissions found'
+        };
+      } else {
+        const { data: adminSubs } = await supabase
+          .from('push_subscriptions')
+          .select('user_id')
+          .in('user_id', adminIds);
 
-      diagnostics.admins = {
-        total_approvers: admins?.length || 0,
-        approvers_with_push: adminSubs?.length || 0,
-        approver_ids: adminIds.map(id => id.slice(0, 8) + '...'),
-        subscribed_ids: adminSubs?.map(s => s.user_id.slice(0, 8) + '...') || []
-      };
+        diagnostics.admins = {
+          total_approvers: admins?.length || 0,
+          approvers_with_push: adminSubs?.length || 0,
+          approver_ids: adminIds.map(id => id ? id.slice(0, 8) + '...' : 'null'),
+          subscribed_ids: (adminSubs || []).map(s => s.user_id ? s.user_id.slice(0, 8) + '...' : 'null')
+        };
+      }
     }
 
     return res.status(200).json(diagnostics);
