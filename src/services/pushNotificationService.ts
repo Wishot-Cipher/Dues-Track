@@ -289,6 +289,71 @@ class PushNotificationService {
       console.error('Error showing notification:', error);
     }
   }
+
+  /**
+   * Test push notification by calling the server API
+   */
+  async testPush(userId: string): Promise<{ ok: boolean; message: string; details?: unknown }> {
+    try {
+      const { data: sessionData } = await supabase.auth.getSession();
+      const token = sessionData?.session?.access_token;
+
+      const res = await fetch('/api/notifications/test-push', {
+        method: 'POST',
+        headers: { 
+          'Content-Type': 'application/json',
+          ...(token ? { 'Authorization': `Bearer ${token}` } : {})
+        },
+        body: JSON.stringify({ userId }),
+      });
+
+      const result = await res.json();
+      console.log('🔔 Test push result:', result);
+      return result;
+    } catch (error) {
+      console.error('Test push error:', error);
+      return { ok: false, message: 'Failed to call test API', details: error };
+    }
+  }
+
+  /**
+   * Get subscription debug info
+   */
+  async getDebugInfo(): Promise<{
+    isSupported: boolean;
+    permission: NotificationPermission;
+    hasServiceWorker: boolean;
+    hasSubscription: boolean;
+    vapidConfigured: boolean;
+    subscriptionEndpoint?: string;
+  }> {
+    const isSupported = this.isSupported();
+    const permission = this.getPermissionStatus();
+    const registration = await this.getRegistration();
+    const hasServiceWorker = !!registration;
+    
+    let hasSubscription = false;
+    let subscriptionEndpoint: string | undefined;
+    
+    if (registration) {
+      try {
+        const subscription = await registration.pushManager.getSubscription();
+        hasSubscription = !!subscription;
+        subscriptionEndpoint = subscription?.endpoint;
+      } catch {
+        // Ignore
+      }
+    }
+
+    return {
+      isSupported,
+      permission,
+      hasServiceWorker,
+      hasSubscription,
+      vapidConfigured: !!VAPID_PUBLIC_KEY,
+      subscriptionEndpoint,
+    };
+  }
 }
 
 export const pushNotificationService = new PushNotificationService();

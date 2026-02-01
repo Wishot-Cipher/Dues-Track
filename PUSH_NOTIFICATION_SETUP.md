@@ -6,10 +6,29 @@ This guide explains how to set up push notifications for the Class Dues Tracker 
 
 Push notifications allow users to receive alerts when:
 - Payments are **approved** ✅
-- Payments are **rejected** ❌
+- Payments are **rejected** ❌  
 - Payments are **waived** 🎁
+- New payments submitted (for **admins**) 💰
 
 Notifications work even when the app is **closed** or in the background!
+
+## Quick Debug Checklist
+
+If push notifications aren't working, check:
+
+1. **VAPID keys configured** in Vercel environment variables
+2. **push_subscriptions table exists** in Supabase (run SQL migration)
+3. **User has enabled notifications** in app settings
+4. **Browser supports push** (Chrome, Firefox, Edge - NOT Safari on iOS < 16.4)
+
+### Debug Endpoints
+
+After deploying, visit these URLs to diagnose issues:
+
+- `https://your-app.vercel.app/api/notifications/debug-push` - Check configuration
+- Use the "Test" button in Settings → Push Notifications
+
+---
 
 ## Prerequisites
 
@@ -61,6 +80,22 @@ VAPID_PRIVATE_KEY=Xxxxx...your-private-key...xxx
 VAPID_PUBLIC_KEY=BNxxx...your-public-key...xxx
 VAPID_EMAIL=mailto:admin@yourschool.edu
 ```
+
+### 🚀 Vercel Configuration (IMPORTANT!)
+
+1. Go to your Vercel project dashboard
+2. Click **Settings** → **Environment Variables**
+3. Add ALL of these variables:
+
+| Name | Value | Environment |
+|------|-------|-------------|
+| `VITE_VAPID_PUBLIC_KEY` | Your public key | Production, Preview |
+| `VAPID_PUBLIC_KEY` | Your public key (same) | Production, Preview |
+| `VAPID_PRIVATE_KEY` | Your private key | Production, Preview |
+| `VAPID_EMAIL` | mailto:your@email.com | Production, Preview |
+| `SUPABASE_SERVICE_ROLE_KEY` | From Supabase settings | Production, Preview |
+
+4. Click **Save** and **Redeploy** for changes to take effect
 
 ---
 

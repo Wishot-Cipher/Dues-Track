@@ -287,6 +287,29 @@ function SettingsView({
   onEnable: () => void;
   onDisable: () => void;
 }) {
+  const { user } = useAuth();
+  const toast = useToast();
+  const [testing, setTesting] = useState(false);
+
+  const handleTestPush = async () => {
+    if (!user?.id) return;
+    setTesting(true);
+    try {
+      const result = await pushNotificationService.testPush(user.id);
+      if (result.ok) {
+        toast.success('Test notification sent! Check your device.');
+      } else {
+        toast.error(result.message || 'Test failed');
+        console.log('Test push details:', result);
+      }
+    } catch (error) {
+      toast.error('Failed to send test notification');
+      console.error('Test push error:', error);
+    } finally {
+      setTesting(false);
+    }
+  };
+
   if (!isSupported) {
     return (
       <div 
@@ -400,6 +423,33 @@ function SettingsView({
           <p className="text-xs" style={{ color: colors.textSecondary }}>
             Receive instant push notifications when your payments are approved, rejected, or waived - even when the app is closed!
           </p>
+        </div>
+      )}
+
+      {isSubscribed && (
+        <div className="mt-3 flex items-center justify-between">
+          <p className="text-xs" style={{ color: colors.textSecondary }}>
+            Test if notifications work on your device
+          </p>
+          <motion.button
+            onClick={handleTestPush}
+            disabled={testing}
+            className="px-3 py-1.5 rounded-lg text-xs font-medium flex items-center gap-1.5"
+            style={{ 
+              background: `${colors.accentBlue}20`, 
+              color: colors.accentBlue,
+              border: `1px solid ${colors.accentBlue}30`
+            }}
+            whileHover={{ scale: 1.02 }}
+            whileTap={{ scale: 0.98 }}
+          >
+            {testing ? (
+              <Loader2 className="w-3 h-3 animate-spin" />
+            ) : (
+              <Bell className="w-3 h-3" />
+            )}
+            Test
+          </motion.button>
         </div>
       )}
     </div>
