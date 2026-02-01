@@ -46,6 +46,7 @@ interface PaymentType {
   is_public: boolean
   created_at: string
   updated_at: string
+  late_fee_per_day?: number
 }
 
 const CATEGORIES = [
@@ -169,6 +170,7 @@ export default function ManageDuesPage() {
           allow_partial: editingPaymentType.allow_partial,
           is_mandatory: editingPaymentType.is_mandatory,
           deadline: editingPaymentType.deadline,
+          late_fee_per_day: Number(editingPaymentType.late_fee_per_day || 0),
           icon: editingPaymentType.icon,
           color: editingPaymentType.color,
           bank_name: editingPaymentType.bank_name,
@@ -186,7 +188,8 @@ export default function ManageDuesPage() {
       setShowEditModal(false)
       setEditingPaymentType(null)
       await loadPaymentTypes()
-    } catch {
+    } catch (err) {
+      console.error('Failed to update payment type error:', err)
       showError('Failed to update payment type')
     } finally {
       setActionLoading(false)
@@ -649,7 +652,7 @@ export default function ManageDuesPage() {
 
                       {/* Details Grid */}
                       <div className="px-4 pb-3">
-                        <div className="grid grid-cols-2 gap-2">
+                        <div className="grid grid-cols-3 gap-2">
                           <div className="p-2.5 rounded-lg text-center" style={{ background: 'rgba(255, 255, 255, 0.03)' }}>
                             <p className="text-[10px] uppercase tracking-wider mb-0.5" style={{ color: colors.textSecondary }}>Deadline</p>
                             <p className="text-white font-semibold text-sm">{formatDate(pt.deadline)}</p>
@@ -657,6 +660,10 @@ export default function ManageDuesPage() {
                           <div className="p-2.5 rounded-lg text-center" style={{ background: 'rgba(255, 255, 255, 0.03)' }}>
                             <p className="text-[10px] uppercase tracking-wider mb-0.5" style={{ color: colors.textSecondary }}>Target</p>
                             <p className="text-white font-semibold text-sm">{pt.target_levels?.join(', ') || 'All Levels'}</p>
+                          </div>
+                          <div className="p-2.5 rounded-lg text-center" style={{ background: 'rgba(255, 255, 255, 0.03)' }}>
+                            <p className="text-[10px] uppercase tracking-wider mb-0.5" style={{ color: colors.textSecondary }}>Late Fee / Day</p>
+                            <p className="text-white font-semibold text-sm">{pt.late_fee_per_day ? `₦${Number(pt.late_fee_per_day).toLocaleString()}` : '₦0'}</p>
                           </div>
                         </div>
                       </div>
@@ -731,7 +738,7 @@ export default function ManageDuesPage() {
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 overflow-y-auto"
-            onClick={() => setShowEditModal(false)}
+              onClick={() => { setShowEditModal(false); setEditingPaymentType(null) }}
           >
             <motion.div
               initial={{ scale: 0.9, opacity: 0, y: 20 }}
@@ -755,7 +762,7 @@ export default function ManageDuesPage() {
                         </p>
                       </div>
                     </div>
-                    <button onClick={() => setShowEditModal(false)} className="p-2 rounded-lg hover:bg-white/10">
+                    <button onClick={() => { setShowEditModal(false); setEditingPaymentType(null) }} className="p-2 rounded-lg hover:bg-white/10">
                       <X className="w-5 h-5" style={{ color: colors.textSecondary }} />
                     </button>
                   </div>
@@ -910,6 +917,28 @@ export default function ManageDuesPage() {
                       </div>
                     </div>
 
+                    <div className="pt-4 border-t" style={{ borderColor: 'rgba(255, 255, 255, 0.1)' }}>
+                      <h4 className="text-sm font-semibold text-white mb-3">Late Fee</h4>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 items-center">
+                        <div>
+                          <label className="block text-sm font-medium text-white mb-2">Late Fee per Day (₦)</label>
+                          <input
+                            type="number"
+                            value={editingPaymentType?.late_fee_per_day ?? ''}
+                            onChange={(e) => {
+                              const v = e.target.value
+                              setEditingPaymentType({ ...editingPaymentType, late_fee_per_day: v === '' ? undefined : Number(v) })
+                            }}
+                            className="w-full px-4 py-3 rounded-xl bg-white/5 border text-white focus:outline-none focus:ring-2"
+                            style={{ borderColor: 'rgba(255, 255, 255, 0.1)' }}
+                          />
+                        </div>
+                        <div>
+                          <p className="text-sm" style={{ color: colors.textSecondary }}>Set the amount charged per day for students who miss the deadline.</p>
+                        </div>
+                      </div>
+                    </div>
+
                     {/* Options */}
                     <div className="pt-4 border-t" style={{ borderColor: 'rgba(255, 255, 255, 0.1)' }}>
                       <h4 className="text-sm font-semibold text-white mb-3">Payment Options</h4>
@@ -949,7 +978,7 @@ export default function ManageDuesPage() {
                     <motion.button
                       whileHover={{ scale: 1.02 }}
                       whileTap={{ scale: 0.98 }}
-                      onClick={() => setShowEditModal(false)}
+                      onClick={() => { setShowEditModal(false); setEditingPaymentType(null) }}
                       className="flex-1 px-4 py-3 rounded-xl font-medium"
                       style={{ background: 'rgba(255, 255, 255, 0.05)', color: colors.textSecondary }}
                     >

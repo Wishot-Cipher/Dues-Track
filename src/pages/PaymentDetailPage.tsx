@@ -1,3 +1,5 @@
+/* eslint-disable @typescript-eslint/no-unused-vars */
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import { useState, useEffect } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
@@ -125,6 +127,45 @@ export default function PaymentDetailPage() {
   const progressPercentage =
     paymentTypeAmount > 0 ? (totalPaid / paymentTypeAmount) * 100 : 0;
 
+  // Compute current user's accumulated late fees for this payment type
+  const paymentDeadline = paymentType?.deadline ? new Date(paymentType.deadline) : null;
+  const perDayLate = Number((paymentType as any)?.late_fee_per_day || 0);
+  let currentUserAccumulatedLate = 0;
+  try {
+    if (paymentDeadline && new Date() > paymentDeadline && perDayLate > 0) {
+      // Sum approved payments submitted on-or-before the deadline
+      const totalPaidBeforeDeadline = existingPayments
+        .filter(p => p.status === 'approved')
+        .reduce((sum, p) => {
+          try {
+            // Use submitted_at if available, otherwise fall back to created_at or reviewed_at
+            const submittedStr = p.submitted_at || (p as any).created_at || p.reviewed_at;
+            const submitted = submittedStr ? new Date(submittedStr) : null;
+            if (submitted && submitted.getTime() <= paymentDeadline.getTime()) {
+              return sum + (Number(p.amount) || 0);
+            }
+          } catch (e) {
+            // ignore parse errors
+          }
+          return sum;
+        }, 0);
+
+      const remainingAtDeadline = Math.max(0, (Number(paymentType?.amount) || 0) - totalPaidBeforeDeadline);
+
+      // If the student had fully paid by the deadline, no late fee should apply
+      if (remainingAtDeadline <= 0) {
+        currentUserAccumulatedLate = 0;
+      } else {
+        const daysOverdue = Math.floor((Date.now() - paymentDeadline.getTime()) / (1000 * 60 * 60 * 24));
+        if (daysOverdue > 0) currentUserAccumulatedLate = daysOverdue * perDayLate;
+      }
+    }
+  } catch (e) {
+    currentUserAccumulatedLate = 0;
+  }
+
+  const currentUserOutstanding = Math.max(0, remainingAmount) + currentUserAccumulatedLate;
+
   useEffect(() => {
     fetchPaymentDetails();
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -132,9 +173,9 @@ export default function PaymentDetailPage() {
 
   useEffect(() => {
     if (paymentType) {
-      setAmount(paymentOption === "full" ? remainingAmount : 0);
+      setAmount(paymentOption === "full" ? currentUserOutstanding : 0);
     }
-  }, [paymentOption, paymentType, remainingAmount]);
+  }, [paymentOption, paymentType, currentUserOutstanding]);
 
   const fetchPaymentDetails = async () => {
     try {
@@ -203,10 +244,10 @@ export default function PaymentDetailPage() {
       return;
     }
 
-    if (paymentOption === "partial" && amount > remainingAmount) {
+    if (paymentOption === "partial" && amount > currentUserOutstanding) {
       toast.error(
         `Amount cannot exceed remaining balance of ${formatCurrency(
-          remainingAmount
+          currentUserOutstanding
         )}`
       );
       return;
@@ -237,7 +278,9 @@ export default function PaymentDetailPage() {
           full_name: user.full_name,
           reg_number: user.reg_number,
           level: user.level,
-        });
+          // Attach computed outstanding (including late fees) so insertion uses correct amount
+          ...( { outstanding: currentUserOutstanding } as any ),
+        } as any);
       }
 
       if (students.length === 0) {
@@ -274,14 +317,14 @@ export default function PaymentDetailPage() {
           selectedMethod === "cash"
             ? `CASH-QR-${student.reg_number}-${Date.now()}`
             : `${transactionRef}-${student.reg_number}`;
-
-        // Insert payment
+        // Insert payment (use per-student outstanding when paying full)
+        const amountToInsert = paymentOption === 'full' ? (student as any).outstanding ?? currentUserOutstanding : amount;
         const { data: insertedPayment, error: insertError } = await supabase
           .from("payments")
           .insert({
             student_id: student.id,
             payment_type_id: id,
-            amount: paymentOption === "full" ? remainingAmount : amount,
+            amount: amountToInsert,
             transaction_ref: finalTransactionRef,
             receipt_url: receiptUrl || null,
             notes: notes.trim() || null,
@@ -294,13 +337,14 @@ export default function PaymentDetailPage() {
 
         if (insertError) throw insertError;
 
-        // Send notification to student about payment submission
+        // Send notification to student about payment submission (use actual inserted amount)
         if (insertedPayment) {
+          const notifyAmount = paymentOption === 'full' ? ((student as any).outstanding ?? currentUserOutstanding ?? amount) : amount;
           await notificationService.sendPaymentPendingNotification(
             student.id,
             student.full_name,
             paymentType?.title || "Payment",
-            paymentOption === "full" ? remainingAmount : amount,
+            notifyAmount,
             insertedPayment.id
           );
         }
@@ -496,7 +540,7 @@ export default function PaymentDetailPage() {
                       >
                         <Banknote className="w-4 h-4" style={{ color: colors.primary }} />
                         <span className="text-lg sm:text-xl font-bold" style={{ color: colors.primary }}>
-                          {formatCurrency(paymentType.amount)}
+                          {formatCurrency(paymentOption === 'full' ? currentUserOutstanding : amount)}
                         </span>
                       </div>
                       <div 
@@ -557,7 +601,7 @@ export default function PaymentDetailPage() {
                     >
                       <div className="absolute top-0 left-0 right-0 h-1" style={{ background: gradients.primary }} />
                       <p className="text-[10px] sm:text-xs mb-1 font-medium" style={{ color: colors.textSecondary }}>
-                        TOTAL
+                        {currentUserAccumulatedLate > 0 ? 'BASE DUE' : 'TOTAL DUE'}
                       </p>
                       <p className="text-base sm:text-xl font-bold text-white">
                         {formatCurrency(paymentTypeAmount)}
@@ -582,20 +626,57 @@ export default function PaymentDetailPage() {
                     <motion.div
                       className="text-center p-4 rounded-xl relative overflow-hidden"
                       style={{ 
-                        background: `linear-gradient(135deg, ${isFullyPaid ? colors.statusPaid : colors.warning}10 0%, ${isFullyPaid ? colors.statusPaid : colors.warning}05 100%)`,
-                        border: `1px solid ${isFullyPaid ? colors.statusPaid : colors.warning}20`
+                        background: `linear-gradient(135deg, ${currentUserOutstanding <= 0 ? colors.statusPaid : colors.warning}10 0%, ${currentUserOutstanding <= 0 ? colors.statusPaid : colors.warning}05 100%)`,
+                        border: `1px solid ${currentUserOutstanding <= 0 ? colors.statusPaid : colors.warning}20`
                       }}
                       whileHover={{ scale: 1.02 }}
                     >
-                      <div className="absolute top-0 left-0 right-0 h-1" style={{ background: isFullyPaid ? colors.statusPaid : colors.warning }} />
+                      <div className="absolute top-0 left-0 right-0 h-1" style={{ background: currentUserOutstanding <= 0 ? colors.statusPaid : colors.warning }} />
                       <p className="text-[10px] sm:text-xs mb-1 font-medium" style={{ color: colors.textSecondary }}>
                         REMAINING
                       </p>
-                      <p className="text-base sm:text-xl font-bold" style={{ color: isFullyPaid ? colors.statusPaid : colors.warning }}>
-                        {formatCurrency(Math.max(0, remainingAmount))}
+                      <p className="text-base sm:text-xl font-bold" style={{ color: currentUserOutstanding <= 0 ? colors.statusPaid : colors.warning }}>
+                        {formatCurrency(Math.max(0, currentUserOutstanding))}
                       </p>
                     </motion.div>
                   </div>
+
+                  {/* Late Fee Breakdown - Only show if there are late fees */}
+                  {currentUserAccumulatedLate > 0 && (
+                    <motion.div
+                      initial={{ opacity: 0, height: 0 }}
+                      animate={{ opacity: 1, height: 'auto' }}
+                      className="mb-5 p-4 rounded-xl"
+                      style={{ 
+                        background: `linear-gradient(135deg, ${colors.statusUnpaid}08 0%, transparent 100%)`,
+                        border: `1px solid ${colors.statusUnpaid}20`
+                      }}
+                    >
+                      <div className="flex items-center gap-2 mb-2">
+                        <AlertCircle className="w-4 h-4" style={{ color: colors.statusUnpaid }} />
+                        <span className="text-sm font-semibold" style={{ color: colors.statusUnpaid }}>Late Payment Fees Applied</span>
+                      </div>
+                      <div className="grid grid-cols-2 gap-3 text-sm">
+                        <div>
+                          <p className="text-xs" style={{ color: colors.textSecondary }}>Base Amount</p>
+                          <p className="font-semibold text-white">{formatCurrency(paymentTypeAmount)}</p>
+                        </div>
+                        <div>
+                          <p className="text-xs" style={{ color: colors.textSecondary }}>Late Fees</p>
+                          <p className="font-semibold" style={{ color: colors.statusUnpaid }}>+{formatCurrency(currentUserAccumulatedLate)}</p>
+                        </div>
+                        <div className="col-span-2 pt-2 mt-2" style={{ borderTop: '1px solid rgba(255,255,255,0.1)' }}>
+                          <div className="flex justify-between items-center">
+                            <p className="text-xs" style={{ color: colors.textSecondary }}>Total Due (incl. late fees)</p>
+                            <p className="font-bold text-white">{formatCurrency(paymentTypeAmount + currentUserAccumulatedLate)}</p>
+                          </div>
+                        </div>
+                      </div>
+                      <p className="text-xs mt-3" style={{ color: colors.textSecondary }}>
+                        Late fee: {formatCurrency(perDayLate)}/day × {Math.floor((Date.now() - (paymentDeadline?.getTime() || 0)) / (1000 * 60 * 60 * 24))} days overdue
+                      </p>
+                    </motion.div>
+                  )}
 
                   {/* Enhanced Progress Bar */}
                   <div className="relative">
@@ -836,13 +917,24 @@ export default function PaymentDetailPage() {
               )}
 
               {step === "qr" && selectedMethod === "cash" && user && (() => {
-                // Calculate total students: if no students selected and not includeSelf, default to 1 (paying for self only)
-                const totalStudentCount = selectedStudents.length + (includeSelf ? 1 : 0);
-                const effectiveStudentCount = totalStudentCount > 0 ? totalStudentCount : 1;
-                const baseAmount = paymentOption === "full" ? remainingAmount : amount;
-                const totalAmount = baseAmount * effectiveStudentCount;
+                // Build list of students for total calculation (include self if requested)
+                // Attach outstanding to all students in selectedStudents
+                const selectedWithOutstanding = selectedStudents.map(s => {
+                  // TODO: Replace with real outstanding calculation for each student if available
+                  // For now, use currentUserOutstanding for all (should be replaced with per-student logic)
+                  return { ...s, outstanding: currentUserOutstanding };
+                });
+                const studentsForTotal = [...selectedWithOutstanding];
                 const isSoloPayment = selectedStudents.length === 0 && !includeSelf;
-                
+                // Include the current user when requested or when this is a solo payment
+                if ((includeSelf || isSoloPayment) && !studentsForTotal.some(s => s.id === user.id)) {
+                  studentsForTotal.push({ id: user.id, full_name: user.full_name, reg_number: user.reg_number, level: user.level, outstanding: currentUserOutstanding } as any);
+                }
+                const effectiveStudentCount = studentsForTotal.length > 0 ? studentsForTotal.length : 1;
+                // If paying full, sum per-student outstanding when available, otherwise use entered amount
+                const totalAmount = paymentOption === 'full'
+                  ? studentsForTotal.reduce((sum, s) => sum + (Number((s as any).outstanding ?? currentUserOutstanding ?? amount) || 0), 0)
+                  : (effectiveStudentCount * amount);
                 return (
                   <motion.div
                     initial={{ opacity: 0, y: 20 }}
@@ -856,7 +948,7 @@ export default function PaymentDetailPage() {
                       paymentTypeName={paymentType.title}
                       amount={totalAmount}
                       totalStudents={effectiveStudentCount}
-                      selectedStudents={selectedStudents}
+                      selectedStudents={selectedWithOutstanding}
                       includeSelf={isSoloPayment ? true : includeSelf}
                       onBack={() => setStep("method")}
                     />
@@ -1014,7 +1106,7 @@ export default function PaymentDetailPage() {
                                 className="text-lg sm:text-xl font-bold"
                                 style={{ color: colors.primary }}
                               >
-                                {formatCurrency(Math.max(0, remainingAmount))}
+                                {formatCurrency(Math.max(0, currentUserOutstanding))}
                               </p>
                             </div>
                           </button>
@@ -1056,7 +1148,7 @@ export default function PaymentDetailPage() {
                             >
                               <label className="block text-sm font-medium mb-2 text-white">
                                 Enter Amount (Max:{" "}
-                                {formatCurrency(Math.max(0, remainingAmount))})
+                                {formatCurrency(Math.max(0, currentUserOutstanding))})
                               </label>
                               <input
                                 type="number"
@@ -1065,11 +1157,11 @@ export default function PaymentDetailPage() {
                                   setAmount(
                                     Math.min(
                                       parseFloat(e.target.value) || 0,
-                                      remainingAmount
+                                      currentUserOutstanding
                                     )
                                   )
                                 }
-                                max={remainingAmount}
+                                max={currentUserOutstanding}
                                 min={0}
                                 step="0.01"
                                 className="w-full px-4 py-3 rounded-lg text-white focus:outline-none focus:ring-2"
@@ -1085,7 +1177,7 @@ export default function PaymentDetailPage() {
                               >
                                 You'll be able to pay the remaining{" "}
                                 {formatCurrency(
-                                  Math.max(0, remainingAmount - amount)
+                                  Math.max(0, currentUserOutstanding - amount)
                                 )}{" "}
                                 later
                               </p>

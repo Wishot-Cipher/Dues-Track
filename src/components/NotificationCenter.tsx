@@ -54,10 +54,15 @@ export const NotificationCenter = () => {
   const [loading, setLoading] = useState(false);
 
   const fetchNotifications = useCallback(async () => {
-    if (!user?.id) return;
+    if (!user?.id) {
+      console.log('🔔 NotificationCenter: No user ID, skipping fetch');
+      return;
+    }
 
     try {
       setLoading(true);
+      console.log('🔔 Fetching notifications for user:', user.id);
+      
       const { data, error } = await supabase
         .from('notifications')
         .select('*')
@@ -65,9 +70,13 @@ export const NotificationCenter = () => {
         .order('created_at', { ascending: false })
         .limit(20);
 
-      if (error) throw error;
+      if (error) {
+        console.error('🔔 Error fetching notifications:', error);
+        throw error;
+      }
+      
+      console.log('🔔 Notifications loaded:', data?.length || 0, 'items');
 
-      setNotifications(data || []);
       setNotifications(data || []);
       setUnreadCount(data?.filter(n => !n.is_read).length || 0);
     } catch (error) {

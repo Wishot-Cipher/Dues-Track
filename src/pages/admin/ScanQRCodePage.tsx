@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 /* eslint-disable @typescript-eslint/no-unused-vars */
 import { useState, useEffect, useRef, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
@@ -83,6 +84,7 @@ interface PaymentType {
   id: string;
   title: string;
   amount: number;
+  late_fee_per_day?: number;
 }
 
 // Detect iOS
@@ -941,12 +943,14 @@ export default function ScanQRCodePage() {
 
         const transactionRef = `CASH-${studentToPay.regNumber}-${baseTimestamp}-${i}`;
 
+        const amountToInsert = (studentToPay as any).outstanding ?? qrData.amountPerStudent ?? paymentType.amount;
+
         const paymentResponse = await supabase
           .from("payments")
           .insert({
             student_id: studentToPay.id,
             payment_type_id: qrData.paymentTypeId,
-            amount: qrData.amountPerStudent,
+            amount: amountToInsert,
             payment_method: "cash",
             transaction_ref: transactionRef,
             status: "approved",
@@ -974,8 +978,8 @@ export default function ScanQRCodePage() {
           type: "payment_approved",
           title: `Cash Payment Received - ${qrData.paymentTypeName}`,
           message: qrData.totalStudents > 1
-            ? `Your cash payment of ${formatCurrency(qrData.amountPerStudent)} has been received and approved.\n\nPaid by: ${qrData.paidByName}\nTransaction Ref: ${transactionRef}\n\nThank you!`
-            : `Your cash payment of ${formatCurrency(qrData.amountPerStudent)} has been received and approved.\n\nTransaction Ref: ${transactionRef}\n\nThank you for your payment!`,
+            ? `Your cash payment of ${formatCurrency(amountToInsert)} has been received and approved.\n\nPaid by: ${qrData.paidByName}\nTransaction Ref: ${transactionRef}\n\nThank you!`
+            : `Your cash payment of ${formatCurrency(amountToInsert)} has been received and approved.\n\nTransaction Ref: ${transactionRef}\n\nThank you for your payment!`,
           link: "/payments",
         });
       }
@@ -1026,8 +1030,12 @@ export default function ScanQRCodePage() {
 
 const handleMultiPayCode = async (codeInput: string) => {
   try {
+    console.log('🔍 Multi-pay code received:', codeInput);
+    
     const withoutPrefix = codeInput.substring(3);
     const parts = withoutPrefix.split('-');
+    
+    console.log('📝 Parsed parts:', { withoutPrefix, parts, partsLength: parts.length });
     
     if (parts.length < 2) {
       toast.error("Invalid multi-pay code format");
@@ -1037,6 +1045,8 @@ const handleMultiPayCode = async (codeInput: string) => {
     
     const paymentPart = parts[0];
     const payerPart = parts[1];
+    
+    console.log('📦 Payment part:', paymentPart, '| Payer part:', payerPart);
     
     if (!payerPart.startsWith('P')) {
       toast.error("Invalid code: Missing payer identifier");
@@ -1048,6 +1058,8 @@ const handleMultiPayCode = async (codeInput: string) => {
     const otherSuffixes = parts.length > 2 
       ? parts[2].split('.').filter(s => s.length > 0) 
       : [];
+    
+    console.log('👥 Payer suffix:', payerSuffix, '| Recipient suffixes:', otherSuffixes);
 
     const { data: allPaymentTypes, error: ptError } = await supabase
       .from("payment_types")
@@ -1055,10 +1067,14 @@ const handleMultiPayCode = async (codeInput: string) => {
       .eq("is_active", true);
 
     if (ptError) throw ptError;
+    
+    console.log('💳 Active payment types:', allPaymentTypes?.map(pt => ({ id: pt.id, suffix: pt.id.replace(/-/g, '').slice(-3).toUpperCase(), title: pt.title })));
 
     const matchingPT = allPaymentTypes?.find(pt => 
       pt.id.replace(/-/g, '').slice(-3).toUpperCase() === paymentPart.toUpperCase()
     );
+    
+    console.log('🎯 Looking for payment suffix:', paymentPart.toUpperCase(), '| Found:', matchingPT?.title || 'NONE');
 
     if (!matchingPT) {
       toast.error("Payment type not found. The code may be invalid.");
@@ -1070,22 +1086,64 @@ const handleMultiPayCode = async (codeInput: string) => {
       .from("students")
       .select("id, full_name, reg_number");
 
-    if (studentError) throw studentError;
+    if (studentError) {
+      console.error('❌ Error fetching students:', studentError);
+      toast.error("Failed to load students. Please try again.");
+      setProcessingManual(false);
+      return;
+    }
+    
+    if (!allStudents || allStudents.length === 0) {
+      console.error('❌ No students found in database');
+      toast.error("No students found. Please check database connection.");
+      setProcessingManual(false);
+      return;
+    }
+    
+    console.log('👨‍🎓 Total students loaded:', allStudents.length);
+    console.log('📋 Sample reg numbers:', allStudents.slice(0, 5).map(s => ({ 
+      name: s.full_name, 
+      reg: s.reg_number, 
+      cleaned: s.reg_number.replace(/[^A-Z0-9]/gi, ''),
+      suffix: s.reg_number.replace(/[^A-Z0-9]/gi, '').slice(-3).toUpperCase()
+    })));
 
     const findStudentBySuffix = (suffix: string) => {
-      return allStudents?.find(stu => {
+      // Try exact suffix match first (last 3 alphanumeric chars)
+      let found = allStudents.find(stu => {
         const cleanedReg = stu.reg_number.replace(/[^A-Z0-9]/gi, '');
         return cleanedReg.slice(-3).toUpperCase() === suffix.toUpperCase();
       });
+      
+      // If not found, try partial match (suffix might be anywhere in reg number)
+      if (!found) {
+        found = allStudents.find(stu => {
+          const cleanedReg = stu.reg_number.replace(/[^A-Z0-9]/gi, '').toUpperCase();
+          return cleanedReg.includes(suffix.toUpperCase());
+        });
+        if (found) {
+          console.log('🔎 Found via partial match for suffix:', suffix);
+        }
+      }
+      
+      console.log('🔎 Finding suffix:', suffix, '| Found:', found?.full_name || 'NONE', found ? `(reg: ${found.reg_number})` : '');
+      return found;
     };
 
     const payerStudent = findStudentBySuffix(payerSuffix);
     
     if (!payerStudent) {
-      toast.error("Could not identify the payer. Invalid code.");
+      console.error('❌ Payer not found. Suffix:', payerSuffix);
+      console.log('Available suffixes:', allStudents.slice(0, 10).map(s => ({
+        name: s.full_name.substring(0, 20),
+        suffix: s.reg_number.replace(/[^A-Z0-9]/gi, '').slice(-3).toUpperCase()
+      })));
+      toast.error(`Could not find payer with suffix "${payerSuffix}". Please verify the code.`);
       setProcessingManual(false);
       return;
     }
+    
+    console.log('✅ Payer identified:', payerStudent.full_name, '| Reg:', payerStudent.reg_number);
 
     const otherStudents = otherSuffixes
       .map(suffix => findStudentBySuffix(suffix))
@@ -1093,13 +1151,20 @@ const handleMultiPayCode = async (codeInput: string) => {
 
     const allRecipients = otherStudents;
     
+    console.log('📊 Recipients found:', allRecipients.length, 'of', otherSuffixes.length, 'expected');
+    
     if (allRecipients.length < otherSuffixes.length) {
       const missingCount = otherSuffixes.length - allRecipients.length;
-      toast.warning(`${missingCount} recipient(s) could not be found. Proceeding with ${allRecipients.length} students.`);
+      const missingSuffixes = otherSuffixes.filter(suffix => 
+        !allRecipients.some(r => r.reg_number.replace(/[^A-Z0-9]/gi, '').slice(-3).toUpperCase() === suffix.toUpperCase())
+      );
+      console.warn('⚠️ Missing recipients with suffixes:', missingSuffixes);
+      toast.warning(`${missingCount} recipient(s) not found (${missingSuffixes.join(', ')}). Proceeding with ${allRecipients.length} students.`);
     }
     
     if (allRecipients.length === 0) {
-      toast.error("No valid recipients found in the code.");
+      console.error('❌ No recipients found. Searched for suffixes:', otherSuffixes);
+      toast.error(`No recipients found for suffixes: ${otherSuffixes.join(', ')}. Please check the code.`);
       setProcessingManual(false);
       return;
     }
@@ -1139,22 +1204,99 @@ const handleMultiPayCode = async (codeInput: string) => {
       toast.warning(`${alreadyPaidStudents.join(", ")} already paid and will be skipped`);
     }
 
-    const manualQrData: QRData = {
-      type: "CASH_PAYMENT",
-      paidBy: payerStudent.id,
-      paidByName: payerStudent.full_name,
-      paidByRegNumber: payerStudent.reg_number,
-      students: studentsToPay,
-      totalStudents: studentsToPay.length,
-      paymentTypeId: matchingPT.id,
-      paymentTypeName: matchingPT.title,
-      totalAmount: matchingPT.amount * studentsToPay.length,
-      amountPerStudent: matchingPT.amount,
-      timestamp: Date.now(),
-      paymentMethod: "cash",
-    };
+    // Compute outstanding per student (includes late fees) and build detailed QR payload
+    try {
+      // Fetch payment type details (deadline, late_fee_per_day) to compute late fees
+      const { data: fullPT } = await supabase
+        .from('payment_types')
+        .select('id, title, amount, deadline, late_fee_per_day')
+        .eq('id', matchingPT.id)
+        .single();
 
-    setQrData(manualQrData);
+      // Fetch payments for these students in bulk
+      const { data: paymentsData } = await supabase
+        .from('payments')
+        .select('student_id, amount, status, transaction_ref')
+        .eq('payment_type_id', matchingPT.id)
+        .in('student_id', studentsToPay.map(s => s.id));
+
+      const now = new Date();
+      const deadlineDate = fullPT?.deadline ? new Date(fullPT.deadline) : null;
+      const perDay = Number(fullPT?.late_fee_per_day || 0);
+
+      const studentsWithOutstanding = studentsToPay.map(s => {
+        const studentPayments = (paymentsData || []).filter((p: any) => p.student_id === s.id) || [];
+        const paidForType = studentPayments
+          .filter((p: any) => p.status === 'approved' && !p.transaction_ref?.startsWith('WAIVED-'))
+          .reduce((sum: number, p: any) => sum + Number(p.amount || 0), 0);
+
+        const baseOutstanding = Math.max(0, (fullPT?.amount || matchingPT.amount) - paidForType);
+        let accumulated = 0;
+        try {
+          if (deadlineDate && now > deadlineDate && perDay > 0) {
+            // Check how much was paid before deadline
+            const paidBeforeDeadline = studentPayments
+              .filter((p: any) => p.status === 'approved' && !p.transaction_ref?.startsWith('WAIVED-'))
+              .reduce((sum: number, p: any) => {
+                const submittedAt = p.submitted_at ? new Date(p.submitted_at) : (p.created_at ? new Date(p.created_at) : null);
+                if (submittedAt && submittedAt.getTime() <= deadlineDate.getTime()) {
+                  return sum + Number(p.amount || 0);
+                }
+                return sum;
+              }, 0);
+            const remainingAtDeadline = Math.max(0, (fullPT?.amount || matchingPT.amount) - paidBeforeDeadline);
+            // Only apply late fees if student still owed at deadline
+            if (remainingAtDeadline > 0) {
+              const daysOverdue = Math.floor((now.getTime() - deadlineDate.getTime()) / (1000 * 60 * 60 * 24));
+              if (daysOverdue > 0) accumulated = daysOverdue * perDay;
+            }
+          }
+        } catch (e) {
+          // ignore
+        }
+
+        return { id: s.id, name: s.name, regNumber: s.regNumber, outstanding: baseOutstanding + accumulated };
+      });
+
+      const totalAmount = studentsWithOutstanding.reduce((sum, s) => sum + (s.outstanding || 0), 0);
+
+      const manualQrData: QRData = {
+        type: "CASH_PAYMENT",
+        paidBy: payerStudent.id,
+        paidByName: payerStudent.full_name,
+        paidByRegNumber: payerStudent.reg_number,
+        students: studentsWithOutstanding as any,
+        totalStudents: studentsWithOutstanding.length,
+        paymentTypeId: matchingPT.id,
+        paymentTypeName: matchingPT.title,
+        totalAmount,
+        // amountPerStudent kept as fallback (individual outstanding available on each student)
+        amountPerStudent: matchingPT.amount,
+        timestamp: Date.now(),
+        paymentMethod: "cash",
+      };
+
+      setQrData(manualQrData);
+    } catch (err) {
+      console.error('Failed to compute outstanding for manual QR:', err);
+      // Fallback to previous simple payload
+      const manualQrData: QRData = {
+        type: "CASH_PAYMENT",
+        paidBy: payerStudent.id,
+        paidByName: payerStudent.full_name,
+        paidByRegNumber: payerStudent.reg_number,
+        students: studentsToPay,
+        totalStudents: studentsToPay.length,
+        paymentTypeId: matchingPT.id,
+        paymentTypeName: matchingPT.title,
+        totalAmount: matchingPT.amount * studentsToPay.length,
+        amountPerStudent: matchingPT.amount,
+        timestamp: Date.now(),
+        paymentMethod: "cash",
+      };
+
+      setQrData(manualQrData);
+    }
     setStudent({
       id: payerStudent.id,
       full_name: payerStudent.full_name,
@@ -2018,7 +2160,12 @@ const switchCamera = async (newCameraId: string) => {
                               <p className="text-[10px] sm:text-xs font-medium" style={{ color: colors.textSecondary }}>Per Student</p>
                             </div>
                             <p className="text-sm sm:text-lg font-bold" style={{ color: colors.accentMint }}>
-                              {formatCurrency(qrData.amountPerStudent)}
+                              {(() => {
+                                const students = qrData.students || [];
+                                const allSame = students.length > 0 && students.every((s: any) => typeof s.outstanding === 'number' && s.outstanding === (students[0] as any).outstanding);
+                                const display = allSame ? (students[0] as any).outstanding : (qrData.amountPerStudent ?? (qrData.totalAmount && qrData.totalStudents ? qrData.totalAmount / qrData.totalStudents : 0));
+                                return formatCurrency(display);
+                              })()}
                             </p>
                           </motion.div>
                         </>

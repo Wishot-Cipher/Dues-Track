@@ -66,6 +66,11 @@ export default function DashboardPage() {
     status: 'paid' | 'pending' | 'partial' | 'not_paid' | 'waived';
     amountPaid: number;
     progress: number;
+    baseRemaining?: number;
+    daysOverdue?: number;
+    lateFeePerDay?: number;
+    accumulatedLateFees?: number;
+    totalDue?: number;
   }>>([]);
 
   // Dismissed optional dues - stored in localStorage
@@ -176,12 +181,48 @@ export default function DashboardPage() {
             }
           }
           
+          // Compute remaining and late fees
+          const paymentTypeAmount = Number(pt.amount) || 0;
+          const baseRemaining = Math.max(0, paymentTypeAmount - amountPaid);
+          const now = new Date();
+          const deadlineDate = pt.deadline ? new Date(pt.deadline) : null;
+          const lateFeePerDay = Number(pt.late_fee_per_day || 0);
+
+          // Calculate how much was paid BEFORE the deadline
+          let paidBeforeDeadline = 0;
+          if (deadlineDate) {
+            paidBeforeDeadline = paymentsForType
+              .filter(p => p.status === 'approved' && !p.transaction_ref?.startsWith('WAIVED-'))
+              .reduce((sum, p) => {
+                const submittedAt = p.submitted_at ? new Date(p.submitted_at) : (p.created_at ? new Date(p.created_at) : null);
+                if (submittedAt && submittedAt.getTime() <= deadlineDate.getTime()) {
+                  return sum + Number(p.amount || 0);
+                }
+                return sum;
+              }, 0);
+          }
+          const remainingAtDeadline = Math.max(0, paymentTypeAmount - paidBeforeDeadline);
+
+          // Only apply late fees if student still owed money at the deadline
+          let daysOverdue = 0;
+          let accumulatedLateFees = 0;
+          if (deadlineDate && now > deadlineDate && remainingAtDeadline > 0 && lateFeePerDay > 0) {
+            daysOverdue = Math.floor((now.getTime() - deadlineDate.getTime()) / (1000 * 60 * 60 * 24));
+            accumulatedLateFees = daysOverdue * lateFeePerDay;
+          }
+          const totalDue = Math.max(0, baseRemaining) + accumulatedLateFees;
+
           return {
             paymentType: pt,
             payment: paymentsForType[0] || null, // Keep first payment for reference
             status,
             amountPaid,
-            progress
+            progress,
+            baseRemaining,
+            daysOverdue,
+            lateFeePerDay,
+            accumulatedLateFees,
+            totalDue
           };
         });
         
@@ -660,7 +701,12 @@ export default function DashboardPage() {
                                 <div className="flex items-center justify-between mb-3">
                                   <div>
                                     <p className="text-[10px] uppercase tracking-wider" style={{ color: colors.textSecondary }}>Amount Due</p>
-                                    <span className="text-xl font-bold text-white">{formatCurrency(paymentType.amount)}</span>
+                                    <span className="text-xl font-bold text-white">{formatCurrency(item.totalDue ?? paymentType.amount)}</span>
+                                    {(item.accumulatedLateFees ?? 0) > 0 && (
+                                      <div className="text-xs mt-1" style={{ color: colors.textSecondary }}>
+                                        Includes {formatCurrency(item.accumulatedLateFees ?? 0)} late fees ({item.daysOverdue} days)
+                                      </div>
+                                    )}
                                   </div>
                                   <div 
                                     className="px-3 py-1.5 rounded-full text-xs font-bold flex items-center gap-1.5"

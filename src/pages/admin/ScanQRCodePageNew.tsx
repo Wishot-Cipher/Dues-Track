@@ -1,3 +1,5 @@
+/* eslint-disable @typescript-eslint/no-unused-vars */
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import { useState, useEffect, useRef, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useNavigate, useLocation } from "react-router-dom";
@@ -53,6 +55,7 @@ interface PaymentType {
   id: string;
   title: string;
   amount: number;
+  late_fee_per_day?: number;
 }
 
 const SCANNER_CONTAINER_ID = "qr-scanner";
@@ -555,11 +558,12 @@ export default function ScanQRCodePage() {
 
         const transactionRef = `CASH-${studentToPay.regNumber}-${baseTimestamp}-${i}`;
 
-        // Insert payment
+        // Insert payment (use per-student outstanding if available)
+        const amountToInsert = (studentToPay as any).outstanding ?? qrData.amountPerStudent ?? paymentType.amount;
         const { error: insertError } = await supabase.from("payments").insert({
           student_id: studentToPay.id,
           payment_type_id: qrData.paymentTypeId,
-          amount: qrData.amountPerStudent,
+          amount: amountToInsert,
           payment_method: "cash",
           transaction_ref: transactionRef,
           status: "approved",
@@ -587,8 +591,8 @@ export default function ScanQRCodePage() {
           title: `Cash Payment Received - ${qrData.paymentTypeName}`,
           message:
             qrData.totalStudents > 1
-              ? `Your cash payment of ${formatCurrency(qrData.amountPerStudent)} has been received.\nPaid by: ${qrData.paidByName}`
-              : `Your cash payment of ${formatCurrency(qrData.amountPerStudent)} has been received.`,
+              ? `Your cash payment of ${formatCurrency(amountToInsert)} has been received.\nPaid by: ${qrData.paidByName}`
+              : `Your cash payment of ${formatCurrency(amountToInsert)} has been received.`,
           link: "/payments",
         });
       }
@@ -674,32 +678,109 @@ export default function ScanQRCodePage() {
         return;
       }
 
-      // Create QR data structure
-      const data: QRData = {
-        type: "CASH_PAYMENT",
-        paidBy: matchingStudent.id,
-        paidByName: matchingStudent.full_name,
-        paidByRegNumber: matchingStudent.reg_number,
-        students: [
-          {
-            id: matchingStudent.id,
-            name: matchingStudent.full_name,
-            regNumber: matchingStudent.reg_number,
-          },
-        ],
-        totalStudents: 1,
-        paymentTypeId: matchingPaymentType.id,
-        paymentTypeName: matchingPaymentType.title,
-        totalAmount: matchingPaymentType.amount,
-        amountPerStudent: matchingPaymentType.amount,
-        timestamp: Date.now(),
-        paymentMethod: "cash",
-      };
+      // Compute outstanding (including late fees) for this student
+      try {
+        const { data: fullPT } = await supabase
+          .from('payment_types')
+          .select('id, title, amount, deadline, late_fee_per_day')
+          .eq('id', matchingPaymentType.id)
+          .single();
 
-      setQrData(data);
-      setStudent(matchingStudent);
-      setPaymentType(matchingPaymentType);
-      setMode("confirm");
+        const { data: paymentsData } = await supabase
+          .from('payments')
+          .select('student_id, amount, status, transaction_ref')
+          .eq('payment_type_id', matchingPaymentType.id)
+          .eq('student_id', matchingStudent.id);
+
+        const paidForType = (paymentsData || [])
+          .filter((p: any) => p.status === 'approved' && !p.transaction_ref?.startsWith('WAIVED-'))
+          .reduce((sum: number, p: any) => sum + Number(p.amount || 0), 0);
+
+        const now = new Date();
+        const deadlineDate = fullPT?.deadline ? new Date(fullPT.deadline) : null;
+        const perDay = Number(fullPT?.late_fee_per_day || 0);
+        let accumulated = 0;
+        try {
+          if (deadlineDate && now > deadlineDate && perDay > 0) {
+            // Check how much was paid before deadline
+            const paidBeforeDeadline = (paymentsData || [])
+              .filter((p: any) => p.status === 'approved' && !p.transaction_ref?.startsWith('WAIVED-'))
+              .reduce((sum: number, p: any) => {
+                const submittedAt = p.submitted_at ? new Date(p.submitted_at) : (p.created_at ? new Date(p.created_at) : null);
+                if (submittedAt && deadlineDate && submittedAt.getTime() <= deadlineDate.getTime()) {
+                  return sum + Number(p.amount || 0);
+                }
+                return sum;
+              }, 0);
+            const remainingAtDeadline = Math.max(0, (fullPT?.amount || matchingPaymentType.amount) - paidBeforeDeadline);
+            // Only apply late fees if student still owed at deadline
+            if (remainingAtDeadline > 0) {
+              const daysOverdue = Math.floor((now.getTime() - deadlineDate.getTime()) / (1000 * 60 * 60 * 24));
+              if (daysOverdue > 0) accumulated = daysOverdue * perDay;
+            }
+          }
+        // eslint-disable-next-line no-empty
+        } catch (e) {}
+
+        const baseOutstanding = Math.max(0, (fullPT?.amount || matchingPaymentType.amount) - paidForType);
+        const outstanding = baseOutstanding + accumulated;
+
+        // Create QR data structure including outstanding per-student
+        const data: QRData = {
+          type: "CASH_PAYMENT",
+          paidBy: matchingStudent.id,
+          paidByName: matchingStudent.full_name,
+          paidByRegNumber: matchingStudent.reg_number,
+          students: [
+            {
+              id: matchingStudent.id,
+              name: matchingStudent.full_name,
+              regNumber: matchingStudent.reg_number,
+              outstanding,
+            } as any,
+          ],
+          totalStudents: 1,
+          paymentTypeId: matchingPaymentType.id,
+          paymentTypeName: matchingPaymentType.title,
+          totalAmount: outstanding,
+          amountPerStudent: matchingPaymentType.amount,
+          timestamp: Date.now(),
+          paymentMethod: "cash",
+        };
+
+        setQrData(data);
+        setStudent(matchingStudent);
+        setPaymentType(matchingPaymentType);
+        setMode("confirm");
+      } catch (err) {
+        console.error('Failed to compute outstanding for manual QR (new):', err);
+        // fallback to simple payload
+        const data: QRData = {
+          type: "CASH_PAYMENT",
+          paidBy: matchingStudent.id,
+          paidByName: matchingStudent.full_name,
+          paidByRegNumber: matchingStudent.reg_number,
+          students: [
+            {
+              id: matchingStudent.id,
+              name: matchingStudent.full_name,
+              regNumber: matchingStudent.reg_number,
+            },
+          ],
+          totalStudents: 1,
+          paymentTypeId: matchingPaymentType.id,
+          paymentTypeName: matchingPaymentType.title,
+          totalAmount: matchingPaymentType.amount,
+          amountPerStudent: matchingPaymentType.amount,
+          timestamp: Date.now(),
+          paymentMethod: "cash",
+        };
+
+        setQrData(data);
+        setStudent(matchingStudent);
+        setPaymentType(matchingPaymentType);
+        setMode("confirm");
+      }
     } catch (error) {
       console.error("Manual lookup error:", error);
       toast.error("Failed to look up payment code");

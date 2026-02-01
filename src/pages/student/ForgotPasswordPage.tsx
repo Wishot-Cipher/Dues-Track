@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Mail, ArrowLeft, CheckCircle, AlertCircle, Send, Info } from "lucide-react";
+import { Mail, ArrowLeft, CheckCircle, AlertCircle, Send, Info, User } from "lucide-react";
 import { colors, gradients } from "@/config/colors";
 import CustomButton from "@/components/ui/CustomButton";
 import Input from "@/components/ui/Input";
@@ -14,6 +14,7 @@ export default function ForgotPasswordPage() {
   const [success, setSuccess] = useState(false);
   const [loading, setLoading] = useState(false);
   const [debugInfo, setDebugInfo] = useState("");
+  const [showContactAdmin, setShowContactAdmin] = useState(false);
   const navigate = useNavigate();
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -30,7 +31,6 @@ export default function ForgotPasswordPage() {
 
       const emailLower = email.trim().toLowerCase();
       
-      // Log attempt
       console.log("🔍 Attempting password reset for:", emailLower);
       setDebugInfo(`Checking email: ${emailLower}...`);
 
@@ -45,31 +45,39 @@ export default function ForgotPasswordPage() {
 
       if (studentError) {
         console.error("❌ Student lookup error:", studentError);
-        setDebugInfo(`Error looking up student: ${studentError.message}`);
       }
 
       if (!studentData) {
         console.log("⚠️ No student found with email:", emailLower);
-        throw new Error("No account found with this email address. Please check your email or contact your class representative.");
+        throw new Error("No account found with this email address. Please contact your class representative to reset your password.");
       }
 
       console.log("✅ Found student:", studentData.full_name);
-      setDebugInfo(`Found student: ${studentData.full_name}. Sending reset email...`);
+      setDebugInfo(`Found: ${studentData.full_name}. Sending reset email...`);
 
-      // Call server endpoint to create token and send reset email
-      const resp = await fetch('/api/password/send-reset-email', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email: emailLower }),
-      });
+      // Try to call server endpoint
+      try {
+        const resp = await fetch('/api/password/send-reset-email', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email: emailLower }),
+        });
 
-      const body = await resp.json().catch(() => ({}));
-      if (!resp.ok) {
-        console.error('Reset email endpoint error:', body);
-        throw new Error(body.error || 'Failed to send reset email');
+        const body = await resp.json().catch(() => ({}));
+        console.log('📬 Reset email response:', { status: resp.status, body });
+        
+        if (resp.ok && body.success !== false) {
+          setSuccess(true);
+          return;
+        }
+      } catch (fetchErr) {
+        console.warn('Email sending failed:', fetchErr);
       }
 
-      setSuccess(true);
+      // If email sending failed, show contact admin option
+      setShowContactAdmin(true);
+      setDebugInfo(`Found account for ${studentData.full_name}. Email service unavailable - please contact your admin.`);
+      
     } catch (err: unknown) {
       console.error("❌ Error in password reset:", err);
       const errorMessage =
@@ -174,6 +182,108 @@ export default function ForgotPasswordPage() {
               Didn't receive an email?{" "}
               <button
                 onClick={() => setSuccess(false)}
+                className="underline hover:no-underline"
+                style={{ color: colors.primary }}
+              >
+                Try again
+              </button>
+            </p>
+          </div>
+        </motion.div>
+      </PageWrapper>
+    );
+  }
+
+  // Show contact admin view when email fails
+  if (showContactAdmin) {
+    return (
+      <PageWrapper centered noPadding className="p-4 sm:p-6 lg:p-8">
+        <motion.div
+          className="w-full max-w-md"
+          initial={{ opacity: 0, scale: 0.95 }}
+          animate={{ opacity: 1, scale: 1 }}
+          transition={{ duration: 0.5 }}
+        >
+          <div
+            className="backdrop-blur-xl rounded-3xl p-8 border text-center"
+            style={{
+              background: "rgba(15, 7, 3, 0.6)",
+              borderColor: "rgba(255, 104, 3, 0.2)",
+              boxShadow: `
+                0 0 0 1px rgba(255, 104, 3, 0.1),
+                0 20px 50px -12px rgba(0, 0, 0, 0.8),
+                inset 0 1px 0 0 rgba(255, 255, 255, 0.05)
+              `,
+            }}
+          >
+            <motion.div
+              className="w-20 h-20 rounded-full flex items-center justify-center mx-auto mb-6"
+              style={{
+                background: `${colors.warning}20`,
+                border: `2px solid ${colors.warning}`,
+              }}
+              initial={{ scale: 0 }}
+              animate={{ scale: 1 }}
+              transition={{ delay: 0.2, type: "spring", stiffness: 200 }}
+            >
+              <User size={40} style={{ color: colors.warning }} />
+            </motion.div>
+
+            <h2 className="text-2xl font-bold mb-3">Contact Your Admin</h2>
+            <p className="text-sm mb-6" style={{ color: colors.textSecondary }}>
+              Email service is currently unavailable. Please contact your class representative or admin to reset your password.
+            </p>
+
+            <div
+              className="p-4 rounded-xl mb-6 text-left"
+              style={{
+                background: "rgba(255, 255, 255, 0.03)",
+                border: "1px solid rgba(255, 255, 255, 0.1)",
+              }}
+            >
+              <p className="text-xs leading-relaxed" style={{ color: colors.textSecondary }}>
+                <strong>What to do:</strong>
+                <br />
+                1. Contact your class rep or financial secretary
+                <br />
+                2. Ask them to reset your password in the admin panel
+                <br />
+                3. They'll give you a temporary password
+                <br />
+                4. Log in and change it immediately
+              </p>
+            </div>
+
+            <div
+              className="p-4 rounded-xl mb-6 text-left"
+              style={{
+                background: `${colors.accentMint}10`,
+                border: `1px solid ${colors.accentMint}30`,
+              }}
+            >
+              <p className="text-xs leading-relaxed" style={{ color: colors.accentMint }}>
+                <strong>💡 Tip for Admins:</strong>
+                <br />
+                Go to <strong>Manage Students</strong> → Find the student → Click the <strong>🔑 Reset</strong> button
+              </p>
+            </div>
+
+            <CustomButton
+              variant="primary"
+              fullWidth
+              onClick={() => navigate("/login")}
+              className="mb-4"
+            >
+              Back to Login
+            </CustomButton>
+
+            <p className="text-xs" style={{ color: colors.textSecondary }}>
+              Want to try email again?{" "}
+              <button
+                onClick={() => {
+                  setShowContactAdmin(false);
+                  setDebugInfo("");
+                }}
                 className="underline hover:no-underline"
                 style={{ color: colors.primary }}
               >
@@ -449,30 +559,48 @@ export default function ForgotPasswordPage() {
 
             {/* Contact Support */}
             <motion.div
-              className="mt-6 p-4 rounded-xl"
+              className="mt-6 p-4 rounded-xl space-y-3"
               style={{ background: "rgba(255, 255, 255, 0.03)" }}
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               transition={{ delay: 1.0 }}
             >
-              <p
-                className="text-xs text-center"
-                style={{ color: colors.textSecondary }}
-              >
-                Need help?{" "}
-                <button
-                  type="button"
-                  className="underline hover:no-underline"
-                  style={{ color: colors.primary }}
-                  onClick={() =>
-                    setError(
-                      "Please contact your class representative for assistance with account recovery."
-                    )
-                  }
+              <div className="flex items-start gap-2">
+                <Info size={16} className="shrink-0 mt-0.5" style={{ color: colors.warning }} />
+                <p
+                  className="text-xs"
+                  style={{ color: colors.textSecondary }}
                 >
-                  Contact Support
-                </button>
-              </p>
+                  <strong style={{ color: colors.warning }}>Don't have an email on file?</strong>
+                  <br />
+                  Contact your class representative or admin to:
+                  <br />
+                  • Add your email to your profile, or
+                  <br />
+                  • Reset your password manually
+                </p>
+              </div>
+              
+              <div className="pt-2 border-t border-white/10">
+                <p
+                  className="text-xs text-center"
+                  style={{ color: colors.textSecondary }}
+                >
+                  Need other help?{" "}
+                  <button
+                    type="button"
+                    className="underline hover:no-underline"
+                    style={{ color: colors.primary }}
+                    onClick={() =>
+                      setError(
+                        "Please contact your class representative for assistance with account recovery."
+                      )
+                    }
+                  >
+                    Contact Support
+                  </button>
+                </p>
+              </div>
             </motion.div>
           </motion.div>
         </motion.div>

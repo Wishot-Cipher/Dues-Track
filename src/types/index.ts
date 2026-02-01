@@ -90,6 +90,8 @@ export interface PaymentType {
   allow_partial: boolean;
   is_mandatory: boolean;
   deadline: string;
+  /** Per-day late fee applied after deadline elapses (in the same currency as `amount`) */
+  late_fee_per_day?: number;
   icon?: string;
   color?: string;
   bank_name: string;

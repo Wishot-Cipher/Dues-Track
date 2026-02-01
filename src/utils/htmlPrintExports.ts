@@ -309,7 +309,8 @@ export function exportPaymentsToPrint(
  * Supports multi-page printing for expense records
  */
 export function exportExpensesToPrint(
-  expenses: ExpenseExport[]
+  expenses: ExpenseExport[],
+  options?: { paymentSource?: string }
 ): void {
   const approvedExpenses = expenses.filter(e => e.status === 'approved');
   const pendingExpenses = expenses.filter(e => e.status === 'pending');
@@ -337,6 +338,7 @@ export function exportExpensesToPrint(
     { label: 'Report Generated', value: new Date().toLocaleDateString('en-US', { dateStyle: 'full' }) },
     { label: 'Total Expenses', value: expenses.length.toString() },
     { label: 'Academic Session', value: getAcademicSession() },
+    { label: 'Payment Source', value: options?.paymentSource || 'All Funding Sources' },
   ];
   summaryContent += generateSection('📊', 'Report Information', generateInfoCard(infoItems, 3));
   
