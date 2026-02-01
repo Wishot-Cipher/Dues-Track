@@ -9,7 +9,7 @@ import DashboardSwitcher from '@/components/DashboardSwitcher';
 import { formatCurrency, formatDate } from '@/utils/formatters';
 import { AdminDashboardSkeleton, PaymentCardSkeleton } from '@/components/ui/Skeleton';
 import AnimatedCounter from '@/components/ui/AnimatedCounter';
-// AdminNotificationCenter removed - using push notifications instead
+import { AdminNotificationCenter } from '@/components/admin/AdminNotificationCenter';
 import {
   Users,
   Clock,
@@ -355,8 +355,11 @@ export default function AdminDashboardPage() {
             
             <div className="relative z-10 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
               {/* Mobile Dashboard Switcher - At Top */}
-              <div className="sm:hidden w-full mb-3">
+              <div className="sm:hidden w-full mb-3 flex items-center justify-between">
                 <DashboardSwitcher variant="compact" />
+                <div className="relative">
+                  <AdminNotificationCenter />
+                </div>
               </div>
               
               <div className="flex items-center gap-4">
@@ -388,8 +391,9 @@ export default function AdminDashboardPage() {
                 </div>
               </div>
 
-              {/* Dashboard Switcher */}
-              <div className="hidden sm:block">
+              {/* Dashboard Switcher + Notification Bell */}
+              <div className="hidden sm:flex items-center gap-3 relative">
+                <AdminNotificationCenter />
                 <DashboardSwitcher />
               </div>
               

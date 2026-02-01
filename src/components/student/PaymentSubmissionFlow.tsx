@@ -78,6 +78,7 @@ export default function PaymentSubmissionFlow({
   const [receiptFile, setReceiptFile] = useState<File | null>(null);
   const [notes, setNotes] = useState('');
   const [copied, setCopied] = useState(false);
+  const [validationError, setValidationError] = useState('');
 
   const isTransfer = paymentMethod === 'bank_transfer';
 
@@ -127,6 +128,33 @@ export default function PaymentSubmissionFlow({
       default:
         return false;
     }
+  };
+
+  // Get validation message for current step
+  const getValidationMessage = () => {
+    if (currentStep === 3) {
+      const missing: string[] = [];
+      if (!transactionRef.trim()) missing.push('transaction reference');
+      if (!receiptFile) missing.push('receipt image');
+      if (missing.length > 0) {
+        return `Please provide: ${missing.join(' and ')}`;
+      }
+    }
+    if (currentStep === 2 && paymentOption === 'partial' && partialAmount <= 0) {
+      return 'Please enter a valid partial amount';
+    }
+    return '';
+  };
+
+  // Handle continue with validation feedback
+  const handleContinue = () => {
+    const message = getValidationMessage();
+    if (message) {
+      setValidationError(message);
+      return;
+    }
+    setValidationError('');
+    setCurrentStep(currentStep + 1);
   };
 
   const handleSubmit = async () => {
@@ -625,6 +653,26 @@ export default function PaymentSubmissionFlow({
                     showPreview={true}
                     multiple={false}
                   />
+                  {/* Receipt upload status */}
+                  {receiptFile && (
+                    <motion.div
+                      initial={{ opacity: 0, y: -10 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      className="mt-3 p-3 rounded-xl flex items-center gap-3"
+                      style={{ 
+                        background: `${colors.accentMint}10`, 
+                        border: `1px solid ${colors.accentMint}30` 
+                      }}
+                    >
+                      <CheckCircle className="w-5 h-5" style={{ color: colors.accentMint }} />
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-medium text-white truncate">{receiptFile.name}</p>
+                        <p className="text-xs" style={{ color: colors.textSecondary }}>
+                          {(receiptFile.size / 1024).toFixed(1)} KB • Ready to upload
+                        </p>
+                      </div>
+                    </motion.div>
+                  )}
                 </div>
 
                 {/* Notes */}
@@ -749,11 +797,33 @@ export default function PaymentSubmissionFlow({
         )}
       </AnimatePresence>
 
+      {/* Validation Error Message */}
+      <AnimatePresence>
+        {validationError && (
+          <motion.div
+            initial={{ opacity: 0, y: -10 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -10 }}
+            className="p-3 rounded-xl flex items-center gap-2"
+            style={{ 
+              background: `${colors.statusUnpaid}15`, 
+              border: `1px solid ${colors.statusUnpaid}30` 
+            }}
+          >
+            <AlertTriangle className="w-4 h-4 shrink-0" style={{ color: colors.statusUnpaid }} />
+            <p className="text-sm" style={{ color: colors.statusUnpaid }}>{validationError}</p>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
       {/* Navigation Buttons */}
       <div className="flex gap-3">
         {currentStep > 1 && (
           <motion.button
-            onClick={() => setCurrentStep(currentStep - 1)}
+            onClick={() => {
+              setValidationError('');
+              setCurrentStep(currentStep - 1);
+            }}
             className="flex-1 py-4 px-6 rounded-xl font-semibold"
             style={{
               background: 'rgba(255, 255, 255, 0.05)',
@@ -769,13 +839,11 @@ export default function PaymentSubmissionFlow({
 
         {currentStep < 4 ? (
           <motion.button
-            onClick={() => setCurrentStep(currentStep + 1)}
-            disabled={!canProceedToNext()}
+            onClick={handleContinue}
             className="flex-1 py-4 px-6 rounded-xl font-semibold flex items-center justify-center gap-2"
             style={{
               background: canProceedToNext() ? gradients.primary : 'rgba(255, 255, 255, 0.1)',
               color: canProceedToNext() ? 'white' : colors.textSecondary,
-              opacity: canProceedToNext() ? 1 : 0.5,
             }}
             whileHover={canProceedToNext() ? { scale: 1.02 } : {}}
             whileTap={canProceedToNext() ? { scale: 0.98 } : {}}

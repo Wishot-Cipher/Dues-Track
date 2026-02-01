@@ -165,7 +165,7 @@ export default function DashboardSwitcher({ variant = 'full' }: DashboardSwitche
                 initial={{ opacity: 0, y: -10, scale: 0.95 }}
                 animate={{ opacity: 1, y: 0, scale: 1 }}
                 exit={{ opacity: 0, y: -10, scale: 0.95 }}
-                className="absolute right-0 mt-2 w-64 rounded-xl border overflow-hidden z-50"
+                className="fixed sm:absolute left-3 right-3 sm:left-auto sm:right-0 top-14 sm:top-auto sm:mt-2 w-auto sm:w-72 rounded-xl border overflow-hidden z-50"
                 style={{
                   background: 'rgba(15, 7, 3, 0.98)',
                   backdropFilter: 'blur(20px)',

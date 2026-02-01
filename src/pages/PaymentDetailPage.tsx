@@ -93,14 +93,9 @@ export default function PaymentDetailPage() {
   const [selectedStudents, setSelectedStudents] = useState<Student[]>([]);
   const [includeSelf, setIncludeSelf] = useState(false);
 
-  // Form state
-  const [paymentOption, setPaymentOption] = useState<"full" | "partial">(
-    "full"
-  );
+  // Form state (used by PaymentSubmissionFlow now, but paymentOption needed for QR flow)
+  const [paymentOption] = useState<"full" | "partial">("full");
   const [amount, setAmount] = useState<number>(0);
-  const [receiptFile, setReceiptFile] = useState<File | null>(null);
-  const [transactionRef, setTransactionRef] = useState("");
-  const [notes, setNotes] = useState("");
 
   // Success celebration state
   const [showCelebration, setShowCelebration] = useState(false);
@@ -215,32 +210,47 @@ export default function PaymentDetailPage() {
     }
   };
 
-  const handleSubmitPayment = async (e: React.FormEvent) => {
-    e.preventDefault();
+  // Unified submit handler that accepts data directly (fixes async state issue)
+  const submitPaymentWithData = async (options: {
+    method: PaymentMethod;
+    transactionRefValue: string;
+    receiptFileValue: File | null;
+    notesValue: string;
+    paymentOptionValue: "full" | "partial";
+    amountValue: number;
+  }) => {
+    const {
+      method,
+      transactionRefValue,
+      receiptFileValue,
+      notesValue,
+      paymentOptionValue,
+      amountValue,
+    } = options;
 
     // Validate based on payment method
-    if (selectedMethod !== "cash" && !receiptFile) {
+    if (method !== "cash" && !receiptFileValue) {
       toast.error("Please upload a receipt");
-      return;
+      return false;
     }
 
-    if (selectedMethod !== "cash" && !transactionRef.trim()) {
+    if (method !== "cash" && !transactionRefValue.trim()) {
       toast.error("Please enter transaction reference");
-      return;
+      return false;
     }
 
-    if (paymentOption === "partial" && amount <= 0) {
+    if (paymentOptionValue === "partial" && amountValue <= 0) {
       toast.error("Please enter a valid amount");
-      return;
+      return false;
     }
 
-    if (paymentOption === "partial" && amount > currentUserOutstanding) {
+    if (paymentOptionValue === "partial" && amountValue > currentUserOutstanding) {
       toast.error(
         `Amount cannot exceed remaining balance of ${formatCurrency(
           currentUserOutstanding
         )}`
       );
-      return;
+      return false;
     }
 
     try {
@@ -249,7 +259,7 @@ export default function PaymentDetailPage() {
       // Determine students to pay for
       if (!user) {
         toast.error("User not found");
-        return;
+        return false;
       }
 
       // Build list of students based on selectedStudents and whether they're paying for themselves
@@ -275,15 +285,15 @@ export default function PaymentDetailPage() {
 
       if (students.length === 0) {
         toast.error("No students to pay for");
-        return;
+        return false;
       }
 
       for (const student of students) {
         let receiptUrl = "";
 
         // Upload receipt for bank_transfer and pos (not cash)
-        if (selectedMethod !== "cash" && receiptFile) {
-          const fileExt = receiptFile.name.split(".").pop();
+        if (method !== "cash" && receiptFileValue) {
+          const fileExt = receiptFileValue.name.split(".").pop();
           const fileName = `${student.id}_${Date.now()}_${Math.random()
             .toString(36)
             .substring(7)}.${fileExt}`;
@@ -291,9 +301,13 @@ export default function PaymentDetailPage() {
 
           const { error: uploadError } = await supabase.storage
             .from("payment-receipts")
-            .upload(filePath, receiptFile);
+            .upload(filePath, receiptFileValue);
 
-          if (uploadError) throw uploadError;
+          if (uploadError) {
+            console.error("Upload error:", uploadError);
+            toast.error(`Failed to upload receipt: ${uploadError.message}`);
+            throw uploadError;
+          }
 
           const { data: urlData } = supabase.storage
             .from("payment-receipts")
@@ -304,11 +318,11 @@ export default function PaymentDetailPage() {
 
         // Generate transaction ref for cash if not provided
         const finalTransactionRef =
-          selectedMethod === "cash"
+          method === "cash"
             ? `CASH-QR-${student.reg_number}-${Date.now()}`
-            : `${transactionRef}-${student.reg_number}`;
+            : `${transactionRefValue}-${student.reg_number}`;
         // Insert payment (use per-student outstanding when paying full)
-        const amountToInsert = paymentOption === 'full' ? (student as any).outstanding ?? currentUserOutstanding : amount;
+        const amountToInsert = paymentOptionValue === 'full' ? (student as any).outstanding ?? currentUserOutstanding : amountValue;
         const { data: insertedPayment, error: insertError } = await supabase
           .from("payments")
           .insert({
@@ -317,26 +331,38 @@ export default function PaymentDetailPage() {
             amount: amountToInsert,
             transaction_ref: finalTransactionRef,
             receipt_url: receiptUrl || null,
-            notes: notes.trim() || null,
+            notes: notesValue.trim() || null,
             status: "pending",
-            payment_method: selectedMethod,
+            payment_method: method,
             paid_by: student.id !== user.id ? user.id : null, // Track who paid on behalf of others
           })
           .select()
           .single();
 
-        if (insertError) throw insertError;
+        if (insertError) {
+          console.error("Insert error:", insertError);
+          throw insertError;
+        }
 
         // Send notification to student about payment submission (use actual inserted amount)
         if (insertedPayment) {
-          const notifyAmount = paymentOption === 'full' ? ((student as any).outstanding ?? currentUserOutstanding ?? amount) : amount;
-          await notificationService.sendPaymentPendingNotification(
+          const notifyAmount = paymentOptionValue === 'full' ? ((student as any).outstanding ?? currentUserOutstanding ?? amountValue) : amountValue;
+          // Non-blocking notification - don't fail payment if notification fails
+          notificationService.sendPaymentPendingNotification(
             student.id,
             student.full_name,
             paymentType?.title || "Payment",
             notifyAmount,
             insertedPayment.id
-          );
+          ).catch(err => console.warn("Student notification failed:", err));
+
+          // Notify admins/approvers about the new payment (important!)
+          notificationService.notifyApproversOfNewPayment(
+            insertedPayment.id,
+            student.id,
+            notifyAmount,
+            id || ""
+          ).catch(err => console.warn("Approver notification failed:", err));
         }
       }
 
@@ -348,6 +374,7 @@ export default function PaymentDetailPage() {
       // Show celebration with confetti
       setCelebrationMessage(message);
       setShowCelebration(true);
+      return true;
     } catch (error: unknown) {
       console.error("Error submitting payment:", error);
 
@@ -361,19 +388,20 @@ export default function PaymentDetailPage() {
       } else {
         toast.error("Failed to submit payment");
       }
+      return false;
     } finally {
       setSubmitting(false);
     }
   };
 
-  const handleResubmitRejected = (rejectedPayment: ExistingPayment) => {
-    // Pre-fill form with rejected payment details
-    setTransactionRef(rejectedPayment.transaction_ref);
-    setNotes(
-      `Resubmission of rejected payment. Previous reason: ${rejectedPayment.rejection_reason}`
-    );
+  const handleResubmitRejected = (_rejectedPayment: ExistingPayment) => {
+    // Navigate to method selection - PaymentSubmissionFlow will handle the form
+    // Note: Pre-filling is not supported in the new flow, user will need to re-enter details
     setStep("method");
   };
+
+  // Silence unused variable warning - function is used in JSX
+  void handleResubmitRejected;
 
   if (loading) {
     return (
@@ -965,16 +993,15 @@ export default function PaymentDetailPage() {
                     }}
                     onBack={() => setStep("method")}
                     onSubmit={async (data) => {
-                      // Create a synthetic form event to reuse existing logic
-                      setTransactionRef(data.transactionRef);
-                      setReceiptFile(data.receiptFile);
-                      setNotes(data.notes);
-                      setPaymentOption(data.paymentOption);
-                      setAmount(data.amount);
-                      
-                      // Trigger submit with validated data
-                      const fakeEvent = { preventDefault: () => {} } as React.FormEvent;
-                      await handleSubmitPayment(fakeEvent);
+                      // Submit directly with the data (fixes async state issue)
+                      await submitPaymentWithData({
+                        method: selectedMethod as PaymentMethod,
+                        transactionRefValue: data.transactionRef,
+                        receiptFileValue: data.receiptFile,
+                        notesValue: data.notes,
+                        paymentOptionValue: data.paymentOption,
+                        amountValue: data.amount,
+                      });
                     }}
                     submitting={submitting}
                   />

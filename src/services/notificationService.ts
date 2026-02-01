@@ -220,10 +220,22 @@ class NotificationService {
    */
   async notifyApproversOfNewPayment(paymentId: string, studentId: string, amount: number, paymentTypeId: string): Promise<boolean> {
     try {
+      // Get auth token for the API call
+      const { data: sessionData } = await supabase.auth.getSession();
+      const token = sessionData?.session?.access_token;
+
+      if (!token) {
+        console.warn('No auth token available for notify-approvers API');
+        return false;
+      }
+
       // Call server API which uses Supabase service role to insert notifications
       const res = await fetch('/api/notify-approvers', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
+        },
         body: JSON.stringify({ paymentId, studentId, amount, paymentTypeId }),
       });
 

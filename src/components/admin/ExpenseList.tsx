@@ -469,7 +469,7 @@ export default function ExpenseList({ categoryFilter = 'all' }: { categoryFilter
                         initial={{ opacity: 0, y: -10, scale: 0.95 }}
                         animate={{ opacity: 1, y: 0, scale: 1 }}
                         exit={{ opacity: 0, y: -10, scale: 0.95 }}
-                        className="fixed sm:absolute left-3 right-4 sm:left-auto sm:right-0 bottom-4 sm:bottom-auto sm:top-full sm:mt-2 w-auto sm:w-48 rounded-xl overflow-hidden shadow-2xl z-50"
+                        className="absolute right-0 top-full mt-2 w-48 rounded-xl overflow-hidden shadow-2xl z-50"
                         style={{
                           background: 'linear-gradient(135deg, rgba(30, 20, 15, 0.98), rgba(20, 12, 8, 0.98))',
                           border: '1px solid rgba(255, 255, 255, 0.1)',
