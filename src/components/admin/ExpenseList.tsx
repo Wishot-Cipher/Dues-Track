@@ -88,7 +88,6 @@ export default function ExpenseList({ categoryFilter = 'all' }: { categoryFilter
   }, [])
   // Collected totals for selected payment type (exclude waived)
   const [collectedAmount, setCollectedAmount] = useState<number>(0)
-  const [collectedCount, setCollectedCount] = useState<number>(0)
 
   useEffect(() => {
     let mounted = true
@@ -114,12 +113,10 @@ export default function ExpenseList({ categoryFilter = 'all' }: { categoryFilter
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const total = payments.reduce((s: number, p: any) => s + Number(p.amount || 0), 0)
         setCollectedAmount(total)
-        setCollectedCount(payments.length)
       } catch (err) {
         console.error('Failed to fetch collected totals:', err)
         if (mounted) {
           setCollectedAmount(0)
-          setCollectedCount(0)
         }
       }
     })()
