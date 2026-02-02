@@ -21,6 +21,9 @@ async function sendPushNotification(
   tag?: string
 ): Promise<boolean> {
   try {
+    console.log('📤 Sending push notification to user:', userId);
+    console.log('📤 Title:', title);
+    
     const res = await fetch('/api/notifications/send-push', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -33,15 +36,23 @@ async function sendPushNotification(
       }),
     });
 
+    const result = await res.json();
+    console.log('📤 Push API response:', result);
+
     if (!res.ok) {
-      console.log('Push notification not sent (API unavailable or user not subscribed)');
+      console.log('❌ Push notification API failed:', result);
       return false;
     }
 
-    const result = await res.json();
-    return result.sent > 0;
+    if (result.sent > 0) {
+      console.log('✅ Push notification sent successfully!');
+      return true;
+    } else {
+      console.log('⚠️ Push not sent:', result.message || 'User may not be subscribed');
+      return false;
+    }
   } catch (error) {
-    console.log('Push notification failed:', error);
+    console.log('❌ Push notification failed:', error);
     return false;
   }
 }
@@ -220,28 +231,23 @@ class NotificationService {
    */
   async notifyApproversOfNewPayment(paymentId: string, studentId: string, amount: number, paymentTypeId: string): Promise<boolean> {
     try {
-      // Get auth token for the API call
-      const { data: sessionData } = await supabase.auth.getSession();
-      const token = sessionData?.session?.access_token;
-
-      if (!token) {
-        console.warn('No auth token available for notify-approvers API');
-        return false;
-      }
-
+      console.log('📩 Notifying approvers of new payment:', { paymentId, studentId, amount, paymentTypeId });
+      
       // Call server API which uses Supabase service role to insert notifications
+      // No auth token needed - API validates payment exists in database
       const res = await fetch('/api/notify-approvers', {
         method: 'POST',
         headers: { 
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`,
         },
         body: JSON.stringify({ paymentId, studentId, amount, paymentTypeId }),
       });
 
+      const result = await res.json();
+      console.log('📩 notify-approvers response:', result);
+
       if (!res.ok) {
-        const txt = await res.text();
-        console.error('notify-approvers API failed:', txt);
+        console.error('notify-approvers API failed:', result);
         return false;
       }
 

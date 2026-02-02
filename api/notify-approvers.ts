@@ -72,24 +72,29 @@ export default async function handler(req: any, res: any) {
 
   const supabaseAdmin = createClient(supabaseUrl, serviceRole)
 
-  // Verify the caller is authenticated
-  const authHeader = req.headers.authorization || req.headers['Authorization']
-  const authResult = await verifyAuth(supabaseAdmin, authHeader)
-  
-  if (!authResult.valid) {
-    return res.status(401).json({ error: authResult.error || 'Unauthorized' })
-  }
+  // Note: We validate by checking the payment exists in the database
+  // rather than requiring Supabase Auth (since app uses custom auth)
 
   try {
     const { paymentId, studentId, amount, paymentTypeId } = req.body
+
+    console.log('📩 notify-approvers called:', { paymentId, studentId, amount, paymentTypeId });
 
     if (!paymentId || !studentId || !paymentTypeId) {
       return res.status(400).json({ error: 'Missing required fields' })
     }
 
-    // Verify the caller is the student who made the payment (security check)
-    if (authResult.userId !== studentId) {
-      return res.status(403).json({ error: 'You can only trigger notifications for your own payments' })
+    // Validate the payment exists and belongs to this student (security check)
+    const { data: payment, error: paymentError } = await supabaseAdmin
+      .from('payments')
+      .select('id, student_id, amount, status')
+      .eq('id', paymentId)
+      .eq('student_id', studentId)
+      .single();
+
+    if (paymentError || !payment) {
+      console.log('❌ Payment validation failed:', paymentError);
+      return res.status(403).json({ error: 'Payment not found or does not belong to student' });
     }
 
     // Validate amount

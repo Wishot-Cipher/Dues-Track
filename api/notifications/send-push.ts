@@ -33,14 +33,16 @@ export default async function handler(req: any, res: any) {
     return res.status(405).json({ error: 'Method not allowed' });
   }
 
+  console.log('📤 send-push API called');
+
   // Check configuration
   if (!supabaseUrl || !serviceRole) {
-    console.error('Missing Supabase credentials');
+    console.error('❌ Missing Supabase credentials');
     return res.status(500).json({ error: 'Server configuration error' });
   }
 
   if (!vapidPublicKey || !vapidPrivateKey) {
-    console.warn('VAPID keys not configured - push notifications disabled');
+    console.warn('⚠️ VAPID keys not configured - push notifications disabled');
     return res.status(200).json({ ok: true, message: 'Push notifications not configured', sent: 0 });
   }
 
@@ -48,6 +50,9 @@ export default async function handler(req: any, res: any) {
 
   try {
     const { userId, title, body, url, tag, data } = req.body;
+
+    console.log('📤 Push request for user:', userId);
+    console.log('📤 Title:', title);
 
     if (!userId || !title || !body) {
       return res.status(400).json({ error: 'Missing required fields: userId, title, body' });
@@ -61,9 +66,11 @@ export default async function handler(req: any, res: any) {
       .single();
 
     if (subError || !subscription) {
-      console.log('No push subscription found for user:', userId);
+      console.log('⚠️ No push subscription found for user:', userId, subError?.message);
       return res.status(200).json({ ok: true, message: 'No subscription found', sent: 0 });
     }
+
+    console.log('✅ Found subscription for user:', userId);
 
     // Construct the push subscription object
     const pushSubscription = {
