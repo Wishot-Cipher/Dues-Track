@@ -109,46 +109,57 @@ class PushNotificationService {
    * Subscribe to push notifications
    */
   async subscribe(userId: string): Promise<boolean> {
+    console.log('🔔 Starting push notification subscription for user:', userId);
+    
     if (!this.isSupported()) {
-      console.warn('Push notifications not supported');
+      console.warn('❌ Push notifications not supported in this browser');
       return false;
     }
 
     if (!VAPID_PUBLIC_KEY) {
-      console.warn('VAPID public key not configured. Add VITE_VAPID_PUBLIC_KEY to environment.');
+      console.warn('❌ VAPID public key not configured. Add VITE_VAPID_PUBLIC_KEY to environment.');
       // Still return true to avoid infinite loading - just skip push functionality
       return true;
     }
+    
+    console.log('✅ VAPID public key found');
 
     try {
       // Request permission first
+      console.log('🔔 Requesting notification permission...');
       const permission = await this.requestPermission();
       if (permission !== 'granted') {
-        console.log('Notification permission not granted');
+        console.log('❌ Notification permission not granted:', permission);
         return false;
       }
+      console.log('✅ Permission granted');
 
       // Get service worker registration
+      console.log('🔔 Getting service worker registration...');
       const registration = await this.getRegistration();
       if (!registration) {
-        console.log('No service worker registration - push notifications require production build');
+        console.log('⚠️ No service worker registration - push notifications require production build');
         // In dev mode, still return true so user isn't stuck
         // Push will work once deployed
         return true;
       }
+      console.log('✅ Service worker registration found');
 
       // Check for existing subscription
       let subscription = await registration.pushManager.getSubscription();
+      console.log('🔔 Existing subscription:', subscription ? 'Yes' : 'No');
 
       // Create new subscription if none exists
       if (!subscription) {
         try {
+          console.log('🔔 Creating new push subscription...');
           subscription = await registration.pushManager.subscribe({
             userVisibleOnly: true,
             applicationServerKey: urlBase64ToUint8Array(VAPID_PUBLIC_KEY),
           });
+          console.log('✅ New push subscription created');
         } catch (subError) {
-          console.error('Error creating push subscription:', subError);
+          console.error('❌ Error creating push subscription:', subError);
           // Return true anyway - permission was granted, push will work when keys are configured
           return true;
         }
@@ -156,21 +167,19 @@ class PushNotificationService {
 
       this._currentSubscription = subscription;
 
-      // Save subscription to database (non-blocking - don't fail if DB save fails)
-      try {
-        const success = await this.saveSubscription(userId, subscription);
-        if (success) {
-          console.log('✅ Push notification subscription saved');
-        } else {
-          console.warn('⚠️ Could not save subscription to database (table may not exist)');
-        }
-      } catch (saveError) {
-        console.warn('⚠️ Database save error (push will still work locally):', saveError);
+      // Save subscription to database
+      console.log('🔔 Saving subscription to database...');
+      const success = await this.saveSubscription(userId, subscription);
+      if (success) {
+        console.log('✅ Push notification subscription saved to database!');
+      } else {
+        console.warn('⚠️ Could not save subscription to database - push notifications will NOT work when app is closed!');
+        console.warn('⚠️ Check the browser console for detailed error above');
       }
 
       return true;
     } catch (error) {
-      console.error('Error subscribing to push notifications:', error);
+      console.error('❌ Error subscribing to push notifications:', error);
       return false;
     }
   }
@@ -223,7 +232,10 @@ class PushNotificationService {
     try {
       const subscriptionJSON = subscription.toJSON();
       
-      const { error } = await supabase
+      console.log('🔔 Saving push subscription for user:', userId);
+      console.log('🔔 Subscription endpoint:', subscription.endpoint.slice(0, 50) + '...');
+      
+      const { data, error } = await supabase
         .from('push_subscriptions')
         .upsert({
           user_id: userId,
@@ -233,16 +245,22 @@ class PushNotificationService {
           created_at: new Date().toISOString(),
         }, {
           onConflict: 'user_id',
-        });
+        })
+        .select();
 
       if (error) {
-        console.error('Error saving subscription:', error);
+        console.error('❌ Error saving subscription to database:', error);
+        console.error('❌ Error code:', error.code);
+        console.error('❌ Error message:', error.message);
+        console.error('❌ Error hint:', error.hint);
+        console.error('❌ Error details:', error.details);
         return false;
       }
 
+      console.log('✅ Subscription saved successfully:', data);
       return true;
     } catch (error) {
-      console.error('Error saving subscription:', error);
+      console.error('❌ Exception saving subscription:', error);
       return false;
     }
   }
