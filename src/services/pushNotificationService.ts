@@ -226,38 +226,38 @@ class PushNotificationService {
   }
 
   /**
-   * Save push subscription to database
+   * Save push subscription to database via API endpoint
+   * Uses server-side service role to bypass RLS (since app uses custom auth)
    */
   private async saveSubscription(userId: string, subscription: PushSubscription): Promise<boolean> {
     try {
       const subscriptionJSON = subscription.toJSON();
       
       console.log('🔔 Saving push subscription for user:', userId);
-      console.log('🔔 Subscription endpoint:', subscription.endpoint.slice(0, 50) + '...');
       
-      const { data, error } = await supabase
-        .from('push_subscriptions')
-        .upsert({
-          user_id: userId,
+      // Use API endpoint instead of direct Supabase client
+      // This bypasses RLS issues since API uses service role
+      const response = await fetch('/api/notifications/save-subscription', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          userId,
           endpoint: subscription.endpoint,
           p256dh: subscriptionJSON.keys?.p256dh || '',
           auth: subscriptionJSON.keys?.auth || '',
-          created_at: new Date().toISOString(),
-        }, {
-          onConflict: 'user_id',
-        })
-        .select();
+        }),
+      });
 
-      if (error) {
-        console.error('❌ Error saving subscription to database:', error);
-        console.error('❌ Error code:', error.code);
-        console.error('❌ Error message:', error.message);
-        console.error('❌ Error hint:', error.hint);
-        console.error('❌ Error details:', error.details);
+      const result = await response.json();
+
+      if (!response.ok || !result.ok) {
+        console.error('❌ Error saving subscription:', result);
         return false;
       }
 
-      console.log('✅ Subscription saved successfully:', data);
+      console.log('✅ Subscription saved successfully via API');
       return true;
     } catch (error) {
       console.error('❌ Exception saving subscription:', error);
