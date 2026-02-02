@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Mail, ArrowLeft, CheckCircle, AlertCircle, Send, Info, User } from "lucide-react";
+import { Mail, ArrowLeft, CheckCircle, AlertCircle, Send, Info } from "lucide-react";
 import { colors, gradients } from "@/config/colors";
 import CustomButton from "@/components/ui/CustomButton";
 import Input from "@/components/ui/Input";
@@ -66,17 +66,36 @@ export default function ForgotPasswordPage() {
         const body = await resp.json().catch(() => ({}));
         console.log('📬 Reset email response:', { status: resp.status, body });
         
-        if (resp.ok && body.success !== false) {
+        // Check if email was actually sent
+        if (resp.ok && body.emailSent === true) {
           setSuccess(true);
           return;
         }
+        
+        // Email not sent - show appropriate message
+        if (body.reason === 'RESEND_API_KEY not set') {
+          // Email service not configured
+          setShowContactAdmin(true);
+          setDebugInfo(`Email service is not configured. Please contact your class admin to reset your password.`);
+          setError("Email service is currently unavailable. Please contact your class admin for password reset.");
+        } else if (body.emailSent === false) {
+          // Email sending failed
+          setShowContactAdmin(true);
+          setDebugInfo(`Could not send email. Please contact your class admin.`);
+          setError(body.message || "Failed to send reset email. Please contact your class admin.");
+        } else {
+          // Unknown response, treat as failure
+          setShowContactAdmin(true);
+          setError("Could not send reset email. Please contact your class admin.");
+        }
+        return;
+        
       } catch (fetchErr) {
         console.warn('Email sending failed:', fetchErr);
+        setShowContactAdmin(true);
+        setError("Network error. Please check your connection and try again.");
+        return;
       }
-
-      // If email sending failed, show contact admin option
-      setShowContactAdmin(true);
-      setDebugInfo(`Found account for ${studentData.full_name}. Email service unavailable - please contact your admin.`);
       
     } catch (err: unknown) {
       console.error("❌ Error in password reset:", err);
@@ -219,19 +238,19 @@ export default function ForgotPasswordPage() {
             <motion.div
               className="w-20 h-20 rounded-full flex items-center justify-center mx-auto mb-6"
               style={{
-                background: `${colors.warning}20`,
-                border: `2px solid ${colors.warning}`,
+                background: `${colors.primary}20`,
+                border: `2px solid ${colors.primary}`,
               }}
               initial={{ scale: 0 }}
               animate={{ scale: 1 }}
               transition={{ delay: 0.2, type: "spring", stiffness: 200 }}
             >
-              <User size={40} style={{ color: colors.warning }} />
+              <Mail size={40} style={{ color: colors.primary }} />
             </motion.div>
 
-            <h2 className="text-2xl font-bold mb-3">Contact Your Admin</h2>
+            <h2 className="text-2xl font-bold mb-3">Password Reset Assistance</h2>
             <p className="text-sm mb-6" style={{ color: colors.textSecondary }}>
-              Email service is currently unavailable. Please contact your class representative or admin to reset your password.
+              We couldn't send the reset email automatically. Don't worry - your class admin can help you reset your password quickly.
             </p>
 
             <div
@@ -241,17 +260,27 @@ export default function ForgotPasswordPage() {
                 border: "1px solid rgba(255, 255, 255, 0.1)",
               }}
             >
-              <p className="text-xs leading-relaxed" style={{ color: colors.textSecondary }}>
-                <strong>What to do:</strong>
-                <br />
-                1. Contact your class rep or financial secretary
-                <br />
-                2. Ask them to reset your password in the admin panel
-                <br />
-                3. They'll give you a temporary password
-                <br />
-                4. Log in and change it immediately
+              <p className="text-sm font-semibold mb-3" style={{ color: colors.textPrimary }}>
+                📋 How to Reset Your Password:
               </p>
+              <div className="space-y-2">
+                <p className="text-xs flex items-start gap-2" style={{ color: colors.textSecondary }}>
+                  <span className="font-bold text-primary">1.</span>
+                  Contact your class representative or financial secretary
+                </p>
+                <p className="text-xs flex items-start gap-2" style={{ color: colors.textSecondary }}>
+                  <span className="font-bold text-primary">2.</span>
+                  Provide your name and registration number
+                </p>
+                <p className="text-xs flex items-start gap-2" style={{ color: colors.textSecondary }}>
+                  <span className="font-bold text-primary">3.</span>
+                  They will reset your password and give you a temporary one
+                </p>
+                <p className="text-xs flex items-start gap-2" style={{ color: colors.textSecondary }}>
+                  <span className="font-bold text-primary">4.</span>
+                  Log in and change your password immediately
+                </p>
+              </div>
             </div>
 
             <div
@@ -262,9 +291,22 @@ export default function ForgotPasswordPage() {
               }}
             >
               <p className="text-xs leading-relaxed" style={{ color: colors.accentMint }}>
-                <strong>💡 Tip for Admins:</strong>
+                <strong>💡 For Class Admins:</strong>
                 <br />
-                Go to <strong>Manage Students</strong> → Find the student → Click the <strong>🔑 Reset</strong> button
+                Go to <strong>Manage Students</strong> → Find the student → Click the <strong>🔑 Reset Password</strong> button
+              </p>
+            </div>
+
+            <div
+              className="p-3 rounded-xl mb-6"
+              style={{
+                background: `${colors.primary}10`,
+                border: `1px solid ${colors.primary}30`,
+              }}
+            >
+              <p className="text-xs text-center" style={{ color: colors.primary }}>
+                <Info className="inline w-3 h-3 mr-1" />
+                This is a temporary issue. Your data is safe.
               </p>
             </div>
 

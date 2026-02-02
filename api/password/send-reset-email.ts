@@ -110,8 +110,14 @@ export default async function handler(req: any, res: any) {
 
     // Send email via Resend (if configured)
     if (!RESEND_API_KEY) {
-      console.warn('RESEND_API_KEY not configured; skipping sending email. Reset link:', resetUrl)
-      return res.status(200).json({ success: true, message: 'Password reset link generated (email not sent in this environment).' })
+      console.warn('⚠️ RESEND_API_KEY not configured - cannot send email')
+      console.log('📝 Reset link (for debugging):', resetUrl)
+      return res.status(200).json({ 
+        success: false, 
+        emailSent: false,
+        message: 'Email service not configured. Please contact your class admin.',
+        reason: 'RESEND_API_KEY not set'
+      })
     }
 
     const resendRes = await fetch('https://api.resend.com/emails', {
@@ -209,12 +215,21 @@ export default async function handler(req: any, res: any) {
 
     if (!resendRes.ok) {
       const body = await resendRes.text()
-      console.error('Resend API error:', body)
-      // still return 200 to caller to avoid leakage
-      return res.status(200).json({ success: true, message: 'Password reset link generated (email sending failed).' })
+      console.error('❌ Resend API error:', body)
+      return res.status(200).json({ 
+        success: false, 
+        emailSent: false,
+        message: 'Failed to send email. Please try again or contact your class admin.',
+        reason: 'Email service error'
+      })
     }
 
-    return res.status(200).json({ success: true, message: 'Password reset email sent' })
+    console.log('✅ Password reset email sent successfully to:', student.email)
+    return res.status(200).json({ 
+      success: true, 
+      emailSent: true,
+      message: 'Password reset email sent successfully' 
+    })
   } catch (err: any) {
     console.error('send-reset-email error:', err)
     return res.status(500).json({ error: err.message || String(err) })
