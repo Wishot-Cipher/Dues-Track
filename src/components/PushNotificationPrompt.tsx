@@ -105,8 +105,10 @@ export function PushNotificationPrompt({ mode = 'banner', onDismiss }: PushNotif
     localStorage.setItem('push_prompt_dismissed', Date.now().toString());
   };
 
-  // Check if prompt was recently dismissed
+  // Check if prompt was recently dismissed (only for banner mode)
   useEffect(() => {
+    if (mode !== 'banner') return; // Only apply dismissal to banner mode
+    
     const dismissedAt = localStorage.getItem('push_prompt_dismissed');
     if (dismissedAt) {
       const daysSinceDismissed = (Date.now() - parseInt(dismissedAt)) / (1000 * 60 * 60 * 24);
@@ -114,25 +116,9 @@ export function PushNotificationPrompt({ mode = 'banner', onDismiss }: PushNotif
         setDismissed(true);
       }
     }
-  }, []);
+  }, [mode]);
 
-  // Don't show if not supported, already subscribed, permission denied, or dismissed
-  if (!isSupported || isSubscribed || permission === 'denied' || dismissed) {
-    if (mode === 'settings') {
-      return (
-        <SettingsView
-          isSupported={isSupported}
-          isSubscribed={isSubscribed}
-          permission={permission}
-          loading={loading}
-          onEnable={handleEnable}
-          onDisable={handleDisable}
-        />
-      );
-    }
-    return null;
-  }
-
+  // Settings mode: Always show the SettingsView
   if (mode === 'settings') {
     return (
       <SettingsView
@@ -144,6 +130,11 @@ export function PushNotificationPrompt({ mode = 'banner', onDismiss }: PushNotif
         onDisable={handleDisable}
       />
     );
+  }
+
+  // For banner/inline: Don't show if not supported, already subscribed, permission denied, or dismissed
+  if (!isSupported || isSubscribed || permission === 'denied' || dismissed) {
+    return null;
   }
 
   if (mode === 'inline') {

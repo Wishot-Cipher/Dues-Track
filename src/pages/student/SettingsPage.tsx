@@ -20,6 +20,7 @@ import GlassCard from '@/components/ui/GlassCard';
 import PageWrapper from '@/components/ui/PageWrapper';
 import Skeleton from '@/components/ui/Skeleton';
 import ProfessionalDropdown from '@/components/ui/ProfessionalDropdown';
+import PushNotificationPrompt from '@/components/PushNotificationPrompt';
 
 interface SettingSection {
   id: string;
@@ -501,6 +502,14 @@ export default function SettingsPage() {
               onChangePassword={() => navigate('/change-password')} 
               onTestSound={handleSoundTest}
             />
+
+            {/* Push Notifications - Always Visible */}
+            <div className="space-y-2">
+              <h3 className="text-sm font-semibold px-1" style={{ color: colors.textSecondary }}>
+                Push Notifications
+              </h3>
+              <PushNotificationPrompt mode="settings" />
+            </div>
 
             {/* Settings Sections */}
             {sections.map((section, index) => (

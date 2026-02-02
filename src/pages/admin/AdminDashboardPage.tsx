@@ -34,10 +34,12 @@ import {
   Receipt,
   Calendar,
   Heart,
+  Bell,
 } from 'lucide-react';
 import Footer from '@/components/Footer';
 import StudentFeatureSettings from '@/components/admin/StudentFeatureSettings';
 import ExpenseVisibilitySettings from '@/components/admin/ExpenseVisibilitySettings';
+import PushNotificationPrompt from '@/components/PushNotificationPrompt';
 // ExpenseList removed from dashboard; use dedicated Expenses page instead
 
 interface AdminStats {
@@ -1043,6 +1045,21 @@ export default function AdminDashboardPage() {
             </div>
           </motion.div>
         )}
+
+        {/* Push Notifications - Always show so admins can enable */}
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.87 }}
+        >
+          <div className="space-y-2">
+            <h3 className="text-sm font-semibold px-1 flex items-center gap-2" style={{ color: colors.textSecondary }}>
+              <Bell size={16} style={{ color: colors.primary }} />
+              Push Notifications
+            </h3>
+            <PushNotificationPrompt mode="settings" />
+          </div>
+        </motion.div>
 
         {/* Expenses - quick link + recent expenses preview with pagination */}
         <motion.div
