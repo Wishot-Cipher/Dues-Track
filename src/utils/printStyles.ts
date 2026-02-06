@@ -573,6 +573,7 @@ export function generateHeader(title: string, subtitle: string, badgeText?: stri
       <div class="header-right">
         <div class="doc-title">${docType || title}</div>
         <div class="doc-meta">
+          ${subtitle ? `<div class="doc-subtitle">${subtitle}</div>` : ''}
           <strong>Date:</strong> ${now}<br>
           <strong>Ref:</strong> ${docId}
         </div>
