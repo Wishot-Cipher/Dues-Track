@@ -1160,8 +1160,12 @@ export function exportFinancialSummaryToPDF(data: {
 }
 
 /**
- * Generate professional payment receipt PDF
- * Matches the well-formatted style of other exports with dark header and proper sections
+ * Generate professional payment receipt — World-class HTML receipt
+ * Matches the premium QuickPaymentSummary design language:
+ * Inter font, accent-bar gradient, watermark, document-style layout,
+ * 3-column info grid, QR verification, signature line.
+ *
+ * Opens in a print window for perfect rendering (supports ₦, custom fonts, etc.)
  */
 export function generatePaymentReceiptPDF(payment: {
   id: string;
@@ -1174,263 +1178,437 @@ export function generatePaymentReceiptPDF(payment: {
   payment_type: { title: string; amount: number };
   student: { full_name: string; reg_number: string; email?: string; level?: string };
 }): void {
-  const doc = new jsPDF();
-  const pageWidth = doc.internal.pageSize.getWidth();
-  const pageHeight = doc.internal.pageSize.getHeight();
-  const margin = 15;
-  const contentWidth = pageWidth - (margin * 2);
-  
   const isWaived = payment.transaction_ref?.startsWith('WAIVED-');
   const isApproved = payment.status === 'approved';
   const isPending = payment.status === 'pending';
-  
-  // Status configuration
-  const statusConfig = isWaived 
-    ? { color: [99, 102, 241], label: 'WAIVED', icon: '✓' }
-    : isApproved 
-      ? { color: [34, 197, 94], label: 'APPROVED', icon: '✓' }
-      : isPending 
-        ? { color: [245, 158, 11], label: 'PENDING', icon: '⏳' }
-        : { color: [239, 68, 68], label: 'REJECTED', icon: '✗' };
 
-  // ═══════════════════════════════════════════════════════════════
-  // HEADER - Professional dark header with branding
-  // ═══════════════════════════════════════════════════════════════
-  
-  // Header background
-  doc.setFillColor(26, 14, 9);
-  doc.rect(0, 0, pageWidth, 55, 'F');
-  
-  // Orange accent stripe
-  doc.setFillColor(255, 107, 53);
-  doc.rect(0, 55, pageWidth, 4, 'F');
-  
-  // Official Receipt badge
-  doc.setFillColor(255, 107, 53);
-  doc.roundedRect(margin, 10, 80, 14, 3, 3, 'F');
-  doc.setFont(STYLES.headerFont, 'bold');
-  doc.setFontSize(9);
-  doc.setTextColor(255, 255, 255);
-  doc.text('OFFICIAL RECEIPT', margin + 40, 19, { align: 'center' });
-  
-  // Main title
-  doc.setFont(STYLES.headerFont, 'bold');
-  doc.setFontSize(20);
-  doc.setTextColor(255, 255, 255);
-  doc.text('PAYMENT RECEIPT', margin, 42);
-  
-  // ECE subtitle
-  doc.setFont(STYLES.bodyFont, 'normal');
-  doc.setFontSize(9);
-  doc.setTextColor(255, 107, 53);
-  doc.text('Class Dues Tracker • ECE Department', margin, 50);
-  
-  // Right side - Receipt ID
-  doc.setFont(STYLES.headerFont, 'bold');
-  doc.setFontSize(8);
-  doc.setTextColor(150, 150, 150);
-  doc.text('Receipt No.', pageWidth - margin, 15, { align: 'right' });
-  
-  doc.setFont('courier', 'bold');
-  doc.setFontSize(12);
-  doc.setTextColor(255, 255, 255);
-  doc.text(`#${payment.id.slice(0, 8).toUpperCase()}`, pageWidth - margin, 28, { align: 'right' });
-  
-  // Date generated
-  doc.setFont(STYLES.bodyFont, 'normal');
-  doc.setFontSize(8);
-  doc.setTextColor(150, 150, 150);
-  doc.text(new Date(payment.created_at).toLocaleDateString('en-NG', {
-    year: 'numeric', month: 'long', day: 'numeric'
-  }), pageWidth - margin, 40, { align: 'right' });
+  // Deterministic receipt reference
+  const docRef = (() => {
+    const raw = payment.id + '-' + payment.amount + '-' + payment.status;
+    let hash = 0;
+    for (let i = 0; i < raw.length; i++) {
+      hash = ((hash << 5) - hash) + raw.charCodeAt(i);
+      hash |= 0;
+    }
+    return 'DT-' + Math.abs(hash).toString(36).toUpperCase().padStart(6, '0').slice(0, 6);
+  })();
 
-  let yPos = 70;
+  const statusCfg = isWaived
+    ? { bg: '#6366f1', light: '#eef2ff', text: '#4338ca', label: 'WAIVED', dot: '#6366f1' }
+    : isApproved
+      ? { bg: '#059669', light: '#ecfdf5', text: '#065f46', label: 'APPROVED', dot: '#059669' }
+      : isPending
+        ? { bg: '#d97706', light: '#fffbeb', text: '#92400e', label: 'PENDING', dot: '#d97706' }
+        : { bg: '#dc2626', light: '#fef2f2', text: '#991b1b', label: 'REJECTED', dot: '#dc2626' };
 
-  // ═══════════════════════════════════════════════════════════════
-  // STATUS & AMOUNT BOXES - Side by side
-  // ═══════════════════════════════════════════════════════════════
-  
-  const boxWidth = (contentWidth - 10) / 2;
-  
-  // Status Box
-  doc.setFillColor(statusConfig.color[0], statusConfig.color[1], statusConfig.color[2]);
-  doc.roundedRect(margin, yPos, boxWidth, 50, 5, 5, 'F');
-  
-  doc.setFont(STYLES.bodyFont, 'normal');
-  doc.setFontSize(9);
-  doc.setTextColor(255, 255, 255);
-  doc.text('PAYMENT STATUS', margin + boxWidth / 2, yPos + 15, { align: 'center' });
-  
-  doc.setFont(STYLES.headerFont, 'bold');
-  doc.setFontSize(18);
-  doc.text(`${statusConfig.icon} ${statusConfig.label}`, margin + boxWidth / 2, yPos + 35, { align: 'center' });
-  
-  // Amount Box
-  doc.setFillColor(255, 107, 53);
-  doc.roundedRect(margin + boxWidth + 10, yPos, boxWidth, 50, 5, 5, 'F');
-  
-  doc.setFont(STYLES.bodyFont, 'normal');
-  doc.setFontSize(9);
-  doc.setTextColor(255, 255, 255);
-  doc.text(isWaived ? 'AMOUNT WAIVED' : 'AMOUNT PAID', margin + boxWidth + 10 + boxWidth / 2, yPos + 15, { align: 'center' });
-  
-  doc.setFont(STYLES.headerFont, 'bold');
-  doc.setFontSize(18);
-  doc.text(formatNairaPDF(payment.amount), margin + boxWidth + 10 + boxWidth / 2, yPos + 35, { align: 'center' });
+  const fmtDate = (d: string, opts?: Intl.DateTimeFormatOptions) =>
+    new Date(d).toLocaleDateString('en-US', opts || { year: 'numeric', month: 'long', day: 'numeric' });
+  const fmtDateTime = (d: string) =>
+    new Date(d).toLocaleString('en-US', { year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+  const fmtCurrency = (n: number) => `₦${Number(n).toLocaleString('en-NG', { minimumFractionDigits: 0, maximumFractionDigits: 2 })}`;
 
-  yPos += 60;
+  // Pseudo-QR pattern (deterministic from payment.id)
+  const qrSeed = payment.id.replace(/-/g, '');
+  const qrCells = Array.from({ length: 49 }, (_, i) => {
+    const row = Math.floor(i / 7), col = i % 7;
+    if (row < 2 || col < 2 || row > 4 || col > 4) {
+      return qrSeed.charCodeAt(i % qrSeed.length) % 3 !== 0 ? 'f' : 'e';
+    }
+    return (row + col) % 2 === 0 ? 'f' : 'e';
+  });
 
-  // ═══════════════════════════════════════════════════════════════
-  // STUDENT INFORMATION SECTION
-  // ═══════════════════════════════════════════════════════════════
-  
-  const colWidth = contentWidth / 2;
-  
-  // Helper to add field
-  const addField = (label: string, value: string, x: number, y: number) => {
-    doc.setFont(STYLES.bodyFont, 'normal');
-    doc.setFontSize(8);
-    doc.setTextColor(COLORS.textLight);
-    doc.text(label, x, y);
-    
-    doc.setFont(STYLES.headerFont, 'bold');
-    doc.setFontSize(10);
-    doc.setTextColor(COLORS.text);
-    const lines = doc.splitTextToSize(value || 'N/A', colWidth - 15);
-    doc.text(lines[0], x, y + 8);
-  };
-  
-  // Section header with orange accent bar and curved left accent
-  // Draw orange accent (curved) at the left
-  doc.setFillColor(255, 107, 53);
-  doc.roundedRect(margin, yPos, 18, 38, 10, 10, 'F');
-  // Section header bar
-  doc.setFillColor(255, 107, 53);
-  doc.roundedRect(margin, yPos, contentWidth, 16, 3, 3, 'F');
-  doc.setFont(STYLES.headerFont, 'bold');
-  doc.setFontSize(10);
-  doc.setTextColor(255, 255, 255);
-  doc.text('STUDENT INFORMATION', margin + 28, yPos + 11);
+  const logoSVG = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 40 40" width="40" height="40">
+    <rect width="40" height="40" rx="8" fill="#0F0703"/>
+    <rect x="8" y="22" width="6" height="11" rx="2" fill="#FF6803"/>
+    <rect x="17" y="14" width="6" height="19" rx="2" fill="#FF6803"/>
+    <rect x="26" y="8" width="6" height="25" rx="2" fill="#FF6803"/>
+    <path d="M6 35 Q20 28 34 35" stroke="#30FFAC" stroke-width="2.2" fill="none" stroke-linecap="round"/>
+  </svg>`;
 
-  yPos += 20;
+  const html = `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Receipt - ${payment.student.full_name}</title>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap');
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --amber: #FF6803; --amber-light: #FFAC5F; --amber-dark: #CC5202;
+      --mint: #30FFAC; --charcoal: #0F0703;
+      --slate-900: #0f172a; --slate-700: #334155; --slate-500: #64748b;
+      --slate-300: #cbd5e1; --slate-100: #f1f5f9; --slate-50: #f8fafc;
+    }
+    body {
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      color: var(--slate-900); background: var(--slate-100);
+      line-height: 1.6; -webkit-font-smoothing: antialiased;
+    }
+    .page {
+      max-width: 720px; margin: 24px auto; background: white;
+      border-radius: 2px; position: relative; overflow: hidden;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.08), 0 20px 60px rgba(0,0,0,0.06);
+    }
+    .watermark {
+      position: absolute; top: 50%; left: 50%;
+      transform: translate(-50%, -50%) rotate(-35deg);
+      font-size: 72px; font-weight: 800; letter-spacing: 14px;
+      color: rgba(255, 104, 3, 0.02); white-space: nowrap;
+      pointer-events: none; z-index: 0;
+    }
+    .accent-bar { height: 4px; background: linear-gradient(90deg, var(--amber) 0%, var(--amber-light) 50%, var(--mint) 100%); }
+    .header {
+      padding: 28px 36px 22px; display: flex;
+      justify-content: space-between; align-items: flex-start;
+      position: relative; z-index: 1;
+    }
+    .header-left { display: flex; align-items: center; gap: 14px; }
+    .brand-name { font-size: 18px; font-weight: 800; color: var(--charcoal); letter-spacing: -0.5px; }
+    .brand-name span { color: var(--amber); }
+    .brand-tagline { font-size: 9px; color: var(--slate-500); text-transform: uppercase; letter-spacing: 2.5px; margin-top: 1px; }
+    .header-right { text-align: right; }
+    .doc-title { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 3px; color: var(--amber); margin-bottom: 6px; }
+    .doc-meta { font-size: 10px; color: var(--slate-500); line-height: 1.9; }
+    .doc-meta strong { color: var(--slate-700); font-weight: 600; }
+    .divider { height: 1px; background: linear-gradient(90deg, transparent 0%, var(--slate-300) 15%, var(--slate-300) 85%, transparent 100%); margin: 0 36px; }
+    .body { padding: 24px 36px 28px; position: relative; z-index: 1; }
+    .section { margin-bottom: 22px; }
+    .section-header { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; }
+    .section-icon { width: 26px; height: 26px; border-radius: 6px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; font-size: 13px; }
+    .section-icon.amber { background: rgba(255, 104, 3, 0.08); }
+    .section-icon.blue { background: rgba(59, 130, 246, 0.08); }
+    .section-icon.green { background: rgba(5, 150, 105, 0.08); }
+    .section-title { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 1.5px; color: var(--slate-700); }
+    .section-line { flex: 1; height: 1px; background: var(--slate-300); }
 
-  // Student details box (overlapping the accent)
-  doc.setFillColor(255, 255, 255);
-  doc.setDrawColor(229, 231, 235);
-  doc.setLineWidth(0.5);
-  doc.roundedRect(margin, yPos, contentWidth, 38, 4, 4, 'FD');
+    /* Status + Amount Hero */
+    .hero-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 22px; }
+    .hero-card {
+      border-radius: 10px; padding: 20px; text-align: center;
+      position: relative; overflow: hidden;
+    }
+    .hero-card::after {
+      content: ''; position: absolute; top: 0; left: 0; right: 0; height: 3px;
+    }
+    .hero-card.status { background: ${statusCfg.light}; }
+    .hero-card.status::after { background: ${statusCfg.bg}; }
+    .hero-card.amount { background: linear-gradient(135deg, var(--amber), var(--amber-light)); }
+    .hero-card.amount::after { background: var(--amber-dark); }
+    .hero-label { font-size: 9px; font-weight: 700; text-transform: uppercase; letter-spacing: 2px; margin-bottom: 8px; }
+    .hero-card.status .hero-label { color: ${statusCfg.text}; }
+    .hero-card.amount .hero-label { color: rgba(255,255,255,0.8); }
+    .hero-value { font-size: 26px; font-weight: 800; line-height: 1.2; }
+    .hero-card.status .hero-value { color: ${statusCfg.bg}; }
+    .hero-card.amount .hero-value { color: white; }
+    .status-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: ${statusCfg.dot}; margin-right: 6px; vertical-align: middle; }
 
-  // Watermark inside student details box (light grey, drawn before fields so fields overlay it)
-  const wmX = margin + contentWidth / 2;
-  const wmY = yPos + 22;
-  doc.setFont(STYLES.headerFont, 'bold');
-  doc.setFontSize(30);
-  doc.setTextColor(240, 240, 240);
-  doc.text('Class Dues Tracker By Wishot', wmX, wmY, { align: 'center', angle: -9 });
+    /* Info Grid */
+    .info-grid {
+      display: grid; grid-template-columns: repeat(3, 1fr); gap: 0;
+      border: 1px solid var(--slate-300); border-radius: 8px; overflow: hidden;
+    }
+    .info-cell { padding: 11px 14px; border-bottom: 1px solid var(--slate-300); border-right: 1px solid var(--slate-300); }
+    .info-cell:nth-child(3n) { border-right: none; }
+    .info-cell:nth-last-child(-n+3) { border-bottom: none; }
+    .info-label { font-size: 8px; font-weight: 600; text-transform: uppercase; letter-spacing: 1px; color: var(--slate-500); margin-bottom: 3px; }
+    .info-value { font-size: 12px; font-weight: 600; color: var(--slate-900); word-break: break-word; }
+    .info-value.mono { font-family: 'Courier New', monospace; font-size: 11px; }
+    .info-value.amber { color: var(--amber); }
 
-  addField('Full Name', payment.student.full_name, margin + 28, yPos + 10);
-  addField('Reg. Number', payment.student.reg_number, margin + colWidth + 5, yPos + 10);
-  addField('Email', payment.student.email || 'Not provided', margin + 28, yPos + 26);
-  addField('Level', payment.student.level || 'Not specified', margin + colWidth + 5, yPos + 26);
+    /* Payment Summary Table */
+    .pay-table { width: 100%; border: 1px solid var(--slate-300); border-radius: 8px; overflow: hidden; border-collapse: collapse; }
+    .pay-table thead th {
+      background: var(--slate-900); color: white; padding: 9px 12px;
+      text-align: left; font-weight: 600; font-size: 9px;
+      text-transform: uppercase; letter-spacing: 0.8px;
+    }
+    .pay-table tbody td { padding: 10px 12px; border-bottom: 1px solid var(--slate-100); color: var(--slate-700); font-size: 12px; }
+    .pay-table tbody tr:last-child td { border-bottom: none; }
+    .pay-table .td-amount { font-weight: 700; color: var(--slate-900); font-variant-numeric: tabular-nums; }
+    .pay-table .td-mono { font-family: 'Courier New', monospace; font-size: 10px; color: var(--slate-500); }
+    .pay-table .badge {
+      display: inline-flex; align-items: center; gap: 4px;
+      padding: 2px 8px; border-radius: 20px; font-size: 9px; font-weight: 600;
+    }
+    .pay-table .badge::before { content: ''; width: 5px; height: 5px; border-radius: 50%; }
+    .badge.approved { background: #ecfdf5; color: #065f46; }
+    .badge.approved::before { background: #059669; }
+    .badge.pending { background: #fffbeb; color: #92400e; }
+    .badge.pending::before { background: #d97706; }
+    .badge.rejected { background: #fef2f2; color: #991b1b; }
+    .badge.rejected::before { background: #dc2626; }
+    .badge.waived { background: #eef2ff; color: #4338ca; }
+    .badge.waived::before { background: #6366f1; }
 
-  yPos += 46;
+    /* Amount strip */
+    .amount-strip {
+      display: flex; justify-content: space-between; align-items: center;
+      background: linear-gradient(135deg, var(--amber) 0%, var(--amber-light) 100%);
+      border-radius: 8px; padding: 14px 18px; margin-top: 12px;
+    }
+    .amount-strip-label { font-size: 11px; font-weight: 600; color: rgba(255,255,255,0.85); text-transform: uppercase; letter-spacing: 1px; }
+    .amount-strip-value { font-size: 24px; font-weight: 800; color: white; }
 
-  // ═══════════════════════════════════════════════════════════════
-  // PAYMENT DETAILS SECTION
-  // ═══════════════════════════════════════════════════════════════
-  
-  // Section header with orange accent bar
-  doc.setFillColor(255, 107, 53);
-  doc.roundedRect(margin, yPos, contentWidth, 16, 3, 3, 'F');
-  doc.setFont(STYLES.headerFont, 'bold');
-  doc.setFontSize(10);
-  doc.setTextColor(255, 255, 255);
-  doc.text('PAYMENT DETAILS', margin + 10, yPos + 11);
-  
-  yPos += 20;
-  
-  // Payment details box
-  doc.setFillColor(255, 255, 255);
-  doc.setDrawColor(229, 231, 235);
-  doc.roundedRect(margin, yPos, contentWidth, 54, 4, 4, 'FD');
-  
-  addField('Payment Type', payment.payment_type.title, margin + 8, yPos + 10);
-  addField('Target Amount', formatNairaPDF(payment.payment_type.amount), margin + colWidth + 5, yPos + 10);
-  addField('Payment Method', payment.payment_method || 'Bank Transfer', margin + 8, yPos + 26);
-  addField('Transaction Ref', (payment.transaction_ref || 'N/A').slice(0, 20), margin + colWidth + 5, yPos + 26);
-  addField('Submitted On', new Date(payment.created_at).toLocaleString('en-NG', {
-    year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit'
-  }), margin + 8, yPos + 42);
-  
-  if (payment.approved_at) {
-    addField(isWaived ? 'Waived On' : 'Approved On', new Date(payment.approved_at).toLocaleString('en-NG', {
-      year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit'
-    }), margin + colWidth + 5, yPos + 42);
+    /* Verification */
+    .verification {
+      margin-top: 24px; padding-top: 18px;
+      border-top: 2px dashed var(--slate-300);
+      display: flex; justify-content: space-between; align-items: flex-end;
+    }
+    .verification-left { display: flex; gap: 12px; align-items: center; }
+    .qr-box {
+      width: 52px; height: 52px; border: 2px solid var(--slate-300); border-radius: 5px;
+      display: grid; grid-template-columns: repeat(7, 1fr); grid-template-rows: repeat(7, 1fr);
+      gap: 0; padding: 3px; overflow: hidden;
+    }
+    .qr-cell { border-radius: 0; }
+    .qr-cell.f { background: var(--slate-900); }
+    .qr-cell.e { background: transparent; }
+    .verify-text { font-size: 9px; color: var(--slate-500); line-height: 1.9; }
+    .verify-text strong { color: var(--slate-700); font-weight: 600; }
+    .verify-code {
+      font-family: 'Courier New', monospace; font-size: 10px;
+      background: var(--slate-100); padding: 1px 5px; border-radius: 3px;
+      color: var(--amber); font-weight: 700; letter-spacing: 1px;
+    }
+    .sig-block { text-align: center; width: 170px; }
+    .sig-line { border-top: 1px solid var(--slate-400); margin-bottom: 5px; margin-top: 36px; }
+    .sig-name { font-size: 9px; color: var(--slate-500); text-transform: uppercase; letter-spacing: 1px; }
+
+    /* Footer */
+    .footer {
+      background: var(--slate-50); border-top: 1px solid var(--slate-300);
+      padding: 14px 36px; display: flex;
+      justify-content: space-between; align-items: center;
+      position: relative; z-index: 1;
+    }
+    .footer-brand { display: flex; align-items: center; gap: 8px; }
+    .footer-info { font-size: 9px; color: var(--slate-500); line-height: 1.6; }
+    .footer-info strong { color: var(--amber); font-weight: 700; }
+    .footer-right { text-align: right; font-size: 8px; color: var(--slate-500); line-height: 1.8; }
+
+    /* Print Button */
+    .print-actions { max-width: 720px; margin: 16px auto 32px; display: flex; justify-content: center; }
+    .btn-print {
+      padding: 12px 32px; border: none; border-radius: 8px; cursor: pointer;
+      font-size: 14px; font-weight: 600; font-family: 'Inter', sans-serif;
+      display: flex; align-items: center; gap: 8px; transition: all 0.2s;
+      background: linear-gradient(135deg, var(--amber) 0%, var(--amber-light) 100%);
+      color: white; box-shadow: 0 4px 14px rgba(255, 104, 3, 0.3);
+    }
+    .btn-print:hover { transform: translateY(-1px); box-shadow: 0 6px 20px rgba(255, 104, 3, 0.4); }
+    @media print {
+      body { background: white; }
+      .page { margin: 0; box-shadow: none; border-radius: 0; }
+      .no-print { display: none !important; }
+      .watermark { color: rgba(255, 104, 3, 0.015); }
+    }
+    @media (max-width: 640px) {
+      .header { padding: 20px; flex-direction: column; gap: 14px; }
+      .header-right { text-align: left; }
+      .body { padding: 16px; }
+      .footer { padding: 12px 16px; flex-direction: column; gap: 8px; text-align: center; }
+      .footer-right { text-align: center; }
+      .info-grid { grid-template-columns: repeat(2, 1fr); }
+      .info-cell:nth-child(2n) { border-right: none; }
+      .info-cell:nth-child(3n) { border-right: 1px solid var(--slate-300); }
+      .hero-row { grid-template-columns: 1fr; }
+      .divider { margin: 0 16px; }
+      .verification { flex-direction: column; align-items: flex-start; gap: 16px; }
+    }
+  </style>
+</head>
+<body>
+  <div class="page">
+    <div class="watermark">DUESTRACKER</div>
+    <div class="accent-bar"></div>
+
+    <!-- HEADER -->
+    <div class="header">
+      <div class="header-left">
+        ${logoSVG}
+        <div>
+          <div class="brand-name">Dues<span>Tracker</span></div>
+          <div class="brand-tagline">Payment Receipt</div>
+        </div>
+      </div>
+      <div class="header-right">
+        <div class="doc-title">Official Receipt</div>
+        <div class="doc-meta">
+          <strong>Date:</strong> ${fmtDate(payment.created_at)}<br>
+          <strong>Ref:</strong> ${docRef}<br>
+          <strong>ID:</strong> #${payment.id.slice(0, 8).toUpperCase()}
+        </div>
+      </div>
+    </div>
+    <div class="divider"></div>
+
+    <div class="body">
+      <!-- STATUS + AMOUNT HERO -->
+      <div class="hero-row">
+        <div class="hero-card status">
+          <div class="hero-label">Payment Status</div>
+          <div class="hero-value"><span class="status-dot"></span>${statusCfg.label}</div>
+        </div>
+        <div class="hero-card amount">
+          <div class="hero-label">${isWaived ? 'Amount Waived' : 'Amount Paid'}</div>
+          <div class="hero-value">${fmtCurrency(payment.amount)}</div>
+        </div>
+      </div>
+
+      <!-- STUDENT INFORMATION -->
+      <div class="section">
+        <div class="section-header">
+          <div class="section-icon amber">👤</div>
+          <div class="section-title">Student Information</div>
+          <div class="section-line"></div>
+        </div>
+        <div class="info-grid">
+          <div class="info-cell">
+            <div class="info-label">Full Name</div>
+            <div class="info-value">${payment.student.full_name}</div>
+          </div>
+          <div class="info-cell">
+            <div class="info-label">Reg. Number</div>
+            <div class="info-value mono amber">${payment.student.reg_number}</div>
+          </div>
+          <div class="info-cell">
+            <div class="info-label">Level</div>
+            <div class="info-value">${payment.student.level || 'Not specified'}</div>
+          </div>
+          <div class="info-cell">
+            <div class="info-label">Email</div>
+            <div class="info-value">${payment.student.email || 'Not provided'}</div>
+          </div>
+          <div class="info-cell">
+            <div class="info-label">Department</div>
+            <div class="info-value">ECE</div>
+          </div>
+          <div class="info-cell">
+            <div class="info-label">Academic Session</div>
+            <div class="info-value">${new Date().getFullYear()}/${new Date().getFullYear() + 1}</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- PAYMENT DETAILS -->
+      <div class="section">
+        <div class="section-header">
+          <div class="section-icon blue">💳</div>
+          <div class="section-title">Transaction Details</div>
+          <div class="section-line"></div>
+        </div>
+        <table class="pay-table">
+          <thead>
+            <tr>
+              <th>Description</th>
+              <th>Details</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>Payment Type</td>
+              <td style="font-weight:600;">${payment.payment_type.title}</td>
+            </tr>
+            <tr>
+              <td>Target Amount</td>
+              <td class="td-amount">${fmtCurrency(payment.payment_type.amount)}</td>
+            </tr>
+            <tr>
+              <td>Amount ${isWaived ? 'Waived' : 'Paid'}</td>
+              <td class="td-amount" style="color:var(--amber);">${fmtCurrency(payment.amount)}</td>
+            </tr>
+            <tr>
+              <td>Payment Method</td>
+              <td>${payment.payment_method ? payment.payment_method.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase()) : 'Bank Transfer'}</td>
+            </tr>
+            <tr>
+              <td>Transaction Reference</td>
+              <td class="td-mono">${payment.transaction_ref || 'N/A'}</td>
+            </tr>
+            <tr>
+              <td>Submitted On</td>
+              <td>${fmtDateTime(payment.created_at)}</td>
+            </tr>
+            ${payment.approved_at ? `<tr>
+              <td>${isWaived ? 'Waived On' : 'Approved On'}</td>
+              <td>${fmtDateTime(payment.approved_at)}</td>
+            </tr>` : ''}
+            <tr>
+              <td>Status</td>
+              <td><span class="badge ${isWaived ? 'waived' : payment.status}">${statusCfg.label}</span></td>
+            </tr>
+          </tbody>
+        </table>
+
+        <div class="amount-strip">
+          <span class="amount-strip-label">${isWaived ? 'Total Waived' : 'Total Paid'}</span>
+          <span class="amount-strip-value">${fmtCurrency(payment.amount)}</span>
+        </div>
+      </div>
+
+      <!-- VERIFICATION -->
+      <div class="verification">
+        <div class="verification-left">
+          <div class="qr-box">
+            ${qrCells.map(c => `<div class="qr-cell ${c}"></div>`).join('')}
+          </div>
+          <div class="verify-text">
+            <strong>Verification</strong><br>
+            Document Ref: <span class="verify-code">${docRef}</span><br>
+            This is electronically generated.<br>
+            No signature required.
+          </div>
+        </div>
+        <div class="sig-block">
+          <div class="sig-line"></div>
+          <div class="sig-name">Authorized Signatory</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- FOOTER -->
+    <div class="footer">
+      <div class="footer-brand">
+        ${logoSVG.replace('width="40"', 'width="28"').replace('height="40"', 'height="28"')}
+        <div class="footer-info">
+          <strong>DuesTracker</strong><br>
+          Powered by Dev_Wishot
+        </div>
+      </div>
+      <div class="footer-right">
+        Official Payment Receipt<br>
+        Generated ${new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
+      </div>
+    </div>
+  </div>
+
+  <div class="print-actions no-print">
+    <button class="btn-print" onclick="window.print()">🖨️ Print / Save as PDF</button>
+  </div>
+</body>
+</html>`;
+
+  // Open in print window
+  const isIOSDevice = /iPad|iPhone|iPod/.test(navigator.userAgent) ||
+    (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+
+  if (isIOSDevice) {
+    let printFrame = document.getElementById('receipt-print-frame') as HTMLIFrameElement;
+    if (!printFrame) {
+      printFrame = document.createElement('iframe');
+      printFrame.id = 'receipt-print-frame';
+      printFrame.style.cssText = 'position:fixed;right:0;bottom:0;width:0;height:0;border:none';
+      document.body.appendChild(printFrame);
+    }
+    const fd = printFrame.contentDocument || printFrame.contentWindow?.document;
+    if (fd) { fd.open(); fd.write(html); fd.close(); }
+    setTimeout(() => { printFrame.contentWindow?.focus(); printFrame.contentWindow?.print(); }, 500);
+  } else {
+    const win = window.open('', '_blank');
+    if (win) { win.document.write(html); win.document.close(); }
   }
-
-  yPos += 62;
-
-  // ═══════════════════════════════════════════════════════════════
-  // VERIFICATION SECTION
-  // ═══════════════════════════════════════════════════════════════
-  
-  doc.setFillColor(26, 14, 9);
-  doc.roundedRect(margin, yPos, contentWidth, 35, 4, 4, 'F');
-  
-  doc.setFont(STYLES.bodyFont, 'normal');
-  doc.setFontSize(8);
-  doc.setTextColor(150, 150, 150);
-  doc.text('VERIFICATION CODE', margin + 10, yPos + 12);
-  
-  doc.setFont('courier', 'bold');
-  doc.setFontSize(12);
-  doc.setTextColor(255, 107, 53);
-  doc.text(`CDT-${payment.id.slice(0, 12).toUpperCase()}`, margin + 10, yPos + 24);
-  
-  // Valid/Waived stamp
-  if (isApproved || isWaived) {
-    const stampColor = isWaived ? statusConfig.color : [34, 197, 94];
-    doc.setFillColor(stampColor[0], stampColor[1], stampColor[2]);
-    doc.roundedRect(pageWidth - margin - 50, yPos + 6, 45, 22, 4, 4, 'F');
-    
-    doc.setFont(STYLES.headerFont, 'bold');
-    doc.setFontSize(9);
-    doc.setTextColor(255, 255, 255);
-    doc.text(isWaived ? 'WAIVED' : 'VALID', pageWidth - margin - 27.5, yPos + 20, { align: 'center' });
-  }
-
-  yPos += 45;
-
-  // ═══════════════════════════════════════════════════════════════
-  // FOOTER NOTES
-  // ═══════════════════════════════════════════════════════════════
-  
-  // Footer notes
-  doc.setFont(STYLES.bodyFont, 'normal');
-  doc.setFontSize(7);
-  doc.setTextColor(COLORS.textLight);
-  doc.text('This is an electronically generated receipt. No signature required.', pageWidth / 2, yPos, { align: 'center' });
-  doc.text('For verification, contact your class administration with the code above.', pageWidth / 2, yPos + 8, { align: 'center' });
-  
-  // ═══════════════════════════════════════════════════════════════
-  // BOTTOM BRANDING BAR
-  // ═══════════════════════════════════════════════════════════════
-  
-  doc.setFillColor(26, 14, 9);
-  doc.rect(0, pageHeight - 18, pageWidth, 18, 'F');
-  
-  doc.setFont(STYLES.bodyFont, 'normal');
-  doc.setFontSize(7);
-  doc.setTextColor(150, 150, 150);
-  doc.text('Class Dues Tracker', margin, pageHeight - 7);
-  
-  doc.setTextColor(255, 107, 53);
-  doc.text('Developed by Dev_Wishot | @wishotstudio', pageWidth / 2, pageHeight - 7, { align: 'center' });
-  
-  doc.setTextColor(150, 150, 150);
-  doc.text('Official Document', pageWidth - margin, pageHeight - 7, { align: 'right' });
-  
-  doc.save(`receipt_${payment.transaction_ref || payment.id.slice(0, 8)}.pdf`);
 }
 
 export default {

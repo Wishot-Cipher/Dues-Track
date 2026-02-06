@@ -11,11 +11,26 @@ import { createClient } from '@supabase/supabase-js';
 const supabaseUrl = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL;
 const serviceRole = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SERVICE_ROLE;
 
+// Allowed origins — restrict to your production domain(s)
+const ALLOWED_ORIGINS = [
+  process.env.VITE_APP_URL,
+  process.env.NEXT_PUBLIC_APP_URL,
+  'http://localhost:5173',
+  'http://localhost:3000',
+].filter(Boolean) as string[];
+
+function getAllowedOrigin(origin?: string): string {
+  if (!origin) return '';
+  return ALLOWED_ORIGINS.some(o => origin.startsWith(o)) ? origin : '';
+}
+
 export default async function handler(req: any, res: any) {
-  // Set CORS headers
-  res.setHeader('Access-Control-Allow-Origin', '*');
+  // Set CORS headers — restricted to known origins
+  const origin = req.headers?.origin || '';
+  const allowed = getAllowedOrigin(origin);
+  if (allowed) res.setHeader('Access-Control-Allow-Origin', allowed);
   res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
 
   if (req.method === 'OPTIONS') {
     return res.status(200).end();
@@ -42,7 +57,16 @@ export default async function handler(req: any, res: any) {
       });
     }
 
-    console.log('📝 Saving push subscription for user:', userId);
+    // Verify the userId actually exists in the students table
+    const { data: student, error: studentErr } = await supabase
+      .from('students')
+      .select('id')
+      .eq('id', userId)
+      .maybeSingle();
+
+    if (studentErr || !student) {
+      return res.status(403).json({ error: 'Invalid user ID' });
+    }
 
     // Upsert the subscription (update if exists, insert if not)
     const { data, error } = await supabase

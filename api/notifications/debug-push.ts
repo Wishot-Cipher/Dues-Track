@@ -19,6 +19,12 @@ export default async function handler(req: any, res: any) {
     return res.status(405).json({ error: 'Method not allowed' });
   }
 
+  // Block in production — only allow in development/preview
+  const isProduction = process.env.VERCEL_ENV === 'production' || process.env.NODE_ENV === 'production';
+  if (isProduction) {
+    return res.status(403).json({ error: 'Debug endpoint disabled in production' });
+  }
+
   const diagnostics: Record<string, any> = {
     timestamp: new Date().toISOString(),
     environment: {
@@ -53,7 +59,7 @@ export default async function handler(req: any, res: any) {
       diagnostics.database = {
         push_subscriptions_table: '✅ Exists',
         total_subscriptions: subscriptions?.length || 0,
-        sample_user_ids: subscriptions?.map(s => s.user_id.slice(0, 8) + '...') || []
+        // Redacted — no user IDs exposed
       };
     }
 

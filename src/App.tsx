@@ -189,7 +189,6 @@ function App() {
               }
             />
 
-            {/* Default Redirect */}
             {/* Collected by category */}
             <Route
               path="/admin/collected"

@@ -17,7 +17,10 @@ import {
   CheckCircle2,
   AlertCircle,
   GraduationCap,
-  Hash
+  Hash,
+  KeyRound,
+  History,
+  ChevronRight
 } from 'lucide-react';
 import Footer from '@/components/Footer';
 import { colors, gradients } from '@/config/colors';
@@ -272,6 +275,45 @@ export default function ProfilePage() {
                 </div>
               </div>
             </GlassCard>
+
+            {/* Quick Actions */}
+            <motion.div
+              className="mt-4"
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.35 }}
+            >
+              <GlassCard className="!p-0 overflow-hidden">
+                <div className="px-4 pt-4 pb-2">
+                  <h3 className="text-sm font-semibold text-white">Quick Actions</h3>
+                </div>
+                {[
+                  { icon: KeyRound, label: 'Change Password', path: '/change-password', color: colors.primary },
+                  { icon: History, label: 'Payment History', path: '/dashboard', color: colors.accentMint },
+                ].map((action, i) => (
+                  <motion.button
+                    key={action.path}
+                    onClick={() => navigate(action.path)}
+                    className="w-full flex items-center gap-3 px-4 py-3 transition-all text-left"
+                    style={{ borderTop: '1px solid rgba(255, 255, 255, 0.06)' }}
+                    whileHover={{ background: 'rgba(255, 255, 255, 0.04)' }}
+                    whileTap={{ scale: 0.98 }}
+                    initial={{ opacity: 0, x: -10 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    transition={{ delay: 0.4 + i * 0.1 }}
+                  >
+                    <div
+                      className="w-8 h-8 rounded-lg flex items-center justify-center shrink-0"
+                      style={{ background: `${action.color}15` }}
+                    >
+                      <action.icon size={16} style={{ color: action.color }} />
+                    </div>
+                    <span className="text-sm font-medium text-white flex-1">{action.label}</span>
+                    <ChevronRight size={16} style={{ color: colors.textSecondary }} />
+                  </motion.button>
+                ))}
+              </GlassCard>
+            </motion.div>
 
             {/* Payment Summary Card - Mobile */}
             <motion.div

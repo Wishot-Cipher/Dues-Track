@@ -1,8 +1,9 @@
 import { useState, useEffect } from 'react';
-import { Zap, Lock, User, AlertCircle, Info } from 'lucide-react';
-import { colors, gradients } from '@/config/colors';
+import { Lock, User, AlertCircle, Info } from 'lucide-react';
+import { colors } from '@/config/colors';
 import CustomButton from '@/components/ui/CustomButton';
 import Input from '@/components/ui/Input';
+import Logo from '@/components/ui/Logo';
 import { useAuth } from '@/hooks/useAuth';
 import { useNavigate, Link } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -68,25 +69,7 @@ export default function LoginPage() {
         >
           <div className="space-y-4">
             <div className="flex items-center gap-3 mb-6">
-              <motion.div
-                className="w-16 h-16 rounded-2xl flex items-center justify-center"
-                style={{
-                  background: gradients.primary,
-                  boxShadow: `0 0 40px ${colors.primary}60`,
-                }}
-                whileHover={{ scale: 1.05, rotate: 5 }}
-                transition={{ type: "spring", stiffness: 300 }}
-              >
-                <Zap size={32} className="text-white" />
-              </motion.div>
-              <div>
-                <h1 className="text-4xl font-bold bg-linear-to-r from-white to-gray-400 bg-clip-text text-transparent">
-                  DuesTrack
-                </h1>
-                <p className="text-sm" style={{ color: colors.textSecondary }}>
-                  Class Dues Management System
-                </p>
-              </div>
+              <Logo size="xl" showText={true} variant="light" />
             </div>
 
             <motion.h2 
@@ -149,19 +132,9 @@ export default function LoginPage() {
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.2 }}
           >
-            <motion.div
-              className="w-16 h-16 rounded-2xl flex items-center justify-center mb-4"
-              style={{
-                background: gradients.primary,
-                boxShadow: `0 0 40px ${colors.primary}60`,
-              }}
-              whileHover={{ scale: 1.05, rotate: 5 }}
-            >
-              <Zap size={32} className="text-white" />
-            </motion.div>
-            <h1 className="text-3xl font-bold">DuesTrack</h1>
-            <p className="text-sm mt-1" style={{ color: colors.textSecondary }}>
-              ECE 200L Dues Management
+            <Logo size="xl" showText={true} variant="light" className="flex-col items-center text-center" />
+            <p className="text-sm mt-2" style={{ color: colors.textSecondary }}>
+              ECE Class Dues Management
             </p>
           </motion.div>
 
@@ -298,12 +271,34 @@ export default function LoginPage() {
                 <button
                   type="button"
                   className="underline hover:no-underline transition-all"
-                  style={{ color: colors.primary }}
-                  onClick={() => setError('Please contact your class representative for assistance.')}
+                  style={{ color: colors.accentMint }}
+                  onClick={() => {
+                    setError('');
+                    const helpEl = document.getElementById('login-help-info');
+                    if (helpEl) { helpEl.style.display = helpEl.style.display === 'none' ? 'flex' : 'none'; }
+                  }}
                 >
                   Get help
                 </button>
               </p>
+              <AnimatePresence>
+                <motion.div
+                  id="login-help-info"
+                  className="flex items-start gap-3 p-3 rounded-xl mt-3"
+                  style={{
+                    display: 'none',
+                    background: `${colors.accentMint}10`,
+                    border: `1px solid ${colors.accentMint}25`,
+                  }}
+                  initial={{ opacity: 0, y: -5 }}
+                  animate={{ opacity: 1, y: 0 }}
+                >
+                  <Info size={16} style={{ color: colors.accentMint, marginTop: 2, flexShrink: 0 }} />
+                  <p className="text-xs leading-relaxed" style={{ color: colors.accentMint }}>
+                    Please contact your class representative for login assistance. Your default password is your registration number.
+                  </p>
+                </motion.div>
+              </AnimatePresence>
               <p className="text-[10px]" style={{ color: colors.textSecondary }}>
                 Developed by{' '}
                 <a 

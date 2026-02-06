@@ -2,6 +2,7 @@ import { motion } from 'framer-motion';
 import { useNavigate } from 'react-router-dom';
 import { Home, ArrowLeft, Search, AlertTriangle } from 'lucide-react';
 import { colors, gradients } from '@/config/colors';
+import { LogoCompact } from '@/components/ui/Logo';
 
 export default function NotFoundPage() {
   const navigate = useNavigate();
@@ -51,6 +52,16 @@ export default function NotFoundPage() {
         transition={{ duration: 0.5 }}
         className="relative z-10 text-center max-w-md mx-auto"
       >
+        {/* Brand Logo */}
+        <motion.div
+          initial={{ opacity: 0, scale: 0.8 }}
+          animate={{ opacity: 1, scale: 1 }}
+          transition={{ type: 'spring', damping: 15 }}
+          className="flex justify-center mb-6"
+        >
+          <LogoCompact />
+        </motion.div>
+
         {/* 404 Illustration */}
         <motion.div
           initial={{ scale: 0.8 }}
@@ -185,7 +196,15 @@ export default function NotFoundPage() {
           className="mt-8 text-xs"
           style={{ color: colors.textMuted }}
         >
-          If you believe this is an error, please contact support.
+          If you believe this is an error, please{' '}
+          <button
+            onClick={() => navigate('/dashboard')}
+            className="underline hover:no-underline"
+            style={{ color: colors.primary }}
+          >
+            return to the dashboard
+          </button>
+          {' '}or contact your class representative.
         </motion.p>
       </motion.div>
     </div>

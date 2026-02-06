@@ -312,10 +312,10 @@ function AppInfo() {
         </div>
         <h4 className="font-semibold text-white mb-1">ECE Class Dues Tracker</h4>
         <p className="text-xs mb-3" style={{ color: colors.textSecondary }}>
-          Version 1.0.0
+          Version 2.0.0
         </p>
         <div className="flex items-center justify-center gap-4 text-xs" style={{ color: colors.textSecondary }}>
-          <span>© 2024 ECE Department</span>
+          <span>© 2026 ECE Department</span>
           <span>•</span>
           <span>All Rights Reserved</span>
         </div>

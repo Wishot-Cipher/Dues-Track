@@ -15,14 +15,6 @@ export default function Skeleton({
   height,
   count = 1
 }: SkeletonProps) {
-  const baseStyles: React.CSSProperties = {
-    background: `linear-gradient(90deg, 
-      rgba(255, 104, 3, 0.05) 0%, 
-      rgba(255, 104, 3, 0.15) 50%, 
-      rgba(255, 104, 3, 0.05) 100%)`,
-    backgroundSize: '200% 100%',
-  }
-
   const variantStyles: Record<string, string> = {
     text: 'h-4 rounded-md',
     circular: 'rounded-full',
@@ -31,23 +23,31 @@ export default function Skeleton({
   }
 
   const elements = Array.from({ length: count }, (_, i) => (
-    <motion.div
+    <div
       key={i}
-      className={`${variantStyles[variant]} ${className}`}
+      className={`${variantStyles[variant]} ${className} relative overflow-hidden`}
       style={{
-        ...baseStyles,
         width: width ?? '100%',
         height: height ?? (variant === 'text' ? '1rem' : variant === 'circular' ? '3rem' : '4rem'),
+        background: 'rgba(255, 104, 3, 0.06)',
       }}
-      animate={{
-        backgroundPosition: ['0% 0%', '-200% 0%'],
-      }}
-      transition={{
-        duration: 1.5,
-        repeat: Infinity,
-        ease: 'linear',
-      }}
-    />
+    >
+      <motion.div
+        className="absolute inset-0"
+        style={{
+          background: 'linear-gradient(90deg, transparent 0%, rgba(255, 104, 3, 0.12) 40%, rgba(255, 255, 255, 0.06) 50%, rgba(255, 104, 3, 0.12) 60%, transparent 100%)',
+        }}
+        animate={{
+          x: ['-100%', '100%'],
+        }}
+        transition={{
+          duration: 1.8,
+          repeat: Infinity,
+          ease: 'easeInOut',
+          repeatDelay: 0.3,
+        }}
+      />
+    </div>
   ))
 
   return count === 1 ? elements[0] : <div className="space-y-3">{elements}</div>

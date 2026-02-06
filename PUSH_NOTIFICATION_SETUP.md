@@ -25,7 +25,7 @@ If push notifications aren't working, check:
 
 After deploying, visit these URLs to diagnose issues:
 
-- `https://your-app.vercel.app/api/notifications/debug-push` - Check configuration
+- `https://your-app.vercel.app/Error fetching subscription` - Check configuration
 - Use the "Test" button in Settings → Push Notifications
 
 ---

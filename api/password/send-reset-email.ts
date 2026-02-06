@@ -8,13 +8,9 @@ const appUrl = process.env.VITE_APP_URL || process.env.NEXT_PUBLIC_APP_URL || 'h
 const RESEND_API_KEY = process.env.RESEND_API_KEY || process.env.VITE_RESEND_API_KEY
 
 function generateSecureToken(): string {
-  try {
-    const crypto = require('crypto')
-    return crypto.randomBytes(32).toString('hex')
-  } catch {
-    // Fallback for environments without crypto
-    return Math.random().toString(36).substring(2) + Date.now().toString(36) + Math.random().toString(36).substring(2)
-  }
+  // crypto is always available in Node.js (Vercel) — never fall back to Math.random()
+  const crypto = require('crypto')
+  return crypto.randomBytes(32).toString('hex')
 }
 
 export default async function handler(req: any, res: any) {
@@ -51,7 +47,7 @@ export default async function handler(req: any, res: any) {
     }
 
     const emailLower = String(email).trim().toLowerCase()
-    console.log('📧 Password reset requested for:', emailLower)
+    // SECURITY: Don't log the email address
 
     // Lookup student by email from students table (NOT Supabase auth.users)
     const { data: student, error: studentError } = await supabaseAdmin
@@ -60,21 +56,15 @@ export default async function handler(req: any, res: any) {
       .ilike('email', emailLower)
       .maybeSingle()
 
-    console.log('🔍 Student lookup:', { found: !!student, error: studentError?.message })
-
     // Always return success to avoid disclosing accounts
     if (studentError || !student) {
-      console.log('⚠️ Student not found or error:', studentError?.message || 'No student with this email')
       return res.status(200).json({ success: true, message: 'If that email exists, a reset link has been sent' })
     }
     
     // Check if student has a valid email
     if (!student.email || !student.email.includes('@')) {
-      console.log('⚠️ Student has no valid email:', student.full_name)
       return res.status(200).json({ success: true, message: 'If that email exists, a reset link has been sent' })
     }
-
-    console.log('✅ Found student:', student.full_name, '| Email:', student.email)
 
     // Delete previous unused tokens for this student
     try {
@@ -106,12 +96,11 @@ export default async function handler(req: any, res: any) {
     }
 
     const resetUrl = `${appUrl.replace(/\/$/, '')}/reset-password?token=${resetToken}`
-    console.log('🔗 Reset URL generated:', resetUrl)
+    // SECURITY: Never log the reset URL — it contains the secret token
 
     // Send email via Resend (if configured)
     if (!RESEND_API_KEY) {
       console.warn('⚠️ RESEND_API_KEY not configured - cannot send email')
-      console.log('📝 Reset link (for debugging):', resetUrl)
       return res.status(200).json({ 
         success: false, 
         emailSent: false,

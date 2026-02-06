@@ -14,29 +14,48 @@ export default defineConfig({
       srcDir: 'src',
       filename: 'sw.ts',
       registerType: 'autoUpdate',
-      includeAssets: ['favicon.ico', 'apple-touch-icon.png', 'masked-icon.svg'],
+      includeAssets: ['favicon.svg', 'app-icon.png'],
       manifest: {
-        name: 'Class Dues Tracker',
+        name: 'Class Dues Tracker - By Wishot',
         short_name: 'DuesTracker',
-        description: 'Track and manage class payment dues for ECE students',
-        theme_color: '#ff6803',
-        background_color: '#0a0a0a',
+        description: 'Modern class payment management system for ECE students. Track dues, manage payments, and stay organized.',
+        theme_color: '#FF6803',
+        background_color: '#0F0703',
         display: 'standalone',
         orientation: 'portrait',
         scope: '/',
         start_url: '/',
+        categories: ['finance', 'education', 'utilities'],
         icons: [
           {
-            src: '/pwa-192x192.png',
-            sizes: '192x192',
-            type: 'image/png',
-            purpose: 'any maskable'
-          },
-          {
-            src: '/pwa-512x512.png',
+            src: '/app-icon.png',
             sizes: '512x512',
             type: 'image/png',
-            purpose: 'any maskable'
+            purpose: 'any'
+          },
+          {
+            src: '/app-icon.png',
+            sizes: '192x192',
+            type: 'image/png',
+            purpose: 'any'
+          },
+          {
+            src: '/app-icon.png',
+            sizes: '512x512',
+            type: 'image/png',
+            purpose: 'maskable'
+          },
+          {
+            src: '/app-icon.png',
+            sizes: '192x192',
+            type: 'image/png',
+            purpose: 'maskable'
+          },
+          {
+            src: '/favicon.svg',
+            sizes: '512x512',
+            type: 'image/svg+xml',
+            purpose: 'maskable'
           }
         ]
       },

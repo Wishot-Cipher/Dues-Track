@@ -32,11 +32,15 @@ import {
   FileSpreadsheet,
   Key,
   Copy,
+  Plus,
+  Loader2,
+  GraduationCap,
 } from 'lucide-react';
 import Footer from '@/components/Footer';
 import { useAuth } from '@/hooks/useAuth';
 import authService from '@/services/authService';
 import { exportStudentsToPDF } from '@/utils/htmlPrintExports';
+import BulkStudentImport from '@/components/admin/BulkStudentImport';
 
 interface Student {
   id: string;
@@ -101,6 +105,27 @@ export default function ManageStudentsPage() {
     studentName: string;
     tempPassword: string;
   } | null>(null);
+  
+  // Add Student Modal State
+  const [showAddModal, setShowAddModal] = useState(false);
+  const [addLoading, setAddLoading] = useState(false);
+  const [newStudent, setNewStudent] = useState({
+    full_name: '',
+    reg_number: '',
+    email: '',
+    phone: '',
+    level: '200L',
+    department: 'ECE',
+    section: 'A',
+  });
+  const [addResult, setAddResult] = useState<{
+    isOpen: boolean;
+    studentName: string;
+    regNumber: string;
+    tempPassword: string;
+  } | null>(null);
+  const [showBulkModal, setShowBulkModal] = useState(false);
+  const [showAddMenu, setShowAddMenu] = useState(false);
   
   // Apply filters and pagination
   const getFilteredStudents = () => {
@@ -187,6 +212,41 @@ export default function ManageStudentsPage() {
     fetchStudents();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // Lock body scroll when any modal is open
+  useEffect(() => {
+    const isAnyModalOpen = showEditModal || showAddModal || showBulkModal || confirmModal.isOpen || !!passwordResetResult?.isOpen || !!addResult?.isOpen;
+    
+    if (isAnyModalOpen) {
+      // Save current scroll position
+      const scrollY = window.scrollY;
+      document.body.style.position = 'fixed';
+      document.body.style.top = `-${scrollY}px`;
+      document.body.style.left = '0';
+      document.body.style.right = '0';
+      document.body.style.overflow = 'hidden';
+    } else {
+      // Restore scroll position
+      const scrollY = document.body.style.top;
+      document.body.style.position = '';
+      document.body.style.top = '';
+      document.body.style.left = '';
+      document.body.style.right = '';
+      document.body.style.overflow = '';
+      if (scrollY) {
+        window.scrollTo(0, parseInt(scrollY || '0', 10) * -1);
+      }
+    }
+    
+    // Cleanup on unmount
+    return () => {
+      document.body.style.position = '';
+      document.body.style.top = '';
+      document.body.style.left = '';
+      document.body.style.right = '';
+      document.body.style.overflow = '';
+    };
+  }, [showEditModal, showAddModal, showBulkModal, confirmModal.isOpen, passwordResetResult?.isOpen, addResult?.isOpen]);
 
   useEffect(() => {
     // Debounce search to prevent blank screen during typing
@@ -775,6 +835,85 @@ export default function ManageStudentsPage() {
     }
   };
 
+  // Add New Student
+  const handleAddStudent = async () => {
+    if (!hasPermission('can_manage_students')) {
+      showError('You do not have permission to add students');
+      return;
+    }
+
+    // Validate required fields
+    if (!newStudent.full_name.trim()) {
+      showError('Full name is required');
+      return;
+    }
+    if (!newStudent.reg_number.trim()) {
+      showError('Registration number is required');
+      return;
+    }
+
+    try {
+      setAddLoading(true);
+      
+      // Call the RPC function to add student with hashed password
+      const { data: result, error } = await supabase.rpc('admin_add_student', {
+        p_full_name: newStudent.full_name.trim(),
+        p_reg_number: newStudent.reg_number.trim().toUpperCase(),
+        p_email: newStudent.email.trim() || null,
+        p_phone: newStudent.phone.trim() || null,
+        p_level: newStudent.level,
+        p_department: newStudent.department,
+        p_section: newStudent.section,
+      });
+
+      if (error) {
+        console.error('RPC error:', error);
+        if (error.message.includes('function') || error.code === '42883') {
+          showError('Add student function not found. Please run the SQL migration.');
+          console.error('Run: supabase/migrations/admin_add_student_function.sql');
+          return;
+        }
+        throw error;
+      }
+
+      const response = result?.[0];
+      if (!response?.success) {
+        showError(response?.message || 'Failed to add student');
+        return;
+      }
+
+      // Show success modal with temp password
+      setAddResult({
+        isOpen: true,
+        studentName: newStudent.full_name.trim(),
+        regNumber: newStudent.reg_number.trim().toUpperCase(),
+        tempPassword: response.temp_password,
+      });
+
+      // Reset form
+      setNewStudent({
+        full_name: '',
+        reg_number: '',
+        email: '',
+        phone: '',
+        level: '200L',
+        department: 'ECE',
+        section: 'A',
+      });
+      setShowAddModal(false);
+
+      // Refresh student list
+      await fetchStudents();
+      success('Student added successfully!');
+
+    } catch (err) {
+      console.error('Error adding student:', err);
+      showError(err instanceof Error ? err.message : 'Failed to add student');
+    } finally {
+      setAddLoading(false);
+    }
+  };
+
   // Handle confirmation modal action
   const handleConfirmAction = async () => {
     if (!confirmModal.student) return;
@@ -1043,6 +1182,140 @@ export default function ManageStudentsPage() {
         </div>
       </Modal>
 
+      {/* Add Student Success Modal */}
+      <Modal
+        isOpen={!!addResult?.isOpen}
+        onClose={() => setAddResult(null)}
+        title={
+          <div className="flex items-center gap-3">
+            <div 
+              className="w-12 h-12 rounded-xl flex items-center justify-center"
+              style={{ background: `${colors.accentMint}20`, color: colors.accentMint }}
+            >
+              <GraduationCap className="w-8 h-8" />
+            </div>
+            <span>Student Added Successfully!</span>
+          </div>
+        }
+        size="sm"
+        footer={
+          <motion.button
+            whileHover={{ scale: 1.02 }}
+            whileTap={{ scale: 0.98 }}
+            onClick={() => setAddResult(null)}
+            className="w-full py-3 px-4 rounded-xl font-semibold text-white transition-all"
+            style={{ 
+              background: `linear-gradient(135deg, ${colors.accentMint}, ${colors.primary})`,
+              boxShadow: `0 4px 15px ${colors.accentMint}40`
+            }}
+          >
+            Done
+          </motion.button>
+        }
+      >
+        <div className="space-y-4">
+          {/* Student Info Card */}
+          <div 
+            className="p-4 rounded-xl"
+            style={{ background: 'rgba(255, 255, 255, 0.03)', border: '1px solid rgba(255, 255, 255, 0.08)' }}
+          >
+            <div className="flex items-center gap-4 mb-3">
+              <div 
+                className="w-14 h-14 rounded-full flex items-center justify-center text-xl font-bold"
+                style={{ background: `${colors.primary}20`, color: colors.primary }}
+              >
+                {addResult?.studentName?.charAt(0)?.toUpperCase()}
+              </div>
+              <div>
+                <p className="font-semibold text-white text-lg">{addResult?.studentName}</p>
+                <p className="text-sm" style={{ color: colors.textSecondary }}>{addResult?.regNumber}</p>
+              </div>
+            </div>
+          </div>
+
+          {/* Login Credentials */}
+          <div 
+            className="p-4 rounded-xl"
+            style={{ background: `${colors.primary}10`, border: `1px solid ${colors.primary}20` }}
+          >
+            <p className="text-xs mb-3 font-semibold uppercase tracking-wider" style={{ color: colors.primary }}>
+              Login Credentials
+            </p>
+            
+            <div className="space-y-3">
+              <div>
+                <p className="text-xs mb-1" style={{ color: colors.textSecondary }}>Username:</p>
+                <div className="flex items-center gap-2">
+                  <code 
+                    className="flex-1 text-sm font-mono font-semibold py-2 px-3 rounded-lg"
+                    style={{ background: 'rgba(255, 255, 255, 0.05)', color: colors.textPrimary }}
+                  >
+                    {addResult?.regNumber}
+                  </code>
+                  <button
+                    onClick={() => {
+                      navigator.clipboard.writeText(addResult?.regNumber || '');
+                      success('Username copied!');
+                    }}
+                    className="p-2 rounded-lg transition-colors hover:bg-white/10"
+                    style={{ background: 'rgba(255, 255, 255, 0.05)' }}
+                    title="Copy Username"
+                  >
+                    <Copy className="w-4 h-4" style={{ color: colors.textSecondary }} />
+                  </button>
+                </div>
+              </div>
+              
+              <div>
+                <p className="text-xs mb-1" style={{ color: colors.textSecondary }}>Password:</p>
+                <div className="flex items-center gap-2">
+                  <code 
+                    className="flex-1 text-lg font-mono font-bold tracking-wider py-2 px-3 rounded-lg text-center"
+                    style={{ 
+                      background: `${colors.accentMint}15`, 
+                      color: colors.accentMint,
+                      border: `1px solid ${colors.accentMint}30`
+                    }}
+                  >
+                    {addResult?.tempPassword}
+                  </code>
+                  <button
+                    onClick={() => {
+                      navigator.clipboard.writeText(addResult?.tempPassword || '');
+                      success('Password copied!');
+                    }}
+                    className="p-2 rounded-lg transition-colors hover:bg-white/10"
+                    style={{ background: 'rgba(255, 255, 255, 0.05)' }}
+                    title="Copy Password"
+                  >
+                    <Copy className="w-4 h-4" style={{ color: colors.textSecondary }} />
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Instructions */}
+          <div 
+            className="p-4 rounded-xl flex items-start gap-3"
+            style={{ 
+              background: `${colors.warning}10`,
+              border: `1px solid ${colors.warning}20`
+            }}
+          >
+            <AlertTriangle className="w-5 h-5 mt-0.5 shrink-0" style={{ color: colors.warning }} />
+            <div className="text-sm" style={{ color: colors.textSecondary }}>
+              <p className="font-medium text-white mb-1">Share With Student:</p>
+              <ul className="list-disc list-inside space-y-1 text-xs">
+                <li>The password is their registration number</li>
+                <li>They must change it on first login</li>
+                <li>These credentials will not be shown again</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+      </Modal>
+
       {/* Background Grid Pattern */}
       <div
         className="absolute inset-0 opacity-20 pointer-events-none"
@@ -1157,6 +1430,73 @@ export default function ManageStudentsPage() {
                     View and manage all registered students
                   </p>
                 </div>
+                
+                {/* Add Student Button - Right Side */}
+                {hasPermission('can_manage_students') && (
+                  <div className="relative sm:ml-auto mt-3 sm:mt-0">
+                    <motion.button
+                      whileHover={{ scale: 1.02, y: -2 }}
+                      whileTap={{ scale: 0.98 }}
+                      onClick={() => setShowAddMenu(!showAddMenu)}
+                      className="flex items-center gap-2 px-5 py-3 rounded-xl font-semibold text-white transition-all"
+                      style={{ 
+                        background: `linear-gradient(135deg, ${colors.accentMint}, ${colors.primary})`,
+                        boxShadow: `0 4px 20px ${colors.accentMint}40`
+                      }}
+                    >
+                      <Plus className="w-5 h-5" />
+                      <span>Add Students</span>
+                      <ChevronDown className={`w-4 h-4 transition-transform ${showAddMenu ? 'rotate-180' : ''}`} />
+                    </motion.button>
+
+                    <AnimatePresence>
+                      {showAddMenu && (
+                        <motion.div
+                          initial={{ opacity: 0, y: -8, scale: 0.95 }}
+                          animate={{ opacity: 1, y: 0, scale: 1 }}
+                          exit={{ opacity: 0, y: -8, scale: 0.95 }}
+                          transition={{ duration: 0.15 }}
+                          className="absolute right-0 top-full mt-2 w-64 rounded-xl overflow-hidden shadow-2xl z-50"
+                          style={{
+                            background: 'linear-gradient(135deg, rgba(30, 20, 15, 0.98), rgba(20, 12, 8, 0.98))',
+                            border: '1px solid rgba(255, 255, 255, 0.1)',
+                            backdropFilter: 'blur(20px)',
+                          }}
+                        >
+                          <div className="p-2">
+                            <motion.button
+                              whileHover={{ x: 4 }}
+                              onClick={() => { setShowAddMenu(false); setShowAddModal(true); }}
+                              className="w-full flex items-center gap-3 px-3 py-3 rounded-lg transition-all hover:bg-white/5"
+                            >
+                              <div className="w-9 h-9 rounded-lg flex items-center justify-center" style={{ background: `${colors.primary}20` }}>
+                                <UserPlus className="w-4 h-4" style={{ color: colors.primary }} />
+                              </div>
+                              <div className="text-left">
+                                <p className="text-sm font-medium text-white">Single Student</p>
+                                <p className="text-[10px]" style={{ color: colors.textSecondary }}>Add one student manually</p>
+                              </div>
+                            </motion.button>
+                            <motion.button
+                              whileHover={{ x: 4 }}
+                              onClick={() => { setShowAddMenu(false); setShowBulkModal(true); }}
+                              className="w-full flex items-center gap-3 px-3 py-3 rounded-lg transition-all hover:bg-white/5"
+                            >
+                              <div className="w-9 h-9 rounded-lg flex items-center justify-center" style={{ background: `${colors.accentMint}20` }}>
+                                <Users className="w-4 h-4" style={{ color: colors.accentMint }} />
+                              </div>
+                              <div className="text-left">
+                                <p className="text-sm font-medium text-white">Bulk Import</p>
+                                <p className="text-[10px]" style={{ color: colors.textSecondary }}>Upload CSV with multiple students</p>
+                              </div>
+                            </motion.button>
+                          </div>
+                        </motion.div>
+                      )}
+                    </AnimatePresence>
+                    {showAddMenu && <div className="fixed inset-0 z-40" onClick={() => setShowAddMenu(false)} />}
+                  </div>
+                )}
               </div>
 
               {/* Quick Stats */}
@@ -1943,7 +2283,7 @@ export default function ManageStudentsPage() {
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50 p-4"
+            className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50 p-4 overflow-y-auto overscroll-contain"
             onClick={() => setShowEditModal(false)}
           >
             <motion.div
@@ -2183,6 +2523,326 @@ export default function ManageStudentsPage() {
                       </motion.button>
                     </div>
                   </div>
+                </div>
+              </GlassCard>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Add Student Modal */}
+      <AnimatePresence>
+        {showAddModal && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50 p-4 overflow-y-auto overscroll-contain"
+            onClick={() => setShowAddModal(false)}
+          >
+            <motion.div
+              initial={{ scale: 0.9, opacity: 0, y: 20 }}
+              animate={{ scale: 1, opacity: 1, y: 0 }}
+              exit={{ scale: 0.9, opacity: 0, y: 20 }}
+              onClick={(e) => e.stopPropagation()}
+              className="max-w-md w-full max-h-[90vh] overflow-y-auto"
+            >
+              <GlassCard className="relative overflow-hidden">
+                {/* Modal Header Gradient */}
+                <div 
+                  className="absolute top-0 left-0 w-full h-24"
+                  style={{ 
+                    background: `linear-gradient(135deg, ${colors.primary}30 0%, ${colors.accentMint}30 50%, transparent 100%)`,
+                  }}
+                />
+                <div 
+                  className="absolute top-0 left-0 w-full h-1"
+                  style={{ background: `linear-gradient(90deg, ${colors.primary}, ${colors.accentMint})` }}
+                />
+                
+                <div className="relative z-10">
+                  {/* Close Button */}
+                  <motion.button
+                    whileHover={{ scale: 1.1, rotate: 90 }}
+                    whileTap={{ scale: 0.9 }}
+                    onClick={() => setShowAddModal(false)}
+                    className="absolute top-0 right-0 w-8 h-8 rounded-full flex items-center justify-center transition-colors"
+                    style={{ background: 'rgba(255, 255, 255, 0.1)' }}
+                  >
+                    <X className="w-4 h-4" style={{ color: colors.textSecondary }} />
+                  </motion.button>
+
+                  {/* Header Content */}
+                  <div className="flex items-center gap-4 mb-6">
+                    <div className="w-14 h-14 rounded-xl flex items-center justify-center shadow-lg"
+                         style={{ 
+                           background: `linear-gradient(135deg, ${colors.primary}30, ${colors.primary}10)`,
+                           border: `1px solid ${colors.primary}40`,
+                           boxShadow: `0 4px 15px ${colors.primary}20`
+                         }}>
+                      <UserPlus className="w-7 h-7" style={{ color: colors.primary }} />
+                    </div>
+                    <div>
+                      <h3 className="text-xl font-bold text-white">Add New Student</h3>
+                      <p className="text-sm" style={{ color: colors.textSecondary }}>
+                        Create a new student account
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* Info Banner */}
+                  <div 
+                    className="p-3 rounded-xl mb-4 flex items-start gap-3"
+                    style={{ 
+                      background: `${colors.info}10`,
+                      border: `1px solid ${colors.info}20`
+                    }}
+                  >
+                    <Key className="w-5 h-5 mt-0.5 shrink-0" style={{ color: colors.info }} />
+                    <p className="text-xs" style={{ color: colors.textSecondary }}>
+                      The student's password will be set to their <strong className="text-white">registration number</strong>. 
+                      They will be required to change it on first login.
+                    </p>
+                  </div>
+                
+                  <div className="space-y-4">
+                    {/* Full Name */}
+                    <div>
+                      <label className="block text-sm font-medium mb-2 text-white">
+                        Full Name <span style={{ color: colors.statusUnpaid }}>*</span>
+                      </label>
+                      <input
+                        type="text"
+                        value={newStudent.full_name}
+                        onChange={(e) => setNewStudent({ ...newStudent, full_name: e.target.value })}
+                        placeholder="e.g., John Doe"
+                        className="w-full px-4 py-3 rounded-xl text-white placeholder-gray-500 focus:outline-none focus:ring-2 transition-all"
+                        style={{ 
+                          background: 'rgba(255, 255, 255, 0.05)', 
+                          border: '1px solid rgba(255, 255, 255, 0.1)'
+                        }}
+                      />
+                    </div>
+
+                    {/* Registration Number */}
+                    <div>
+                      <label className="block text-sm font-medium mb-2 text-white">
+                        Registration Number <span style={{ color: colors.statusUnpaid }}>*</span>
+                      </label>
+                      <input
+                        type="text"
+                        value={newStudent.reg_number}
+                        onChange={(e) => setNewStudent({ ...newStudent, reg_number: e.target.value.toUpperCase() })}
+                        placeholder="e.g., FE/20/12345678"
+                        className="w-full px-4 py-3 rounded-xl text-white placeholder-gray-500 focus:outline-none focus:ring-2 transition-all uppercase"
+                        style={{ 
+                          background: 'rgba(255, 255, 255, 0.05)', 
+                          border: '1px solid rgba(255, 255, 255, 0.1)'
+                        }}
+                      />
+                      <p className="text-xs mt-1" style={{ color: colors.textSecondary }}>
+                        This will also be the student's username and initial password
+                      </p>
+                    </div>
+
+                    {/* Email */}
+                    <div>
+                      <label className="block text-sm font-medium mb-2 text-white">Email (Optional)</label>
+                      <input
+                        type="email"
+                        value={newStudent.email}
+                        onChange={(e) => setNewStudent({ ...newStudent, email: e.target.value })}
+                        placeholder="e.g., john.doe@example.com"
+                        className="w-full px-4 py-3 rounded-xl text-white placeholder-gray-500 focus:outline-none focus:ring-2 transition-all"
+                        style={{ 
+                          background: 'rgba(255, 255, 255, 0.05)', 
+                          border: '1px solid rgba(255, 255, 255, 0.1)'
+                        }}
+                      />
+                    </div>
+
+                    {/* Phone */}
+                    <div>
+                      <label className="block text-sm font-medium mb-2 text-white">Phone (Optional)</label>
+                      <input
+                        type="tel"
+                        value={newStudent.phone}
+                        onChange={(e) => setNewStudent({ ...newStudent, phone: e.target.value })}
+                        placeholder="e.g., +234 801 234 5678"
+                        className="w-full px-4 py-3 rounded-xl text-white placeholder-gray-500 focus:outline-none focus:ring-2 transition-all"
+                        style={{ 
+                          background: 'rgba(255, 255, 255, 0.05)', 
+                          border: '1px solid rgba(255, 255, 255, 0.1)'
+                        }}
+                      />
+                    </div>
+
+                    {/* Department */}
+                    <div>
+                      <label className="block text-sm font-medium mb-2 text-white">Department</label>
+                      <input
+                        type="text"
+                        value={newStudent.department}
+                        onChange={(e) => setNewStudent({ ...newStudent, department: e.target.value })}
+                        placeholder="e.g., ECE, EEE, Computer Science"
+                        className="w-full px-4 py-3 rounded-xl text-white placeholder-gray-500 focus:outline-none focus:ring-2 transition-all"
+                        style={{ 
+                          background: 'rgba(255, 255, 255, 0.05)', 
+                          border: '1px solid rgba(255, 255, 255, 0.1)'
+                        }}
+                      />
+                    </div>
+
+                    {/* Level and Section Grid */}
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <ProfessionalDropdown
+                          label="Level"
+                          value={newStudent.level}
+                          onChange={(val) => setNewStudent({ ...newStudent, level: val as string })}
+                          variant="filled"
+                          size="md"
+                          options={[
+                            { value: "100L", label: "100 Level" },
+                            { value: "200L", label: "200 Level" },
+                            { value: "300L", label: "300 Level" },
+                            { value: "400L", label: "400 Level" },
+                            { value: "500L", label: "500 Level" },
+                          ]}
+                        />
+                      </div>
+
+                      <div>
+                        <ProfessionalDropdown
+                          label="Section"
+                          value={newStudent.section}
+                          onChange={(val) => setNewStudent({ ...newStudent, section: val as string })}
+                          variant="filled"
+                          size="md"
+                          options={[
+                            { value: "A", label: "Section A" },
+                            { value: "B", label: "Section B" },
+                            { value: "C", label: "Section C" },
+                            { value: "D", label: "Section D" },
+                          ]}
+                        />
+                      </div>
+                    </div>
+
+                    {/* Action Buttons */}
+                    <div className="flex gap-3 pt-4">
+                      <motion.button
+                        whileHover={{ scale: 1.02 }}
+                        whileTap={{ scale: 0.98 }}
+                        onClick={() => {
+                          setShowAddModal(false);
+                          setNewStudent({
+                            full_name: '',
+                            reg_number: '',
+                            email: '',
+                            phone: '',
+                            level: '200L',
+                            department: 'ECE',
+                            section: 'A',
+                          });
+                        }}
+                        className="flex-1 px-4 py-3 rounded-xl font-medium transition-colors"
+                        style={{ 
+                          background: 'rgba(255, 255, 255, 0.1)', 
+                          color: colors.textPrimary,
+                          border: '1px solid rgba(255, 255, 255, 0.1)'
+                        }}
+                      >
+                        Cancel
+                      </motion.button>
+                      <motion.button
+                        whileHover={{ scale: 1.02 }}
+                        whileTap={{ scale: 0.98 }}
+                        onClick={handleAddStudent}
+                        disabled={addLoading || !newStudent.full_name.trim() || !newStudent.reg_number.trim()}
+                        className="flex-1 px-4 py-3 rounded-xl font-semibold text-white transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                        style={{ 
+                          background: `linear-gradient(135deg, ${colors.primary}, ${colors.accentMint})`,
+                          boxShadow: `0 4px 15px ${colors.primary}30`
+                        }}
+                      >
+                        {addLoading ? (
+                          <span className="flex items-center justify-center gap-2">
+                            <Loader2 className="w-4 h-4 animate-spin" />
+                            Creating...
+                          </span>
+                        ) : (
+                          <span className="flex items-center justify-center gap-2">
+                            <UserPlus className="w-4 h-4" />
+                            Add Student
+                          </span>
+                        )}
+                      </motion.button>
+                    </div>
+                  </div>
+                </div>
+              </GlassCard>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Bulk Import Modal */}
+      <AnimatePresence>
+        {showBulkModal && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50 p-4 overflow-y-auto overscroll-contain"
+            onClick={() => setShowBulkModal(false)}
+          >
+            <motion.div
+              initial={{ scale: 0.9, opacity: 0, y: 20 }}
+              animate={{ scale: 1, opacity: 1, y: 0 }}
+              exit={{ scale: 0.9, opacity: 0, y: 20 }}
+              onClick={(e) => e.stopPropagation()}
+              className="max-w-lg w-full max-h-[90vh] overflow-y-auto"
+            >
+              <GlassCard className="relative overflow-hidden">
+                {/* Header Gradient */}
+                <div className="absolute top-0 left-0 w-full h-24"
+                  style={{ background: `linear-gradient(135deg, ${colors.accentMint}30 0%, ${colors.primary}30 50%, transparent 100%)` }} />
+                <div className="absolute top-0 left-0 w-full h-1"
+                  style={{ background: `linear-gradient(90deg, ${colors.accentMint}, ${colors.primary})` }} />
+
+                <div className="relative z-10">
+                  <motion.button
+                    whileHover={{ scale: 1.1, rotate: 90 }}
+                    whileTap={{ scale: 0.9 }}
+                    onClick={() => setShowBulkModal(false)}
+                    className="absolute top-0 right-0 w-8 h-8 rounded-full flex items-center justify-center transition-colors"
+                    style={{ background: 'rgba(255, 255, 255, 0.1)' }}
+                  >
+                    <X className="w-4 h-4" style={{ color: colors.textSecondary }} />
+                  </motion.button>
+
+                  <div className="flex items-center gap-4 mb-5">
+                    <div className="w-14 h-14 rounded-xl flex items-center justify-center shadow-lg"
+                      style={{
+                        background: `linear-gradient(135deg, ${colors.accentMint}30, ${colors.accentMint}10)`,
+                        border: `1px solid ${colors.accentMint}40`,
+                        boxShadow: `0 4px 15px ${colors.accentMint}20`
+                      }}>
+                      <Users className="w-7 h-7" style={{ color: colors.accentMint }} />
+                    </div>
+                    <div>
+                      <h3 className="text-xl font-bold text-white">Bulk Import</h3>
+                      <p className="text-sm" style={{ color: colors.textSecondary }}>
+                        Import multiple students via CSV
+                      </p>
+                    </div>
+                  </div>
+
+                  <BulkStudentImport
+                    onComplete={fetchStudents}
+                    onClose={() => setShowBulkModal(false)}
+                  />
                 </div>
               </GlassCard>
             </motion.div>

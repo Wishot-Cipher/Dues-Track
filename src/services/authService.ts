@@ -15,12 +15,9 @@ interface ProfileUpdateData {
 
 export const authService = {
   /**
-   * Login with registration number and password
-   * Temporary password rule (since hashing not implemented yet):
-   *  - If password_hash is 'default_hash', allow login when:
-   *      a) password === reg_number OR
-   *      b) password === 'TEMP2024' (for placeholder imported students without full matric)
-   * Replace this logic once real hashing is implemented.
+   * Login with registration number and password.
+   * Uses server-side pgcrypto crypt() verification via the
+   * verify_student_login RPC for secure credential checking.
    */
   async login(rawRegNumber: string, password: string): Promise<LoginResponse> {
     try {

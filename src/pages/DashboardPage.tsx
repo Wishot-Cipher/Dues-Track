@@ -2,7 +2,6 @@ import { useState, useEffect, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
   User, 
-  Wallet, 
   Calendar, 
   Settings,
   LogOut,
@@ -24,6 +23,7 @@ import { colors, gradients } from '@/config/colors';
 import { useAuth } from '@/hooks/useAuth';
 import { useNavigate, useLocation } from 'react-router-dom';
 import GlassCard from '@/components/ui/GlassCard';
+import { LogoCompact } from '@/components/ui/Logo';
 import { formatCurrency, formatDate } from '@/utils/formatters';
 import paymentService from '@/services/paymentService';
 import type { Payment, PaymentType, PaymentStats } from '@/types';
@@ -41,6 +41,9 @@ import { useStudentFeatures } from '@/hooks/useStudentFeatures';
 import { StatCardSkeleton, PaymentCardSkeleton } from '@/components/ui/Skeleton';
 import EmptyState, { AllPaidState } from '@/components/ui/EmptyState';
 import { useSettings } from '@/contexts/SettingsContext';
+import haptics from '@/lib/haptics';
+import usePullToRefresh from '@/hooks/usePullToRefresh';
+import PullToRefreshIndicator from '@/components/ui/PullToRefreshIndicator';
 
 export default function DashboardPage() {
   const { user, logout, hasPermission } = useAuth();
@@ -53,6 +56,15 @@ export default function DashboardPage() {
   const [showLogoutModal, setShowLogoutModal] = useState(false);
   const [loading, setLoading] = useState(true);
   const [refreshKey, setRefreshKey] = useState(0);
+
+  // Pull-to-refresh
+  const { pullDistance, isRefreshing, isReady } = usePullToRefresh({
+    onRefresh: async () => {
+      setRefreshKey(prev => prev + 1);
+      // Small delay so data fetch has time to start
+      await new Promise(resolve => setTimeout(resolve, 800));
+    },
+  });
   
   // Real data states
   const [stats, setStats] = useState<PaymentStats>({
@@ -258,6 +270,7 @@ export default function DashboardPage() {
   };
 
   const confirmLogout = () => {
+    haptics.warning();
     setShowLogoutModal(true);
     setShowProfileMenu(false);
     setShowMobileMenu(false);
@@ -330,20 +343,14 @@ export default function DashboardPage() {
         animate={{ y: 0 }}
         transition={{ duration: 0.6 }}
       >
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex items-center justify-between h-16">
+        <div className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8">
+          <div className="flex items-center justify-between h-[72px] sm:h-16">
             {/* Logo */}
-            <div className="flex items-center gap-3 mr-4">
-              <motion.div
-                className="w-10 h-10 rounded-xl flex items-center justify-center"
-                style={{ background: gradients.primary }}
-                whileHover={{ scale: 1.05, rotate: 5 }}
-              >
-                <Wallet className="w-5 h-5 text-white" />
-              </motion.div>
-               <div className="hidden sm:block leading-tight">
-                <h1 className="text-lg font-bold text-white">Class Dues</h1>
-                <p className="text-xs pb-0.5" style={{ color: colors.textSecondary }}>{user?.level || 'N/A'}</p>
+            <div className="flex items-center gap-2.5 p-1.5 rounded-xl" style={{ background: 'rgba(255, 104, 3, 0.06)' }}>
+              <LogoCompact />
+               <div className="hidden sm:block leading-tight pr-2">
+                <h1 className="text-base font-extrabold text-white tracking-tight">Dues<span style={{ color: colors.primary }}>Tracker</span></h1>
+                <p className="text-[10px] font-medium tracking-wider uppercase" style={{ color: colors.textTertiary }}>{user?.level || 'N/A'}</p>
                 </div> 
             </div>
 
@@ -432,22 +439,22 @@ export default function DashboardPage() {
             </div>
 
             {/* Right Side - Mobile */}
-            <div className="flex md:hidden items-center gap-2">
+            <div className="flex md:hidden items-center gap-1.5">
               {/* Notifications on mobile */}
               <NotificationCenter />
 
               {/* Mobile Menu Button */}
               <motion.button
                 onClick={() => setShowMobileMenu(!showMobileMenu)}
-                className="p-2.5 rounded-xl transition-colors"
+                className="p-2 rounded-xl transition-colors"
                 style={{ background: 'rgba(255, 255, 255, 0.05)' }}
                 whileHover={{ background: 'rgba(255, 255, 255, 0.1)' }}
                 whileTap={{ scale: 0.95 }}
               >
                 {showMobileMenu ? (
-                  <CloseIcon className="w-6 h-6" style={{ color: colors.textPrimary }} />
+                  <CloseIcon className="w-5 h-5" style={{ color: colors.textPrimary }} />
                 ) : (
-                  <Menu className="w-6 h-6" style={{ color: colors.textPrimary }} />
+                  <Menu className="w-5 h-5" style={{ color: colors.textPrimary }} />
                 )}
               </motion.button>
             </div>
@@ -528,6 +535,13 @@ export default function DashboardPage() {
         )}
       </motion.nav>
 
+      {/* Pull to Refresh Indicator */}
+      <PullToRefreshIndicator
+        pullDistance={pullDistance}
+        isRefreshing={isRefreshing}
+        isReady={isReady}
+      />
+
       {/* Main Content */}
       <div className="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 sm:py-6 lg:py-8">
         {/* Welcome Section */}
@@ -538,7 +552,12 @@ export default function DashboardPage() {
           transition={{ delay: 0.2 }}
         >
           <h2 className="text-2xl sm:text-3xl lg:text-4xl font-bold text-white mb-2">
-            Welcome back, {user?.full_name?.split(' ')[0]}! 👋
+            {(() => {
+              const hour = new Date().getHours();
+              if (hour < 12) return 'Good morning';
+              if (hour < 17) return 'Good afternoon';
+              return 'Good evening';
+            })()}, {user?.full_name?.split(' ')[0]}! 👋
           </h2>
           <p className="text-sm sm:text-base" style={{ color: colors.textSecondary }}>
             Here's your payment overview and recent activity
@@ -739,6 +758,7 @@ export default function DashboardPage() {
                                   }}
                                   onClick={(e) => {
                                     e.stopPropagation();
+                                    haptics.medium();
                                     navigate(`/payment/${paymentType.id}`);
                                   }}
                                   whileHover={{ scale: 1.02 }}

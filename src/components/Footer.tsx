@@ -1,6 +1,6 @@
 import { motion } from 'framer-motion';
 import { colors } from '@/config/colors';
-import { Twitter } from 'lucide-react';
+import { Twitter, Heart } from 'lucide-react';
 
 export default function Footer() {
   return (
@@ -23,13 +23,23 @@ export default function Footer() {
             whileHover={{ scale: 1.05 }}
             transition={{ type: "spring", stiffness: 400 }}
           >
-            <p className="text-xs sm:text-sm" style={{ color: colors.textSecondary }}>
+            <p className="text-xs sm:text-sm flex items-center gap-1.5" style={{ color: colors.textSecondary }}>
               Developed with{' '}
-              <span className="inline-block animate-pulse" style={{ color: colors.primary }}>💙</span>{' '}
+              <motion.span 
+                animate={{ scale: [1, 1.2, 1] }}
+                transition={{ duration: 1.5, repeat: Infinity, ease: 'easeInOut' }}
+              >
+                <Heart className="w-3.5 h-3.5 inline fill-current" style={{ color: colors.primary }} />
+              </motion.span>{' '}
               by{' '}
-              <span className="font-bold bg-clip-text text-transparent bg-linear-to-r from-orange-400 to-orange-600">
+              <a
+                href="https://x.com/wishotstudio?s=21"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="font-bold bg-clip-text text-transparent bg-linear-to-r from-orange-400 to-orange-600 hover:from-orange-300 hover:to-orange-500 transition-all"
+              >
                 Dev_Wishot
-              </span>
+              </a>
             </p>
           </motion.div>
 
@@ -55,9 +65,9 @@ export default function Footer() {
             </a>
           </motion.div>
 
-          {/* Copyright */}
+          {/* Copyright + Version */}
           <p className="text-[10px] sm:text-xs order-3 sm:order-2" style={{ color: colors.textSecondary }}>
-            © {new Date().getFullYear()} Class Dues Tracker
+            © {new Date().getFullYear()} Class Dues Tracker · <span style={{ color: colors.primary }}>v2.0</span>
           </p>
         </div>
       </div>

@@ -1,8 +1,9 @@
+/* eslint-disable @typescript-eslint/no-unused-vars */
 /// <reference lib="webworker" />
 import { clientsClaim } from 'workbox-core';
 import { precacheAndRoute, cleanupOutdatedCaches } from 'workbox-precaching';
 import { registerRoute } from 'workbox-routing';
-import { CacheFirst, NetworkFirst } from 'workbox-strategies';
+import { CacheFirst } from 'workbox-strategies';
 import { ExpirationPlugin } from 'workbox-expiration';
 import { CacheableResponsePlugin } from 'workbox-cacheable-response';
 
@@ -30,16 +31,16 @@ registerRoute(
   })
 );
 
-// Cache Supabase API calls
+// Cache only Supabase Storage (public assets) — NEVER cache auth/RPC/data endpoints
+// Sensitive data (payments, student info) must not persist in Cache Storage
 registerRoute(
-  /^https:\/\/.*\.supabase\.co\/.*/i,
-  new NetworkFirst({
-    cacheName: 'supabase-cache',
+  /^https:\/\/.*\.supabase\.co\/storage\/.*/i,
+  new CacheFirst({
+    cacheName: 'supabase-storage-cache',
     plugins: [
       new CacheableResponsePlugin({ statuses: [0, 200] }),
-      new ExpirationPlugin({ maxEntries: 50, maxAgeSeconds: 60 * 60 * 24 })
+      new ExpirationPlugin({ maxEntries: 30, maxAgeSeconds: 60 * 60 * 24 * 7 })
     ],
-    networkTimeoutSeconds: 10
   })
 );
 
@@ -65,8 +66,8 @@ self.addEventListener('push', (event) => {
   let data = {
     title: 'Class Dues Tracker',
     body: 'You have a new notification',
-    icon: '/icons/icon-192x192.png',
-    badge: '/icons/icon-72x72.png',
+    icon: '/app-icon.png',
+    badge: '/app-icon.png',
     tag: 'general',
     data: {
       url: '/'
@@ -86,8 +87,8 @@ self.addEventListener('push', (event) => {
   
   const options: NotificationOptions = {
     body: data.body,
-    icon: data.icon || '/icons/icon-192x192.png',
-    badge: data.badge || '/icons/icon-72x72.png',
+    icon: data.icon || '/app-icon.png',
+    badge: data.badge || '/app-icon.png',
     tag: data.tag || 'general',
     // vibrate is supported in service workers but not in TS NotificationOptions
     data: data.data || { url: '/' },

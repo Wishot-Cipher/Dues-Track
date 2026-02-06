@@ -12,18 +12,23 @@
  */
 import { createClient } from '@supabase/supabase-js'
 
+
 const supabaseUrl = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL
 const serviceRole = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SERVICE_ROLE
 
-// Generate a random temporary password
+
+// Generate a cryptographically random temporary password
 function generateTempPassword(): string {
-  const chars = 'abcdefghjkmnpqrstuvwxyz23456789' // Removed confusing characters like 0/O, 1/l/I
-  let password = ''
-  for (let i = 0; i < 8; i++) {
-    password += chars.charAt(Math.floor(Math.random() * chars.length))
+  const chars = 'abcdefghjkmnpqrstuvwxyz23456789'; // No confusing chars
+  const array = new Uint8Array(10);
+  (globalThis.crypto || window.crypto).getRandomValues(array);
+  let password = '';
+  for (let i = 0; i < array.length; i++) {
+    password += chars.charAt(array[i] % chars.length);
   }
-  return password
+  return password;
 }
+
 
 // Verify admin token and extract admin info
 async function verifyAdminToken(supabase: any, authHeader: string): Promise<{ valid: boolean; adminId?: string; adminName?: string; error?: string }> {

@@ -1,0 +1,94 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <!--
+    DuesTracker — Premium Transparent Mark
+    
+    CONCEPT: A single flowing upward sweep that unifies 
+    three bold pillars into one organic motion. The sweep 
+    crests into a mint burst — the moment a payment is verified.
+    Think: Robinhood's feather meets Stripe's confidence.
+  -->
+  <defs>
+    <!-- Deep-to-bright amber for pillars -->
+    <linearGradient id="p1" x1="50%" y1="100%" x2="50%" y2="0%">
+      <stop offset="0%" stop-color="#D04A00"/>
+      <stop offset="100%" stop-color="#FF8B3A"/>
+    </linearGradient>
+    <linearGradient id="p2" x1="50%" y1="100%" x2="50%" y2="0%">
+      <stop offset="0%" stop-color="#D95200"/>
+      <stop offset="100%" stop-color="#FF9B4F"/>
+    </linearGradient>
+    <linearGradient id="p3" x1="50%" y1="100%" x2="50%" y2="0%">
+      <stop offset="0%" stop-color="#E05A00"/>
+      <stop offset="100%" stop-color="#FFAB5F"/>
+    </linearGradient>
+    
+    <!-- Sweep gradient: amber fading into mint at the peak -->
+    <linearGradient id="sweep" x1="0%" y1="100%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#FF6803" stop-opacity="0"/>
+      <stop offset="30%" stop-color="#FF6803" stop-opacity="0.7"/>
+      <stop offset="70%" stop-color="#FF8E3D"/>
+      <stop offset="88%" stop-color="#4DEBB0"/>
+      <stop offset="100%" stop-color="#30FFAC"/>
+    </linearGradient>
+
+    <!-- Mint burst -->
+    <radialGradient id="burst" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" stop-color="#30FFAC"/>
+      <stop offset="60%" stop-color="#1DD488"/>
+      <stop offset="100%" stop-color="#1DD488" stop-opacity="0"/>
+    </radialGradient>
+
+    <!-- Subtle lift -->
+    <filter id="lift" x="-8%" y="-8%" width="116%" height="120%">
+      <feDropShadow dx="0" dy="5" stdDeviation="7" flood-color="#C84000" flood-opacity="0.14"/>
+    </filter>
+    
+    <!-- Mint glow -->
+    <filter id="mg" x="-80%" y="-80%" width="260%" height="260%">
+      <feGaussianBlur stdDeviation="8" result="g"/>
+      <feMerge><feMergeNode in="g"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+  </defs>
+
+  <g filter="url(#lift)">
+
+    <!-- ═══ THREE PILLARS — Bold, rounded, ascending ═══ -->
+    <!-- Pillar 1: shortest (past / history) -->
+    <rect x="88" y="312" width="84" height="140" rx="22" fill="url(#p1)"/>
+    
+    <!-- Pillar 2: medium (present / tracking) -->
+    <rect x="214" y="230" width="84" height="222" rx="22" fill="url(#p2)"/>
+    
+    <!-- Pillar 3: tallest (future / growth) -->
+    <rect x="340" y="132" width="84" height="320" rx="22" fill="url(#p3)"/>
+
+    <!-- ═══ THE SWEEP — A single fluid curve connecting all peaks ═══ -->
+    <!-- Flows from left pillar's top, arcs through middle, crests at right -->
+    <path d="
+      M 88,310
+      C 120,290 170,248 256,228
+      C 310,214 358,160 382,100
+    " fill="none" stroke="url(#sweep)" stroke-width="10" 
+      stroke-linecap="round"/>
+
+    <!-- ═══ VERIFIED BURST — Mint pulse at the crest ═══ -->
+    <g filter="url(#mg)">
+      <!-- Outer glow ring -->
+      <circle cx="382" cy="100" r="28" fill="none" stroke="#30FFAC" stroke-width="4" opacity="0.5"/>
+      <!-- Inner solid -->
+      <circle cx="382" cy="100" r="14" fill="#30FFAC"/>
+      <!-- Bright core -->
+      <circle cx="382" cy="100" r="6" fill="white" opacity="0.85"/>
+    </g>
+
+    <!-- ═══ SUBTLE DETAILS ═══ -->
+    <!-- Faint baseline anchoring the composition -->
+    <line x1="76" y1="464" x2="436" y2="464" 
+          stroke="#FF6803" stroke-width="4" stroke-linecap="round" opacity="0.12"/>
+
+    <!-- Pulse rings on lower nodes (barely visible, adds life) -->
+    <circle cx="130" cy="310" r="6" fill="#FF6803" opacity="0.3"/>
+    <circle cx="256" cy="228" r="6" fill="#FF6803" opacity="0.3"/>
+
+  </g>
+</svg>
