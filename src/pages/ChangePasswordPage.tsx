@@ -254,12 +254,9 @@ export default function ChangePasswordPage() {
                   className="text-xs leading-relaxed"
                   style={{ color: colors.accentMint }}
                 >
-                  <strong>Tip:</strong> Your current password is the one you
-                  just used to log in
-                  {user?.reg_number?.includes("/")
-                    ? ` (your registration number)`
-                    : ` (TEMP2024)`}
-                  .
+                  <strong>Tip:</strong> Your current password is the temporary
+                  password provided by the administrator. If you don't know it,
+                  please contact your class rep or admin to get it again.
                 </p>
               </div>
             )}

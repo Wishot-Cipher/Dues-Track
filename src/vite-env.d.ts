@@ -12,3 +12,8 @@ declare module 'virtual:pwa-register' {
 
   export function registerSW(options?: RegisterSWOptions): (reloadPage?: boolean) => Promise<void>;
 }
+
+interface Navigator {
+  setAppBadge(contents?: number): Promise<void>;
+  clearAppBadge(): Promise<void>;
+}

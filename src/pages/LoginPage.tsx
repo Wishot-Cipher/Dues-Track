@@ -4,6 +4,7 @@ import { colors, gradients } from '@/config/colors';
 import CustomButton from '@/components/ui/CustomButton';
 import Input from '@/components/ui/Input';
 import { useAuth } from '@/hooks/useAuth';
+import { useOrganization } from '@/contexts/OrganizationContext';
 import { useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import PageWrapper from '@/components/ui/PageWrapper';
@@ -14,7 +15,16 @@ export default function LoginPage() {
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const { login, isAuthenticated, user, needsPasswordChange } = useAuth();
+  const { organization, department } = useOrganization();
   const navigate = useNavigate();
+
+  // Dynamic branding - falls back to defaults for backward compatibility
+  const orgName = organization?.short_name || department?.short_name || 'ECE';
+  const brandingText = organization ? `${orgName}` : 'ECE 200L';
+  const subtitleText = organization 
+    ? `${organization.name}${department ? ` | ${department.short_name}` : ''}`
+    : 'Class Dues Management System';
+  const primaryColor = organization?.primary_color || colors.primary;
 
   // Redirect if already logged in
   useEffect(() => {
@@ -90,7 +100,7 @@ export default function LoginPage() {
               transition={{ delay: 0.4 }}
             >
               Welcome Back to<br />
-              <span style={{ color: colors.primary }}>ECE 200L</span>
+              <span style={{ color: primaryColor }}>{brandingText}</span>
             </motion.h2>
             
             <motion.p 
@@ -155,7 +165,7 @@ export default function LoginPage() {
             </motion.div>
             <h1 className="text-3xl font-bold">DuesTrack</h1>
             <p className="text-sm mt-1" style={{ color: colors.textSecondary }}>
-              ECE 200L Dues Management
+              {subtitleText}
             </p>
           </motion.div>
 

@@ -42,10 +42,17 @@ export const authService = {
         throw new Error('Login failed. Please check your credentials and try again.');
       }
 
-      // RPC returns an array, get the first element
-      const student = Array.isArray(data) && data.length > 0 ? data[0] : null;
+      // Handle both array response (single-tenant) and JSONB response (multi-tenant)
+      let student = null;
+      if (Array.isArray(data) && data.length > 0) {
+        // Single-tenant: RPC returns array
+        student = data[0];
+      } else if (data && typeof data === 'object' && data.id) {
+        // Multi-tenant: RPC returns JSONB object directly
+        student = data;
+      }
 
-      // Check if student was found (RPC returns empty array if credentials don't match)
+      // Check if student was found (RPC returns null/empty if credentials don't match)
       if (!student || !student.id) {
         // More helpful error message
         throw new Error(
@@ -115,7 +122,7 @@ export const authService = {
   async updateProfile(studentId: string, profileData: ProfileUpdateData): Promise<Student> {
     try {
       const { email, phone, section, full_name } = profileData as ProfileUpdateData & { full_name?: string };
-      
+
       // Use RPC function to bypass RLS (since we use custom auth, not Supabase Auth)
       const { data, error } = await supabase.rpc('update_student_profile', {
         p_student_id: studentId,
@@ -146,7 +153,7 @@ export const authService = {
    */
   isProfileComplete(student: Student | null): boolean {
     if (!student) return false;
-    
+
     return Boolean(
       student.email &&
       student.phone &&
@@ -162,11 +169,11 @@ export const authService = {
       // Clear session from localStorage
       localStorage.removeItem('auth_session');
       localStorage.removeItem('current_user');
-      
+
       // For Supabase Auth (if using in future):
       // const { error } = await supabase.auth.signOut();
       // if (error) throw error;
-      
+
       return true;
     } catch (error) {
       console.error('Logout error:', error);
@@ -227,14 +234,14 @@ export const authService = {
       }
 
       // Extract roles from admins join
-  interface AdminRow { id: string; role: string; can_create_payments?: boolean; can_approve_payments?: boolean; can_manage_students?: boolean; can_view_analytics?: boolean }
-  const admins: AdminRow[] = data.admins || [];
-  const roles = admins.map((admin: AdminRow) => admin.role) || [];
+      interface AdminRow { id: string; role: string; can_create_payments?: boolean; can_approve_payments?: boolean; can_manage_students?: boolean; can_view_analytics?: boolean }
+      const admins: AdminRow[] = data.admins || [];
+      const roles = admins.map((admin: AdminRow) => admin.role) || [];
       const admin_permissions = {
-  can_create_payments: admins.some((a: AdminRow) => a.can_create_payments === true),
-  can_approve_payments: admins.some((a: AdminRow) => a.can_approve_payments === true),
-  can_manage_students: admins.some((a: AdminRow) => a.can_manage_students === true),
-  can_view_analytics: admins.some((a: AdminRow) => a.can_view_analytics === true),
+        can_create_payments: admins.some((a: AdminRow) => a.can_create_payments === true),
+        can_approve_payments: admins.some((a: AdminRow) => a.can_approve_payments === true),
+        can_manage_students: admins.some((a: AdminRow) => a.can_manage_students === true),
+        can_view_analytics: admins.some((a: AdminRow) => a.can_view_analytics === true),
       };
 
       const studentWithRoles = {
@@ -245,7 +252,7 @@ export const authService = {
       };
 
       // Update stored session with latest data including roles
-  this.saveSession(studentWithRoles as LoginResponse['student']);
+      this.saveSession(studentWithRoles as LoginResponse['student']);
 
       // Return fresh data from database
       return {

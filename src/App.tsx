@@ -2,6 +2,7 @@ import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider } from '@/hooks/useAuth';
 import { ToastProvider } from '@/components/ui/ToastProvider';
 import { SettingsProvider } from '@/contexts/SettingsContext';
+import { OrganizationProvider } from '@/contexts/OrganizationContext';
 import ProtectedRoute from '@/components/auth/ProtectedRoute';
 import OfflineIndicator from '@/components/OfflineIndicator';
 import InstallPWA from '@/components/InstallPWA';
@@ -32,7 +33,8 @@ function App() {
     <BrowserRouter>
       <ToastProvider>
         <SettingsProvider>
-          <AuthProvider>
+          <OrganizationProvider>
+            <AuthProvider>
             <OfflineIndicator />
             <InstallPWA />
             <UpdateNotification />
@@ -202,7 +204,8 @@ function App() {
             <Route path="/" element={<Navigate to="/dashboard" replace />} />
             <Route path="*" element={<NotFoundPage />} />
           </Routes>
-          </AuthProvider>
+            </AuthProvider>
+          </OrganizationProvider>
         </SettingsProvider>
       </ToastProvider>
     </BrowserRouter>
