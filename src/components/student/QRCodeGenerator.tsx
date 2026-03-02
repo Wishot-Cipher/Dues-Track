@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import { useEffect, useRef, useState } from "react";
 import { motion } from "framer-motion";
 import QRCode from "qrcode";
@@ -19,6 +20,7 @@ import {
   Check,
   Hash,
   MessageSquare,
+  ArrowLeft,
 } from "lucide-react";
 import { formatCurrency } from "@/utils/formatters";
 
@@ -87,6 +89,7 @@ export default function QRCodeGenerator({
   totalStudents = 1,
   selectedStudents = [],
   includeSelf = true,
+  onBack,
 }: QRCodeGeneratorProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [qrDataUrl, setQrDataUrl] = useState<string>("");
@@ -138,6 +141,7 @@ export default function QRCodeGenerator({
               id: studentId,
               name: studentName,
               regNumber: studentRegNumber,
+              outstanding: totalStudents > 0 ? amount / totalStudents : amount,
             });
           }
           
@@ -146,6 +150,7 @@ export default function QRCodeGenerator({
               id: s.id,
               name: s.full_name,
               regNumber: s.reg_number,
+              ...(s as any).outstanding ? { outstanding: (s as any).outstanding } : {},
             });
           });
           
@@ -256,7 +261,32 @@ export default function QRCodeGenerator({
 
   return (
     <div className="space-y-6 w-full flex flex-col items-center justify-center px-4 overflow-hidden">
-      {/* Header */}
+      {/* Header with Back Button */}
+      <motion.div
+        initial={{ opacity: 0, y: -20 }}
+        animate={{ opacity: 1, y: 0 }}
+        className="w-full max-w-lg"
+      >
+        <div className="flex items-center gap-4 mb-4">
+          <motion.button
+            onClick={onBack}
+            className="flex items-center justify-center w-10 h-10 rounded-xl"
+            style={{ background: 'rgba(255, 255, 255, 0.05)', border: '1px solid rgba(255, 255, 255, 0.1)' }}
+            whileHover={{ scale: 1.05 }}
+            whileTap={{ scale: 0.95 }}
+          >
+            <ArrowLeft className="w-5 h-5" style={{ color: colors.textSecondary }} />
+          </motion.button>
+          <div className="flex-1">
+            <h2 className="text-xl font-bold text-white">Cash Payment</h2>
+            <p className="text-sm" style={{ color: colors.textSecondary }}>
+              {paymentTypeName}
+            </p>
+          </div>
+        </div>
+      </motion.div>
+
+      {/* Instant Verification Badge */}
       <motion.div
         initial={{ opacity: 0, y: -20 }}
         animate={{ opacity: 1, y: 0 }}
@@ -370,7 +400,35 @@ export default function QRCodeGenerator({
                 <div className="flex items-center gap-1.5">
                   <DollarSign className="w-4 h-4" style={{ color: colors.accentMint }} />
                   <p className="text-lg font-bold" style={{ color: colors.accentMint }}>
-                    {formatCurrency(amount)}
+                    {(() => {
+                      const studentsForTotal = [...selectedStudents];
+                      if (includeSelf && !studentsForTotal.some(s => s.id === studentId)) {
+                        studentsForTotal.push({ id: studentId, full_name: studentName, reg_number: studentRegNumber, outstanding: totalStudents > 0 ? amount / totalStudents : amount } as any);
+                      }
+
+                      if (!studentsForTotal || studentsForTotal.length === 0) {
+                        return formatCurrency(amount || 0);
+                      }
+
+                      // Try to sum any per-student outstanding values (robust to strings like "₦2,000")
+                      const totalFromStudents = studentsForTotal.reduce((sum, s) => {
+                        const raw = (s as any).outstanding ?? (s as any).amount ?? null;
+                        if (raw == null) return sum;
+                        const cleaned = String(raw).replace(/[^0-9.-]/g, '');
+                        const num = Number(cleaned);
+                        return Number.isFinite(num) ? sum + num : sum;
+                      }, 0);
+
+                      // If we found a positive total from student-specific values, prefer that
+                      if (totalFromStudents > 0) {
+                        return formatCurrency(totalFromStudents);
+                      }
+
+                      // Fallback: use the provided amount divided across students
+                      const fallbackPer = totalStudents > 0 ? Number(amount) / totalStudents : Number(amount || 0);
+                      const fallbackTotal = fallbackPer * studentsForTotal.length;
+                      return formatCurrency(Number.isFinite(fallbackTotal) ? fallbackTotal : 0);
+                    })()}
                   </p>
                 </div>
               </div>
@@ -404,23 +462,31 @@ export default function QRCodeGenerator({
                   {totalStudents > 1 ? `Paying for ${totalStudents} Students:` : 'Paying for:'}
                 </p>
                 <div className="flex flex-wrap gap-2">
-                  {includeSelf && (
-                    <span 
-                      className="px-2.5 py-1 rounded-lg text-xs font-medium"
-                      style={{ background: `${colors.primary}20`, color: colors.primary }}
-                    >
-                      {studentName} (You)
-                    </span>
-                  )}
-                  {selectedStudents.map(s => (
-                    <span 
-                      key={s.id}
-                      className="px-2.5 py-1 rounded-lg text-xs font-medium"
-                      style={{ background: 'rgba(255, 255, 255, 0.08)', color: colors.textPrimary }}
-                    >
-                      {s.full_name}
-                    </span>
-                  ))}
+                  {(() => {
+                    const studentsForList = [...selectedStudents];
+                    if (includeSelf && !studentsForList.some(s => s.id === studentId)) {
+                      studentsForList.push({ id: studentId, full_name: `${studentName} (You)`, reg_number: studentRegNumber } as any);
+                    }
+                    return studentsForList.map(s => {
+                      const raw = (s as any).outstanding ?? (s as any).amount ?? null;
+                      let display = '';
+                      if (raw != null) {
+                        const cleaned = String(raw).replace(/[^0-9.-]/g, '');
+                        const num = Number(cleaned);
+                        if (Number.isFinite(num)) display = `— ${formatCurrency(num)}`;
+                      }
+
+                      return (
+                        <span
+                          key={s.id}
+                          className="px-2.5 py-1 rounded-lg text-xs font-medium"
+                          style={{ background: 'rgba(255, 255, 255, 0.08)', color: colors.textPrimary }}
+                        >
+                          {s.full_name} {display}
+                        </span>
+                      );
+                    });
+                  })()}
                 </div>
               </div>
             )}

@@ -9,6 +9,7 @@ import DashboardSwitcher from '@/components/DashboardSwitcher';
 import { formatCurrency, formatDate } from '@/utils/formatters';
 import { AdminDashboardSkeleton, PaymentCardSkeleton } from '@/components/ui/Skeleton';
 import AnimatedCounter from '@/components/ui/AnimatedCounter';
+import { AdminNotificationCenter } from '@/components/admin/AdminNotificationCenter';
 import {
   Users,
   Clock,
@@ -32,10 +33,13 @@ import {
   BarChart3,
   Receipt,
   Calendar,
+  Heart,
+  Bell,
 } from 'lucide-react';
 import Footer from '@/components/Footer';
 import StudentFeatureSettings from '@/components/admin/StudentFeatureSettings';
 import ExpenseVisibilitySettings from '@/components/admin/ExpenseVisibilitySettings';
+import PushNotificationPrompt from '@/components/PushNotificationPrompt';
 // ExpenseList removed from dashboard; use dedicated Expenses page instead
 
 interface AdminStats {
@@ -353,8 +357,11 @@ export default function AdminDashboardPage() {
             
             <div className="relative z-10 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
               {/* Mobile Dashboard Switcher - At Top */}
-              <div className="sm:hidden w-full mb-3">
+              <div className="sm:hidden w-full mb-3 flex items-center justify-between">
                 <DashboardSwitcher variant="compact" />
+                <div className="relative">
+                  <AdminNotificationCenter />
+                </div>
               </div>
               
               <div className="flex items-center gap-4">
@@ -386,8 +393,9 @@ export default function AdminDashboardPage() {
                 </div>
               </div>
 
-              {/* Dashboard Switcher */}
-              <div className="hidden sm:block">
+              {/* Dashboard Switcher + Notification Bell */}
+              <div className="hidden sm:flex items-center gap-3 relative">
+                <AdminNotificationCenter />
                 <DashboardSwitcher />
               </div>
               
@@ -451,6 +459,7 @@ export default function AdminDashboardPage() {
                   )}
                 </motion.button>
                 )}
+                
               </div>
             </div>
           </GlassCard>
@@ -997,6 +1006,28 @@ export default function AdminDashboardPage() {
                 </div>
               </motion.button>
               )}
+              
+              {hasPermission('can_approve_payments') && (
+              <motion.button
+                whileHover={{ scale: 1.02, y: -2 }}
+                whileTap={{ scale: 0.98 }}
+                onClick={() => navigate('/admin/donation-settings')}
+                className="flex items-center gap-3 p-4 rounded-xl transition-all group"
+                style={{ 
+                  background: `linear-gradient(135deg, ${colors.accentMint}10, transparent)`,
+                  border: `1px solid ${colors.accentMint}30`
+                }}
+              >
+                <div className="w-10 h-10 rounded-lg flex items-center justify-center transition-transform group-hover:scale-110"
+                     style={{ background: `${colors.accentMint}30` }}>
+                  <Heart className="w-5 h-5" style={{ color: colors.accentMint }} />
+                </div>
+                <div className="text-left">
+                  <span className="text-white font-medium block">Public Donations</span>
+                  <span className="text-xs" style={{ color: colors.textSecondary }}>Manage contributions & settings</span>
+                </div>
+              </motion.button>
+              )}
             </div>
           </GlassCard>
         </motion.div>
@@ -1014,6 +1045,21 @@ export default function AdminDashboardPage() {
             </div>
           </motion.div>
         )}
+
+        {/* Push Notifications - Always show so admins can enable */}
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.87 }}
+        >
+          <div className="space-y-2">
+            <h3 className="text-sm font-semibold px-1 flex items-center gap-2" style={{ color: colors.textSecondary }}>
+              <Bell size={16} style={{ color: colors.primary }} />
+              Push Notifications
+            </h3>
+            <PushNotificationPrompt mode="settings" />
+          </div>
+        </motion.div>
 
         {/* Expenses - quick link + recent expenses preview with pagination */}
         <motion.div

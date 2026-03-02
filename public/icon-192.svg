@@ -1,16 +1,27 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 192 192" fill="none">
   <defs>
-    <linearGradient id="chipGrad" x1="0%" y1="0%" x2="100%" y2="100%">
-      <stop offset="0%" style="stop-color:#ff6803;stop-opacity:1" />
-      <stop offset="50%" style="stop-color:#ff8534;stop-opacity:1" />
-      <stop offset="100%" style="stop-color:#06b6d4;stop-opacity:1" />
+    <!-- Primary Gradient - Warm Orange -->
+    <linearGradient id="primaryGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#FF8534;stop-opacity:1" />
+      <stop offset="50%" style="stop-color:#FF6803;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#CC5202;stop-opacity:1" />
     </linearGradient>
+    
+    <!-- Accent Gradient - Mint -->
+    <linearGradient id="accentGrad" x1="0%" y1="100%" x2="100%" y2="0%">
+      <stop offset="0%" style="stop-color:#16F456;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#30FFAC;stop-opacity:1" />
+    </linearGradient>
+    
+    <!-- Background Gradient - Dark Brown -->
     <linearGradient id="bgGrad" x1="0%" y1="0%" x2="100%" y2="100%">
-      <stop offset="0%" style="stop-color:#1a1a2e;stop-opacity:1" />
-      <stop offset="100%" style="stop-color:#0f0f1e;stop-opacity:1" />
+      <stop offset="0%" style="stop-color:#1A0E09;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#0F0703;stop-opacity:1" />
     </linearGradient>
-    <filter id="glow">
-      <feGaussianBlur stdDeviation="3" result="coloredBlur"/>
+    
+    <!-- Glow Effect -->
+    <filter id="glow" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur stdDeviation="4" result="coloredBlur"/>
       <feMerge>
         <feMergeNode in="coloredBlur"/>
         <feMergeNode in="SourceGraphic"/>
@@ -18,62 +29,45 @@
     </filter>
   </defs>
   
-  <!-- Background Circle with gradient -->
+  <!-- Background Circle -->
   <circle cx="96" cy="96" r="96" fill="url(#bgGrad)"/>
   
-  <!-- Outer glow ring -->
-  <circle cx="96" cy="96" r="84" fill="none" stroke="url(#chipGrad)" stroke-width="2" opacity="0.2"/>
+  <!-- Outer Ring Glow -->
+  <circle cx="96" cy="96" r="88" fill="none" stroke="url(#primaryGrad)" stroke-width="1.5" opacity="0.3"/>
+  <circle cx="96" cy="96" r="82" fill="none" stroke="url(#accentGrad)" stroke-width="0.5" opacity="0.2"/>
   
-  <!-- Microchip Body -->
-  <rect x="54" y="54" width="84" height="84" rx="8" fill="url(#chipGrad)" opacity="0.95" filter="url(#glow)"/>
+  <!-- Main Card Shape - Representing Payment/Dues -->
+  <rect x="36" y="52" width="120" height="88" rx="16" fill="url(#primaryGrad)" filter="url(#glow)"/>
   
-  <!-- Inner chip detail -->
-  <rect x="66" y="66" width="60" height="60" rx="6" fill="#1a1a2e" opacity="0.8"/>
+  <!-- Inner Card Detail -->
+  <rect x="44" y="60" width="104" height="72" rx="12" fill="url(#bgGrad)" opacity="0.85"/>
   
-  <!-- Circuit board pattern -->
-  <path d="M96 78 L96 66" stroke="#ff6803" stroke-width="4" stroke-linecap="round" opacity="0.9"/>
-  <path d="M96 126 L96 114" stroke="#ff6803" stroke-width="4" stroke-linecap="round" opacity="0.9"/>
-  <path d="M78 96 L66 96" stroke="#ff6803" stroke-width="4" stroke-linecap="round" opacity="0.9"/>
-  <path d="M126 96 L114 96" stroke="#ff6803" stroke-width="4" stroke-linecap="round" opacity="0.9"/>
+  <!-- DT Monogram - Professional Style -->
+  <!-- "D" letter -->
+  <path d="M60 82 L60 114 L76 114 C88 114 96 106 96 98 C96 90 88 82 76 82 L60 82 Z" 
+        fill="none" stroke="url(#primaryGrad)" stroke-width="6" stroke-linecap="round" stroke-linejoin="round"/>
   
-  <!-- Diagonal circuits -->
-  <path d="M78 78 L66 66" stroke="#06b6d4" stroke-width="4" stroke-linecap="round" opacity="0.8"/>
-  <path d="M114 78 L126 66" stroke="#06b6d4" stroke-width="4" stroke-linecap="round" opacity="0.8"/>
-  <path d="M78 114 L66 126" stroke="#06b6d4" stroke-width="4" stroke-linecap="round" opacity="0.8"/>
-  <path d="M114 114 L126 126" stroke="#06b6d4" stroke-width="4" stroke-linecap="round" opacity="0.8"/>
+  <!-- "T" letter -->
+  <path d="M108 82 L132 82 M120 82 L120 114" 
+        fill="none" stroke="url(#accentGrad)" stroke-width="6" stroke-linecap="round" stroke-linejoin="round"/>
   
-  <!-- Connection nodes -->
-  <circle cx="66" cy="66" r="4" fill="#06b6d4" opacity="0.9"/>
-  <circle cx="126" cy="66" r="4" fill="#06b6d4" opacity="0.9"/>
-  <circle cx="66" cy="126" r="4" fill="#06b6d4" opacity="0.9"/>
-  <circle cx="126" cy="126" r="4" fill="#06b6d4" opacity="0.9"/>
+  <!-- Decorative Corner Elements -->
+  <circle cx="52" cy="68" r="3" fill="url(#accentGrad)" opacity="0.8"/>
+  <circle cx="140" cy="68" r="3" fill="url(#accentGrad)" opacity="0.8"/>
+  <circle cx="52" cy="124" r="3" fill="url(#accentGrad)" opacity="0.5"/>
+  <circle cx="140" cy="124" r="3" fill="url(#accentGrad)" opacity="0.5"/>
   
-  <!-- Center "W" for Wishot -->
-  <text x="96" y="108" font-family="'Segoe UI', Arial, sans-serif" font-size="36" font-weight="bold" fill="#ff6803" text-anchor="middle" filter="url(#glow)">W</text>
+  <!-- Accent Line - Bottom Detail -->
+  <rect x="56" y="130" width="80" height="4" rx="2" fill="url(#accentGrad)" opacity="0.6"/>
   
-  <!-- Chip pins - Left side -->
-  <rect x="42" y="72" width="12" height="6" rx="2" fill="#ff8534" opacity="0.9"/>
-  <rect x="42" y="90" width="12" height="6" rx="2" fill="#ff8534" opacity="0.9"/>
-  <rect x="42" y="108" width="12" height="6" rx="2" fill="#ff8534" opacity="0.9"/>
+  <!-- Top Decorative Lines -->
+  <rect x="70" y="42" width="52" height="3" rx="1.5" fill="url(#primaryGrad)" opacity="0.4"/>
   
-  <!-- Chip pins - Right side -->
-  <rect x="138" y="72" width="12" height="6" rx="2" fill="#ff8534" opacity="0.9"/>
-  <rect x="138" y="90" width="12" height="6" rx="2" fill="#ff8534" opacity="0.9"/>
-  <rect x="138" y="108" width="12" height="6" rx="2" fill="#ff8534" opacity="0.9"/>
+  <!-- Signal/Pulse Lines - Representing Tracking -->
+  <path d="M160 72 Q168 80 160 88" fill="none" stroke="url(#primaryGrad)" stroke-width="2" opacity="0.5"/>
+  <path d="M166 68 Q178 80 166 92" fill="none" stroke="url(#primaryGrad)" stroke-width="2" opacity="0.3"/>
   
-  <!-- Chip pins - Top -->
-  <rect x="72" y="42" width="6" height="12" rx="2" fill="#ff8534" opacity="0.9"/>
-  <rect x="90" y="42" width="6" height="12" rx="2" fill="#ff8534" opacity="0.9"/>
-  <rect x="108" y="42" width="6" height="12" rx="2" fill="#ff8534" opacity="0.9"/>
-  
-  <!-- Chip pins - Bottom -->
-  <rect x="72" y="138" width="6" height="12" rx="2" fill="#ff8534" opacity="0.9"/>
-  <rect x="90" y="138" width="6" height="12" rx="2" fill="#ff8534" opacity="0.9"/>
-  <rect x="108" y="138" width="6" height="12" rx="2" fill="#ff8534" opacity="0.9"/>
-  
-  <!-- Inner circuit details -->
-  <circle cx="84" cy="84" r="2" fill="#06b6d4" opacity="0.7"/>
-  <circle cx="108" cy="84" r="2" fill="#06b6d4" opacity="0.7"/>
-  <circle cx="84" cy="108" r="2" fill="#06b6d4" opacity="0.7"/>
-  <circle cx="108" cy="108" r="2" fill="#06b6d4" opacity="0.7"/>
+  <!-- Left Signal Lines -->
+  <path d="M32 72 Q24 80 32 88" fill="none" stroke="url(#accentGrad)" stroke-width="2" opacity="0.5"/>
+  <path d="M26 68 Q14 80 26 92" fill="none" stroke="url(#accentGrad)" stroke-width="2" opacity="0.3"/>
 </svg>

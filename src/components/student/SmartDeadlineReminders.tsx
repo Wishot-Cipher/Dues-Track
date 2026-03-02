@@ -14,6 +14,7 @@ interface DeadlineReminder {
   status: 'paid' | 'partial' | 'unpaid'
   amountPaid: number
   urgency: 'low' | 'medium' | 'high' | 'critical'
+  late_fee_per_day?: number
 }
 
 export default function SmartDeadlineReminders() {
@@ -39,7 +40,7 @@ export default function SmartDeadlineReminders() {
       // Get active payment types with deadlines
       const { data: paymentTypes } = await supabase
         .from('payment_types')
-        .select('id, title, amount, deadline, allow_partial')
+        .select('id, title, amount, deadline, allow_partial, late_fee_per_day')
         .eq('is_active', true)
         .not('deadline', 'is', null)
 
@@ -95,7 +96,8 @@ export default function SmartDeadlineReminders() {
               daysLeft,
               status,
               amountPaid,
-              urgency
+              urgency,
+              late_fee_per_day: pt.late_fee_per_day ? Number(pt.late_fee_per_day) : undefined
             })
           }
         }
@@ -247,6 +249,11 @@ export default function SmartDeadlineReminders() {
                     {reminder.status === 'partial' && (
                       <div className="text-xs" style={{ color: colors.textSecondary }}>
                         Paid: ₦{reminder.amountPaid.toLocaleString()} of ₦{reminder.amount.toLocaleString()}
+                      </div>
+                    )}
+                    {reminder.late_fee_per_day && (
+                      <div className="text-xs mt-1 font-medium" style={{ color: colors.textSecondary }}>
+                        Late fee: ₦{Number(reminder.late_fee_per_day).toLocaleString()} / day after deadline
                       </div>
                     )}
                   </div>

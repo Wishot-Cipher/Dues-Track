@@ -2,6 +2,7 @@ import React from 'react'
 import type { CSSProperties } from 'react'
 import { colors, gradients, glows } from '../../config/colors'
 import { motion } from 'framer-motion'
+import haptics from '@/lib/haptics'
 
 type Variant = 'primary' | 'secondary' | 'success' | 'danger' | 'ghost'
 type Size = 'sm' | 'md' | 'lg'
@@ -144,7 +145,12 @@ const CustomButton: React.FC<CustomButtonProps> = ({
   return (
     <button
       type={type}
-      onClick={onClick}
+      onClick={(e) => {
+        if (!disabled && !loading) {
+          haptics.light();
+        }
+        onClick?.(e);
+      }}
       disabled={disabled || loading}
       onMouseEnter={() => setIsHovered(true)}
       onMouseLeave={() => setIsHovered(false)}

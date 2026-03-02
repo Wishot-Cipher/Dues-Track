@@ -1,0 +1,122 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <!--
+    DuesTracker Mark — Meaningful Design System
+    
+    SYMBOLISM:
+    ● Three ascending bars  = Past, Present, Future — tracking payments over time
+    ● Rising connector line = Growth trajectory — financial health improving
+    ● Mint verified node    = Goal reached — payment verified / dues complete
+    ● Orbital arc           = Community bond — the class cycle, recurring dues
+    ● Warm amber ground     = Trust, approachability, warmth of community
+    ● Baseline              = Foundation — the ledger, the record
+
+    CONSTRUCTION: Golden-ratio bar heights (1 : 1.618 : 2.618)
+  -->
+  <defs>
+    <!-- Deep amber foundation -->
+    <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#FFAB4F"/>
+      <stop offset="45%" stop-color="#FF6803"/>
+      <stop offset="100%" stop-color="#C83E00"/>
+    </linearGradient>
+
+    <!-- Warm bloom for depth -->
+    <radialGradient id="bloom" cx="36%" cy="26%" r="62%">
+      <stop offset="0%" stop-color="#FFD6A6" stop-opacity="0.28"/>
+      <stop offset="100%" stop-color="#FF6803" stop-opacity="0"/>
+    </radialGradient>
+
+    <!-- Verified mint -->
+    <linearGradient id="mint" x1="0%" y1="100%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#30FFAC"/>
+      <stop offset="100%" stop-color="#1BD88A"/>
+    </linearGradient>
+
+    <!-- Bar gradient (bottom warm → top bright) -->
+    <linearGradient id="barFill" x1="0%" y1="100%" x2="0%" y2="0%">
+      <stop offset="0%" stop-color="#FFFFFF" stop-opacity="0.88"/>
+      <stop offset="100%" stop-color="#FFFFFF" stop-opacity="1"/>
+    </linearGradient>
+
+    <!-- Subtle mark shadow -->
+    <filter id="lift" x="-4%" y="-4%" width="108%" height="112%">
+      <feDropShadow dx="0" dy="4" stdDeviation="6" flood-color="#7A2E00" flood-opacity="0.22"/>
+    </filter>
+
+    <!-- Mint glow -->
+    <filter id="mintGlow" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur stdDeviation="5" result="g"/>
+      <feMerge><feMergeNode in="g"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+
+    <!-- Clip -->
+    <clipPath id="bgClip">
+      <rect x="24" y="24" width="464" height="464" rx="108"/>
+    </clipPath>
+  </defs>
+
+  <!-- ========================= -->
+  <!--   BACKGROUND               -->
+  <!-- ========================= -->
+  <rect x="24" y="24" width="464" height="464" rx="108" fill="url(#bg)"/>
+  <rect x="24" y="24" width="464" height="464" rx="108" fill="url(#bloom)"/>
+
+  <!-- Glass shine -->
+  <g clip-path="url(#bgClip)">
+    <ellipse cx="200" cy="16" rx="280" ry="160" fill="white" opacity="0.06"/>
+  </g>
+
+  <!-- Inner polish ring -->
+  <rect x="34" y="34" width="444" height="444" rx="98" fill="none" stroke="white" stroke-width="1.2" opacity="0.08"/>
+
+  <!-- ========================= -->
+  <!--   THE MARK                 -->
+  <!-- ========================= -->
+  <g filter="url(#lift)">
+
+    <!-- Orbital arc — community bond, recurring cycle -->
+    <!-- A broken circle wrapping from bottom-left to upper-right -->
+    <path d="M 136,352 
+             A 148,148 0 1,1 392,218" 
+          fill="none" stroke="white" stroke-width="7" 
+          stroke-linecap="round" opacity="0.13"/>
+
+    <!-- Baseline — the ledger foundation -->
+    <line x1="140" y1="378" x2="372" y2="378" 
+          stroke="white" stroke-width="3" stroke-linecap="round" opacity="0.15"/>
+
+    <!-- ─── BAR 1 (Past) ─── -->
+    <!-- Golden ratio height: base unit = 78 -->
+    <rect x="156" y="298" width="56" height="80" rx="14" fill="url(#barFill)"/>
+
+    <!-- ─── BAR 2 (Present) ─── -->
+    <!-- Height = 78 × 1.618 ≈ 126 -->
+    <rect x="228" y="252" width="56" height="126" rx="14" fill="url(#barFill)"/>
+
+    <!-- ─── BAR 3 (Future / Growth) ─── -->
+    <!-- Height = 78 × 2.618 ≈ 204 -->
+    <rect x="300" y="174" width="56" height="204" rx="14" fill="url(#barFill)"/>
+
+    <!-- Ascending connector — growth trajectory -->
+    <polyline points="184,296 256,250 328,172" 
+              fill="none" stroke="white" stroke-width="4.5" 
+              stroke-linecap="round" stroke-linejoin="round" opacity="0.35"/>
+
+    <!-- Tracking nodes at each bar peak -->
+    <circle cx="184" cy="296" r="5.5" fill="white" opacity="0.55"/>
+    <circle cx="256" cy="250" r="5.5" fill="white" opacity="0.55"/>
+
+    <!-- ─── VERIFIED PEAK NODE ─── -->
+    <!-- The highest data point glows mint — goal reached -->
+    <g filter="url(#mintGlow)">
+      <circle cx="328" cy="172" r="16" fill="none" stroke="url(#mint)" stroke-width="3.5" opacity="0.82"/>
+      <circle cx="328" cy="172" r="6" fill="url(#mint)"/>
+    </g>
+
+    <!-- Subtle growth arrow tip above peak -->
+    <path d="M 322,146 L 328,132 L 334,146" 
+          fill="none" stroke="white" stroke-width="3" 
+          stroke-linecap="round" stroke-linejoin="round" opacity="0.3"/>
+
+  </g>
+</svg>

@@ -17,6 +17,7 @@ interface PaymentType {
   id: string
   title: string
   amount: number
+  late_fee_per_day?: number
 }
 
 // Helper to render category icon (Lucide icon name or emoji)

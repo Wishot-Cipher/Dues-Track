@@ -1,106 +1,83 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" fill="none">
   <defs>
-    <linearGradient id="mainGrad" x1="0%" y1="0%" x2="100%" y2="100%">
-      <stop offset="0%" style="stop-color:#ff6803;stop-opacity:1" />
-      <stop offset="50%" style="stop-color:#ff8534;stop-opacity:1" />
-      <stop offset="100%" style="stop-color:#06b6d4;stop-opacity:1" />
+    <!-- Primary Gradient - Warm Orange -->
+    <linearGradient id="primaryGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#FF8534;stop-opacity:1" />
+      <stop offset="50%" style="stop-color:#FF6803;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#CC5202;stop-opacity:1" />
     </linearGradient>
-    <linearGradient id="darkGrad" x1="0%" y1="0%" x2="100%" y2="100%">
-      <stop offset="0%" style="stop-color:#1a1a2e;stop-opacity:1" />
-      <stop offset="100%" style="stop-color:#0f0f1e;stop-opacity:1" />
+    
+    <!-- Accent Gradient - Mint -->
+    <linearGradient id="accentGrad" x1="0%" y1="100%" x2="100%" y2="0%">
+      <stop offset="0%" style="stop-color:#16F456;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#30FFAC;stop-opacity:1" />
     </linearGradient>
-    <filter id="chipGlow">
-      <feGaussianBlur stdDeviation="4" result="coloredBlur"/>
+    
+    <!-- Background Gradient - Dark Brown -->
+    <linearGradient id="bgGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#1A0E09;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#0F0703;stop-opacity:1" />
+    </linearGradient>
+    
+    <!-- Glow Effect -->
+    <filter id="glow" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur stdDeviation="8" result="coloredBlur"/>
       <feMerge>
         <feMergeNode in="coloredBlur"/>
         <feMergeNode in="SourceGraphic"/>
       </feMerge>
     </filter>
-    <radialGradient id="centerGlow">
-      <stop offset="0%" style="stop-color:#ff6803;stop-opacity:0.3" />
-      <stop offset="100%" style="stop-color:#ff6803;stop-opacity:0" />
-    </radialGradient>
+    
+    <!-- Soft Shadow -->
+    <filter id="shadow" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="8" stdDeviation="12" flood-color="#FF6803" flood-opacity="0.4"/>
+    </filter>
   </defs>
   
   <!-- Background Circle -->
-  <circle cx="256" cy="256" r="256" fill="url(#darkGrad)"/>
+  <circle cx="256" cy="256" r="256" fill="url(#bgGrad)"/>
   
-  <!-- Outer glow rings -->
-  <circle cx="256" cy="256" r="240" fill="none" stroke="url(#mainGrad)" stroke-width="3" opacity="0.15"/>
-  <circle cx="256" cy="256" r="220" fill="none" stroke="url(#mainGrad)" stroke-width="2" opacity="0.1"/>
+  <!-- Outer Ring Glow -->
+  <circle cx="256" cy="256" r="234" fill="none" stroke="url(#primaryGrad)" stroke-width="3" opacity="0.3"/>
+  <circle cx="256" cy="256" r="218" fill="none" stroke="url(#accentGrad)" stroke-width="1" opacity="0.2"/>
   
-  <!-- Center glow effect -->
-  <circle cx="256" cy="256" r="180" fill="url(#centerGlow)"/>
+  <!-- Main Card Shape - Representing Payment/Dues -->
+  <rect x="96" y="138" width="320" height="236" rx="42" fill="url(#primaryGrad)" filter="url(#shadow)"/>
   
-  <!-- Main Microchip Body -->
-  <rect x="144" y="144" width="224" height="224" rx="20" fill="url(#mainGrad)" opacity="0.95" filter="url(#chipGlow)"/>
+  <!-- Inner Card Detail -->
+  <rect x="118" y="160" width="276" height="192" rx="32" fill="url(#bgGrad)" opacity="0.85"/>
   
-  <!-- Inner chip surface -->
-  <rect x="176" y="176" width="160" height="160" rx="16" fill="#1a1a2e" opacity="0.85"/>
+  <!-- DT Monogram - Professional Style -->
+  <!-- "D" letter -->
+  <path d="M160 218 L160 304 L202 304 C234 304 256 282 256 261 C256 240 234 218 202 218 L160 218 Z" 
+        fill="none" stroke="url(#primaryGrad)" stroke-width="16" stroke-linecap="round" stroke-linejoin="round"/>
   
-  <!-- Central circuit board traces -->
-  <path d="M256 208 L256 176" stroke="#ff6803" stroke-width="10" stroke-linecap="round" opacity="0.9"/>
-  <path d="M256 336 L256 304" stroke="#ff6803" stroke-width="10" stroke-linecap="round" opacity="0.9"/>
-  <path d="M208 256 L176 256" stroke="#ff6803" stroke-width="10" stroke-linecap="round" opacity="0.9"/>
-  <path d="M336 256 L304 256" stroke="#ff6803" stroke-width="10" stroke-linecap="round" opacity="0.9"/>
+  <!-- "T" letter -->
+  <path d="M288 218 L352 218 M320 218 L320 304" 
+        fill="none" stroke="url(#accentGrad)" stroke-width="16" stroke-linecap="round" stroke-linejoin="round"/>
   
-  <!-- Diagonal circuit traces -->
-  <path d="M208 208 L176 176" stroke="#06b6d4" stroke-width="10" stroke-linecap="round" opacity="0.85"/>
-  <path d="M304 208 L336 176" stroke="#06b6d4" stroke-width="10" stroke-linecap="round" opacity="0.85"/>
-  <path d="M208 304 L176 336" stroke="#06b6d4" stroke-width="10" stroke-linecap="round" opacity="0.85"/>
-  <path d="M304 304 L336 336" stroke="#06b6d4" stroke-width="10" stroke-linecap="round" opacity="0.85"/>
+  <!-- Decorative Corner Elements -->
+  <circle cx="138" cy="180" r="8" fill="url(#accentGrad)" opacity="0.8"/>
+  <circle cx="374" cy="180" r="8" fill="url(#accentGrad)" opacity="0.8"/>
+  <circle cx="138" cy="332" r="8" fill="url(#accentGrad)" opacity="0.5"/>
+  <circle cx="374" cy="332" r="8" fill="url(#accentGrad)" opacity="0.5"/>
   
-  <!-- Corner connection nodes -->
-  <circle cx="176" cy="176" r="8" fill="#06b6d4" opacity="0.9"/>
-  <circle cx="336" cy="176" r="8" fill="#06b6d4" opacity="0.9"/>
-  <circle cx="176" cy="336" r="8" fill="#06b6d4" opacity="0.9"/>
-  <circle cx="336" cy="336" r="8" fill="#06b6d4" opacity="0.9"/>
+  <!-- Accent Line - Bottom Detail -->
+  <rect x="150" y="346" width="212" height="10" rx="5" fill="url(#accentGrad)" opacity="0.6"/>
   
-  <!-- Center "W" for Wishot with shadow -->
-  <text x="256" y="288" font-family="'Segoe UI', Arial, sans-serif" font-size="96" font-weight="bold" fill="#0f0f1e" text-anchor="middle" opacity="0.3">W</text>
-  <text x="256" y="285" font-family="'Segoe UI', Arial, sans-serif" font-size="96" font-weight="bold" fill="#ff6803" text-anchor="middle" filter="url(#chipGlow)">W</text>
+  <!-- Top Decorative Lines -->
+  <rect x="186" y="112" width="140" height="8" rx="4" fill="url(#primaryGrad)" opacity="0.4"/>
   
-  <!-- Chip pins - Left side (6 pins) -->
-  <rect x="112" y="180" width="32" height="16" rx="6" fill="#ff8534" opacity="0.9"/>
-  <rect x="112" y="220" width="32" height="16" rx="6" fill="#ff8534" opacity="0.9"/>
-  <rect x="112" y="248" width="32" height="16" rx="6" fill="#ff8534" opacity="0.9"/>
-  <rect x="112" y="276" width="32" height="16" rx="6" fill="#ff8534" opacity="0.9"/>
-  <rect x="112" y="304" width="32" height="16" rx="6" fill="#ff8534" opacity="0.9"/>
-  <rect x="112" y="332" width="32" height="16" rx="6" fill="#ff8534" opacity="0.9"/>
+  <!-- Signal/Pulse Lines - Representing Tracking -->
+  <path d="M426 192 Q448 212 426 234" fill="none" stroke="url(#primaryGrad)" stroke-width="5" opacity="0.5"/>
+  <path d="M442 176 Q474 212 442 248" fill="none" stroke="url(#primaryGrad)" stroke-width="5" opacity="0.3"/>
+  <path d="M458 160 Q500 212 458 264" fill="none" stroke="url(#primaryGrad)" stroke-width="4" opacity="0.15"/>
   
-  <!-- Chip pins - Right side (6 pins) -->
-  <rect x="368" y="180" width="32" height="16" rx="6" fill="#ff8534" opacity="0.9"/>
-  <rect x="368" y="220" width="32" height="16" rx="6" fill="#ff8534" opacity="0.9"/>
-  <rect x="368" y="248" width="32" height="16" rx="6" fill="#ff8534" opacity="0.9"/>
-  <rect x="368" y="276" width="32" height="16" rx="6" fill="#ff8534" opacity="0.9"/>
-  <rect x="368" y="304" width="32" height="16" rx="6" fill="#ff8534" opacity="0.9"/>
-  <rect x="368" y="332" width="32" height="16" rx="6" fill="#ff8534" opacity="0.9"/>
+  <!-- Left Signal Lines -->
+  <path d="M86 192 Q64 212 86 234" fill="none" stroke="url(#accentGrad)" stroke-width="5" opacity="0.5"/>
+  <path d="M70 176 Q38 212 70 248" fill="none" stroke="url(#accentGrad)" stroke-width="5" opacity="0.3"/>
+  <path d="M54 160 Q12 212 54 264" fill="none" stroke="url(#accentGrad)" stroke-width="4" opacity="0.15"/>
   
-  <!-- Chip pins - Top (6 pins) -->
-  <rect x="180" y="112" width="16" height="32" rx="6" fill="#ff8534" opacity="0.9"/>
-  <rect x="220" y="112" width="16" height="32" rx="6" fill="#ff8534" opacity="0.9"/>
-  <rect x="248" y="112" width="16" height="32" rx="6" fill="#ff8534" opacity="0.9"/>
-  <rect x="276" y="112" width="16" height="32" rx="6" fill="#ff8534" opacity="0.9"/>
-  <rect x="304" y="112" width="16" height="32" rx="6" fill="#ff8534" opacity="0.9"/>
-  <rect x="332" y="112" width="16" height="32" rx="6" fill="#ff8534" opacity="0.9"/>
-  
-  <!-- Chip pins - Bottom (6 pins) -->
-  <rect x="180" y="368" width="16" height="32" rx="6" fill="#ff8534" opacity="0.9"/>
-  <rect x="220" y="368" width="16" height="32" rx="6" fill="#ff8534" opacity="0.9"/>
-  <rect x="248" y="368" width="16" height="32" rx="6" fill="#ff8534" opacity="0.9"/>
-  <rect x="276" y="368" width="16" height="32" rx="6" fill="#ff8534" opacity="0.9"/>
-  <rect x="304" y="368" width="16" height="32" rx="6" fill="#ff8534" opacity="0.9"/>
-  <rect x="332" y="368" width="16" height="32" rx="6" fill="#ff8534" opacity="0.9"/>
-  
-  <!-- Inner circuit micro-details -->
-  <circle cx="224" cy="224" r="5" fill="#06b6d4" opacity="0.7"/>
-  <circle cx="288" cy="224" r="5" fill="#06b6d4" opacity="0.7"/>
-  <circle cx="224" cy="288" r="5" fill="#06b6d4" opacity="0.7"/>
-  <circle cx="288" cy="288" r="5" fill="#06b6d4" opacity="0.7"/>
-  
-  <!-- Corner circuit patterns -->
-  <path d="M200 200 L216 200 L216 216" stroke="#ff6803" stroke-width="3" opacity="0.5" fill="none" stroke-linecap="round"/>
-  <path d="M312 200 L296 200 L296 216" stroke="#ff6803" stroke-width="3" opacity="0.5" fill="none" stroke-linecap="round"/>
-  <path d="M200 312 L216 312 L216 296" stroke="#ff6803" stroke-width="3" opacity="0.5" fill="none" stroke-linecap="round"/>
-  <path d="M312 312 L296 312 L296 296" stroke="#ff6803" stroke-width="3" opacity="0.5" fill="none" stroke-linecap="round"/>
+  <!-- Bottom Reflection Line -->
+  <ellipse cx="256" cy="420" rx="120" ry="8" fill="url(#primaryGrad)" opacity="0.1"/>
 </svg>

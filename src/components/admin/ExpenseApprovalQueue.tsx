@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import GlassCard from '@/components/ui/GlassCard'
 import ConfirmDialog from '@/components/ui/ConfirmDialog'
+import ProfessionalDropdown from '@/components/ui/ProfessionalDropdown'
 import { colors } from '@/config/colors'
 import { useAuth } from '@/hooks/useAuth'
 import { useToast } from '@/hooks/useToast'
@@ -58,9 +59,50 @@ export default function ExpenseApprovalQueue() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
+  function renderCategoryIcon(icon: any, name: string, color: string) {
+    // If it's a valid React element, render it directly
+    if (icon && typeof icon === 'object' && icon.$$typeof) return icon
+
+    // If icon is a URL, render an image
+    if (typeof icon === 'string' && /^(https?:)?\/\//.test(icon)) {
+      return (
+        <img
+          src={icon}
+          alt={name}
+          className="w-6 h-6 sm:w-8 sm:h-8 object-contain"
+          style={{ display: 'block' }}
+        />
+      )
+    }
+
+    // If icon is a short string (emoji or 1-2 chars), render it large
+    if (typeof icon === 'string' && icon.trim().length <= 2) {
+      return (
+        <span className="text-lg sm:text-xl" style={{ lineHeight: 1 }}>
+          {icon}
+        </span>
+      )
+    }
+
+    // Otherwise, fallback to initials from the category name
+    const initials = (name || '')
+      .split(' ')
+      .filter(Boolean)
+      .slice(0, 2)
+      .map(s => s[0]?.toUpperCase())
+      .join('') || '📦'
+
+    return (
+      <span className="text-sm sm:text-base font-semibold" style={{ color }}>
+        {initials}
+      </span>
+    )
+  }
+
   async function loadCategories() {
     try {
-      const data = await fetchExpenseCategories()
+      // Include inactive categories so admins can reassign expenses to them
+      const data = await fetchExpenseCategories(true)
       setCategories(data)
     } catch (err) {
       console.error('Failed to load categories:', err)
@@ -91,29 +133,33 @@ export default function ExpenseApprovalQueue() {
 
   async function fetchAvailableBalances() {
     try {
+      // Compute balances per category (collected - expenses)
       const { data: paymentsData } = await supabase
         .from('payments')
-        .select('amount, payment_type_id')
+        .select('amount, payment_type_id, payment_types ( id, category )')
         .eq('status', 'approved')
         .not('transaction_ref', 'like', 'WAIVED-%')
 
       const { data: expensesData } = await supabase
         .from('expenses')
-        .select('amount, funded_by')
+        .select('amount, category, category_id, payment_type_id, payment_types ( id, category )')
         .eq('status', 'approved')
 
       const balances = new Map<string, number>()
 
+      // Add collected payments to their payment type's category
       paymentsData?.forEach((p: any) => {
-        if (p.payment_type_id) {
-          balances.set(p.payment_type_id, (balances.get(p.payment_type_id) || 0) + Number(p.amount || 0))
-        }
+        const cat = Array.isArray(p.payment_types) ? p.payment_types[0]?.category : p.payment_types?.category
+        const categoryKey = cat || 'Other'
+        balances.set(categoryKey, (balances.get(categoryKey) || 0) + Number(p.amount || 0))
       })
 
+      // Subtract approved expenses from their category
       expensesData?.forEach((e: any) => {
-        if (e.funded_by) {
-          balances.set(e.funded_by, (balances.get(e.funded_by) || 0) - Number(e.amount || 0))
-        }
+        // expense may have relation or a raw category field
+        const catFromRel = Array.isArray(e.payment_types) ? e.payment_types[0]?.category : e.payment_types?.category
+        const categoryKey = e.category || catFromRel || 'Other'
+        balances.set(categoryKey, (balances.get(categoryKey) || 0) - Number(e.amount || 0))
       })
 
       setBalanceMap(balances)
@@ -129,7 +175,9 @@ export default function ExpenseApprovalQueue() {
     // mark selected so loading state can be shown per-item
     setSelectedExpense(expense)
 
-    const currentBalance = balanceMap.get(expense.funded_by || '') || 0
+    // Determine expense category (support relation or plain string)
+    const expenseCategory = (expense as any).category?.name || (expense as any).category || (expense as any).payment_types?.[0]?.category || 'Other'
+    const currentBalance = balanceMap.get(expenseCategory) || 0
     const balanceAfterApproval = currentBalance - (expense.amount || 0)
     const LOW_BALANCE_THRESHOLD = 15000
 
@@ -474,7 +522,7 @@ Balance After Approval: N${balanceAfterApproval.toLocaleString()}`
                               border: `1px solid ${categoryColor}40`
                             }}
                           >
-                            {categoryIcon}
+                            {renderCategoryIcon(categoryIcon, categoryName, categoryColor)}
                           </div>
                           <div className="flex-1 min-w-0">
                             <h3 className="font-semibold text-white text-base sm:text-lg leading-tight mb-1">{expense.title}</h3>
@@ -807,36 +855,42 @@ Balance After Approval: N${balanceAfterApproval.toLocaleString()}`
 
                       <div>
                         <label className="block text-sm font-medium text-white mb-2">Category</label>
-                        <select
+                        <ProfessionalDropdown
+                          options={categories.map(cat => ({
+                            value: cat.id,
+                            label: cat.name,
+                            icon: (() => {
+                              const ic = cat.icon
+                              if (!ic) return undefined
+                              if (typeof ic === 'string') {
+                                if (/^(https?:)?\/\//.test(ic)) {
+                                  return <img src={ic} alt={cat.name} className="w-4 h-4 object-contain" />
+                                }
+                                // only use short strings (emoji/1-2 chars) as icons
+                                if (ic.trim().length <= 2) return ic
+                                return undefined
+                              }
+                              return ic
+                            })(),
+                          }))}
                           value={editingExpense.category_id || ''}
-                          onChange={(e) => setEditingExpense({ ...editingExpense, category_id: e.target.value })}
-                          className="w-full px-4 py-3 rounded-xl bg-white/5 border text-white focus:outline-none focus:ring-2"
-                          style={{ borderColor: 'rgba(255, 255, 255, 0.1)' }}
-                        >
-                          <option value="">Select category</option>
-                          {categories.map((cat) => (
-                            <option key={cat.id} value={cat.id} style={{ background: '#1a1a1a' }}>
-                              {cat.name}
-                            </option>
-                          ))}
-                        </select>
+                          onChange={(val) => setEditingExpense({ ...editingExpense, category_id: String(val) })}
+                          placeholder="Select category"
+                          searchable
+                          clearable
+                        />
                       </div>
 
                       <div>
                         <label className="block text-sm font-medium text-white mb-2">Funded By</label>
-                        <select
+                        <ProfessionalDropdown
+                          options={paymentTypes.map(pt => ({ value: pt.id, label: pt.name }))}
                           value={editingExpense.funded_by || ''}
-                          onChange={(e) => setEditingExpense({ ...editingExpense, funded_by: e.target.value })}
-                          className="w-full px-4 py-3 rounded-xl bg-white/5 border text-white focus:outline-none focus:ring-2"
-                          style={{ borderColor: 'rgba(255, 255, 255, 0.1)' }}
-                        >
-                          <option value="">Select funding source</option>
-                          {paymentTypes.map((pt) => (
-                            <option key={pt.id} value={pt.id} style={{ background: '#1a1a1a' }}>
-                              {pt.name}
-                            </option>
-                          ))}
-                        </select>
+                          onChange={(val) => setEditingExpense({ ...editingExpense, funded_by: String(val) })}
+                          placeholder="Select funding source"
+                          searchable
+                          clearable
+                        />
                       </div>
                     </div>
 

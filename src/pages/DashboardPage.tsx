@@ -1,8 +1,7 @@
-import { useState, useEffect } from 'react';
-import { motion } from 'framer-motion';
+import { useState, useEffect, useMemo } from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
 import { 
   User, 
-  Wallet, 
   Calendar, 
   Settings,
   LogOut,
@@ -12,17 +11,25 @@ import {
   AlertCircle,
   Menu,
   X as CloseIcon,
-  Plus
+  Plus,
+  XCircle,
+  Eye,
+  EyeOff,
+  Gift,
+  Star,
+  AlertTriangle
 } from 'lucide-react';
 import { colors, gradients } from '@/config/colors';
 import { useAuth } from '@/hooks/useAuth';
 import { useNavigate, useLocation } from 'react-router-dom';
 import GlassCard from '@/components/ui/GlassCard';
+import { LogoCompact } from '@/components/ui/Logo';
 import { formatCurrency, formatDate } from '@/utils/formatters';
 import paymentService from '@/services/paymentService';
 import type { Payment, PaymentType, PaymentStats } from '@/types';
 import { StatCard } from '@/components/dashboard/StatCard';
 import { NotificationCenter } from '@/components/NotificationCenter';
+import PushNotificationPrompt from '@/components/PushNotificationPrompt';
 import Footer from '@/components/Footer';
 import ExpenseTransparencyDashboard from '@/components/student/ExpenseTransparencyDashboard';
 import AchievementSystem from '@/components/student/AchievementSystem';
@@ -34,6 +41,9 @@ import { useStudentFeatures } from '@/hooks/useStudentFeatures';
 import { StatCardSkeleton, PaymentCardSkeleton } from '@/components/ui/Skeleton';
 import EmptyState, { AllPaidState } from '@/components/ui/EmptyState';
 import { useSettings } from '@/contexts/SettingsContext';
+import haptics from '@/lib/haptics';
+import usePullToRefresh from '@/hooks/usePullToRefresh';
+import PullToRefreshIndicator from '@/components/ui/PullToRefreshIndicator';
 
 export default function DashboardPage() {
   const { user, logout, hasPermission } = useAuth();
@@ -43,8 +53,18 @@ export default function DashboardPage() {
   const location = useLocation();
   const [showProfileMenu, setShowProfileMenu] = useState(false);
   const [showMobileMenu, setShowMobileMenu] = useState(false);
+  const [showLogoutModal, setShowLogoutModal] = useState(false);
   const [loading, setLoading] = useState(true);
   const [refreshKey, setRefreshKey] = useState(0);
+
+  // Pull-to-refresh
+  const { pullDistance, isRefreshing, isReady } = usePullToRefresh({
+    onRefresh: async () => {
+      setRefreshKey(prev => prev + 1);
+      // Small delay so data fetch has time to start
+      await new Promise(resolve => setTimeout(resolve, 800));
+    },
+  });
   
   // Real data states
   const [stats, setStats] = useState<PaymentStats>({
@@ -61,7 +81,51 @@ export default function DashboardPage() {
     status: 'paid' | 'pending' | 'partial' | 'not_paid' | 'waived';
     amountPaid: number;
     progress: number;
+    baseRemaining?: number;
+    daysOverdue?: number;
+    lateFeePerDay?: number;
+    accumulatedLateFees?: number;
+    totalDue?: number;
   }>>([]);
+
+  // Dismissed optional dues - stored in localStorage
+  const [dismissedDues, setDismissedDues] = useState<string[]>(() => {
+    try {
+      const stored = localStorage.getItem(`dismissedDues_${user?.id}`);
+      return stored ? JSON.parse(stored) : [];
+    } catch {
+      return [];
+    }
+  });
+  const [showDismissed, setShowDismissed] = useState(false);
+
+  // Save dismissed dues to localStorage when it changes
+  useEffect(() => {
+    if (user?.id) {
+      localStorage.setItem(`dismissedDues_${user.id}`, JSON.stringify(dismissedDues));
+    }
+  }, [dismissedDues, user?.id]);
+
+  // Dismiss an optional due
+  const dismissOptionalDue = (paymentTypeId: string) => {
+    setDismissedDues(prev => [...prev, paymentTypeId]);
+  };
+
+  // Restore a dismissed due
+  const restoreDismissedDue = (paymentTypeId: string) => {
+    setDismissedDues(prev => prev.filter(id => id !== paymentTypeId));
+  };
+
+  // Filter and separate dues
+  const { mandatoryUnpaidDues, optionalUnpaidDues, dismissedUnpaidDues } = useMemo(() => {
+    const unpaid = activePayments.filter(p => p.status === 'not_paid');
+    
+    return {
+      mandatoryUnpaidDues: unpaid.filter(p => p.paymentType.is_mandatory),
+      optionalUnpaidDues: unpaid.filter(p => !p.paymentType.is_mandatory && !dismissedDues.includes(p.paymentType.id)),
+      dismissedUnpaidDues: unpaid.filter(p => !p.paymentType.is_mandatory && dismissedDues.includes(p.paymentType.id))
+    };
+  }, [activePayments, dismissedDues]);
 
   // Check if we need to refresh based on navigation state
   useEffect(() => {
@@ -132,12 +196,48 @@ export default function DashboardPage() {
             }
           }
           
+          // Compute remaining and late fees
+          const paymentTypeAmount = Number(pt.amount) || 0;
+          const baseRemaining = Math.max(0, paymentTypeAmount - amountPaid);
+          const now = new Date();
+          const deadlineDate = pt.deadline ? new Date(pt.deadline) : null;
+          const lateFeePerDay = Number(pt.late_fee_per_day || 0);
+
+          // Calculate how much was paid BEFORE the deadline
+          let paidBeforeDeadline = 0;
+          if (deadlineDate) {
+            paidBeforeDeadline = paymentsForType
+              .filter(p => p.status === 'approved' && !p.transaction_ref?.startsWith('WAIVED-'))
+              .reduce((sum, p) => {
+                const submittedAt = p.submitted_at ? new Date(p.submitted_at) : (p.created_at ? new Date(p.created_at) : null);
+                if (submittedAt && submittedAt.getTime() <= deadlineDate.getTime()) {
+                  return sum + Number(p.amount || 0);
+                }
+                return sum;
+              }, 0);
+          }
+          const remainingAtDeadline = Math.max(0, paymentTypeAmount - paidBeforeDeadline);
+
+          // Only apply late fees if student still owed money at the deadline
+          let daysOverdue = 0;
+          let accumulatedLateFees = 0;
+          if (deadlineDate && now > deadlineDate && remainingAtDeadline > 0 && lateFeePerDay > 0) {
+            daysOverdue = Math.floor((now.getTime() - deadlineDate.getTime()) / (1000 * 60 * 60 * 24));
+            accumulatedLateFees = daysOverdue * lateFeePerDay;
+          }
+          const totalDue = Math.max(0, baseRemaining) + accumulatedLateFees;
+
           return {
             paymentType: pt,
             payment: paymentsForType[0] || null, // Keep first payment for reference
             status,
             amountPaid,
-            progress
+            progress,
+            baseRemaining,
+            daysOverdue,
+            lateFeePerDay,
+            accumulatedLateFees,
+            totalDue
           };
         });
         
@@ -167,6 +267,13 @@ export default function DashboardPage() {
     } catch (error) {
       console.error('Logout error:', error);
     }
+  };
+
+  const confirmLogout = () => {
+    haptics.warning();
+    setShowLogoutModal(true);
+    setShowProfileMenu(false);
+    setShowMobileMenu(false);
   };
 
   return (
@@ -236,20 +343,14 @@ export default function DashboardPage() {
         animate={{ y: 0 }}
         transition={{ duration: 0.6 }}
       >
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex items-center justify-between h-16">
+        <div className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8">
+          <div className="flex items-center justify-between h-[72px] sm:h-16">
             {/* Logo */}
-            <div className="flex items-center gap-3 mr-4">
-              <motion.div
-                className="w-10 h-10 rounded-xl flex items-center justify-center"
-                style={{ background: gradients.primary }}
-                whileHover={{ scale: 1.05, rotate: 5 }}
-              >
-                <Wallet className="w-5 h-5 text-white" />
-              </motion.div>
-               <div className="hidden sm:block leading-tight">
-                <h1 className="text-lg font-bold text-white">Class Dues</h1>
-                <p className="text-xs pb-0.5" style={{ color: colors.textSecondary }}>{user?.level || 'N/A'}</p>
+            <div className="flex items-center gap-2.5 p-1.5 rounded-xl" style={{ background: 'rgba(255, 104, 3, 0.06)' }}>
+              <LogoCompact />
+               <div className="hidden sm:block leading-tight pr-2">
+                <h1 className="text-base font-extrabold text-white tracking-tight">Dues<span style={{ color: colors.primary }}>Tracker</span></h1>
+                <p className="text-[10px] font-medium tracking-wider uppercase" style={{ color: colors.textTertiary }}>{user?.level || 'N/A'}</p>
                 </div> 
             </div>
 
@@ -322,7 +423,7 @@ export default function DashboardPage() {
                       <div className="my-1 border-t" style={{ borderColor: 'rgba(255, 255, 255, 0.1)' }} />
 
                       <button
-                        onClick={handleLogout}
+                        onClick={confirmLogout}
                         className="w-full flex items-center gap-3 px-3 py-2 rounded-lg transition-colors text-left"
                         style={{ color: colors.statusUnpaid }}
                         onMouseEnter={(e) => e.currentTarget.style.background = 'rgba(255, 68, 68, 0.1)'}
@@ -338,22 +439,22 @@ export default function DashboardPage() {
             </div>
 
             {/* Right Side - Mobile */}
-            <div className="flex md:hidden items-center gap-2">
+            <div className="flex md:hidden items-center gap-1.5">
               {/* Notifications on mobile */}
               <NotificationCenter />
 
               {/* Mobile Menu Button */}
               <motion.button
                 onClick={() => setShowMobileMenu(!showMobileMenu)}
-                className="p-2.5 rounded-xl transition-colors"
+                className="p-2 rounded-xl transition-colors"
                 style={{ background: 'rgba(255, 255, 255, 0.05)' }}
                 whileHover={{ background: 'rgba(255, 255, 255, 0.1)' }}
                 whileTap={{ scale: 0.95 }}
               >
                 {showMobileMenu ? (
-                  <CloseIcon className="w-6 h-6" style={{ color: colors.textPrimary }} />
+                  <CloseIcon className="w-5 h-5" style={{ color: colors.textPrimary }} />
                 ) : (
-                  <Menu className="w-6 h-6" style={{ color: colors.textPrimary }} />
+                  <Menu className="w-5 h-5" style={{ color: colors.textPrimary }} />
                 )}
               </motion.button>
             </div>
@@ -420,7 +521,7 @@ export default function DashboardPage() {
               <div className="my-1 border-t" style={{ borderColor: 'rgba(255, 255, 255, 0.1)' }} />
 
               <button
-                onClick={handleLogout}
+                onClick={confirmLogout}
                 className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg transition-colors text-left"
                 style={{ color: colors.statusUnpaid }}
                 onMouseEnter={(e) => e.currentTarget.style.background = 'rgba(255, 68, 68, 0.1)'}
@@ -434,6 +535,13 @@ export default function DashboardPage() {
         )}
       </motion.nav>
 
+      {/* Pull to Refresh Indicator */}
+      <PullToRefreshIndicator
+        pullDistance={pullDistance}
+        isRefreshing={isRefreshing}
+        isReady={isReady}
+      />
+
       {/* Main Content */}
       <div className="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 sm:py-6 lg:py-8">
         {/* Welcome Section */}
@@ -444,7 +552,12 @@ export default function DashboardPage() {
           transition={{ delay: 0.2 }}
         >
           <h2 className="text-2xl sm:text-3xl lg:text-4xl font-bold text-white mb-2">
-            Welcome back, {user?.full_name?.split(' ')[0]}! 👋
+            {(() => {
+              const hour = new Date().getHours();
+              if (hour < 12) return 'Good morning';
+              if (hour < 17) return 'Good afternoon';
+              return 'Good evening';
+            })()}, {user?.full_name?.split(' ')[0]}! 👋
           </h2>
           <p className="text-sm sm:text-base" style={{ color: colors.textSecondary }}>
             Here's your payment overview and recent activity
@@ -512,9 +625,21 @@ export default function DashboardPage() {
             className="lg:col-start-3 lg:row-start-1"
           >
             <GlassCard>
-              <h3 className="text-xl font-bold text-white mb-6">
-                Unpaid Dues ({activePayments.filter(p => p.status === 'not_paid').length})
-              </h3>
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-xl font-bold text-white">
+                  Unpaid Dues ({mandatoryUnpaidDues.length + optionalUnpaidDues.length})
+                </h3>
+                {dismissedUnpaidDues.length > 0 && (
+                  <button
+                    onClick={() => setShowDismissed(!showDismissed)}
+                    className="flex items-center gap-1.5 text-xs font-medium transition-all hover:opacity-80"
+                    style={{ color: colors.textSecondary }}
+                  >
+                    {showDismissed ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+                    {showDismissed ? 'Hide' : 'Show'} Skipped ({dismissedUnpaidDues.length})
+                  </button>
+                )}
+              </div>
               
               {loading ? (
                 <div className="space-y-3">
@@ -522,120 +647,338 @@ export default function DashboardPage() {
                     <PaymentCardSkeleton key={i} />
                   ))}
                 </div>
-              ) : activePayments.filter(p => p.status === 'not_paid').length === 0 ? (
+              ) : mandatoryUnpaidDues.length === 0 && optionalUnpaidDues.length === 0 ? (
                 <AllPaidState />
               ) : (
-                <div className="space-y-3">
-                  {activePayments
-                    .filter(p => p.status === 'not_paid')
-                    .sort((a, b) => {
-                      // Sort by created_at in ascending order (oldest first)
-                      const dateA = new Date(a.paymentType.created_at || 0).getTime();
-                      const dateB = new Date(b.paymentType.created_at || 0).getTime();
-                      return dateA - dateB;
-                    })
-                    .slice(0, 3) // Show only first 3 unpaid dues
-                    .map((item, index) => {
-                      const { paymentType } = item;
-                      const isOverdue = new Date(paymentType.deadline) < new Date();
-                      
-                      return (
-                        <motion.div
-                          key={paymentType.id}
-                          className="relative rounded-2xl overflow-hidden transition-all cursor-pointer group"
-                          style={{ 
-                            background: 'linear-gradient(135deg, rgba(255, 68, 68, 0.08) 0%, rgba(255, 68, 68, 0.02) 100%)',
-                            border: isOverdue ? `1px solid ${colors.statusUnpaid}40` : '1px solid rgba(255, 68, 68, 0.2)',
-                          }}
-                          initial={{ opacity: 0, y: 10 }}
-                          animate={{ opacity: 1, y: 0 }}
-                          transition={{ delay: 0.1 * index }}
-                          whileHover={{ scale: 1.02, y: -2 }}
-                          onClick={() => navigate(`/payment/${paymentType.id}`)}
-                        >
-                          {/* Overdue badge */}
-                          {isOverdue && (
-                            <div 
-                              className="absolute top-0 right-0 px-2 py-1 text-[10px] font-bold uppercase"
-                              style={{ 
-                                background: colors.statusUnpaid, 
-                                color: 'white',
-                                borderBottomLeftRadius: '8px'
-                              }}
-                            >
-                              ⚠️ Overdue
-                            </div>
-                          )}
+                <div className="space-y-4">
+                  {/* Mandatory Dues Section */}
+                  {mandatoryUnpaidDues.length > 0 && (
+                    <div className="space-y-3">
+                      <div className="flex items-center gap-2 mb-2">
+                        <Star className="w-4 h-4" style={{ color: colors.statusUnpaid }} />
+                        <span className="text-xs font-bold uppercase tracking-wider" style={{ color: colors.statusUnpaid }}>
+                          Required ({mandatoryUnpaidDues.length})
+                        </span>
+                      </div>
+                      {mandatoryUnpaidDues
+                        .sort((a, b) => {
+                          const dateA = new Date(a.paymentType.created_at || 0).getTime();
+                          const dateB = new Date(b.paymentType.created_at || 0).getTime();
+                          return dateA - dateB;
+                        })
+                        .slice(0, 2)
+                        .map((item, index) => {
+                          const { paymentType } = item;
+                          const isOverdue = new Date(paymentType.deadline) < new Date();
                           
-                          <div className="p-4">
-                            <div className="flex items-center gap-3 mb-3">
-                              <motion.div 
-                                className="w-12 h-12 rounded-xl flex items-center justify-center text-2xl shrink-0"
+                          return (
+                            <motion.div
+                              key={paymentType.id}
+                              className="relative rounded-2xl overflow-hidden transition-all cursor-pointer group"
+                              style={{ 
+                                background: 'linear-gradient(135deg, rgba(255, 68, 68, 0.08) 0%, rgba(255, 68, 68, 0.02) 100%)',
+                                border: isOverdue ? `1px solid ${colors.statusUnpaid}40` : '1px solid rgba(255, 68, 68, 0.2)',
+                              }}
+                              initial={{ opacity: 0, y: 10 }}
+                              animate={{ opacity: 1, y: 0 }}
+                              transition={{ delay: 0.1 * index }}
+                              whileHover={{ scale: 1.02, y: -2 }}
+                              onClick={() => navigate(`/payment/${paymentType.id}`)}
+                            >
+                              {/* Overdue badge */}
+                              {isOverdue && (
+                                <div 
+                                  className="absolute top-0 right-0 px-2 py-1 text-[10px] font-bold uppercase"
+                                  style={{ 
+                                    background: colors.statusUnpaid, 
+                                    color: 'white',
+                                    borderBottomLeftRadius: '8px'
+                                  }}
+                                >
+                                  ⚠️ Overdue
+                                </div>
+                              )}
+                              
+                              <div className="p-4">
+                                <div className="flex items-center gap-3 mb-3">
+                                  <motion.div 
+                                    className="w-12 h-12 rounded-xl flex items-center justify-center text-2xl shrink-0"
+                                    style={{ 
+                                      background: `${paymentType.color || colors.statusUnpaid}15`,
+                                      border: `1px solid ${paymentType.color || colors.statusUnpaid}30`
+                                    }}
+                                    whileHover={{ rotate: 10 }}
+                                  >
+                                    {paymentType.icon || 
+                                     (paymentType.category === 'semester_dues' ? '🎓' : 
+                                      paymentType.category === 'books' ? '📚' : 
+                                      paymentType.category === 'events' ? '🎉' :
+                                      paymentType.category === 'projects' ? '📊' : '💰')}
+                                  </motion.div>
+                                  <div className="flex-1 min-w-0">
+                                    <p className="font-bold text-white text-sm truncate">{paymentType.title}</p>
+                                    <div className="flex items-center gap-2 mt-0.5">
+                                      <Calendar className="w-3 h-3" style={{ color: isOverdue ? colors.statusUnpaid : colors.textSecondary }} />
+                                      <p className="text-xs" style={{ color: isOverdue ? colors.statusUnpaid : colors.textSecondary }}>
+                                        {formatDate(paymentType.deadline, 'short')}
+                                      </p>
+                                    </div>
+                                  </div>
+                                </div>
+                                
+                                <div className="flex items-center justify-between mb-3">
+                                  <div>
+                                    <p className="text-[10px] uppercase tracking-wider" style={{ color: colors.textSecondary }}>Amount Due</p>
+                                    <span className="text-xl font-bold text-white">{formatCurrency(item.totalDue ?? paymentType.amount)}</span>
+                                    {(item.accumulatedLateFees ?? 0) > 0 && (
+                                      <div className="text-xs mt-1" style={{ color: colors.textSecondary }}>
+                                        Includes {formatCurrency(item.accumulatedLateFees ?? 0)} late fees ({item.daysOverdue} days)
+                                      </div>
+                                    )}
+                                  </div>
+                                  <div 
+                                    className="px-3 py-1.5 rounded-full text-xs font-bold flex items-center gap-1.5"
+                                    style={{ 
+                                      background: `${colors.statusUnpaid}15`,
+                                      color: colors.statusUnpaid,
+                                      border: `1px solid ${colors.statusUnpaid}30`
+                                    }}
+                                  >
+                                    <div className="w-1.5 h-1.5 rounded-full animate-pulse" style={{ background: colors.statusUnpaid }} />
+                                    REQUIRED
+                                  </div>
+                                </div>
+
+                                <motion.button
+                                  className="w-full py-2.5 px-4 rounded-xl font-semibold text-sm transition-all flex items-center justify-center gap-2 group-hover:shadow-lg"
+                                  style={{
+                                    background: gradients.primary,
+                                    color: 'white',
+                                    boxShadow: `0 4px 15px ${colors.primary}30`
+                                  }}
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    haptics.medium();
+                                    navigate(`/payment/${paymentType.id}`);
+                                  }}
+                                  whileHover={{ scale: 1.02 }}
+                                  whileTap={{ scale: 0.98 }}
+                                >
+                                  <DollarSign className="w-4 h-4" />
+                                  Pay Now
+                                </motion.button>
+                              </div>
+                            </motion.div>
+                          );
+                        })}
+                    </div>
+                  )}
+
+                  {/* Optional Dues Section */}
+                  {optionalUnpaidDues.length > 0 && (
+                    <div className="space-y-3">
+                      <div className="flex items-center gap-2 mb-2">
+                        <Gift className="w-4 h-4" style={{ color: colors.primary }} />
+                        <span className="text-xs font-bold uppercase tracking-wider" style={{ color: colors.primary }}>
+                          Optional ({optionalUnpaidDues.length})
+                        </span>
+                      </div>
+                      {optionalUnpaidDues
+                        .sort((a, b) => {
+                          const dateA = new Date(a.paymentType.created_at || 0).getTime();
+                          const dateB = new Date(b.paymentType.created_at || 0).getTime();
+                          return dateA - dateB;
+                        })
+                        .slice(0, 2)
+                        .map((item, index) => {
+                          const { paymentType } = item;
+                          const isOverdue = new Date(paymentType.deadline) < new Date();
+                          
+                          return (
+                            <motion.div
+                              key={paymentType.id}
+                              className="relative rounded-2xl overflow-hidden transition-all cursor-pointer group"
+                              style={{ 
+                                background: 'linear-gradient(135deg, rgba(255, 104, 3, 0.06) 0%, rgba(255, 104, 3, 0.02) 100%)',
+                                border: `1px solid rgba(255, 104, 3, 0.2)`,
+                              }}
+                              initial={{ opacity: 0, y: 10 }}
+                              animate={{ opacity: 1, y: 0 }}
+                              transition={{ delay: 0.1 * index }}
+                              whileHover={{ scale: 1.02, y: -2 }}
+                              onClick={() => navigate(`/payment/${paymentType.id}`)}
+                            >
+                              {/* Skip button */}
+                              <button
+                                className="absolute top-2 right-2 p-1.5 rounded-full transition-all hover:scale-110 z-10"
                                 style={{ 
-                                  background: `${paymentType.color || colors.statusUnpaid}15`,
-                                  border: `1px solid ${paymentType.color || colors.statusUnpaid}30`
+                                  background: 'rgba(255, 255, 255, 0.1)',
                                 }}
-                                whileHover={{ rotate: 10 }}
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  dismissOptionalDue(paymentType.id);
+                                }}
+                                title="Skip this optional due"
                               >
-                                {paymentType.icon || 
-                                 (paymentType.category === 'semester_dues' ? '🎓' : 
-                                  paymentType.category === 'books' ? '📚' : 
-                                  paymentType.category === 'events' ? '🎉' :
-                                  paymentType.category === 'projects' ? '📊' : '💰')}
-                              </motion.div>
-                              <div className="flex-1 min-w-0">
-                                <p className="font-bold text-white text-sm truncate">{paymentType.title}</p>
-                                <div className="flex items-center gap-2 mt-0.5">
-                                  <Calendar className="w-3 h-3" style={{ color: isOverdue ? colors.statusUnpaid : colors.textSecondary }} />
-                                  <p className="text-xs" style={{ color: isOverdue ? colors.statusUnpaid : colors.textSecondary }}>
-                                    {formatDate(paymentType.deadline, 'short')}
-                                  </p>
+                                <XCircle className="w-4 h-4" style={{ color: colors.textSecondary }} />
+                              </button>
+                              
+                              <div className="p-4">
+                                <div className="flex items-center gap-3 mb-3">
+                                  <motion.div 
+                                    className="w-12 h-12 rounded-xl flex items-center justify-center text-2xl shrink-0"
+                                    style={{ 
+                                      background: `${paymentType.color || colors.primary}15`,
+                                      border: `1px solid ${paymentType.color || colors.primary}30`
+                                    }}
+                                    whileHover={{ rotate: 10 }}
+                                  >
+                                    {paymentType.icon || 
+                                     (paymentType.category === 'events' ? '🎉' :
+                                      paymentType.category === 'projects' ? '📊' : 
+                                      paymentType.category === 'welfare' ? '❤️' : '🎁')}
+                                  </motion.div>
+                                  <div className="flex-1 min-w-0 pr-6">
+                                    <p className="font-bold text-white text-sm truncate">{paymentType.title}</p>
+                                    <div className="flex items-center gap-2 mt-0.5">
+                                      <Calendar className="w-3 h-3" style={{ color: isOverdue ? colors.statusUnpaid : colors.textSecondary }} />
+                                      <p className="text-xs" style={{ color: isOverdue ? colors.statusUnpaid : colors.textSecondary }}>
+                                        {formatDate(paymentType.deadline, 'short')}
+                                      </p>
+                                    </div>
+                                  </div>
+                                </div>
+                                
+                                <div className="flex items-center justify-between mb-3">
+                                  <div>
+                                    <p className="text-[10px] uppercase tracking-wider" style={{ color: colors.textSecondary }}>Amount</p>
+                                    <span className="text-xl font-bold text-white">{formatCurrency(paymentType.amount)}</span>
+                                  </div>
+                                  <div 
+                                    className="px-3 py-1.5 rounded-full text-xs font-bold flex items-center gap-1.5"
+                                    style={{ 
+                                      background: `${colors.primary}15`,
+                                      color: colors.primary,
+                                      border: `1px solid ${colors.primary}30`
+                                    }}
+                                  >
+                                    <Gift className="w-3 h-3" />
+                                    OPTIONAL
+                                  </div>
+                                </div>
+
+                                <div className="flex gap-2">
+                                  <motion.button
+                                    className="flex-1 py-2 px-3 rounded-xl font-semibold text-sm transition-all flex items-center justify-center gap-2"
+                                    style={{
+                                      background: 'rgba(255, 255, 255, 0.1)',
+                                      color: colors.textSecondary,
+                                      border: '1px solid rgba(255, 255, 255, 0.1)'
+                                    }}
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      dismissOptionalDue(paymentType.id);
+                                    }}
+                                    whileHover={{ scale: 1.02 }}
+                                    whileTap={{ scale: 0.98 }}
+                                  >
+                                    Skip
+                                  </motion.button>
+                                  <motion.button
+                                    className="flex-1 py-2 px-3 rounded-xl font-semibold text-sm transition-all flex items-center justify-center gap-2"
+                                    style={{
+                                      background: gradients.primary,
+                                      color: 'white',
+                                      boxShadow: `0 4px 15px ${colors.primary}30`
+                                    }}
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      navigate(`/payment/${paymentType.id}`);
+                                    }}
+                                    whileHover={{ scale: 1.02 }}
+                                    whileTap={{ scale: 0.98 }}
+                                  >
+                                    <DollarSign className="w-4 h-4" />
+                                    Contribute
+                                  </motion.button>
                                 </div>
                               </div>
-                            </div>
-                            
-                            <div className="flex items-center justify-between mb-3">
-                              <div>
-                                <p className="text-[10px] uppercase tracking-wider" style={{ color: colors.textSecondary }}>Amount Due</p>
-                                <span className="text-xl font-bold text-white">{formatCurrency(paymentType.amount)}</span>
-                              </div>
-                              <div 
-                                className="px-3 py-1.5 rounded-full text-xs font-bold flex items-center gap-1.5"
-                                style={{ 
-                                  background: `${colors.statusUnpaid}15`,
-                                  color: colors.statusUnpaid,
-                                  border: `1px solid ${colors.statusUnpaid}30`
-                                }}
-                              >
-                                <div className="w-1.5 h-1.5 rounded-full animate-pulse" style={{ background: colors.statusUnpaid }} />
-                                UNPAID
-                              </div>
-                            </div>
+                            </motion.div>
+                          );
+                        })}
+                    </div>
+                  )}
 
-                            <motion.button
-                              className="w-full py-2.5 px-4 rounded-xl font-semibold text-sm transition-all flex items-center justify-center gap-2 group-hover:shadow-lg"
-                              style={{
-                                background: gradients.primary,
-                                color: 'white',
-                                boxShadow: `0 4px 15px ${colors.primary}30`
+                  {/* Dismissed/Skipped Dues Section */}
+                  <AnimatePresence>
+                    {showDismissed && dismissedUnpaidDues.length > 0 && (
+                      <motion.div 
+                        className="space-y-3"
+                        initial={{ opacity: 0, height: 0 }}
+                        animate={{ opacity: 1, height: 'auto' }}
+                        exit={{ opacity: 0, height: 0 }}
+                        transition={{ duration: 0.3 }}
+                      >
+                        <div className="flex items-center gap-2 mb-2">
+                          <EyeOff className="w-4 h-4" style={{ color: colors.textSecondary }} />
+                          <span className="text-xs font-bold uppercase tracking-wider" style={{ color: colors.textSecondary }}>
+                            Skipped ({dismissedUnpaidDues.length})
+                          </span>
+                        </div>
+                        {dismissedUnpaidDues.map((item, index) => {
+                          const { paymentType } = item;
+                          
+                          return (
+                            <motion.div
+                              key={paymentType.id}
+                              className="relative rounded-xl overflow-hidden transition-all opacity-60"
+                              style={{ 
+                                background: 'rgba(255, 255, 255, 0.03)',
+                                border: '1px solid rgba(255, 255, 255, 0.08)',
                               }}
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                navigate(`/payment/${paymentType.id}`);
-                              }}
-                              whileHover={{ scale: 1.02 }}
-                              whileTap={{ scale: 0.98 }}
+                              initial={{ opacity: 0, y: 10 }}
+                              animate={{ opacity: 0.6, y: 0 }}
+                              transition={{ delay: 0.1 * index }}
                             >
-                              <DollarSign className="w-4 h-4" />
-                              Pay Now
-                            </motion.button>
-                          </div>
-                        </motion.div>
-                      );
-                    })}
+                              <div className="p-3">
+                                <div className="flex items-center justify-between">
+                                  <div className="flex items-center gap-3">
+                                    <div 
+                                      className="w-10 h-10 rounded-lg flex items-center justify-center text-lg shrink-0"
+                                      style={{ 
+                                        background: 'rgba(255, 255, 255, 0.05)',
+                                      }}
+                                    >
+                                      {paymentType.icon || '🎁'}
+                                    </div>
+                                    <div>
+                                      <p className="font-medium text-white text-sm">{paymentType.title}</p>
+                                      <p className="text-xs" style={{ color: colors.textSecondary }}>
+                                        {formatCurrency(paymentType.amount)}
+                                      </p>
+                                    </div>
+                                  </div>
+                                  <button
+                                    className="px-3 py-1.5 rounded-lg text-xs font-medium transition-all hover:opacity-80"
+                                    style={{ 
+                                      background: 'rgba(255, 255, 255, 0.1)',
+                                      color: colors.textSecondary
+                                    }}
+                                    onClick={() => restoreDismissedDue(paymentType.id)}
+                                  >
+                                    Restore
+                                  </button>
+                                </div>
+                              </div>
+                            </motion.div>
+                          );
+                        })}
+                      </motion.div>
+                    )}
+                  </AnimatePresence>
                   
-                  {/* View All Button if more than 3 unpaid dues */}
-                  {activePayments.filter(p => p.status === 'not_paid').length > 3 && (
+                  {/* View All Button if more than visible dues */}
+                  {(mandatoryUnpaidDues.length > 2 || optionalUnpaidDues.length > 2) && (
                     <button
                       onClick={() => navigate('/payments')}
                       className="w-full mt-3 py-2.5 px-4 rounded-lg font-medium text-sm transition-all border"
@@ -653,7 +996,7 @@ export default function DashboardPage() {
                         e.currentTarget.style.borderColor = 'rgba(255, 104, 3, 0.3)';
                       }}
                     >
-                      View All Unpaid Dues ({activePayments.filter(p => p.status === 'not_paid').length}) →
+                      View All Dues ({mandatoryUnpaidDues.length + optionalUnpaidDues.length}) →
                     </button>
                   )}
                 </div>
@@ -715,9 +1058,9 @@ export default function DashboardPage() {
                             };
                           case 'waived':
                             return { 
-                              color: '#9CA3AF', // Gray color to indicate no payment
-                              bg: `linear-gradient(135deg, rgba(156, 163, 175, 0.1) 0%, rgba(156, 163, 175, 0.05) 100%)`,
-                              border: 'rgba(156, 163, 175, 0.25)',
+                              color: '#6366F1', // Professional Indigo for waived
+                              bg: `linear-gradient(135deg, rgba(99, 102, 241, 0.1) 0%, rgba(99, 102, 241, 0.05) 100%)`,
+                              border: 'rgba(99, 102, 241, 0.25)',
                               label: 'WAIVED',
                               icon: '🔓'
                             };
@@ -730,10 +1073,10 @@ export default function DashboardPage() {
                               icon: '🟠'
                             };
                           case 'pending':
-                            return { 
-                              color: colors.accentMint, 
-                              bg: `linear-gradient(135deg, ${colors.accentMint}08 0%, transparent 100%)`,
-                              border: `${colors.accentMint}20`,
+                            return {
+                              color: colors.statusPending,
+                              bg: `linear-gradient(135deg, ${colors.statusPending}08 0%, transparent 100%)`,
+                              border: `${colors.statusPending}20`,
                               label: 'PENDING',
                               icon: '⏳'
                             };
@@ -829,7 +1172,7 @@ export default function DashboardPage() {
                                 <div className="flex items-center justify-between text-xs mb-1.5">
                                   <span style={{ color: colors.textSecondary }}>Progress</span>
                                   <span className="font-semibold" style={{ color: colors.warning }}>
-                                    {formatCurrency(amountPaid)} / {formatCurrency(paymentType.amount)}
+                                    {formatCurrency(amountPaid)} / {formatCurrency(item.totalDue ?? paymentType.amount)}
                                   </span>
                                 </div>
                                 <div 
@@ -874,8 +1217,13 @@ export default function DashboardPage() {
                                       {status === 'paid' ? 'Amount Paid' : 'Total Amount'}
                                     </p>
                                     <span className="text-lg font-bold text-white">
-                                      {formatCurrency(status === 'paid' ? amountPaid || paymentType.amount : paymentType.amount)}
+                                      {formatCurrency(status === 'paid' ? amountPaid || paymentType.amount : (item.totalDue ?? paymentType.amount))}
                                     </span>
+                                    {status !== 'paid' && (item.accumulatedLateFees ?? 0) > 0 && (
+                                      <p className="text-xs mt-0.5" style={{ color: colors.statusUnpaid }}>
+                                        +{formatCurrency(item.accumulatedLateFees ?? 0)} late fee
+                                      </p>
+                                    )}
                                   </>
                                 )}
                               </div>
@@ -1000,6 +1348,100 @@ export default function DashboardPage() {
           <Plus size={28} className="text-white" />
         </motion.button>
       )}
+
+      {/* Push Notification Prompt */}
+      <PushNotificationPrompt mode="banner" />
+
+      {/* Logout Confirmation Modal */}
+      <AnimatePresence>
+        {showLogoutModal && (
+          <motion.div
+            className="fixed inset-0 z-[100] flex items-center justify-center p-4"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+          >
+            {/* Backdrop */}
+            <motion.div 
+              className="absolute inset-0 bg-black/70 backdrop-blur-sm"
+              onClick={() => setShowLogoutModal(false)}
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+            />
+            
+            {/* Modal */}
+            <motion.div
+              className="relative w-full max-w-sm rounded-2xl overflow-hidden"
+              style={{
+                background: 'linear-gradient(145deg, #1A1A1A 0%, #0D0D0D 100%)',
+                border: '1px solid rgba(255, 68, 68, 0.3)',
+                boxShadow: '0 25px 50px rgba(255, 68, 68, 0.15)'
+              }}
+              initial={{ opacity: 0, scale: 0.9, y: 20 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.9, y: 20 }}
+            >
+              {/* Header with danger icon */}
+              <div 
+                className="p-6 text-center"
+                style={{ 
+                  background: 'linear-gradient(180deg, rgba(255, 68, 68, 0.15) 0%, transparent 100%)'
+                }}
+              >
+                <div 
+                  className="w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4"
+                  style={{ 
+                    background: 'rgba(255, 68, 68, 0.15)',
+                    border: '2px solid rgba(255, 68, 68, 0.3)'
+                  }}
+                >
+                  <AlertTriangle className="w-8 h-8" style={{ color: colors.statusUnpaid }} />
+                </div>
+                
+                <h3 className="text-xl font-bold text-white mb-2">
+                  Logout Confirmation
+                </h3>
+                <p className="text-sm" style={{ color: colors.textSecondary }}>
+                  Are you sure you want to logout? You'll need to sign in again to access your account.
+                </p>
+              </div>
+              
+              {/* Actions */}
+              <div className="p-4 flex gap-3">
+                <motion.button
+                  className="flex-1 py-3 px-4 rounded-xl font-semibold text-sm transition-all"
+                  style={{
+                    background: 'rgba(255, 255, 255, 0.08)',
+                    color: colors.textPrimary,
+                    border: '1px solid rgba(255, 255, 255, 0.1)'
+                  }}
+                  onClick={() => setShowLogoutModal(false)}
+                  whileHover={{ scale: 1.02, background: 'rgba(255, 255, 255, 0.12)' }}
+                  whileTap={{ scale: 0.98 }}
+                >
+                  Cancel
+                </motion.button>
+                
+                <motion.button
+                  className="flex-1 py-3 px-4 rounded-xl font-semibold text-sm transition-all flex items-center justify-center gap-2"
+                  style={{
+                    background: 'linear-gradient(135deg, #FF4444, #CC3333)',
+                    color: 'white',
+                    boxShadow: '0 4px 15px rgba(255, 68, 68, 0.3)'
+                  }}
+                  onClick={handleLogout}
+                  whileHover={{ scale: 1.02, boxShadow: '0 6px 20px rgba(255, 68, 68, 0.4)' }}
+                  whileTap={{ scale: 0.98 }}
+                >
+                  <LogOut className="w-4 h-4" />
+                  Yes, Logout
+                </motion.button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* Footer */}
       <Footer />

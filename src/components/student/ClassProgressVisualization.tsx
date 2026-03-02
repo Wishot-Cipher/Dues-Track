@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { motion } from 'framer-motion'
-import { Users, TrendingUp, Target, Sparkles } from 'lucide-react'
+import { Users, TrendingUp, Target, Sparkles, Gift } from 'lucide-react'
 import { colors, gradients } from '@/config/colors'
 import { supabase } from '@/config/supabase'
 
@@ -10,6 +10,8 @@ interface ClassProgress {
   percentagePaid: number
   totalCollected: number
   totalExpected: number
+  totalWaived: number
+  effectiveTarget: number
   recentPayers: Array<{
     name: string
     amount: number
@@ -48,25 +50,36 @@ export default function ClassProgressVisualization() {
       // Get ALL approved payments to count unique students and total collected
       const { data: allPayments } = await supabase
         .from('payments')
-        .select('amount, student_id')
+        .select('amount, student_id, status, transaction_ref')
         .eq('status', 'approved')
-        .not('transaction_ref', 'like', 'WAIVED-%')
 
-      const totalCollected = allPayments?.reduce((sum, p) => sum + Number(p.amount), 0) || 0
+      // Calculate total collected (excluding waived)
+      const totalCollected = allPayments
+        ?.filter(p => !p.transaction_ref?.startsWith('WAIVED-'))
+        .reduce((sum, p) => sum + Number(p.amount), 0) || 0
 
-      // Count unique students who have paid from ALL payments
+      // Calculate total waived amount
+      const totalWaived = allPayments
+        ?.filter(p => p.transaction_ref?.startsWith('WAIVED-'))
+        .reduce((sum, p) => sum + Number(p.amount), 0) || 0
+
+      // Effective target = Total Expected - Waived amounts
+      const effectiveTarget = totalExpected - totalWaived
+
+      // Count unique students who have paid from ALL payments (including waived as they count as "paid")
       const uniqueStudents = new Set(allPayments?.map(p => p.student_id) || [])
       const studentsWhoPaid = uniqueStudents.size
 
       const percentagePaid = totalStudents ? (studentsWhoPaid / (totalStudents || 1)) * 100 : 0
 
-      // Get recent 5 payers with student names
+      // Get recent 5 payers with student names (excluding waived)
       const { data: recentPayments } = await supabase
         .from('payments')
         .select(`
           amount,
           student_id,
           created_at,
+          transaction_ref,
           students!inner(full_name)
         `)
         .eq('status', 'approved')
@@ -94,6 +107,8 @@ export default function ClassProgressVisualization() {
         percentagePaid,
         totalCollected,
         totalExpected,
+        totalWaived,
+        effectiveTarget,
         recentPayers
       })
     } catch (error) {
@@ -193,13 +208,36 @@ export default function ClassProgressVisualization() {
         <div className="p-2 sm:p-3 rounded-lg" style={{ background: `${colors.primary}10`, border: `1px solid ${colors.primary}30` }}>
           <div className="flex items-center gap-1.5 sm:gap-2 mb-1">
             <Target className="w-3.5 h-3.5 sm:w-4 sm:h-4 flex-shrink-0" style={{ color: colors.primary }} />
-            <span className="text-xs font-medium" style={{ color: colors.textSecondary }}>Target</span>
+            <span className="text-xs font-medium" style={{ color: colors.textSecondary }}>Actual Target</span>
           </div>
           <p className="text-sm sm:text-lg font-bold text-white break-all">
-            ₦{progress.totalExpected.toLocaleString()}
+            ₦{progress.effectiveTarget.toLocaleString()}
           </p>
+          {progress.totalWaived > 0 && (
+            <p className="text-xs mt-0.5" style={{ color: colors.textSecondary }}>
+              <span className="line-through">₦{progress.totalExpected.toLocaleString()}</span>
+            </p>
+          )}
         </div>
       </div>
+
+      {/* Waived Info - Show if there are waivers */}
+      {progress.totalWaived > 0 && (
+        <div className="p-2.5 sm:p-3 rounded-lg mb-3 sm:mb-4" style={{ background: 'rgba(139, 92, 246, 0.1)', border: '1px solid rgba(139, 92, 246, 0.2)' }}>
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <Gift className="w-4 h-4 text-purple-400" />
+              <span className="text-xs sm:text-sm font-medium text-purple-400">Waivers Applied</span>
+            </div>
+            <span className="text-xs sm:text-sm font-bold text-purple-300">
+              ₦{progress.totalWaived.toLocaleString()} waived
+            </span>
+          </div>
+          <p className="text-xs mt-1" style={{ color: colors.textSecondary }}>
+            Some dues have been waived, reducing the overall target
+          </p>
+        </div>
+      )}
 
       {/* Motivation Message */}
       {progress.percentagePaid >= 75 ? (

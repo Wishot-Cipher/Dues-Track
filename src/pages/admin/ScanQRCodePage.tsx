@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 /* eslint-disable @typescript-eslint/no-unused-vars */
 import { useState, useEffect, useRef, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
@@ -83,6 +84,7 @@ interface PaymentType {
   id: string;
   title: string;
   amount: number;
+  late_fee_per_day?: number;
 }
 
 // Detect iOS
@@ -96,6 +98,24 @@ const isSecureContext = () => {
   return window.isSecureContext || 
     window.location.hostname === 'localhost' || 
     window.location.hostname === '127.0.0.1';
+};
+
+// iOS-specific camera permission check
+const checkIOSCameraPermission = async (): Promise<boolean> => {
+  if (!isIOS()) return true;
+  
+  try {
+    // On iOS, we need to explicitly request camera permission first
+    const stream = await navigator.mediaDevices.getUserMedia({ 
+      video: { facingMode: 'environment' } 
+    });
+    // Stop tracks immediately after permission check
+    stream.getTracks().forEach(track => track.stop());
+    return true;
+  } catch (error) {
+    console.warn('iOS camera permission check failed:', error);
+    return false;
+  }
 };
 
 export default function ScanQRCodePage() {
@@ -473,7 +493,12 @@ export default function ScanQRCodePage() {
         await stopScanner();
       }
 
-      const config = { fps: 5, qrbox: { width: 200, height: 200 } };
+      const config = { 
+        fps: 15, 
+        qrbox: { width: 250, height: 250 },
+        formatsToSupport: [0], // QR_CODE only
+        experimentalFeatures: { useBarCodeDetectorIfSupported: true }
+      };
       
         await withScannerLock(async () => {
           const currentContainer = document.getElementById(scannerContainerId);
@@ -532,6 +557,24 @@ export default function ScanQRCodePage() {
         return;
       }
 
+      // iOS-specific: Pre-request camera permission before scanner initialization
+      if (isIOS()) {
+        const hasPermission = await checkIOSCameraPermission();
+        if (!hasPermission) {
+          setCameraError(
+            "Camera access denied on iOS.\n\n" +
+            "To enable:\n" +
+            "1. Go to Settings > Safari\n" +
+            "2. Scroll to 'Camera'\n" +
+            "3. Select 'Allow'\n" +
+            "4. Return here and tap 'Try Again'\n\n" +
+            "Alternatively, use Manual Input below."
+          );
+          setCameraLoading(false);
+          return;
+        }
+      }
+
       let devices: { id: string; label: string }[] = [];
       
       try {
@@ -570,12 +613,23 @@ export default function ScanQRCodePage() {
       const cameraToUse = cameraId || selectedCamera || devices[0].id;
       setSelectedCamera(cameraToUse);
 
-      const config = {
-        fps: 10,
+      // iOS Safari needs simpler config - disable experimental features that may not work
+      const config = isIOS() ? {
+        fps: 15, // Good FPS for iOS with stability
         qrbox: { width: 250, height: 250 },
         aspectRatio: 1.0,
+        formatsToSupport: [0], // QR_CODE only
+      } : {
+        fps: 20, // Higher FPS for faster desktop detection
+        qrbox: { width: 280, height: 280 },
+        aspectRatio: 1.0,
+        formatsToSupport: [0],
+        experimentalFeatures: {
+          useBarCodeDetectorIfSupported: true
+        }
       };
 
+      // iOS always uses facingMode, Android/desktop can use specific cameraId
       const cameraConfig = isIOS() 
         ? { facingMode: "environment" }
         : cameraToUse;
@@ -806,10 +860,44 @@ export default function ScanQRCodePage() {
     initScanner();
 
     return () => {
-      // Ensure scanner stop starts first while DOM still present
-      stopScanner();
       mountedRef.current = false;
       scannerInitializedRef.current = false;
+      
+      // CRITICAL: Force stop all camera tracks immediately on unmount
+      const forceStopAllCameras = async () => {
+        try {
+          // First try to stop via library
+          await stopScanner();
+        } catch (e) {
+          console.debug('stopScanner during unmount error:', e);
+        }
+        
+        // Force stop all video tracks regardless
+        try {
+          const videos = document.querySelectorAll('video');
+          videos.forEach(video => {
+            try {
+              const stream = video.srcObject as MediaStream | null;
+              if (stream) {
+                stream.getTracks().forEach(track => {
+                  try { track.stop(); } catch { /* ignore */ }
+                });
+              }
+              video.srcObject = null;
+            } catch { /* ignore */ }
+          });
+        } catch { /* ignore */ }
+        
+        // Also try navigator.mediaDevices to stop any active streams
+        try {
+          const streams = await navigator.mediaDevices.getUserMedia({ video: true }).catch(() => null);
+          if (streams) {
+            streams.getTracks().forEach(track => track.stop());
+          }
+        } catch { /* ignore */ }
+      };
+      
+      forceStopAllCameras();
     };
   }, [scanning, showManualInput, startScanner, stopScanner, pushScannerError]);
 
@@ -855,12 +943,14 @@ export default function ScanQRCodePage() {
 
         const transactionRef = `CASH-${studentToPay.regNumber}-${baseTimestamp}-${i}`;
 
+        const amountToInsert = (studentToPay as any).outstanding ?? qrData.amountPerStudent ?? paymentType.amount;
+
         const paymentResponse = await supabase
           .from("payments")
           .insert({
             student_id: studentToPay.id,
             payment_type_id: qrData.paymentTypeId,
-            amount: qrData.amountPerStudent,
+            amount: amountToInsert,
             payment_method: "cash",
             transaction_ref: transactionRef,
             status: "approved",
@@ -888,8 +978,8 @@ export default function ScanQRCodePage() {
           type: "payment_approved",
           title: `Cash Payment Received - ${qrData.paymentTypeName}`,
           message: qrData.totalStudents > 1
-            ? `Your cash payment of ${formatCurrency(qrData.amountPerStudent)} has been received and approved.\n\nPaid by: ${qrData.paidByName}\nTransaction Ref: ${transactionRef}\n\nThank you!`
-            : `Your cash payment of ${formatCurrency(qrData.amountPerStudent)} has been received and approved.\n\nTransaction Ref: ${transactionRef}\n\nThank you for your payment!`,
+            ? `Your cash payment of ${formatCurrency(amountToInsert)} has been received and approved.\n\nPaid by: ${qrData.paidByName}\nTransaction Ref: ${transactionRef}\n\nThank you!`
+            : `Your cash payment of ${formatCurrency(amountToInsert)} has been received and approved.\n\nTransaction Ref: ${transactionRef}\n\nThank you for your payment!`,
           link: "/payments",
         });
       }
@@ -940,8 +1030,12 @@ export default function ScanQRCodePage() {
 
 const handleMultiPayCode = async (codeInput: string) => {
   try {
+    console.log('🔍 Multi-pay code received:', codeInput);
+    
     const withoutPrefix = codeInput.substring(3);
     const parts = withoutPrefix.split('-');
+    
+    console.log('📝 Parsed parts:', { withoutPrefix, parts, partsLength: parts.length });
     
     if (parts.length < 2) {
       toast.error("Invalid multi-pay code format");
@@ -951,6 +1045,8 @@ const handleMultiPayCode = async (codeInput: string) => {
     
     const paymentPart = parts[0];
     const payerPart = parts[1];
+    
+    console.log('📦 Payment part:', paymentPart, '| Payer part:', payerPart);
     
     if (!payerPart.startsWith('P')) {
       toast.error("Invalid code: Missing payer identifier");
@@ -962,6 +1058,8 @@ const handleMultiPayCode = async (codeInput: string) => {
     const otherSuffixes = parts.length > 2 
       ? parts[2].split('.').filter(s => s.length > 0) 
       : [];
+    
+    console.log('👥 Payer suffix:', payerSuffix, '| Recipient suffixes:', otherSuffixes);
 
     const { data: allPaymentTypes, error: ptError } = await supabase
       .from("payment_types")
@@ -969,10 +1067,14 @@ const handleMultiPayCode = async (codeInput: string) => {
       .eq("is_active", true);
 
     if (ptError) throw ptError;
+    
+    console.log('💳 Active payment types:', allPaymentTypes?.map(pt => ({ id: pt.id, suffix: pt.id.replace(/-/g, '').slice(-3).toUpperCase(), title: pt.title })));
 
     const matchingPT = allPaymentTypes?.find(pt => 
       pt.id.replace(/-/g, '').slice(-3).toUpperCase() === paymentPart.toUpperCase()
     );
+    
+    console.log('🎯 Looking for payment suffix:', paymentPart.toUpperCase(), '| Found:', matchingPT?.title || 'NONE');
 
     if (!matchingPT) {
       toast.error("Payment type not found. The code may be invalid.");
@@ -984,22 +1086,64 @@ const handleMultiPayCode = async (codeInput: string) => {
       .from("students")
       .select("id, full_name, reg_number");
 
-    if (studentError) throw studentError;
+    if (studentError) {
+      console.error('❌ Error fetching students:', studentError);
+      toast.error("Failed to load students. Please try again.");
+      setProcessingManual(false);
+      return;
+    }
+    
+    if (!allStudents || allStudents.length === 0) {
+      console.error('❌ No students found in database');
+      toast.error("No students found. Please check database connection.");
+      setProcessingManual(false);
+      return;
+    }
+    
+    console.log('👨‍🎓 Total students loaded:', allStudents.length);
+    console.log('📋 Sample reg numbers:', allStudents.slice(0, 5).map(s => ({ 
+      name: s.full_name, 
+      reg: s.reg_number, 
+      cleaned: s.reg_number.replace(/[^A-Z0-9]/gi, ''),
+      suffix: s.reg_number.replace(/[^A-Z0-9]/gi, '').slice(-3).toUpperCase()
+    })));
 
     const findStudentBySuffix = (suffix: string) => {
-      return allStudents?.find(stu => {
+      // Try exact suffix match first (last 3 alphanumeric chars)
+      let found = allStudents.find(stu => {
         const cleanedReg = stu.reg_number.replace(/[^A-Z0-9]/gi, '');
         return cleanedReg.slice(-3).toUpperCase() === suffix.toUpperCase();
       });
+      
+      // If not found, try partial match (suffix might be anywhere in reg number)
+      if (!found) {
+        found = allStudents.find(stu => {
+          const cleanedReg = stu.reg_number.replace(/[^A-Z0-9]/gi, '').toUpperCase();
+          return cleanedReg.includes(suffix.toUpperCase());
+        });
+        if (found) {
+          console.log('🔎 Found via partial match for suffix:', suffix);
+        }
+      }
+      
+      console.log('🔎 Finding suffix:', suffix, '| Found:', found?.full_name || 'NONE', found ? `(reg: ${found.reg_number})` : '');
+      return found;
     };
 
     const payerStudent = findStudentBySuffix(payerSuffix);
     
     if (!payerStudent) {
-      toast.error("Could not identify the payer. Invalid code.");
+      console.error('❌ Payer not found. Suffix:', payerSuffix);
+      console.log('Available suffixes:', allStudents.slice(0, 10).map(s => ({
+        name: s.full_name.substring(0, 20),
+        suffix: s.reg_number.replace(/[^A-Z0-9]/gi, '').slice(-3).toUpperCase()
+      })));
+      toast.error(`Could not find payer with suffix "${payerSuffix}". Please verify the code.`);
       setProcessingManual(false);
       return;
     }
+    
+    console.log('✅ Payer identified:', payerStudent.full_name, '| Reg:', payerStudent.reg_number);
 
     const otherStudents = otherSuffixes
       .map(suffix => findStudentBySuffix(suffix))
@@ -1007,13 +1151,20 @@ const handleMultiPayCode = async (codeInput: string) => {
 
     const allRecipients = otherStudents;
     
+    console.log('📊 Recipients found:', allRecipients.length, 'of', otherSuffixes.length, 'expected');
+    
     if (allRecipients.length < otherSuffixes.length) {
       const missingCount = otherSuffixes.length - allRecipients.length;
-      toast.warning(`${missingCount} recipient(s) could not be found. Proceeding with ${allRecipients.length} students.`);
+      const missingSuffixes = otherSuffixes.filter(suffix => 
+        !allRecipients.some(r => r.reg_number.replace(/[^A-Z0-9]/gi, '').slice(-3).toUpperCase() === suffix.toUpperCase())
+      );
+      console.warn('⚠️ Missing recipients with suffixes:', missingSuffixes);
+      toast.warning(`${missingCount} recipient(s) not found (${missingSuffixes.join(', ')}). Proceeding with ${allRecipients.length} students.`);
     }
     
     if (allRecipients.length === 0) {
-      toast.error("No valid recipients found in the code.");
+      console.error('❌ No recipients found. Searched for suffixes:', otherSuffixes);
+      toast.error(`No recipients found for suffixes: ${otherSuffixes.join(', ')}. Please check the code.`);
       setProcessingManual(false);
       return;
     }
@@ -1053,22 +1204,99 @@ const handleMultiPayCode = async (codeInput: string) => {
       toast.warning(`${alreadyPaidStudents.join(", ")} already paid and will be skipped`);
     }
 
-    const manualQrData: QRData = {
-      type: "CASH_PAYMENT",
-      paidBy: payerStudent.id,
-      paidByName: payerStudent.full_name,
-      paidByRegNumber: payerStudent.reg_number,
-      students: studentsToPay,
-      totalStudents: studentsToPay.length,
-      paymentTypeId: matchingPT.id,
-      paymentTypeName: matchingPT.title,
-      totalAmount: matchingPT.amount * studentsToPay.length,
-      amountPerStudent: matchingPT.amount,
-      timestamp: Date.now(),
-      paymentMethod: "cash",
-    };
+    // Compute outstanding per student (includes late fees) and build detailed QR payload
+    try {
+      // Fetch payment type details (deadline, late_fee_per_day) to compute late fees
+      const { data: fullPT } = await supabase
+        .from('payment_types')
+        .select('id, title, amount, deadline, late_fee_per_day')
+        .eq('id', matchingPT.id)
+        .single();
 
-    setQrData(manualQrData);
+      // Fetch payments for these students in bulk
+      const { data: paymentsData } = await supabase
+        .from('payments')
+        .select('student_id, amount, status, transaction_ref')
+        .eq('payment_type_id', matchingPT.id)
+        .in('student_id', studentsToPay.map(s => s.id));
+
+      const now = new Date();
+      const deadlineDate = fullPT?.deadline ? new Date(fullPT.deadline) : null;
+      const perDay = Number(fullPT?.late_fee_per_day || 0);
+
+      const studentsWithOutstanding = studentsToPay.map(s => {
+        const studentPayments = (paymentsData || []).filter((p: any) => p.student_id === s.id) || [];
+        const paidForType = studentPayments
+          .filter((p: any) => p.status === 'approved' && !p.transaction_ref?.startsWith('WAIVED-'))
+          .reduce((sum: number, p: any) => sum + Number(p.amount || 0), 0);
+
+        const baseOutstanding = Math.max(0, (fullPT?.amount || matchingPT.amount) - paidForType);
+        let accumulated = 0;
+        try {
+          if (deadlineDate && now > deadlineDate && perDay > 0) {
+            // Check how much was paid before deadline
+            const paidBeforeDeadline = studentPayments
+              .filter((p: any) => p.status === 'approved' && !p.transaction_ref?.startsWith('WAIVED-'))
+              .reduce((sum: number, p: any) => {
+                const submittedAt = p.submitted_at ? new Date(p.submitted_at) : (p.created_at ? new Date(p.created_at) : null);
+                if (submittedAt && submittedAt.getTime() <= deadlineDate.getTime()) {
+                  return sum + Number(p.amount || 0);
+                }
+                return sum;
+              }, 0);
+            const remainingAtDeadline = Math.max(0, (fullPT?.amount || matchingPT.amount) - paidBeforeDeadline);
+            // Only apply late fees if student still owed at deadline
+            if (remainingAtDeadline > 0) {
+              const daysOverdue = Math.floor((now.getTime() - deadlineDate.getTime()) / (1000 * 60 * 60 * 24));
+              if (daysOverdue > 0) accumulated = daysOverdue * perDay;
+            }
+          }
+        } catch (e) {
+          // ignore
+        }
+
+        return { id: s.id, name: s.name, regNumber: s.regNumber, outstanding: baseOutstanding + accumulated };
+      });
+
+      const totalAmount = studentsWithOutstanding.reduce((sum, s) => sum + (s.outstanding || 0), 0);
+
+      const manualQrData: QRData = {
+        type: "CASH_PAYMENT",
+        paidBy: payerStudent.id,
+        paidByName: payerStudent.full_name,
+        paidByRegNumber: payerStudent.reg_number,
+        students: studentsWithOutstanding as any,
+        totalStudents: studentsWithOutstanding.length,
+        paymentTypeId: matchingPT.id,
+        paymentTypeName: matchingPT.title,
+        totalAmount,
+        // amountPerStudent kept as fallback (individual outstanding available on each student)
+        amountPerStudent: matchingPT.amount,
+        timestamp: Date.now(),
+        paymentMethod: "cash",
+      };
+
+      setQrData(manualQrData);
+    } catch (err) {
+      console.error('Failed to compute outstanding for manual QR:', err);
+      // Fallback to previous simple payload
+      const manualQrData: QRData = {
+        type: "CASH_PAYMENT",
+        paidBy: payerStudent.id,
+        paidByName: payerStudent.full_name,
+        paidByRegNumber: payerStudent.reg_number,
+        students: studentsToPay,
+        totalStudents: studentsToPay.length,
+        paymentTypeId: matchingPT.id,
+        paymentTypeName: matchingPT.title,
+        totalAmount: matchingPT.amount * studentsToPay.length,
+        amountPerStudent: matchingPT.amount,
+        timestamp: Date.now(),
+        paymentMethod: "cash",
+      };
+
+      setQrData(manualQrData);
+    }
     setStudent({
       id: payerStudent.id,
       full_name: payerStudent.full_name,
@@ -1086,60 +1314,56 @@ const handleMultiPayCode = async (codeInput: string) => {
   }
 };
 
-const formatPaymentCode = (input: string): string => {
-  const value = input.toUpperCase().replace(/[^A-Z0-9.-]/g, '');
+/**
+ * Format payment code as user types
+ * Single payment: ABC-DEF-1234 (3 chars - 3 chars - 4 chars)
+ * Multi payment: MP-XXX-YYYY-NNN.NNN... (MP - payer - payment - student IDs)
+ */
+const formatPaymentCode = (value: string): string => {
+  // Get only alphanumeric characters
+  const chars = value.replace(/[^A-Za-z0-9]/g, '').toUpperCase();
   
-  if (value.startsWith('MP')) {
-    if (value.includes('-') && value.split('-').length >= 3) {
-      return value;
+  if (!chars) return '';
+  
+  // Check if it starts with MP (multi-payment)
+  if (chars.startsWith('MP')) {
+    // Format: MP-XXX-YYYY-NNN.NNN
+    let result = 'MP';
+    const rest = chars.slice(2);
+    
+    if (rest.length > 0) {
+      result += '-' + rest.slice(0, 3); // Payer prefix
     }
-    
-    const stripped = value.replace(/[^A-Z0-9]/g, '').substring(2);
-    
-    if (stripped.length <= 3) return `MP-${stripped}`;
-    
-    const paymentPart = stripped.slice(0, 3);
-    const rest = stripped.slice(3);
-    
-    if (rest.length === 0) return `MP-${paymentPart}`;
-    
-    if (rest.startsWith('P')) {
-      if (rest.length <= 4) return `MP-${paymentPart}-${rest}`;
-      
-      const payerPart = rest.slice(0, 4);
-      const otherPart = rest.slice(4);
-      
-      if (otherPart.length === 0) return `MP-${paymentPart}-${payerPart}`;
-      
-      const otherSuffixes: string[] = [];
-      for (let i = 0; i < otherPart.length; i += 3) {
-        otherSuffixes.push(otherPart.slice(i, i + 3));
-      }
-      
-      return `MP-${paymentPart}-${payerPart}-${otherSuffixes.join('.')}`;
-    } else {
-      if (rest.length <= 3) return `MP-${paymentPart}-P${rest}`;
-      
-      const payerPart = `P${rest.slice(0, 3)}`;
-      const otherPart = rest.slice(3);
-      
-      if (otherPart.length === 0) return `MP-${paymentPart}-${payerPart}`;
-      
-      const otherSuffixes: string[] = [];
-      for (let i = 0; i < otherPart.length; i += 3) {
-        otherSuffixes.push(otherPart.slice(i, i + 3));
-      }
-      
-      return `MP-${paymentPart}-${payerPart}-${otherSuffixes.join('.')}`;
+    if (rest.length > 3) {
+      result += '-' + rest.slice(3, 7); // Payment suffix
     }
+    if (rest.length > 7) {
+      // Student IDs in groups of 3 with dots
+      const students = rest.slice(7);
+      const groups = [];
+      for (let i = 0; i < students.length; i += 3) {
+        groups.push(students.slice(i, i + 3));
+      }
+      result += '-' + groups.join('.');
+    }
+    return result;
   }
   
-  const stripped = value.replace(/[^A-Z0-9]/g, '');
-  if (stripped.length <= 3) return stripped;
-  if (stripped.length <= 6) return `${stripped.slice(0, 3)}-${stripped.slice(3)}`;
-  return `${stripped.slice(0, 3)}-${stripped.slice(3, 6)}-${stripped.slice(6, 10)}`;
+  // Single payment: ABC-DEF-1234
+  let result = chars.slice(0, 3);
+  if (chars.length > 3) {
+    result += '-' + chars.slice(3, 6);
+  }
+  if (chars.length > 6) {
+    result += '-' + chars.slice(6, 10);
+  }
+  return result;
 };
 
+// Ref for payment code input element
+const paymentCodeInputRef = useRef<HTMLInputElement>(null);
+
+// Handler with formatting on every keystroke
 const handlePaymentCodeChange = (e: React.ChangeEvent<HTMLInputElement>) => {
   const formatted = formatPaymentCode(e.target.value);
   setPaymentCodeInput(formatted);
@@ -1152,37 +1376,50 @@ const handlePaymentCodeSubmit = async () => {
   try {
     const codeInput = paymentCodeInput.trim().toUpperCase();
     
+    // Handle multi-payment codes (start with MP-)
     if (codeInput.startsWith('MP-')) {
       await handleMultiPayCode(codeInput);
       return;
     }
     
+    // Single payment validation: must be XXX-YYY-NNNN format
     const codeParts = codeInput.split('-');
     
+    // Validate format: exactly 3 parts
     if (codeParts.length !== 3) {
-      toast.error("Invalid code format. Single: ABC-DEF-1234 | Multi: MP-XXX-P123-456");
+      toast.error("Invalid format! Expected: ABC-DEF-1234 (for single) or MP-XXX-YYYY-NNN (for multi-student)");
       setProcessingManual(false);
       return;
     }
-
-    const [studentPart, paymentPart] = codeParts;
     
+    const [studentPart, paymentPart, sequencePart] = codeParts;
+    
+    // Validate each part has correct length
+    if (studentPart.length !== 3 || paymentPart.length !== 3 || sequencePart.length < 1) {
+      toast.error("Invalid code! Format should be ABC-DEF-1234 where ABC=student, DEF=payment type, 1234=sequence");
+      setProcessingManual(false);
+      return;
+    }
+    
+    // Fetch all students and find matches
     const { data: allStudents, error: studentError } = await supabase
       .from("students")
       .select("id, full_name, reg_number");
 
     if (studentError) throw studentError;
 
+    // Find students matching the first 3 characters of their ID (without dashes)
     const matchingStudents = allStudents?.filter(s => 
       s.id.replace(/-/g, '').slice(0, 3).toUpperCase() === studentPart
     ) || [];
 
     if (matchingStudents.length === 0) {
-      toast.error("No student found matching this payment code. Please verify the code or ask student to regenerate.");
+      toast.error("No student found matching this payment code. Please verify the code or ask the student to regenerate their QR code.");
       setProcessingManual(false);
       return;
     }
 
+    // Find the payment type
     const { data: allPaymentTypes, error: ptError } = await supabase
       .from("payment_types")
       .select("id, title, amount")
@@ -1195,13 +1432,34 @@ const handlePaymentCodeSubmit = async () => {
     );
 
     if (!matchingPT) {
-      toast.error("Payment type not found. The code may be expired - ask student to regenerate QR code.");
+      toast.error("Payment type not found. The code may be expired - ask the student to regenerate their QR code.");
       setProcessingManual(false);
       return;
     }
 
     const matchedStudent = matchingStudents[0];
 
+    // If multiple students match the code prefix, we need to disambiguate
+    // The sequence number (last 4 digits of timestamp) can help us verify the correct student
+    // For now, we'll warn the admin and show the first match, but strongly recommend QR scanning
+    if (matchingStudents.length > 1) {
+      // Show all potential matches to the admin
+      const studentNames = matchingStudents.map(s => `${s.full_name} (${s.reg_number})`).join(', ');
+      
+      toast.warning(
+        `⚠️ AMBIGUOUS CODE: Multiple students match this code prefix!\n\nPotential matches: ${studentNames}\n\nPlease ask the student to show their QR code for accurate identification, or verify the student's identity manually.`,
+        10000
+      );
+      
+      // Don't proceed automatically - require admin to verify
+      // Show a selection dialog instead
+      console.warn(`Multiple students match code prefix ${studentPart}:`, matchingStudents);
+      
+      // Use the first match but with clear warning
+      toast.info(`Defaulting to: ${matchedStudent.full_name} (${matchedStudent.reg_number}). Please verify this is correct before confirming payment.`, 5000);
+    }
+
+    // Check if this student has already paid for this payment type
     const { data: existingPayments } = await supabase
       .from("payments")
       .select("status, amount")
@@ -1213,11 +1471,12 @@ const handlePaymentCodeSubmit = async () => {
       .reduce((sum, p) => sum + (p.amount || 0), 0) || 0;
 
     if (totalPaid >= matchingPT.amount) {
-      toast.error(`${matchedStudent.full_name} has already fully paid for ${matchingPT.title}`);
+      toast.error(`${matchedStudent.full_name} has already fully paid for ${matchingPT.title}. The code might be for a different student - please verify.`);
       setProcessingManual(false);
       return;
     }
 
+    // Build QR data for the matched student
     const manualQrData: QRData = {
       type: "CASH_PAYMENT",
       paidBy: matchedStudent.id,
@@ -1243,10 +1502,13 @@ const handlePaymentCodeSubmit = async () => {
     setScanning(false);
     setShowManualInput(false);
 
-    toast.success(`Found payment for ${matchedStudent.full_name} - please confirm`);
+    // Clear message for single match
+    if (matchingStudents.length === 1) {
+      toast.success(`✓ Found: ${matchedStudent.full_name} (${matchedStudent.reg_number}) - ${matchingPT.title}. Please verify and confirm.`, 4000);
+    }
   } catch (error) {
     console.error("Error looking up payment code:", error);
-    toast.error("Failed to lookup payment code. Please try again.");
+    toast.error("Failed to lookup payment code. Please try again or use QR scan.");
   } finally {
     setProcessingManual(false);
   }
@@ -1390,7 +1652,26 @@ const switchCamera = async (newCameraId: string) => {
                 <motion.button
                   whileHover={{ scale: 1.02 }}
                   whileTap={{ scale: 0.98 }}
-                  onClick={() => { setShowManualInput(true); stopScanner(); }}
+                  onClick={async () => { 
+                    setShowManualInput(true); 
+                    // Force stop camera immediately
+                    try {
+                      await stopScanner();
+                      // Also force stop any lingering video tracks
+                      const videos = document.querySelectorAll('video');
+                      videos.forEach(video => {
+                        try {
+                          const stream = video.srcObject as MediaStream | null;
+                          if (stream) {
+                            stream.getTracks().forEach(track => track.stop());
+                          }
+                          video.srcObject = null;
+                        } catch { /* ignore */ }
+                      });
+                    } catch (e) {
+                      console.debug('Error stopping scanner:', e);
+                    }
+                  }}
                   className="flex items-center gap-2 px-4 py-2.5 rounded-xl font-medium transition-all"
                   style={{ 
                     background: showManualInput ? `${colors.accentMint}20` : 'rgba(255, 255, 255, 0.05)',
@@ -1454,7 +1735,21 @@ const switchCamera = async (newCameraId: string) => {
                       <motion.button
                         whileHover={{ scale: 1.02 }}
                         whileTap={{ scale: 0.98 }}
-                        onClick={async () => { setShowManualInput(true); await stopScanner(); }}
+                        onClick={async () => { 
+                          setShowManualInput(true); 
+                          await stopScanner();
+                          // Force stop any lingering video tracks
+                          const videos = document.querySelectorAll('video');
+                          videos.forEach(video => {
+                            try {
+                              const stream = video.srcObject as MediaStream | null;
+                              if (stream) {
+                                stream.getTracks().forEach(track => track.stop());
+                              }
+                              video.srcObject = null;
+                            } catch { /* ignore */ }
+                          });
+                        }}
                         className="flex items-center gap-2 px-5 py-2.5 rounded-xl font-medium"
                         style={{ 
                           background: `${colors.accentMint}20`,
@@ -1679,10 +1974,15 @@ const switchCamera = async (newCameraId: string) => {
                       Payment Code
                     </label>
                     <input
+                      ref={paymentCodeInputRef}
                       type="text"
                       value={paymentCodeInput}
                       onChange={handlePaymentCodeChange}
-                      placeholder="Enter code (auto-formats)"
+                      placeholder="ABC-DEF-1234"
+                      autoComplete="off"
+                      autoCorrect="off"
+                      autoCapitalize="characters"
+                      spellCheck={false}
                       className="w-full px-4 py-4 rounded-xl text-white font-mono text-lg text-center tracking-widest focus:outline-none focus:ring-2 uppercase"
                       style={{ 
                         background: 'rgba(255, 255, 255, 0.05)', 
@@ -1691,7 +1991,7 @@ const switchCamera = async (newCameraId: string) => {
                       }}
                     />
                     <p className="text-xs text-center mt-2" style={{ color: 'rgba(255, 255, 255, 0.5)' }}>
-                      Single: ABC-DEF-1234 | Multi: MP-XXX-P123-456.789
+                      Single: ABC-DEF-1234 | Multi: MP-XXX-YYYY-NNN.NNN
                     </p>
                   </div>
 
@@ -1860,7 +2160,12 @@ const switchCamera = async (newCameraId: string) => {
                               <p className="text-[10px] sm:text-xs font-medium" style={{ color: colors.textSecondary }}>Per Student</p>
                             </div>
                             <p className="text-sm sm:text-lg font-bold" style={{ color: colors.accentMint }}>
-                              {formatCurrency(qrData.amountPerStudent)}
+                              {(() => {
+                                const students = qrData.students || [];
+                                const allSame = students.length > 0 && students.every((s: any) => typeof s.outstanding === 'number' && s.outstanding === (students[0] as any).outstanding);
+                                const display = allSame ? (students[0] as any).outstanding : (qrData.amountPerStudent ?? (qrData.totalAmount && qrData.totalStudents ? qrData.totalAmount / qrData.totalStudents : 0));
+                                return formatCurrency(display);
+                              })()}
                             </p>
                           </motion.div>
                         </>

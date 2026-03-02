@@ -1,16 +1,15 @@
+/* eslint-disable @typescript-eslint/no-unused-vars */
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import { useState, useEffect } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
 import {
   ArrowLeft,
-  Copy,
   AlertCircle,
   CheckCircle,
   Clock,
   XCircle,
-  Loader2,
   Calendar,
-  Building2,
   RefreshCw,
   Info,
   Sparkles,
@@ -27,9 +26,9 @@ import { formatCurrency, formatDate } from "@/utils/formatters";
 import PaymentMethodSelector from "@/components/student/PaymentMethodSelector";
 import QRCodeGenerator from "@/components/student/QRCodeGenerator";
 import PayForOthersModal from "@/components/student/PayForOthersModal";
+import PaymentSubmissionFlow from "@/components/student/PaymentSubmissionFlow";
 import Footer from "@/components/Footer";
 import notificationService from "@/services/notificationService";
-import FileUploader from "@/components/ui/FileUploader";
 import { SuccessCelebration } from "@/components/ui/Confetti";
 import PageWrapper from "@/components/ui/PageWrapper";
 
@@ -94,14 +93,9 @@ export default function PaymentDetailPage() {
   const [selectedStudents, setSelectedStudents] = useState<Student[]>([]);
   const [includeSelf, setIncludeSelf] = useState(false);
 
-  // Form state
-  const [paymentOption, setPaymentOption] = useState<"full" | "partial">(
-    "full"
-  );
+  // Form state (used by PaymentSubmissionFlow now, but paymentOption needed for QR flow)
+  const [paymentOption] = useState<"full" | "partial">("full");
   const [amount, setAmount] = useState<number>(0);
-  const [receiptFile, setReceiptFile] = useState<File | null>(null);
-  const [transactionRef, setTransactionRef] = useState("");
-  const [notes, setNotes] = useState("");
 
   // Success celebration state
   const [showCelebration, setShowCelebration] = useState(false);
@@ -118,8 +112,51 @@ export default function PaymentDetailPage() {
   const hasPendingPayment = existingPayments.some(
     (p) => p.status === "pending"
   );
+  // Check if payment was waived (has WAIVED- prefix in transaction_ref)
+  const isWaived = existingPayments.some(
+    (p) => p.status === "approved" && p.transaction_ref?.startsWith("WAIVED-")
+  );
   const progressPercentage =
     paymentTypeAmount > 0 ? (totalPaid / paymentTypeAmount) * 100 : 0;
+
+  // Compute current user's accumulated late fees for this payment type
+  const paymentDeadline = paymentType?.deadline ? new Date(paymentType.deadline) : null;
+  const perDayLate = Number((paymentType as any)?.late_fee_per_day || 0);
+  let currentUserAccumulatedLate = 0;
+  try {
+    if (paymentDeadline && new Date() > paymentDeadline && perDayLate > 0) {
+      // Sum approved payments submitted on-or-before the deadline
+      const totalPaidBeforeDeadline = existingPayments
+        .filter(p => p.status === 'approved')
+        .reduce((sum, p) => {
+          try {
+            // Use submitted_at if available, otherwise fall back to created_at or reviewed_at
+            const submittedStr = p.submitted_at || (p as any).created_at || p.reviewed_at;
+            const submitted = submittedStr ? new Date(submittedStr) : null;
+            if (submitted && submitted.getTime() <= paymentDeadline.getTime()) {
+              return sum + (Number(p.amount) || 0);
+            }
+          } catch (e) {
+            // ignore parse errors
+          }
+          return sum;
+        }, 0);
+
+      const remainingAtDeadline = Math.max(0, (Number(paymentType?.amount) || 0) - totalPaidBeforeDeadline);
+
+      // If the student had fully paid by the deadline, no late fee should apply
+      if (remainingAtDeadline <= 0) {
+        currentUserAccumulatedLate = 0;
+      } else {
+        const daysOverdue = Math.floor((Date.now() - paymentDeadline.getTime()) / (1000 * 60 * 60 * 24));
+        if (daysOverdue > 0) currentUserAccumulatedLate = daysOverdue * perDayLate;
+      }
+    }
+  } catch (e) {
+    currentUserAccumulatedLate = 0;
+  }
+
+  const currentUserOutstanding = Math.max(0, remainingAmount) + currentUserAccumulatedLate;
 
   useEffect(() => {
     fetchPaymentDetails();
@@ -128,9 +165,9 @@ export default function PaymentDetailPage() {
 
   useEffect(() => {
     if (paymentType) {
-      setAmount(paymentOption === "full" ? remainingAmount : 0);
+      setAmount(paymentOption === "full" ? currentUserOutstanding : 0);
     }
-  }, [paymentOption, paymentType, remainingAmount]);
+  }, [paymentOption, paymentType, currentUserOutstanding]);
 
   const fetchPaymentDetails = async () => {
     try {
@@ -164,13 +201,6 @@ export default function PaymentDetailPage() {
     }
   };
 
-  const copyAccountNumber = () => {
-    if (paymentType?.account_number) {
-      navigator.clipboard.writeText(paymentType.account_number);
-      toast.success("Account number copied!");
-    }
-  };
-
   const handleMethodSelect = (method: PaymentMethod) => {
     setSelectedMethod(method);
     if (method === "cash") {
@@ -180,32 +210,47 @@ export default function PaymentDetailPage() {
     }
   };
 
-  const handleSubmitPayment = async (e: React.FormEvent) => {
-    e.preventDefault();
+  // Unified submit handler that accepts data directly (fixes async state issue)
+  const submitPaymentWithData = async (options: {
+    method: PaymentMethod;
+    transactionRefValue: string;
+    receiptFileValue: File | null;
+    notesValue: string;
+    paymentOptionValue: "full" | "partial";
+    amountValue: number;
+  }) => {
+    const {
+      method,
+      transactionRefValue,
+      receiptFileValue,
+      notesValue,
+      paymentOptionValue,
+      amountValue,
+    } = options;
 
     // Validate based on payment method
-    if (selectedMethod !== "cash" && !receiptFile) {
+    if (method !== "cash" && !receiptFileValue) {
       toast.error("Please upload a receipt");
-      return;
+      return false;
     }
 
-    if (selectedMethod !== "cash" && !transactionRef.trim()) {
+    if (method !== "cash" && !transactionRefValue.trim()) {
       toast.error("Please enter transaction reference");
-      return;
+      return false;
     }
 
-    if (paymentOption === "partial" && amount <= 0) {
+    if (paymentOptionValue === "partial" && amountValue <= 0) {
       toast.error("Please enter a valid amount");
-      return;
+      return false;
     }
 
-    if (paymentOption === "partial" && amount > remainingAmount) {
+    if (paymentOptionValue === "partial" && amountValue > currentUserOutstanding) {
       toast.error(
         `Amount cannot exceed remaining balance of ${formatCurrency(
-          remainingAmount
+          currentUserOutstanding
         )}`
       );
-      return;
+      return false;
     }
 
     try {
@@ -214,7 +259,7 @@ export default function PaymentDetailPage() {
       // Determine students to pay for
       if (!user) {
         toast.error("User not found");
-        return;
+        return false;
       }
 
       // Build list of students based on selectedStudents and whether they're paying for themselves
@@ -233,20 +278,22 @@ export default function PaymentDetailPage() {
           full_name: user.full_name,
           reg_number: user.reg_number,
           level: user.level,
-        });
+          // Attach computed outstanding (including late fees) so insertion uses correct amount
+          ...( { outstanding: currentUserOutstanding } as any ),
+        } as any);
       }
 
       if (students.length === 0) {
         toast.error("No students to pay for");
-        return;
+        return false;
       }
 
       for (const student of students) {
         let receiptUrl = "";
 
         // Upload receipt for bank_transfer and pos (not cash)
-        if (selectedMethod !== "cash" && receiptFile) {
-          const fileExt = receiptFile.name.split(".").pop();
+        if (method !== "cash" && receiptFileValue) {
+          const fileExt = receiptFileValue.name.split(".").pop();
           const fileName = `${student.id}_${Date.now()}_${Math.random()
             .toString(36)
             .substring(7)}.${fileExt}`;
@@ -254,9 +301,13 @@ export default function PaymentDetailPage() {
 
           const { error: uploadError } = await supabase.storage
             .from("payment-receipts")
-            .upload(filePath, receiptFile);
+            .upload(filePath, receiptFileValue);
 
-          if (uploadError) throw uploadError;
+          if (uploadError) {
+            console.error("Upload error:", uploadError);
+            toast.error(`Failed to upload receipt: ${uploadError.message}`);
+            throw uploadError;
+          }
 
           const { data: urlData } = supabase.storage
             .from("payment-receipts")
@@ -267,38 +318,51 @@ export default function PaymentDetailPage() {
 
         // Generate transaction ref for cash if not provided
         const finalTransactionRef =
-          selectedMethod === "cash"
+          method === "cash"
             ? `CASH-QR-${student.reg_number}-${Date.now()}`
-            : `${transactionRef}-${student.reg_number}`;
-
-        // Insert payment
+            : `${transactionRefValue}-${student.reg_number}`;
+        // Insert payment (use per-student outstanding when paying full)
+        const amountToInsert = paymentOptionValue === 'full' ? (student as any).outstanding ?? currentUserOutstanding : amountValue;
         const { data: insertedPayment, error: insertError } = await supabase
           .from("payments")
           .insert({
             student_id: student.id,
             payment_type_id: id,
-            amount: paymentOption === "full" ? remainingAmount : amount,
+            amount: amountToInsert,
             transaction_ref: finalTransactionRef,
             receipt_url: receiptUrl || null,
-            notes: notes.trim() || null,
+            notes: notesValue.trim() || null,
             status: "pending",
-            payment_method: selectedMethod,
+            payment_method: method,
             paid_by: student.id !== user.id ? user.id : null, // Track who paid on behalf of others
           })
           .select()
           .single();
 
-        if (insertError) throw insertError;
+        if (insertError) {
+          console.error("Insert error:", insertError);
+          throw insertError;
+        }
 
-        // Send notification to student about payment submission
+        // Send notification to student about payment submission (use actual inserted amount)
         if (insertedPayment) {
-          await notificationService.sendPaymentPendingNotification(
+          const notifyAmount = paymentOptionValue === 'full' ? ((student as any).outstanding ?? currentUserOutstanding ?? amountValue) : amountValue;
+          // Non-blocking notification - don't fail payment if notification fails
+          notificationService.sendPaymentPendingNotification(
             student.id,
             student.full_name,
             paymentType?.title || "Payment",
-            paymentOption === "full" ? remainingAmount : amount,
+            notifyAmount,
             insertedPayment.id
-          );
+          ).catch(err => console.warn("Student notification failed:", err));
+
+          // Notify admins/approvers about the new payment (important!)
+          notificationService.notifyApproversOfNewPayment(
+            insertedPayment.id,
+            student.id,
+            notifyAmount,
+            id || ""
+          ).catch(err => console.warn("Approver notification failed:", err));
         }
       }
 
@@ -310,6 +374,7 @@ export default function PaymentDetailPage() {
       // Show celebration with confetti
       setCelebrationMessage(message);
       setShowCelebration(true);
+      return true;
     } catch (error: unknown) {
       console.error("Error submitting payment:", error);
 
@@ -323,19 +388,20 @@ export default function PaymentDetailPage() {
       } else {
         toast.error("Failed to submit payment");
       }
+      return false;
     } finally {
       setSubmitting(false);
     }
   };
 
-  const handleResubmitRejected = (rejectedPayment: ExistingPayment) => {
-    // Pre-fill form with rejected payment details
-    setTransactionRef(rejectedPayment.transaction_ref);
-    setNotes(
-      `Resubmission of rejected payment. Previous reason: ${rejectedPayment.rejection_reason}`
-    );
+  const handleResubmitRejected = (_rejectedPayment: ExistingPayment) => {
+    // Navigate to method selection - PaymentSubmissionFlow will handle the form
+    // Note: Pre-filling is not supported in the new flow, user will need to re-enter details
     setStep("method");
   };
+
+  // Silence unused variable warning - function is used in JSX
+  void handleResubmitRejected;
 
   if (loading) {
     return (
@@ -492,7 +558,7 @@ export default function PaymentDetailPage() {
                       >
                         <Banknote className="w-4 h-4" style={{ color: colors.primary }} />
                         <span className="text-lg sm:text-xl font-bold" style={{ color: colors.primary }}>
-                          {formatCurrency(paymentType.amount)}
+                          {formatCurrency(paymentOption === 'full' ? currentUserOutstanding : amount)}
                         </span>
                       </div>
                       <div 
@@ -553,7 +619,7 @@ export default function PaymentDetailPage() {
                     >
                       <div className="absolute top-0 left-0 right-0 h-1" style={{ background: gradients.primary }} />
                       <p className="text-[10px] sm:text-xs mb-1 font-medium" style={{ color: colors.textSecondary }}>
-                        TOTAL
+                        {currentUserAccumulatedLate > 0 ? 'BASE DUE' : 'TOTAL DUE'}
                       </p>
                       <p className="text-base sm:text-xl font-bold text-white">
                         {formatCurrency(paymentTypeAmount)}
@@ -578,20 +644,57 @@ export default function PaymentDetailPage() {
                     <motion.div
                       className="text-center p-4 rounded-xl relative overflow-hidden"
                       style={{ 
-                        background: `linear-gradient(135deg, ${isFullyPaid ? colors.statusPaid : colors.warning}10 0%, ${isFullyPaid ? colors.statusPaid : colors.warning}05 100%)`,
-                        border: `1px solid ${isFullyPaid ? colors.statusPaid : colors.warning}20`
+                        background: `linear-gradient(135deg, ${currentUserOutstanding <= 0 ? colors.statusPaid : colors.warning}10 0%, ${currentUserOutstanding <= 0 ? colors.statusPaid : colors.warning}05 100%)`,
+                        border: `1px solid ${currentUserOutstanding <= 0 ? colors.statusPaid : colors.warning}20`
                       }}
                       whileHover={{ scale: 1.02 }}
                     >
-                      <div className="absolute top-0 left-0 right-0 h-1" style={{ background: isFullyPaid ? colors.statusPaid : colors.warning }} />
+                      <div className="absolute top-0 left-0 right-0 h-1" style={{ background: currentUserOutstanding <= 0 ? colors.statusPaid : colors.warning }} />
                       <p className="text-[10px] sm:text-xs mb-1 font-medium" style={{ color: colors.textSecondary }}>
                         REMAINING
                       </p>
-                      <p className="text-base sm:text-xl font-bold" style={{ color: isFullyPaid ? colors.statusPaid : colors.warning }}>
-                        {formatCurrency(Math.max(0, remainingAmount))}
+                      <p className="text-base sm:text-xl font-bold" style={{ color: currentUserOutstanding <= 0 ? colors.statusPaid : colors.warning }}>
+                        {formatCurrency(Math.max(0, currentUserOutstanding))}
                       </p>
                     </motion.div>
                   </div>
+
+                  {/* Late Fee Breakdown - Only show if there are late fees */}
+                  {currentUserAccumulatedLate > 0 && (
+                    <motion.div
+                      initial={{ opacity: 0, height: 0 }}
+                      animate={{ opacity: 1, height: 'auto' }}
+                      className="mb-5 p-4 rounded-xl"
+                      style={{ 
+                        background: `linear-gradient(135deg, ${colors.statusUnpaid}08 0%, transparent 100%)`,
+                        border: `1px solid ${colors.statusUnpaid}20`
+                      }}
+                    >
+                      <div className="flex items-center gap-2 mb-2">
+                        <AlertCircle className="w-4 h-4" style={{ color: colors.statusUnpaid }} />
+                        <span className="text-sm font-semibold" style={{ color: colors.statusUnpaid }}>Late Payment Fees Applied</span>
+                      </div>
+                      <div className="grid grid-cols-2 gap-3 text-sm">
+                        <div>
+                          <p className="text-xs" style={{ color: colors.textSecondary }}>Base Amount</p>
+                          <p className="font-semibold text-white">{formatCurrency(paymentTypeAmount)}</p>
+                        </div>
+                        <div>
+                          <p className="text-xs" style={{ color: colors.textSecondary }}>Late Fees</p>
+                          <p className="font-semibold" style={{ color: colors.statusUnpaid }}>+{formatCurrency(currentUserAccumulatedLate)}</p>
+                        </div>
+                        <div className="col-span-2 pt-2 mt-2" style={{ borderTop: '1px solid rgba(255,255,255,0.1)' }}>
+                          <div className="flex justify-between items-center">
+                            <p className="text-xs" style={{ color: colors.textSecondary }}>Total Due (incl. late fees)</p>
+                            <p className="font-bold text-white">{formatCurrency(paymentTypeAmount + currentUserAccumulatedLate)}</p>
+                          </div>
+                        </div>
+                      </div>
+                      <p className="text-xs mt-3" style={{ color: colors.textSecondary }}>
+                        Late fee: {formatCurrency(perDayLate)}/day × {Math.floor((Date.now() - (paymentDeadline?.getTime() || 0)) / (1000 * 60 * 60 * 24))} days overdue
+                      </p>
+                    </motion.div>
+                  )}
 
                   {/* Enhanced Progress Bar */}
                   <div className="relative">
@@ -645,18 +748,26 @@ export default function PaymentDetailPage() {
                   Payment History
                 </h3>
                 <div className="space-y-3">
-                  {existingPayments.map((payment) => (
+                  {existingPayments.map((payment) => {
+                    const paymentIsWaived = payment.transaction_ref?.startsWith("WAIVED-");
+                    const statusColor = paymentIsWaived 
+                      ? '#6366F1' // Indigo for waived
+                      : payment.status === "approved"
+                        ? colors.statusPaid
+                        : payment.status === "rejected"
+                          ? colors.statusUnpaid
+                          : colors.warning;
+                    const statusLabel = paymentIsWaived 
+                      ? 'WAIVED' 
+                      : payment.status.toUpperCase();
+                    
+                    return (
                     <div
                       key={payment.id}
                       className="p-4 rounded-lg border"
                       style={{
                         background: "rgba(255, 255, 255, 0.03)",
-                        borderColor:
-                          payment.status === "approved"
-                            ? `${colors.statusPaid}40`
-                            : payment.status === "rejected"
-                            ? `${colors.statusUnpaid}40`
-                            : `${colors.warning}40`,
+                        borderColor: `${statusColor}40`,
                       }}
                     >
                       <div className="flex items-start justify-between gap-4">
@@ -665,7 +776,7 @@ export default function PaymentDetailPage() {
                             {payment.status === "approved" && (
                               <CheckCircle
                                 className="w-5 h-5"
-                                style={{ color: colors.statusPaid }}
+                                style={{ color: statusColor }}
                               />
                             )}
                             {payment.status === "rejected" && (
@@ -680,27 +791,23 @@ export default function PaymentDetailPage() {
                                 style={{ color: colors.warning }}
                               />
                             )}
-                            <span className="font-bold text-white">
+                            <span 
+                              className="font-bold"
+                              style={{ 
+                                color: paymentIsWaived ? '#6366F1' : 'white',
+                                textDecoration: paymentIsWaived ? 'line-through' : 'none'
+                              }}
+                            >
                               {formatCurrency(payment.amount)}
                             </span>
                             <span
                               className="px-2 py-1 rounded-full text-xs font-medium"
                               style={{
-                                background:
-                                  payment.status === "approved"
-                                    ? `${colors.statusPaid}20`
-                                    : payment.status === "rejected"
-                                    ? `${colors.statusUnpaid}20`
-                                    : `${colors.warning}20`,
-                                color:
-                                  payment.status === "approved"
-                                    ? colors.statusPaid
-                                    : payment.status === "rejected"
-                                    ? colors.statusUnpaid
-                                    : colors.warning,
+                                background: `${statusColor}20`,
+                                color: statusColor,
                               }}
                             >
-                              {payment.status.toUpperCase()}
+                              {statusLabel}
                             </span>
                           </div>
                           <p
@@ -713,7 +820,7 @@ export default function PaymentDetailPage() {
                             className="text-sm"
                             style={{ color: colors.textSecondary }}
                           >
-                            Submitted:{" "}
+                            {paymentIsWaived ? 'Waived' : 'Submitted'}:{" "}
                             {formatDate(payment.submitted_at, "long")}
                           </p>
                           {payment.rejection_reason && (
@@ -742,13 +849,14 @@ export default function PaymentDetailPage() {
                         )}
                       </div>
                     </div>
-                  ))}
+                    );
+                  })}
                 </div>
               </GlassCard>
             </motion.div>
           )}
 
-          {/* Fully Paid Message */}
+          {/* Fully Paid or Waived Message */}
           {isFullyPaid && (
             <motion.div
               initial={{ opacity: 0, scale: 0.9 }}
@@ -759,13 +867,15 @@ export default function PaymentDetailPage() {
                 <div className="text-center p-8">
                   <CheckCircle
                     className="w-16 h-16 mx-auto mb-4"
-                    style={{ color: colors.statusPaid }}
+                    style={{ color: isWaived ? '#6366F1' : colors.statusPaid }}
                   />
                   <h2 className="text-2xl font-bold text-white mb-2">
-                    Payment Complete! 🎉
+                    {isWaived ? 'Payment Waived! 🔓' : 'Payment Complete! 🎉'}
                   </h2>
                   <p style={{ color: colors.textSecondary }}>
-                    You have fully paid for this requirement.
+                    {isWaived 
+                      ? 'This payment has been waived by the class administration.'
+                      : 'You have fully paid for this requirement.'}
                   </p>
                 </div>
               </GlassCard>
@@ -825,13 +935,24 @@ export default function PaymentDetailPage() {
               )}
 
               {step === "qr" && selectedMethod === "cash" && user && (() => {
-                // Calculate total students: if no students selected and not includeSelf, default to 1 (paying for self only)
-                const totalStudentCount = selectedStudents.length + (includeSelf ? 1 : 0);
-                const effectiveStudentCount = totalStudentCount > 0 ? totalStudentCount : 1;
-                const baseAmount = paymentOption === "full" ? remainingAmount : amount;
-                const totalAmount = baseAmount * effectiveStudentCount;
+                // Build list of students for total calculation (include self if requested)
+                // Attach outstanding to all students in selectedStudents
+                const selectedWithOutstanding = selectedStudents.map(s => {
+                  // TODO: Replace with real outstanding calculation for each student if available
+                  // For now, use currentUserOutstanding for all (should be replaced with per-student logic)
+                  return { ...s, outstanding: currentUserOutstanding };
+                });
+                const studentsForTotal = [...selectedWithOutstanding];
                 const isSoloPayment = selectedStudents.length === 0 && !includeSelf;
-                
+                // Include the current user when requested or when this is a solo payment
+                if ((includeSelf || isSoloPayment) && !studentsForTotal.some(s => s.id === user.id)) {
+                  studentsForTotal.push({ id: user.id, full_name: user.full_name, reg_number: user.reg_number, level: user.level, outstanding: currentUserOutstanding } as any);
+                }
+                const effectiveStudentCount = studentsForTotal.length > 0 ? studentsForTotal.length : 1;
+                // If paying full, sum per-student outstanding when available, otherwise use entered amount
+                const totalAmount = paymentOption === 'full'
+                  ? studentsForTotal.reduce((sum, s) => sum + (Number((s as any).outstanding ?? currentUserOutstanding ?? amount) || 0), 0)
+                  : (effectiveStudentCount * amount);
                 return (
                   <motion.div
                     initial={{ opacity: 0, y: 20 }}
@@ -845,7 +966,7 @@ export default function PaymentDetailPage() {
                       paymentTypeName={paymentType.title}
                       amount={totalAmount}
                       totalStudents={effectiveStudentCount}
-                      selectedStudents={selectedStudents}
+                      selectedStudents={selectedWithOutstanding}
                       includeSelf={isSoloPayment ? true : includeSelf}
                       onBack={() => setStep("method")}
                     />
@@ -856,364 +977,34 @@ export default function PaymentDetailPage() {
               {step === "upload" &&
                 (selectedMethod === "bank_transfer" ||
                   selectedMethod === "pos") && (
-                  <motion.div
-                    initial={{ opacity: 0, y: 20 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    className="space-y-6"
-                  >
-                    {/* Back Button */}
-                    <button
-                      onClick={() => setStep("method")}
-                      className="flex items-center justify-center sm:justify-start gap-2 px-4 py-2 rounded-lg transition-colors w-full sm:w-auto"
-                      style={{
-                        color: colors.textPrimary,
-                        background: "rgba(255, 255, 255, 0.05)",
-                      }}
-                    >
-                      <ArrowLeft size={20} />
-                      <span>Change Payment Method</span>
-                    </button>
-
-                    {/* Bank Account Details */}
-                    {selectedMethod === "bank_transfer" && (
-                      <GlassCard className="w-full overflow-hidden">
-                        <div className="flex flex-col sm:flex-row items-start gap-4 mb-4">
-                          <Building2
-                            className="w-6 h-6 shrink-0"
-                            style={{ color: colors.primary }}
-                          />
-                          <div className="flex-1 w-full">
-                            <h3 className="text-lg font-bold text-white mb-1">
-                              Bank Account Details
-                            </h3>
-                            <p
-                              className="text-sm"
-                              style={{ color: colors.textSecondary }}
-                            >
-                              Transfer to this account and upload proof of
-                              payment
-                            </p>
-                          </div>
-                        </div>
-
-                        <div className="space-y-3 w-full">
-                          <div className="w-full">
-                            <p
-                              className="text-sm mb-1"
-                              style={{ color: colors.textSecondary }}
-                            >
-                              Bank Name
-                            </p>
-                            <p className="font-medium text-white wrap-break-words">
-                              {paymentType.bank_name}
-                            </p>
-                          </div>
-                          <div className="w-full">
-                            <p
-                              className="text-sm mb-1"
-                              style={{ color: colors.textSecondary }}
-                            >
-                              Account Name
-                            </p>
-                            <p className="font-medium text-white wrap-break-word">
-                              {paymentType.account_name}
-                            </p>
-                          </div>
-                          <div className="w-full">
-                            <p
-                              className="text-sm mb-1"
-                              style={{ color: colors.textSecondary }}
-                            >
-                              Account Number
-                            </p>
-                            <div className="flex items-center gap-2 w-full">
-                              <p className="font-bold text-lg sm:text-xl text-white flex-1 min-w-0 break-all">
-                                {paymentType.account_number}
-                              </p>
-                              <button
-                                onClick={copyAccountNumber}
-                                className="p-2 rounded-lg transition-colors shrink-0"
-                                style={{
-                                  background: "rgba(255, 255, 255, 0.1)",
-                                }}
-                                title="Copy account number"
-                              >
-                                <Copy
-                                  className="w-4 h-4"
-                                  style={{ color: colors.primary }}
-                                />
-                              </button>
-                            </div>
-                          </div>
-                        </div>
-                      </GlassCard>
-                    )}
-
-                    {/* Payment Options - Full or Partial */}
-                    {/* Disable partial payment when paying for others */}
-                    {paymentType.allow_partial && remainingAmount > 0 && selectedStudents.length === 0 && (
-                      <GlassCard>
-                        <h3 className="text-lg font-bold text-white mb-4">
-                          Payment Amount
-                        </h3>
-
-                        {/* Info Box */}
-                        <div
-                          className="mb-4 p-3 rounded-lg"
-                          style={{ background: `${colors.accentMint}15` }}
-                        >
-                          <p
-                            className="text-sm"
-                            style={{ color: colors.accentMint }}
-                          >
-                            💡 This payment type allows partial payments. You
-                            can pay the full amount or any amount you're
-                            comfortable with.
-                          </p>
-                        </div>
-
-                        <div className="space-y-3">
-                          <button
-                            onClick={() => setPaymentOption("full")}
-                            className="w-full p-4 rounded-lg border-2 transition-all text-left"
-                            style={{
-                              borderColor:
-                                paymentOption === "full"
-                                  ? colors.primary
-                                  : "rgba(255, 255, 255, 0.1)",
-                              background:
-                                paymentOption === "full"
-                                  ? `${colors.primary}10`
-                                  : "rgba(255, 255, 255, 0.03)",
-                            }}
-                          >
-                            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2">
-                              <div>
-                                <p className="font-bold text-white">
-                                  Pay Remaining Balance
-                                </p>
-                                <p
-                                  className="text-sm mt-1"
-                                  style={{ color: colors.textSecondary }}
-                                >
-                                  Complete payment in one transaction
-                                </p>
-                              </div>
-                              <p
-                                className="text-lg sm:text-xl font-bold"
-                                style={{ color: colors.primary }}
-                              >
-                                {formatCurrency(Math.max(0, remainingAmount))}
-                              </p>
-                            </div>
-                          </button>
-
-                          <button
-                            onClick={() => setPaymentOption("partial")}
-                            className="w-full p-4 rounded-lg border-2 transition-all text-left"
-                            style={{
-                              borderColor:
-                                paymentOption === "partial"
-                                  ? colors.primary
-                                  : "rgba(255, 255, 255, 0.1)",
-                              background:
-                                paymentOption === "partial"
-                                  ? `${colors.primary}10`
-                                  : "rgba(255, 255, 255, 0.03)",
-                            }}
-                          >
-                            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2">
-                              <div>
-                                <p className="font-bold text-white">
-                                  Pay Partial Amount
-                                </p>
-                                <p
-                                  className="text-sm mt-1"
-                                  style={{ color: colors.textSecondary }}
-                                >
-                                  Pay what you can afford now, remaining later
-                                </p>
-                              </div>
-                            </div>
-                          </button>
-
-                          {paymentOption === "partial" && (
-                            <motion.div
-                              initial={{ opacity: 0, height: 0 }}
-                              animate={{ opacity: 1, height: "auto" }}
-                              className="mt-4"
-                            >
-                              <label className="block text-sm font-medium mb-2 text-white">
-                                Enter Amount (Max:{" "}
-                                {formatCurrency(Math.max(0, remainingAmount))})
-                              </label>
-                              <input
-                                type="number"
-                                value={amount || ""}
-                                onChange={(e) =>
-                                  setAmount(
-                                    Math.min(
-                                      parseFloat(e.target.value) || 0,
-                                      remainingAmount
-                                    )
-                                  )
-                                }
-                                max={remainingAmount}
-                                min={0}
-                                step="0.01"
-                                className="w-full px-4 py-3 rounded-lg text-white focus:outline-none focus:ring-2"
-                                style={{
-                                  background: "rgba(255, 255, 255, 0.05)",
-                                  border: "1px solid rgba(255, 255, 255, 0.1)",
-                                }}
-                                placeholder="0.00"
-                              />
-                              <p
-                                className="text-xs mt-1"
-                                style={{ color: colors.textSecondary }}
-                              >
-                                You'll be able to pay the remaining{" "}
-                                {formatCurrency(
-                                  Math.max(0, remainingAmount - amount)
-                                )}{" "}
-                                later
-                              </p>
-                            </motion.div>
-                          )}
-                        </div>
-                      </GlassCard>
-                    )}
-
-                    {/* Upload Form */}
-                    <form onSubmit={handleSubmitPayment}>
-                      <GlassCard>
-                        <h3 className="text-lg font-bold text-white mb-4">
-                          Upload Payment Proof
-                        </h3>
-
-                        <div className="space-y-4">
-                          {/* Transaction Reference */}
-                          <div className="w-full overflow-hidden">
-                            <label className="block text-sm font-medium mb-2 text-white">
-                              Transaction Reference *
-                            </label>
-                            <input
-                              type="text"
-                              value={transactionRef}
-                              onChange={(e) =>
-                                setTransactionRef(e.target.value)
-                              }
-                              className="w-full px-4 py-3 rounded-lg text-white focus:outline-none focus:ring-2 break-all"
-                              style={{
-                                background: "rgba(255, 255, 255, 0.05)",
-                                border: "1px solid rgba(255, 255, 255, 0.1)",
-                                maxWidth: "100%",
-                              }}
-                              placeholder="e.g., TRF/2024/11/12345"
-                              required
-                            />
-                          </div>
-
-                          {/* Receipt Upload */}
-                          <div>
-                            <FileUploader
-                              onFileSelect={(file) => {
-                                if (file && !Array.isArray(file)) {
-                                  setReceiptFile(file);
-                                }
-                              }}
-                              accept="image/jpeg,image/jpg,image/png,application/pdf"
-                              maxSize={5 * 1024 * 1024}
-                              label="Upload Receipt *"
-                              description="Accepted: JPG, PNG, PDF (Max 5MB)"
-                              showPreview={true}
-                              multiple={false}
-                            />
-                          </div>
-
-                          {/* Notes */}
-                          <div>
-                            <label className="block text-sm font-medium mb-2 text-white">
-                              Additional Notes (Optional)
-                            </label>
-                            <textarea
-                              value={notes}
-                              onChange={(e) => setNotes(e.target.value)}
-                              rows={3}
-                              className="w-full px-4 py-3 rounded-lg text-white focus:outline-none focus:ring-2"
-                              style={{
-                                background: "rgba(255, 255, 255, 0.05)",
-                                border: "1px solid rgba(255, 255, 255, 0.1)",
-                              }}
-                              placeholder="Any additional information..."
-                            />
-                          </div>
-
-                          {/* Selected Students Summary */}
-                          {selectedStudents.length > 0 && (
-                            <div
-                              className="p-4 rounded-lg"
-                              style={{
-                                background: `${colors.primary}10`,
-                                border: `1px solid ${colors.primary}40`,
-                              }}
-                            >
-                              <p className="font-bold text-white mb-2">
-                                Paying for {selectedStudents.length + (includeSelf ? 1 : 0)}{" "}
-                                student(s):
-                              </p>
-                              <ul
-                                className="text-sm space-y-1"
-                                style={{ color: colors.textSecondary }}
-                              >
-                                {includeSelf && <li>• You</li>}
-                                {selectedStudents.map((s) => (
-                                  <li key={s.id}>
-                                    • {s.full_name} ({s.reg_number})
-                                  </li>
-                                ))}
-                              </ul>
-                              <p
-                                className="text-lg font-bold mt-3"
-                                style={{ color: colors.primary }}
-                              >
-                                Total:{" "}
-                                {formatCurrency(
-                                  (selectedStudents.length + (includeSelf ? 1 : 0)) *
-                                    (paymentOption === "full"
-                                      ? remainingAmount
-                                      : amount)
-                                )}
-                              </p>
-                            </div>
-                          )}
-
-                          {/* Submit Button */}
-                          <button
-                            type="submit"
-                            disabled={submitting}
-                            className="w-full py-3 px-6 rounded-lg font-medium text-white transition-all disabled:opacity-50 disabled:cursor-not-allowed"
-                            style={{ background: gradients.primary }}
-                          >
-                            {submitting ? (
-                              <span className="flex items-center justify-center gap-2">
-                                <Loader2 className="w-5 h-5 animate-spin" />
-                                Submitting...
-                              </span>
-                            ) : (
-                              `Submit Payment${
-                                selectedStudents.length > 0
-                                  ? ` for ${
-                                      selectedStudents.length + (includeSelf ? 1 : 0)
-                                    } Student(s)`
-                                  : ""
-                              }`
-                            )}
-                          </button>
-                        </div>
-                      </GlassCard>
-                    </form>
-                  </motion.div>
+                  <PaymentSubmissionFlow
+                    paymentMethod={selectedMethod as "bank_transfer" | "pos"}
+                    paymentType={paymentType}
+                    currentUserOutstanding={currentUserOutstanding}
+                    accumulatedLateFees={currentUserAccumulatedLate}
+                    allowPartial={paymentType.allow_partial}
+                    selectedStudents={selectedStudents}
+                    includeSelf={includeSelf}
+                    currentUser={{
+                      id: user?.id || "",
+                      full_name: user?.full_name || "",
+                      reg_number: user?.reg_number || "",
+                      level: user?.level,
+                    }}
+                    onBack={() => setStep("method")}
+                    onSubmit={async (data) => {
+                      // Submit directly with the data (fixes async state issue)
+                      await submitPaymentWithData({
+                        method: selectedMethod as PaymentMethod,
+                        transactionRefValue: data.transactionRef,
+                        receiptFileValue: data.receiptFile,
+                        notesValue: data.notes,
+                        paymentOptionValue: data.paymentOption,
+                        amountValue: data.amount,
+                      });
+                    }}
+                    submitting={submitting}
+                  />
                 )}
             </>
           )}

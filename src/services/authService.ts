@@ -15,12 +15,9 @@ interface ProfileUpdateData {
 
 export const authService = {
   /**
-   * Login with registration number and password
-   * Temporary password rule (since hashing not implemented yet):
-   *  - If password_hash is 'default_hash', allow login when:
-   *      a) password === reg_number OR
-   *      b) password === 'TEMP2024' (for placeholder imported students without full matric)
-   * Replace this logic once real hashing is implemented.
+   * Login with registration number and password.
+   * Uses server-side pgcrypto crypt() verification via the
+   * verify_student_login RPC for secure credential checking.
    */
   async login(rawRegNumber: string, password: string): Promise<LoginResponse> {
     try {
@@ -42,17 +39,10 @@ export const authService = {
         throw new Error('Login failed. Please check your credentials and try again.');
       }
 
-      // Handle both array response (single-tenant) and JSONB response (multi-tenant)
-      let student = null;
-      if (Array.isArray(data) && data.length > 0) {
-        // Single-tenant: RPC returns array
-        student = data[0];
-      } else if (data && typeof data === 'object' && data.id) {
-        // Multi-tenant: RPC returns JSONB object directly
-        student = data;
-      }
+      // RPC returns an array, get the first element
+      const student = Array.isArray(data) && data.length > 0 ? data[0] : null;
 
-      // Check if student was found (RPC returns null/empty if credentials don't match)
+      // Check if student was found (RPC returns empty array if credentials don't match)
       if (!student || !student.id) {
         // More helpful error message
         throw new Error(
@@ -122,7 +112,7 @@ export const authService = {
   async updateProfile(studentId: string, profileData: ProfileUpdateData): Promise<Student> {
     try {
       const { email, phone, section, full_name } = profileData as ProfileUpdateData & { full_name?: string };
-
+      
       // Use RPC function to bypass RLS (since we use custom auth, not Supabase Auth)
       const { data, error } = await supabase.rpc('update_student_profile', {
         p_student_id: studentId,
@@ -153,7 +143,7 @@ export const authService = {
    */
   isProfileComplete(student: Student | null): boolean {
     if (!student) return false;
-
+    
     return Boolean(
       student.email &&
       student.phone &&
@@ -166,14 +156,14 @@ export const authService = {
    */
   async logout(): Promise<boolean> {
     try {
-      // Clear session from localStorage
+      // Clear session from localStorage (only storing id now)
       localStorage.removeItem('auth_session');
-      localStorage.removeItem('current_user');
-
+      localStorage.removeItem('current_user_id');
+      
       // For Supabase Auth (if using in future):
       // const { error } = await supabase.auth.signOut();
       // if (error) throw error;
-
+      
       return true;
     } catch (error) {
       console.error('Logout error:', error);
@@ -186,8 +176,11 @@ export const authService = {
    */
   saveSession(student: Student): void {
     try {
+      // Only persist a minimal, non-PII identifier in localStorage
       localStorage.setItem('auth_session', 'active');
-      localStorage.setItem('current_user', JSON.stringify(student));
+      if (student && student.id) {
+        localStorage.setItem('current_user_id', student.id);
+      }
     } catch (error) {
       console.error('Error saving session:', error);
     }
@@ -202,11 +195,9 @@ export const authService = {
       const session = localStorage.getItem('auth_session');
       if (session !== 'active') return null;
 
-      // Get stored user data
-      const userDataStr = localStorage.getItem('current_user');
-      if (!userDataStr) return null;
-
-      const student = JSON.parse(userDataStr) as Student;
+      // Only storing user id in localStorage for privacy
+      const userId = localStorage.getItem('current_user_id');
+      if (!userId) return null;
 
       // Verify student still exists and is active in database
       // Also fetch admin roles
@@ -223,7 +214,7 @@ export const authService = {
             can_view_analytics
           )
         `)
-        .eq('id', student.id)
+        .eq('id', userId)
         .single();
 
       if (error || !data || !data.is_active) {
@@ -234,14 +225,14 @@ export const authService = {
       }
 
       // Extract roles from admins join
-      interface AdminRow { id: string; role: string; can_create_payments?: boolean; can_approve_payments?: boolean; can_manage_students?: boolean; can_view_analytics?: boolean }
-      const admins: AdminRow[] = data.admins || [];
-      const roles = admins.map((admin: AdminRow) => admin.role) || [];
+  interface AdminRow { id: string; role: string; can_create_payments?: boolean; can_approve_payments?: boolean; can_manage_students?: boolean; can_view_analytics?: boolean }
+  const admins: AdminRow[] = data.admins || [];
+  const roles = admins.map((admin: AdminRow) => admin.role) || [];
       const admin_permissions = {
-        can_create_payments: admins.some((a: AdminRow) => a.can_create_payments === true),
-        can_approve_payments: admins.some((a: AdminRow) => a.can_approve_payments === true),
-        can_manage_students: admins.some((a: AdminRow) => a.can_manage_students === true),
-        can_view_analytics: admins.some((a: AdminRow) => a.can_view_analytics === true),
+  can_create_payments: admins.some((a: AdminRow) => a.can_create_payments === true),
+  can_approve_payments: admins.some((a: AdminRow) => a.can_approve_payments === true),
+  can_manage_students: admins.some((a: AdminRow) => a.can_manage_students === true),
+  can_view_analytics: admins.some((a: AdminRow) => a.can_view_analytics === true),
       };
 
       const studentWithRoles = {
@@ -251,8 +242,8 @@ export const authService = {
         admin_permissions,
       };
 
-      // Update stored session with latest data including roles
-      this.saveSession(studentWithRoles as LoginResponse['student']);
+        // Persist minimal session info (id) only
+        this.saveSession(studentWithRoles as LoginResponse['student']);
 
       // Return fresh data from database
       return {

@@ -73,13 +73,32 @@ export default function CreatePaymentTypePage() {
   const navigate = useNavigate();
   const toast = useToast();
   const [loading, setLoading] = useState(false);
-  const [formData, setFormData] = useState({
+  type PaymentFormData = {
+    title: string;
+    description: string;
+    category: string;
+    amount: string;
+    allow_partial: boolean;
+    is_mandatory: boolean;
+    is_public: boolean;
+    deadline: string;
+    bank_name: string;
+    account_name: string;
+    account_number: string;
+    target_levels: string[];
+    icon: string;
+    color: string;
+    late_fee_per_day: string | number;
+  };
+
+  const [formData, setFormData] = useState<PaymentFormData>({
     title: "",
     description: "",
     category: "semester_dues",
     amount: "",
     allow_partial: false,
     is_mandatory: false,
+    is_public: false,
     deadline: "",
     bank_name: "First Bank of Nigeria",
     account_name: "",
@@ -87,6 +106,7 @@ export default function CreatePaymentTypePage() {
     target_levels: ["200L"],
     icon: "🎓",
     color: "#3B82F6",
+    late_fee_per_day: '',
   });
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -137,6 +157,7 @@ export default function CreatePaymentTypePage() {
           allow_partial: formData.allow_partial,
           is_mandatory: formData.is_mandatory,
           deadline: formData.deadline,
+          late_fee_per_day: Number(formData.late_fee_per_day || 0),
           bank_name: formData.bank_name,
           account_name: formData.account_name,
           account_number: formData.account_number,
@@ -146,7 +167,7 @@ export default function CreatePaymentTypePage() {
           icon: formData.icon,
           color: formData.color,
           is_active: true,
-          is_public: false,
+          is_public: formData.is_public,
         })
         .select()
         .single();
@@ -296,6 +317,7 @@ export default function CreatePaymentTypePage() {
                     Set up a new payment type for students to pay
                   </p>
                 </div>
+              {/* NOTE: Late fee input moved into the Basic Info form for consistent visibility */}
               </div>
 
               {/* Progress Steps */}
@@ -406,6 +428,18 @@ export default function CreatePaymentTypePage() {
                   step="0.01"
                 />
 
+                <Input
+                  label="Late Fee per Day (₦)"
+                  type="number"
+                  value={formData.late_fee_per_day ?? ''}
+                  onChange={(e) => {
+                    const v = e.target.value
+                    setFormData({ ...formData, late_fee_per_day: v === '' ? '' : Number(v) })
+                  }}
+                  placeholder="Amount charged per day after deadline"
+                  helperText="Amount charged per day after the payment deadline. Leave empty for no late fee."
+                />
+
                 <div className="space-y-3">
                   <label className="flex items-center gap-3 cursor-pointer">
                     <input
@@ -438,6 +472,23 @@ export default function CreatePaymentTypePage() {
                     />
                     <span className="text-white text-sm">
                       Make payment mandatory
+                    </span>
+                  </label>
+
+                  <label className="flex items-center gap-3 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={formData.is_public}
+                      onChange={(e) =>
+                        setFormData({
+                          ...formData,
+                          is_public: e.target.checked,
+                        })
+                      }
+                      className="w-5 h-5 rounded border-white/20 bg-white/5 text-orange-500 focus:ring-2 focus:ring-orange-500"
+                    />
+                    <span className="text-white text-sm">
+                      Allow public contributions (visible on /contribute page)
                     </span>
                   </label>
                 </div>

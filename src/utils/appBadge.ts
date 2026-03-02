@@ -1,44 +1,64 @@
 /**
- * Utility for handling PWA application badging
- * Uses the Badging API where available
+ * App Badge Utility
+ * Sets the app icon badge for PWA to show pending payment count
+ * Uses the Badging API (Chrome/Edge) with fallback
  */
 
+// Type for Navigator with optional Badging API methods
+type BadgingNavigator = {
+  setAppBadge?: (count: number) => Promise<void>;
+  clearAppBadge?: () => Promise<void>;
+};
+
 class AppBadge {
-    // Check if the Badging API is supported
-    private isSupported(): boolean {
-        return 'setAppBadge' in navigator && 'clearAppBadge' in navigator;
+  private supported: boolean;
+  private nav: BadgingNavigator;
+
+  constructor() {
+    this.nav = navigator as unknown as BadgingNavigator;
+    this.supported = typeof this.nav.setAppBadge === 'function';
+    console.log('🏷️ App Badge API supported:', this.supported);
+  }
+
+  /**
+   * Set the app badge count
+   * @param count Number to show on badge (0 clears the badge)
+   */
+  async setBadge(count: number): Promise<boolean> {
+    if (!this.supported || !this.nav.setAppBadge || !this.nav.clearAppBadge) {
+      console.log('🏷️ App Badge not supported in this browser');
+      return false;
     }
 
-    /**
-     * Set the app badge to a specific number
-     * @param count The number to display in the badge
-     */
-    async setBadge(count: number): Promise<void> {
-        if (!this.isSupported()) return;
-
-        try {
-            if (count > 0) {
-                await navigator.setAppBadge(count);
-            } else {
-                await navigator.clearAppBadge();
-            }
-        } catch (error) {
-            console.error('Error setting app badge:', error);
-        }
+    try {
+      if (count > 0) {
+        await this.nav.setAppBadge(count);
+        console.log('🏷️ App badge set to:', count);
+      } else {
+        await this.nav.clearAppBadge();
+        console.log('🏷️ App badge cleared');
+      }
+      return true;
+    } catch (err) {
+      console.error('🏷️ Failed to set app badge:', err);
+      return false;
     }
+  }
 
-    /**
-     * Clear the app badge
-     */
-    async clearBadge(): Promise<void> {
-        if (!this.isSupported()) return;
+  /**
+   * Clear the app badge
+   */
+  async clearBadge(): Promise<boolean> {
+    return this.setBadge(0);
+  }
 
-        try {
-            await navigator.clearAppBadge();
-        } catch (error) {
-            console.error('Error clearing app badge:', error);
-        }
-    }
+  /**
+   * Check if badge API is supported
+   */
+  isSupported(): boolean {
+    return this.supported;
+  }
 }
 
 export const appBadge = new AppBadge();
+export default appBadge;

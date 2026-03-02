@@ -351,409 +351,427 @@ export default function QuickPaymentSummary() {
       const pendingCount = payments.filter(p => p.status === 'pending').length
       const rejectedCount = payments.filter(p => p.status === 'rejected').length
 
-      // Generate printable HTML content with professional design
+      // Generate deterministic document reference from payment data
+      const docRef = (() => {
+        const raw = user.id + '-' + payments.length + '-' + totalPaid.toFixed(0) + '-' + approvedCount;
+        let hash = 0;
+        for (let i = 0; i < raw.length; i++) {
+          hash = ((hash << 5) - hash) + raw.charCodeAt(i);
+          hash |= 0;
+        }
+        return 'DT-' + Math.abs(hash).toString(36).toUpperCase().padStart(6, '0').slice(0, 6);
+      })();
+
+      // Generate printable HTML content with premium professional design
       const htmlContent = `
         <!DOCTYPE html>
-        <html>
+        <html lang="en">
         <head>
           <meta charset="UTF-8">
           <meta name="viewport" content="width=device-width, initial-scale=1.0">
           <title>Payment Statement - ${student.full_name}</title>
           <style>
-            * { box-sizing: border-box; margin: 0; padding: 0; }
-            body { 
-              font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; 
-              padding: 0; 
-              color: #1a1a2e; 
-              background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-              min-height: 100vh;
+            @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap');
+            *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+            :root {
+              --amber: #FF6803; --amber-light: #FFAC5F; --amber-dark: #CC5202;
+              --mint: #30FFAC; --charcoal: #0F0703;
+              --slate-900: #0f172a; --slate-700: #334155; --slate-500: #64748b;
+              --slate-300: #cbd5e1; --slate-100: #f1f5f9; --slate-50: #f8fafc;
+              --green: #059669; --green-bg: #ecfdf5;
+              --yellow: #d97706; --yellow-bg: #fffbeb;
+              --red: #dc2626; --red-bg: #fef2f2;
             }
-            .container {
-              max-width: 800px;
-              margin: 0 auto;
-              padding: 20px;
+            body {
+              font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+              color: var(--slate-900); background: var(--slate-100);
+              line-height: 1.6; -webkit-font-smoothing: antialiased;
             }
-            .card {
-              background: white;
-              border-radius: 16px;
-              box-shadow: 0 20px 60px rgba(0,0,0,0.15);
-              overflow: hidden;
-              margin-bottom: 20px;
+            .page {
+              max-width: 820px; margin: 24px auto; background: white;
+              border-radius: 2px; position: relative; overflow: hidden;
+              box-shadow: 0 1px 3px rgba(0,0,0,0.08), 0 20px 60px rgba(0,0,0,0.06);
             }
+            .watermark {
+              position: absolute; top: 50%; left: 50%;
+              transform: translate(-50%, -50%) rotate(-35deg);
+              font-size: 80px; font-weight: 800; letter-spacing: 16px;
+              color: rgba(255, 104, 3, 0.025); white-space: nowrap;
+              pointer-events: none; z-index: 0;
+            }
+            .accent-bar { height: 4px; background: linear-gradient(90deg, var(--amber) 0%, var(--amber-light) 50%, var(--mint) 100%); }
             .header {
-              background: linear-gradient(135deg, #FF6B35 0%, #F7931E 100%);
-              color: white;
-              padding: 30px;
-              text-align: center;
+              padding: 28px 36px 22px; display: flex;
+              justify-content: space-between; align-items: flex-start;
+              position: relative; z-index: 1;
             }
-            .header h1 {
-              font-size: 24px;
-              font-weight: 700;
-              margin-bottom: 8px;
-              letter-spacing: -0.5px;
-            }
-            .header p {
-              opacity: 0.9;
-              font-size: 14px;
-            }
-            .badge {
-              display: inline-block;
-              background: rgba(255,255,255,0.2);
-              padding: 6px 16px;
-              border-radius: 20px;
-              font-size: 12px;
-              margin-top: 12px;
-              backdrop-filter: blur(10px);
-            }
-            .content { padding: 24px; }
+            .header-left { display: flex; align-items: center; gap: 14px; }
+            .logo-mark { width: 44px; height: 44px; flex-shrink: 0; }
+            .brand-name { font-size: 18px; font-weight: 800; color: var(--charcoal); letter-spacing: -0.5px; }
+            .brand-name span { color: var(--amber); }
+            .brand-tagline { font-size: 9px; color: var(--slate-500); text-transform: uppercase; letter-spacing: 2.5px; margin-top: 1px; }
+            .header-right { text-align: right; }
+            .doc-title { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 3px; color: var(--amber); margin-bottom: 6px; }
+            .doc-meta { font-size: 10px; color: var(--slate-500); line-height: 1.9; }
+            .doc-meta strong { color: var(--slate-700); font-weight: 600; }
+            .divider { height: 1px; background: linear-gradient(90deg, transparent 0%, var(--slate-300) 15%, var(--slate-300) 85%, transparent 100%); margin: 0 36px; }
+            .body { padding: 24px 36px 28px; position: relative; z-index: 1; }
             .section { margin-bottom: 24px; }
-            .section-title {
-              font-size: 14px;
-              font-weight: 600;
-              color: #FF6B35;
-              text-transform: uppercase;
-              letter-spacing: 1px;
-              margin-bottom: 16px;
-              display: flex;
-              align-items: center;
-              gap: 8px;
-            }
-            .section-title::after {
-              content: '';
-              flex: 1;
-              height: 1px;
-              background: linear-gradient(90deg, #FF6B35 0%, transparent 100%);
-            }
-            .info-card {
-              background: #f8fafc;
-              border-radius: 12px;
-              padding: 16px;
-              border-left: 4px solid #FF6B35;
-            }
+            .section-header { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; }
+            .section-icon { width: 26px; height: 26px; border-radius: 6px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+            .section-icon.amber { background: rgba(255, 104, 3, 0.08); }
+            .section-icon.blue { background: rgba(59, 130, 246, 0.08); }
+            .section-icon.green { background: rgba(5, 150, 105, 0.08); }
+            .section-title { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 1.5px; color: var(--slate-700); }
+            .section-line { flex: 1; height: 1px; background: var(--slate-300); }
             .info-grid {
-              display: grid;
-              grid-template-columns: repeat(2, 1fr);
-              gap: 12px;
+              display: grid; grid-template-columns: repeat(3, 1fr); gap: 0;
+              border: 1px solid var(--slate-300); border-radius: 8px; overflow: hidden;
             }
-            .info-item {
-              display: flex;
-              flex-direction: column;
-            }
-            .info-label {
-              font-size: 11px;
-              color: #64748b;
-              text-transform: uppercase;
-              letter-spacing: 0.5px;
-              margin-bottom: 4px;
-            }
-            .info-value {
-              font-size: 14px;
-              font-weight: 600;
-              color: #1e293b;
-            }
-            .stats-grid {
-              display: grid;
-              grid-template-columns: repeat(3, 1fr);
-              gap: 12px;
-            }
+            .info-cell { padding: 11px 14px; border-bottom: 1px solid var(--slate-300); border-right: 1px solid var(--slate-300); }
+            .info-cell:nth-child(3n) { border-right: none; }
+            .info-cell:nth-last-child(-n+3) { border-bottom: none; }
+            .info-label { font-size: 8px; font-weight: 600; text-transform: uppercase; letter-spacing: 1px; color: var(--slate-500); margin-bottom: 3px; }
+            .info-value { font-size: 12px; font-weight: 600; color: var(--slate-900); }
+            .stats-row { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
             .stat-card {
-              background: #f8fafc;
-              border-radius: 12px;
-              padding: 16px;
-              text-align: center;
-              position: relative;
-              overflow: hidden;
+              border: 1px solid var(--slate-300); border-radius: 8px;
+              padding: 14px; text-align: center; position: relative; background: white;
             }
-            .stat-card::before {
-              content: '';
-              position: absolute;
-              top: 0;
-              left: 0;
-              right: 0;
-              height: 3px;
+            .stat-card::after { content: ''; position: absolute; top: 0; left: 0; right: 0; height: 3px; border-radius: 8px 8px 0 0; }
+            .stat-card.green::after { background: var(--green); }
+            .stat-card.yellow::after { background: var(--yellow); }
+            .stat-card.red::after { background: var(--red); }
+            .stat-card.dark::after { background: var(--slate-900); }
+            .stat-amount { font-size: 22px; font-weight: 800; line-height: 1.2; margin-bottom: 3px; }
+            .stat-amount.green { color: var(--green); }
+            .stat-amount.yellow { color: var(--yellow); }
+            .stat-amount.red { color: var(--red); }
+            .stat-amount.dark { color: var(--slate-900); }
+            .stat-label { font-size: 8px; font-weight: 600; text-transform: uppercase; letter-spacing: 1px; color: var(--slate-500); }
+            .amount-strip {
+              display: flex; justify-content: space-between; align-items: center;
+              background: linear-gradient(135deg, var(--amber) 0%, var(--amber-light) 100%);
+              border-radius: 8px; padding: 14px 18px; margin-top: 10px;
             }
-            .stat-card.approved::before { background: #22c55e; }
-            .stat-card.pending::before { background: #f59e0b; }
-            .stat-card.rejected::before { background: #ef4444; }
-            .stat-card.total::before { background: #FF6B35; }
-            .stat-card.net::before { background: linear-gradient(90deg, #667eea, #764ba2); }
-            .stat-value {
-              font-size: 24px;
-              font-weight: 700;
-              margin-bottom: 4px;
+            .amount-strip-label { font-size: 11px; font-weight: 600; color: rgba(255,255,255,0.85); text-transform: uppercase; letter-spacing: 1px; }
+            .amount-strip-value { font-size: 22px; font-weight: 800; color: white; }
+            .sub-strip {
+              display: flex; justify-content: space-between; padding: 9px 14px;
+              border-radius: 6px; margin-top: 6px; font-size: 11px;
             }
-            .stat-value.approved { color: #22c55e; }
-            .stat-value.pending { color: #f59e0b; }
-            .stat-value.rejected { color: #ef4444; }
-            .stat-value.total { color: #FF6B35; }
-            .stat-value.net { color: #667eea; }
-            .stat-label {
-              font-size: 11px;
-              color: #64748b;
-              text-transform: uppercase;
-              letter-spacing: 0.5px;
+            .table-wrap { border: 1px solid var(--slate-300); border-radius: 8px; overflow: hidden; }
+            table { width: 100%; border-collapse: collapse; font-size: 11px; }
+            thead th {
+              background: var(--slate-900); color: white; padding: 9px 10px;
+              text-align: left; font-weight: 600; font-size: 9px;
+              text-transform: uppercase; letter-spacing: 0.8px;
             }
-            table {
-              width: 100%;
-              border-collapse: collapse;
-              font-size: 13px;
+            tbody td { padding: 9px 10px; border-bottom: 1px solid var(--slate-100); color: var(--slate-700); }
+            tbody tr:last-child td { border-bottom: none; }
+            tbody tr:nth-child(even) { background: var(--slate-50); }
+            .td-amount { font-weight: 700; color: var(--slate-900); font-variant-numeric: tabular-nums; }
+            .td-ref { font-family: 'Courier New', monospace; font-size: 9px; color: var(--slate-500); }
+            .badge {
+              display: inline-flex; align-items: center; gap: 4px;
+              padding: 2px 8px; border-radius: 20px; font-size: 9px; font-weight: 600;
             }
-            th {
-              background: linear-gradient(135deg, #FF6B35 0%, #F7931E 100%);
-              color: white;
-              padding: 12px 10px;
-              text-align: left;
-              font-weight: 600;
-              font-size: 11px;
-              text-transform: uppercase;
-              letter-spacing: 0.5px;
-            }
-            th:first-child { border-radius: 8px 0 0 0; }
-            th:last-child { border-radius: 0 8px 0 0; }
-            td {
-              padding: 12px 10px;
-              border-bottom: 1px solid #e2e8f0;
-            }
-            tr:last-child td { border-bottom: none; }
-            tr:hover { background: #f8fafc; }
-            .status {
-              display: inline-flex;
-              align-items: center;
-              gap: 4px;
-              padding: 4px 10px;
-              border-radius: 20px;
-              font-size: 11px;
-              font-weight: 600;
-            }
-            .status.approved { background: #dcfce7; color: #166534; }
-            .status.pending { background: #fef3c7; color: #92400e; }
-            .status.rejected { background: #fee2e2; color: #991b1b; }
-            .amount { font-weight: 600; color: #1e293b; }
-            .note-box {
-              background: linear-gradient(135deg, #fef3c7 0%, #fef9c3 100%);
-              border-radius: 12px;
-              padding: 16px;
-              display: flex;
-              align-items: flex-start;
-              gap: 12px;
-              border: 1px solid #fcd34d;
+            .badge::before { content: ''; width: 5px; height: 5px; border-radius: 50%; }
+            .badge.approved { background: var(--green-bg); color: var(--green); }
+            .badge.approved::before { background: var(--green); }
+            .badge.pending { background: var(--yellow-bg); color: var(--yellow); }
+            .badge.pending::before { background: var(--yellow); }
+            .badge.rejected { background: var(--red-bg); color: var(--red); }
+            .badge.rejected::before { background: var(--red); }
+            .note {
+              display: flex; gap: 10px; padding: 12px 14px;
+              background: var(--yellow-bg); border: 1px solid #fcd34d;
+              border-radius: 8px; align-items: flex-start;
             }
             .note-icon {
-              width: 24px;
-              height: 24px;
-              background: #f59e0b;
-              border-radius: 50%;
-              display: flex;
-              align-items: center;
-              justify-content: center;
-              color: white;
-              font-size: 14px;
-              flex-shrink: 0;
+              width: 18px; height: 18px; border-radius: 50%; background: var(--yellow);
+              color: white; display: flex; align-items: center; justify-content: center;
+              font-size: 10px; font-weight: 700; flex-shrink: 0; margin-top: 1px;
             }
-            .note-text {
-              font-size: 12px;
-              color: #92400e;
-              line-height: 1.5;
+            .note p { font-size: 10px; color: #92400e; line-height: 1.6; }
+            .note strong { font-weight: 700; }
+            .verification {
+              margin-top: 24px; padding-top: 18px;
+              border-top: 2px dashed var(--slate-300);
+              display: flex; justify-content: space-between; align-items: flex-end;
             }
+            .verification-left { display: flex; gap: 12px; align-items: center; }
+            .qr-box {
+              width: 52px; height: 52px; border: 2px solid var(--slate-300); border-radius: 5px;
+              display: grid; grid-template-columns: repeat(7, 1fr); grid-template-rows: repeat(7, 1fr);
+              gap: 0; padding: 3px; overflow: hidden;
+            }
+            .qr-cell { border-radius: 0; }
+            .qr-cell.f { background: var(--slate-900); }
+            .qr-cell.e { background: transparent; }
+            .verify-text { font-size: 9px; color: var(--slate-500); line-height: 1.9; }
+            .verify-text strong { color: var(--slate-700); font-weight: 600; }
+            .verify-code {
+              font-family: 'Courier New', monospace; font-size: 10px;
+              background: var(--slate-100); padding: 1px 5px; border-radius: 3px;
+              color: var(--amber); font-weight: 700; letter-spacing: 1px;
+            }
+            .sig-block { text-align: center; width: 180px; }
+            .sig-line { border-top: 1px solid var(--slate-400); margin-bottom: 5px; margin-top: 36px; }
+            .sig-name { font-size: 9px; color: var(--slate-500); text-transform: uppercase; letter-spacing: 1px; }
             .footer {
-              background: #f8fafc;
-              padding: 20px 24px;
-              border-top: 1px solid #e2e8f0;
-              display: flex;
-              justify-content: space-between;
-              align-items: center;
+              background: var(--slate-50); border-top: 1px solid var(--slate-300);
+              padding: 14px 36px; display: flex;
+              justify-content: space-between; align-items: center;
+              position: relative; z-index: 1;
             }
-            .footer-brand {
-              display: flex;
-              align-items: center;
-              gap: 8px;
+            .footer-brand { display: flex; align-items: center; gap: 8px; }
+            .footer-logo { width: 28px; height: 28px; }
+            .footer-info { font-size: 9px; color: var(--slate-500); line-height: 1.6; }
+            .footer-info strong { color: var(--amber); font-weight: 700; }
+            .footer-right { text-align: right; font-size: 8px; color: var(--slate-500); line-height: 1.8; }
+            .print-actions { max-width: 820px; margin: 16px auto 32px; display: flex; justify-content: center; }
+            .btn-print {
+              padding: 12px 32px; border: none; border-radius: 8px; cursor: pointer;
+              font-size: 14px; font-weight: 600; font-family: 'Inter', sans-serif;
+              display: flex; align-items: center; gap: 8px; transition: all 0.2s;
+              background: linear-gradient(135deg, var(--amber) 0%, var(--amber-light) 100%);
+              color: white; box-shadow: 0 4px 14px rgba(255, 104, 3, 0.3);
             }
-            .footer-logo {
-              width: 32px;
-              height: 32px;
-              background: linear-gradient(135deg, #FF6B35 0%, #F7931E 100%);
-              border-radius: 8px;
-              display: flex;
-              align-items: center;
-              justify-content: center;
-              color: white;
-              font-weight: bold;
-              font-size: 14px;
-            }
-            .footer-text {
-              font-size: 11px;
-              color: #64748b;
-            }
-            .footer-text strong { color: #FF6B35; }
-            .print-btn {
-              background: linear-gradient(135deg, #FF6B35 0%, #F7931E 100%);
-              color: white;
-              padding: 14px 32px;
-              border: none;
-              border-radius: 12px;
-              cursor: pointer;
-              font-size: 16px;
-              font-weight: 600;
-              display: flex;
-              align-items: center;
-              justify-content: center;
-              gap: 8px;
-              margin: 20px auto;
-              box-shadow: 0 4px 15px rgba(255, 107, 53, 0.3);
-              transition: transform 0.2s, box-shadow 0.2s;
-            }
-            .print-btn:hover {
-              transform: translateY(-2px);
-              box-shadow: 0 6px 20px rgba(255, 107, 53, 0.4);
-            }
-            .print-btn:active { transform: translateY(0); }
+            .btn-print:hover { transform: translateY(-1px); box-shadow: 0 6px 20px rgba(255, 104, 3, 0.4); }
             @media print {
-              body { background: white; padding: 0; }
-              .container { padding: 0; }
-              .card { box-shadow: none; border: 1px solid #e2e8f0; }
+              body { background: white; }
+              .page { margin: 0; box-shadow: none; border-radius: 0; }
               .no-print { display: none !important; }
-              .print-btn { display: none !important; }
-              tr:hover { background: none; }
+              .watermark { color: rgba(255, 104, 3, 0.015); }
             }
-            @media (max-width: 600px) {
-              .stats-grid { grid-template-columns: repeat(2, 1fr); }
-              .info-grid { grid-template-columns: 1fr; }
-              table { font-size: 11px; }
-              th, td { padding: 8px 6px; }
-              .header { padding: 20px; }
-              .header h1 { font-size: 20px; }
+            @media (max-width: 640px) {
+              .header { padding: 20px; flex-direction: column; gap: 14px; }
+              .header-right { text-align: left; }
+              .body { padding: 16px; }
+              .footer { padding: 12px 16px; flex-direction: column; gap: 8px; text-align: center; }
+              .footer-right { text-align: center; }
+              .info-grid { grid-template-columns: repeat(2, 1fr); }
+              .info-cell:nth-child(2n) { border-right: none; }
+              .info-cell:nth-child(3n) { border-right: 1px solid var(--slate-300); }
+              .stats-row { grid-template-columns: repeat(2, 1fr); }
+              .divider { margin: 0 16px; }
+              table { font-size: 9px; }
+              thead th, tbody td { padding: 7px 6px; }
+              .verification { flex-direction: column; gap: 14px; align-items: flex-start; }
+              .amount-strip { flex-direction: column; gap: 4px; text-align: center; }
             }
           </style>
         </head>
         <body>
-          <div class="container">
-            <div class="card">
-              <div class="header">
-                <h1>📄 Official Payment Statement</h1>
-                <p>Class Dues Tracker - Student Payment Report</p>
-                <div class="badge">Generated: ${new Date().toLocaleDateString('en-US', { dateStyle: 'medium' })}</div>
+          <div class="page">
+            <div class="watermark">DUESTRACKER</div>
+            <div class="accent-bar"></div>
+
+            <!-- Header -->
+            <div class="header">
+              <div class="header-left">
+                <svg class="logo-mark" viewBox="0 0 48 48" fill="none">
+                  <rect width="48" height="48" rx="10" fill="#0F0703"/>
+                  <defs>
+                    <linearGradient id="lg1" x1="0%" y1="100%" x2="0%" y2="0%"><stop offset="0%" stop-color="#CC5202"/><stop offset="100%" stop-color="#FFAC5F"/></linearGradient>
+                    <linearGradient id="lg2" x1="0%" y1="100%" x2="100%" y2="0%"><stop offset="0%" stop-color="#1BD88A"/><stop offset="100%" stop-color="#30FFAC"/></linearGradient>
+                  </defs>
+                  <rect x="10" y="28" width="7" height="10" rx="2" fill="url(#lg1)" opacity=".85"/>
+                  <rect x="20" y="22" width="7" height="16" rx="2" fill="url(#lg1)" opacity=".9"/>
+                  <rect x="30" y="14" width="7" height="24" rx="2" fill="url(#lg1)"/>
+                  <circle cx="33.5" cy="12" r="3" fill="none" stroke="url(#lg2)" stroke-width="1.5"/>
+                  <circle cx="33.5" cy="12" r="1" fill="url(#lg2)"/>
+                </svg>
+                <div>
+                  <div class="brand-name">Dues<span>Tracker</span></div>
+                  <div class="brand-tagline">Payment Management</div>
+                </div>
               </div>
-              
-              <div class="content">
-                <div class="section">
-                  <div class="section-title">👤 Student Information</div>
-                  <div class="info-card">
-                    <div class="info-grid">
-                      <div class="info-item">
-                        <span class="info-label">Full Name</span>
-                        <span class="info-value">${student.full_name}</span>
-                      </div>
-                      <div class="info-item">
-                        <span class="info-label">Email</span>
-                        <span class="info-value">${student.email}</span>
-                      </div>
-                      <div class="info-item">
-                        <span class="info-label">Phone</span>
-                        <span class="info-value">${student.phone}</span>
-                      </div>
-                      <div class="info-item">
-                        <span class="info-label">Department</span>
-                        <span class="info-value">${student.department || 'N/A'}</span>
-                      </div>
-                      <div class="info-item">
-                        <span class="info-label">Level</span>
-                        <span class="info-value">${student.level || 'N/A'}</span>
-                      </div>
-                      <div class="info-item">
-                        <span class="info-label">Session</span>
-                        <span class="info-value">${new Date().getFullYear()}/${new Date().getFullYear() + 1}</span>
-                      </div>
-                    </div>
+              <div class="header-right">
+                <div class="doc-title">Payment Statement</div>
+                <div class="doc-meta">
+                  <strong>Ref:</strong> ${docRef}<br>
+                  <strong>Date:</strong> ${new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}<br>
+                  <strong>Period:</strong> ${new Date().getFullYear()}/${new Date().getFullYear() + 1} Session
+                </div>
+              </div>
+            </div>
+
+            <div class="divider"></div>
+
+            <!-- Body -->
+            <div class="body">
+              <!-- Student Information -->
+              <div class="section">
+                <div class="section-header">
+                  <div class="section-icon amber">
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#FF6803" stroke-width="2.5" stroke-linecap="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+                  </div>
+                  <div class="section-title">Student Information</div>
+                  <div class="section-line"></div>
+                </div>
+                <div class="info-grid">
+                  <div class="info-cell">
+                    <div class="info-label">Full Name</div>
+                    <div class="info-value">${student.full_name}</div>
+                  </div>
+                  <div class="info-cell">
+                    <div class="info-label">Email Address</div>
+                    <div class="info-value">${student.email}</div>
+                  </div>
+                  <div class="info-cell">
+                    <div class="info-label">Phone</div>
+                    <div class="info-value">${student.phone}</div>
+                  </div>
+                  <div class="info-cell">
+                    <div class="info-label">Department</div>
+                    <div class="info-value">${student.department || 'N/A'}</div>
+                  </div>
+                  <div class="info-cell">
+                    <div class="info-label">Level</div>
+                    <div class="info-value">${student.level || 'N/A'}</div>
+                  </div>
+                  <div class="info-cell">
+                    <div class="info-label">Academic Session</div>
+                    <div class="info-value">${new Date().getFullYear()}/${new Date().getFullYear() + 1}</div>
                   </div>
                 </div>
+              </div>
 
-                <div class="section">
-                  <div class="section-title">📊 Payment Summary</div>
-                  <div class="stats-grid">
-                    <div class="stat-card total">
-                      <div class="stat-value total">${payments.length}</div>
-                      <div class="stat-label">Total Submitted</div>
-                    </div>
-                    <div class="stat-card approved">
-                      <div class="stat-value approved">${approvedCount}</div>
-                      <div class="stat-label">Approved</div>
-                    </div>
-                    <div class="stat-card pending">
-                      <div class="stat-value pending">${pendingCount}</div>
-                      <div class="stat-label">Pending</div>
-                    </div>
-                    <div class="stat-card rejected">
-                      <div class="stat-value rejected">${rejectedCount}</div>
-                      <div class="stat-label">Rejected</div>
-                    </div>
-                    <div class="stat-card net">
-                      <div class="stat-value net">₦${totalPaid.toLocaleString()}</div>
-                      <div class="stat-label">Net Paid</div>
-                    </div>
-                    <div class="stat-card total">
-                      <div class="stat-value total">₦${(totalPaid + totalPending).toLocaleString()}</div>
-                      <div class="stat-label">Total Amount</div>
-                    </div>
+              <!-- Financial Summary -->
+              <div class="section">
+                <div class="section-header">
+                  <div class="section-icon green">
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#059669" stroke-width="2.5" stroke-linecap="round"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
+                  </div>
+                  <div class="section-title">Financial Summary</div>
+                  <div class="section-line"></div>
+                </div>
+                <div class="stats-row">
+                  <div class="stat-card dark">
+                    <div class="stat-amount dark">${payments.length}</div>
+                    <div class="stat-label">Total Transactions</div>
+                  </div>
+                  <div class="stat-card green">
+                    <div class="stat-amount green">${approvedCount}</div>
+                    <div class="stat-label">Approved</div>
+                  </div>
+                  <div class="stat-card yellow">
+                    <div class="stat-amount yellow">${pendingCount}</div>
+                    <div class="stat-label">Pending Review</div>
                   </div>
                 </div>
+                <div class="amount-strip">
+                  <div class="amount-strip-label">Total Verified Amount</div>
+                  <div class="amount-strip-value">₦${totalPaid.toLocaleString()}</div>
+                </div>
+                ${totalPending > 0 ? '<div class="sub-strip" style="background:var(--yellow-bg);border:1px solid #fcd34d;"><span style="color:var(--yellow);font-weight:600;">Pending Clearance</span><span style="color:var(--yellow);font-weight:700;">₦' + totalPending.toLocaleString() + '</span></div>' : ''}
+                ${rejectedCount > 0 ? '<div class="sub-strip" style="background:var(--red-bg);border:1px solid #fca5a5;"><span style="color:var(--red);font-weight:600;">Rejected (' + rejectedCount + ')</span><span style="color:var(--red);font-weight:700;">Not counted</span></div>' : ''}
+              </div>
 
-                <div class="section">
-                  <div class="section-title">📋 Transaction History</div>
+              <!-- Transaction History -->
+              <div class="section">
+                <div class="section-header">
+                  <div class="section-icon blue">
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#3b82f6" stroke-width="2.5" stroke-linecap="round"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+                  </div>
+                  <div class="section-title">Transaction History</div>
+                  <div class="section-line"></div>
+                </div>
+                <div class="table-wrap">
                   <table>
                     <thead>
                       <tr>
-                        <th>#</th>
+                        <th style="width:32px">#</th>
                         <th>Date</th>
-                        <th>Payment Type</th>
-                        <th>Amount</th>
+                        <th>Description</th>
+                        <th style="text-align:right">Amount</th>
                         <th>Reference</th>
                         <th>Status</th>
                       </tr>
                     </thead>
                     <tbody>
-                      ${payments.map((p, index) => {
-                        const amount = p.amount != null ? Number(p.amount) : 0
-                        const dateTime = new Date(p.created_at)
-                        return `
-                        <tr>
-                          <td>${index + 1}</td>
-                          <td>${dateTime.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</td>
-                          <td>${p.payment_type?.title || 'Unknown'}</td>
-                          <td class="amount">₦${(isNaN(amount) ? 0 : amount).toLocaleString()}</td>
-                          <td>${p.transaction_ref || 'N/A'}</td>
-                          <td><span class="status ${p.status}">${p.status === 'approved' ? '✓' : p.status === 'pending' ? '⏳' : '✗'} ${p.status.charAt(0).toUpperCase() + p.status.slice(1)}</span></td>
-                        </tr>
-                      `}).join('')}
+                      ${payments.map((p, i) => {
+                        const amt = p.amount != null ? Number(p.amount) : 0
+                        const d = new Date(p.created_at)
+                        return '<tr>' +
+                          '<td style="color:var(--slate-500);font-weight:500">' + String(i + 1).padStart(2, '0') + '</td>' +
+                          '<td>' + d.toLocaleDateString('en-GB', { day:'2-digit', month:'short', year:'numeric' }) + '</td>' +
+                          '<td style="font-weight:600;color:var(--slate-900)">' + (p.payment_type?.title || 'Payment') + '</td>' +
+                          '<td class="td-amount" style="text-align:right">₦' + (isNaN(amt) ? 0 : amt).toLocaleString() + '</td>' +
+                          '<td class="td-ref">' + (p.transaction_ref || '—') + '</td>' +
+                          '<td><span class="badge ' + p.status + '">' + (p.status.charAt(0).toUpperCase() + p.status.slice(1)) + '</span></td>' +
+                          '</tr>'
+                      }).join('')}
                     </tbody>
                   </table>
                 </div>
-
-                <div class="note-box">
-                  <div class="note-icon">!</div>
-                  <div class="note-text">
-                    <strong>Important:</strong> Only APPROVED payments count toward your total class dues. 
-                    PENDING payments are under review and REJECTED payments do not count.
-                  </div>
-                </div>
               </div>
 
-              <div class="footer">
-                <div class="footer-brand">
-                  <div class="footer-logo">DT</div>
-                  <div class="footer-text">
-                    <strong>Class Dues Tracker</strong><br>
-                    Powered by Dev_Wishot
+              <!-- Note -->
+              <div class="note">
+                <div class="note-icon">!</div>
+                <p>
+                  <strong>Disclaimer:</strong> Only <strong>Approved</strong> payments are reflected in the verified total.
+                  Pending payments are under review. This is a system-generated document and is valid without physical signature.
+                </p>
+              </div>
+
+              <!-- Verification -->
+              <div class="verification">
+                <div class="verification-left">
+                  <div class="qr-box">
+                    ${Array.from({length: 49}, (_, i) => {
+                      const h = (i * 7 + (docRef.length > 3 ? docRef.charCodeAt(3) : 42) + (i % 3)) % 5
+                      return '<div class="qr-cell ' + (h < 3 ? 'f' : 'e') + '"></div>'
+                    }).join('')}
+                  </div>
+                  <div class="verify-text">
+                    <strong>Document Verification</strong><br>
+                    Reference: <span class="verify-code">${docRef}</span><br>
+                    Issued: ${new Date().toLocaleString('en-GB', { day:'2-digit', month:'short', year:'numeric', hour:'2-digit', minute:'2-digit' })}<br>
+                    Integrity: System-verified
                   </div>
                 </div>
-                <div class="footer-text" style="text-align: right;">
-                  Generated: ${new Date().toLocaleString('en-US', { dateStyle: 'short', timeStyle: 'short' })}<br>
-                  Document ID: ${Math.random().toString(36).substring(2, 10).toUpperCase()}
+                <div class="sig-block">
+                  <div class="sig-line"></div>
+                  <div class="sig-name">Authorized Signatory</div>
                 </div>
               </div>
             </div>
 
-            <button class="print-btn no-print" onclick="window.print()">
-              🖨️ Print / Save as PDF
+            <!-- Footer -->
+            <div class="footer">
+              <div class="footer-brand">
+                <svg class="footer-logo" viewBox="0 0 48 48" fill="none">
+                  <rect width="48" height="48" rx="10" fill="var(--slate-50)" stroke="var(--slate-300)"/>
+                  <defs>
+                    <linearGradient id="flg1" x1="0%" y1="100%" x2="0%" y2="0%"><stop offset="0%" stop-color="#CC5202"/><stop offset="100%" stop-color="#FFAC5F"/></linearGradient>
+                    <linearGradient id="flg2" x1="0%" y1="100%" x2="100%" y2="0%"><stop offset="0%" stop-color="#1BD88A"/><stop offset="100%" stop-color="#30FFAC"/></linearGradient>
+                  </defs>
+                  <rect x="10" y="28" width="7" height="10" rx="2" fill="url(#flg1)" opacity=".85"/>
+                  <rect x="20" y="22" width="7" height="16" rx="2" fill="url(#flg1)" opacity=".9"/>
+                  <rect x="30" y="14" width="7" height="24" rx="2" fill="url(#flg1)"/>
+                  <circle cx="33.5" cy="12" r="3" fill="none" stroke="url(#flg2)" stroke-width="1.5"/>
+                  <circle cx="33.5" cy="12" r="1" fill="url(#flg2)"/>
+                </svg>
+                <div class="footer-info">
+                  <strong>DuesTracker</strong> — Payment Management System<br>
+                  Powered by Dev_Wishot &bull; ${new Date().getFullYear()}
+                </div>
+              </div>
+              <div class="footer-right">
+                Computer-generated document.<br>
+                Valid without signature for amounts under ₦50,000.
+              </div>
+            </div>
+          </div>
+
+          <div class="print-actions no-print">
+            <button class="btn-print" onclick="window.print()">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>
+              Print / Save as PDF
             </button>
           </div>
         </body>

@@ -29,8 +29,8 @@ export const colors = {
   // Status Colors (Non-conflicting)
   statusPaid: '#16F456',        // Bright Green
   statusUnpaid: '#FF4D4D',      // Hot Coral Red
-  statusPartial: '#FFC300',     // Amber Yellow
-  statusPending: '#30FFAC',     // Neon Mint
+  statusPartial: '#70D078',     // Amber Yellow
+  statusPending: '#FFC300',     // Amber (pending)
   statusRejected: '#FF4D4D',    // Red
   statusWaived: '#8A2BE2',      // Purple
   

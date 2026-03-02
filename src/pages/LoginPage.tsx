@@ -1,11 +1,11 @@
 import { useState, useEffect } from 'react';
-import { Zap, Lock, User, AlertCircle, Info } from 'lucide-react';
-import { colors, gradients } from '@/config/colors';
+import { Lock, User, AlertCircle, Info } from 'lucide-react';
+import { colors } from '@/config/colors';
 import CustomButton from '@/components/ui/CustomButton';
 import Input from '@/components/ui/Input';
+import Logo from '@/components/ui/Logo';
 import { useAuth } from '@/hooks/useAuth';
-import { useOrganization } from '@/contexts/OrganizationContext';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, Link } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import PageWrapper from '@/components/ui/PageWrapper';
 
@@ -15,16 +15,7 @@ export default function LoginPage() {
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const { login, isAuthenticated, user, needsPasswordChange } = useAuth();
-  const { organization, department } = useOrganization();
   const navigate = useNavigate();
-
-  // Dynamic branding - falls back to defaults for backward compatibility
-  const orgName = organization?.short_name || department?.short_name || 'ECE';
-  const brandingText = organization ? `${orgName}` : 'ECE 200L';
-  const subtitleText = organization 
-    ? `${organization.name}${department ? ` | ${department.short_name}` : ''}`
-    : 'Class Dues Management System';
-  const primaryColor = organization?.primary_color || colors.primary;
 
   // Redirect if already logged in
   useEffect(() => {
@@ -44,8 +35,14 @@ export default function LoginPage() {
     setLoading(true);
 
     try {
-      await login(regNumber, password);
-      navigate('/dashboard');
+      const result = await login(regNumber, password);
+      
+      // If user needs to change password (admin reset), redirect there
+      if (result.mustChangePassword) {
+        navigate('/change-password', { replace: true });
+      } else {
+        navigate('/dashboard', { replace: true });
+      }
     } catch (err: unknown) {
       const errorMessage = err instanceof Error ? err.message : 'Invalid credentials. Please try again.';
       setError(errorMessage);
@@ -72,25 +69,7 @@ export default function LoginPage() {
         >
           <div className="space-y-4">
             <div className="flex items-center gap-3 mb-6">
-              <motion.div
-                className="w-16 h-16 rounded-2xl flex items-center justify-center"
-                style={{
-                  background: gradients.primary,
-                  boxShadow: `0 0 40px ${colors.primary}60`,
-                }}
-                whileHover={{ scale: 1.05, rotate: 5 }}
-                transition={{ type: "spring", stiffness: 300 }}
-              >
-                <Zap size={32} className="text-white" />
-              </motion.div>
-              <div>
-                <h1 className="text-4xl font-bold bg-linear-to-r from-white to-gray-400 bg-clip-text text-transparent">
-                  DuesTrack
-                </h1>
-                <p className="text-sm" style={{ color: colors.textSecondary }}>
-                  Class Dues Management System
-                </p>
-              </div>
+              <Logo size="xl" showText={true} variant="light" />
             </div>
 
             <motion.h2 
@@ -100,7 +79,7 @@ export default function LoginPage() {
               transition={{ delay: 0.4 }}
             >
               Welcome Back to<br />
-              <span style={{ color: primaryColor }}>{brandingText}</span>
+              <span style={{ color: colors.primary }}>ECE 200L</span>
             </motion.h2>
             
             <motion.p 
@@ -153,19 +132,9 @@ export default function LoginPage() {
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.2 }}
           >
-            <motion.div
-              className="w-16 h-16 rounded-2xl flex items-center justify-center mb-4"
-              style={{
-                background: gradients.primary,
-                boxShadow: `0 0 40px ${colors.primary}60`,
-              }}
-              whileHover={{ scale: 1.05, rotate: 5 }}
-            >
-              <Zap size={32} className="text-white" />
-            </motion.div>
-            <h1 className="text-3xl font-bold">DuesTrack</h1>
-            <p className="text-sm mt-1" style={{ color: colors.textSecondary }}>
-              {subtitleText}
+            <Logo size="xl" showText={true} variant="light" className="flex-col items-center text-center" />
+            <p className="text-sm mt-2" style={{ color: colors.textSecondary }}>
+              ECE Class Dues Management
             </p>
           </motion.div>
 
@@ -265,6 +234,11 @@ export default function LoginPage() {
                   fullWidth
                   autoComplete="current-password"
                 />
+                <div className="text-right mt-2">
+                  <Link to="/forgot-password" className="text-sm underline hover:no-underline" style={{ color: colors.primary }}>
+                    Forgot password?
+                  </Link>
+                </div>
               </motion.div>
 
               <motion.div
@@ -287,7 +261,7 @@ export default function LoginPage() {
 
             {/* Footer Text */}
             <motion.div 
-              className="mt-6 text-center"
+              className="mt-6 text-center space-y-3"
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               transition={{ delay: 1.0 }}
@@ -297,11 +271,45 @@ export default function LoginPage() {
                 <button
                   type="button"
                   className="underline hover:no-underline transition-all"
-                  style={{ color: colors.primary }}
-                  onClick={() => setError('Please contact your class representative for assistance.')}
+                  style={{ color: colors.accentMint }}
+                  onClick={() => {
+                    setError('');
+                    const helpEl = document.getElementById('login-help-info');
+                    if (helpEl) { helpEl.style.display = helpEl.style.display === 'none' ? 'flex' : 'none'; }
+                  }}
                 >
                   Get help
                 </button>
+              </p>
+              <AnimatePresence>
+                <motion.div
+                  id="login-help-info"
+                  className="flex items-start gap-3 p-3 rounded-xl mt-3"
+                  style={{
+                    display: 'none',
+                    background: `${colors.accentMint}10`,
+                    border: `1px solid ${colors.accentMint}25`,
+                  }}
+                  initial={{ opacity: 0, y: -5 }}
+                  animate={{ opacity: 1, y: 0 }}
+                >
+                  <Info size={16} style={{ color: colors.accentMint, marginTop: 2, flexShrink: 0 }} />
+                  <p className="text-xs leading-relaxed" style={{ color: colors.accentMint }}>
+                    Please contact your class representative for login assistance. Your default password is your registration number.
+                  </p>
+                </motion.div>
+              </AnimatePresence>
+              <p className="text-[10px]" style={{ color: colors.textSecondary }}>
+                Developed by{' '}
+                <a 
+                  href="https://x.com/wishotstudio?s=21" 
+                  target="_blank" 
+                  rel="noopener noreferrer"
+                  className="font-bold hover:underline"
+                  style={{ color: colors.primary }}
+                >
+                  Dev_Wishot
+                </a>
               </p>
             </motion.div>
           </motion.div>

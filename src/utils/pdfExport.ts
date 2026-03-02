@@ -44,6 +44,27 @@ const STYLES = {
   smallSize: 8,
 };
 
+/**
+ * Format currency with Naira symbol (for display)
+ */
+function formatNaira(amount: number): string {
+  return `₦${Number(amount).toLocaleString('en-NG', { minimumFractionDigits: 0, maximumFractionDigits: 2 })}`;
+}
+
+/**
+ * Format currency for PDF (uses NGN since jsPDF standard fonts don't support ₦)
+ */
+function formatNairaPDF(amount: number): string {
+  return `NGN ${Number(amount).toLocaleString('en-NG', { minimumFractionDigits: 0, maximumFractionDigits: 2 })}`;
+}
+
+/**
+ * Capitalize category names (convert snake_case to Title Case)
+ */
+function formatCategory(category: string): string {
+  return category.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
+}
+
 interface Student {
   id: string;
   full_name: string;
@@ -89,58 +110,73 @@ interface Expense {
 
 /**
  * Add header to PDF with logo and title
+ * Creates a professional dark header with branding
  */
 function addHeader(doc: jsPDF, title: string, subtitle?: string): number {
   const pageWidth = doc.internal.pageSize.getWidth();
   
-  // Header background
-  doc.setFillColor(COLORS.secondary);
-  doc.rect(0, 0, pageWidth, 45, 'F');
+  // Header background - dark theme
+  doc.setFillColor(26, 14, 9); // Dark background matching app theme
+  doc.rect(0, 0, pageWidth, 50, 'F');
   
-  // Accent stripe
-  doc.setFillColor(COLORS.primary);
-  doc.rect(0, 45, pageWidth, 3, 'F');
+  // Accent stripe - orange brand color
+  doc.setFillColor(255, 107, 53);
+  doc.rect(0, 50, pageWidth, 4, 'F');
   
-  // Title
+  // Document Type Badge
+  doc.setFillColor(255, 107, 53);
+  doc.roundedRect(15, 8, 70, 12, 2, 2, 'F');
   doc.setFont(STYLES.headerFont, 'bold');
-  doc.setFontSize(STYLES.titleSize);
-  doc.setTextColor(COLORS.white);
-  doc.text(title, 20, 25);
+  doc.setFontSize(8);
+  doc.setTextColor(255, 255, 255);
+  doc.text('OFFICIAL DOCUMENT', 50, 16, { align: 'center' });
+  
+  // Main Title
+  doc.setFont(STYLES.headerFont, 'bold');
+  doc.setFontSize(22);
+  doc.setTextColor(255, 255, 255);
+  doc.text(title, 15, 35);
   
   // Subtitle
   if (subtitle) {
     doc.setFont(STYLES.bodyFont, 'normal');
-    doc.setFontSize(STYLES.subtitleSize);
-    doc.setTextColor(COLORS.primary);
-    doc.text(subtitle, 20, 38);
+    doc.setFontSize(10);
+    doc.setTextColor(255, 107, 53);
+    doc.text(subtitle, 15, 45);
   }
   
   // App branding on right
   doc.setFont(STYLES.headerFont, 'bold');
-  doc.setFontSize(10);
-  doc.setTextColor(COLORS.white);
-  doc.text('Class Dues Tracker', pageWidth - 20, 20, { align: 'right' });
+  doc.setFontSize(11);
+  doc.setTextColor(255, 255, 255);
+  doc.text('Class Dues Tracker', pageWidth - 15, 18, { align: 'right' });
   
   doc.setFont(STYLES.bodyFont, 'normal');
   doc.setFontSize(8);
-  doc.setTextColor('#999999');
-  doc.text('ECE Department', pageWidth - 20, 28, { align: 'right' });
+  doc.setTextColor(150, 150, 150);
+  doc.text('ECE Department', pageWidth - 15, 27, { align: 'right' });
   
-  // Date
-  doc.setFontSize(8);
+  // Date/Time
+  doc.setFontSize(7);
+  doc.setTextColor(150, 150, 150);
   doc.text(`Generated: ${new Date().toLocaleDateString('en-US', { 
     year: 'numeric', 
-    month: 'long', 
+    month: 'short', 
     day: 'numeric',
     hour: '2-digit',
     minute: '2-digit'
-  })}`, pageWidth - 20, 38, { align: 'right' });
+  })}`, pageWidth - 15, 36, { align: 'right' });
   
-  return 55; // Return Y position after header
+  // Document ID
+  const docId = `DOC-${Date.now().toString(36).toUpperCase().slice(-8)}`;
+  doc.setFontSize(7);
+  doc.text(`ID: ${docId}`, pageWidth - 15, 44, { align: 'right' });
+  
+  return 62; // Return Y position after header
 }
 
 /**
- * Add footer to PDF
+ * Add footer to PDF with developer credit
  */
 function addFooter(doc: jsPDF, pageNumber: number, totalPages: number): void {
   const pageWidth = doc.internal.pageSize.getWidth();
@@ -149,16 +185,50 @@ function addFooter(doc: jsPDF, pageNumber: number, totalPages: number): void {
   // Footer line
   doc.setDrawColor(COLORS.border);
   doc.setLineWidth(0.5);
-  doc.line(20, pageHeight - 20, pageWidth - 20, pageHeight - 20);
+  doc.line(20, pageHeight - 25, pageWidth - 20, pageHeight - 25);
   
   // Footer text
   doc.setFont(STYLES.bodyFont, 'normal');
   doc.setFontSize(8);
   doc.setTextColor(COLORS.textLight);
   
-  doc.text('Class Dues Tracker - Official Document', 20, pageHeight - 12);
-  doc.text(`Page ${pageNumber} of ${totalPages}`, pageWidth / 2, pageHeight - 12, { align: 'center' });
-  doc.text('Confidential', pageWidth - 20, pageHeight - 12, { align: 'right' });
+  doc.text('Class Dues Tracker - Official Document', 20, pageHeight - 17);
+  doc.text(`Page ${pageNumber} of ${totalPages}`, pageWidth / 2, pageHeight - 17, { align: 'center' });
+  doc.text('Confidential', pageWidth - 20, pageHeight - 17, { align: 'right' });
+  
+  // Developer credit
+  doc.setFontSize(7);
+  doc.text('Developed by Dev_Wishot | @wishotstudio', pageWidth / 2, pageHeight - 8, { align: 'center' });
+}
+
+/**
+ * Add important notes section
+ */
+function addImportantNotes(doc: jsPDF, yPos: number, notes: string[]): number {
+  const pageWidth = doc.internal.pageSize.getWidth();
+  
+  // Note box with warning background
+  const boxHeight = 12 + (notes.length * 8);
+  doc.setFillColor(254, 243, 199); // Light yellow/amber background
+  doc.setDrawColor(252, 211, 77); // Amber border
+  doc.roundedRect(15, yPos, pageWidth - 30, boxHeight, 4, 4, 'FD');
+  
+  // Warning icon and title
+  doc.setFont(STYLES.headerFont, 'bold');
+  doc.setFontSize(9);
+  doc.setTextColor(146, 64, 14); // Amber-800
+  doc.text('⚠️ IMPORTANT INFORMATION', 22, yPos + 10);
+  
+  // Note lines
+  doc.setFont(STYLES.bodyFont, 'normal');
+  doc.setFontSize(8);
+  doc.setTextColor(120, 53, 15); // Amber-900
+  
+  notes.forEach((note, index) => {
+    doc.text(`• ${note}`, 22, yPos + 20 + (index * 8));
+  });
+  
+  return yPos + boxHeight + 10;
 }
 
 /**
@@ -306,7 +376,7 @@ export function exportStudentsToPDF(
 }
 
 /**
- * Export payment history to PDF
+ * Export payment history to PDF - Professional detailed layout
  */
 export function exportPaymentsToPDF(
   payments: Payment[],
@@ -316,23 +386,31 @@ export function exportPaymentsToPDF(
   const pageWidth = doc.internal.pageSize.getWidth();
   
   // Header
-  const title = student ? 'Payment History' : 'All Payments Report';
+  const title = student ? 'Official Payment Statement' : 'All Payments Report';
   const subtitle = student ? `${student.full_name} (${student.reg_number})` : 'Complete Payment Records';
   let yPos = addHeader(doc, title, subtitle);
   
   // Calculate statistics
   const approvedPayments = payments.filter(p => p.status === 'approved');
   const pendingPayments = payments.filter(p => p.status === 'pending');
+  const rejectedPayments = payments.filter(p => p.status === 'rejected');
   
   const totalApproved = approvedPayments.reduce((sum, p) => sum + Number(p.amount || 0), 0);
   const totalPending = pendingPayments.reduce((sum, p) => sum + Number(p.amount || 0), 0);
+  const totalRejected = rejectedPayments.reduce((sum, p) => sum + Number(p.amount || 0), 0);
   
-  // Stats boxes
-  const boxWidth = (pageWidth - 50) / 4;
-  addInfoBox(doc, 'Total Paid', `₦${totalApproved.toLocaleString()}`, 15, yPos, boxWidth);
-  addInfoBox(doc, 'Pending', `₦${totalPending.toLocaleString()}`, 15 + boxWidth + 5, yPos, boxWidth);
-  addInfoBox(doc, 'Approved', approvedPayments.length.toString(), 15 + (boxWidth + 5) * 2, yPos, boxWidth);
-  addInfoBox(doc, 'Total Records', payments.length.toString(), 15 + (boxWidth + 5) * 3, yPos, boxWidth);
+  // Stats boxes - Row 1: Amounts
+  const boxWidth = (pageWidth - 50) / 3;
+  addInfoBox(doc, 'Net Amount Paid', formatNairaPDF(totalApproved), 15, yPos, boxWidth);
+  addInfoBox(doc, 'Pending Amount', formatNairaPDF(totalPending), 15 + boxWidth + 5, yPos, boxWidth);
+  addInfoBox(doc, 'Total Submitted', formatNairaPDF(totalApproved + totalPending + totalRejected), 15 + (boxWidth + 5) * 2, yPos, boxWidth);
+  
+  yPos += 32;
+  
+  // Stats boxes - Row 2: Counts
+  addInfoBox(doc, 'Approved', `${approvedPayments.length} payments`, 15, yPos, boxWidth);
+  addInfoBox(doc, 'Pending', `${pendingPayments.length} payments`, 15 + boxWidth + 5, yPos, boxWidth);
+  addInfoBox(doc, 'Rejected', `${rejectedPayments.length} payments`, 15 + (boxWidth + 5) * 2, yPos, boxWidth);
   
   yPos += 35;
   
@@ -340,48 +418,117 @@ export function exportPaymentsToPDF(
   if (student) {
     yPos = addSectionTitle(doc, 'Student Information', yPos, '👤');
     
-    doc.setFont(STYLES.bodyFont, 'normal');
-    doc.setFontSize(10);
-    doc.setTextColor(COLORS.text);
+    // Student info box with grid layout
+    doc.setFillColor(255, 255, 255);
+    doc.setDrawColor(229, 231, 235);
+    doc.roundedRect(15, yPos, pageWidth - 30, 35, 4, 4, 'FD');
     
-    const infoLines = [
-      `Name: ${student.full_name}`,
-      `Reg Number: ${student.reg_number}`,
-      `Email: ${student.email || 'N/A'}`,
-      `Level: ${student.level || 'N/A'}`,
-      `Department: ${student.department || 'N/A'}`,
-    ];
+    const addStudentField = (label: string, value: string, x: number, y: number) => {
+      doc.setFont(STYLES.bodyFont, 'normal');
+      doc.setFontSize(8);
+      doc.setTextColor(COLORS.textLight);
+      doc.text(label.toUpperCase(), x, y);
+      
+      doc.setFont(STYLES.headerFont, 'bold');
+      doc.setFontSize(10);
+      doc.setTextColor(COLORS.text);
+      doc.text(value, x, y + 8);
+    };
     
-    infoLines.forEach((line, i) => {
-      doc.text(line, 20 + (i % 2) * 90, yPos + Math.floor(i / 2) * 8);
-    });
+    const colWidth = (pageWidth - 50) / 3;
+    addStudentField('Full Name', student.full_name, 22, yPos + 10);
+    addStudentField('Reg Number', student.reg_number, 22 + colWidth, yPos + 10);
+    addStudentField('Email', student.email || 'N/A', 22 + colWidth * 2, yPos + 10);
+    addStudentField('Level', student.level || 'N/A', 22, yPos + 28);
+    addStudentField('Department', student.department || 'N/A', 22 + colWidth, yPos + 28);
+    addStudentField('Session', `${new Date().getFullYear()}/${new Date().getFullYear() + 1}`, 22 + colWidth * 2, yPos + 28);
     
-    yPos += 25;
+    yPos += 42;
   }
   
-  // Payments table
-  yPos = addSectionTitle(doc, 'Payment Records', yPos, '💳');
+  // Payment Type Breakdown (like QuickPaymentSummary)
+  const paymentsByType = payments.reduce((acc, p) => {
+    if (p.status === 'approved' && p.payment_type) {
+      const typeName = p.payment_type.title;
+      if (!acc[typeName]) {
+        acc[typeName] = { paid: 0, count: 0, expected: p.payment_type.amount || 0 };
+      }
+      acc[typeName].paid += Number(p.amount || 0);
+      acc[typeName].count += 1;
+    }
+    return acc;
+  }, {} as Record<string, { paid: number; count: number; expected: number }>);
+  
+  if (Object.keys(paymentsByType).length > 0) {
+    yPos = addSectionTitle(doc, 'Payment Type Breakdown (Approved Only)', yPos, '📊');
+    
+    const typeData = Object.entries(paymentsByType).map(([type, data]) => {
+      const difference = data.paid - data.expected;
+      const status = data.paid >= data.expected ? '✓ COMPLETE' : '⚠ PARTIAL';
+      return [
+        type,
+        data.count.toString(),
+        formatNairaPDF(data.paid),
+        formatNairaPDF(data.expected),
+        formatNairaPDF(difference),
+        status
+      ];
+    });
+    
+    autoTable(doc, {
+      startY: yPos,
+      head: [['Payment Type', 'Times Paid', 'Amount Paid', 'Expected', 'Difference', 'Status']],
+      body: typeData,
+      theme: 'grid',
+      headStyles: {
+        fillColor: [80, 200, 120],
+        textColor: [255, 255, 255],
+        fontStyle: 'bold',
+        fontSize: 9,
+        cellPadding: 3,
+      },
+      bodyStyles: {
+        fontSize: 8,
+        textColor: [51, 51, 51],
+        cellPadding: 3,
+      },
+      columnStyles: {
+        0: { cellWidth: 40, fontStyle: 'bold' },
+        1: { cellWidth: 20, halign: 'center' },
+        2: { cellWidth: 28, halign: 'right' },
+        3: { cellWidth: 28, halign: 'right' },
+        4: { cellWidth: 28, halign: 'right' },
+        5: { cellWidth: 26, halign: 'center' },
+      },
+      margin: { left: 15, right: 15 },
+    });
+    
+    yPos = doc.lastAutoTable.finalY + 10;
+  }
+  
+  // Payments table - Transaction History
+  yPos = addSectionTitle(doc, 'Complete Transaction History', yPos, '💳');
   
   const tableData = payments.map((payment, index) => {
     const statusEmoji = payment.status === 'approved' ? '✓' : payment.status === 'pending' ? '⏳' : '✗';
     return [
       (index + 1).toString(),
-      payment.payment_type?.title || 'N/A',
-      `₦${Number(payment.amount || 0).toLocaleString()}`,
-      payment.payment_method || 'N/A',
-      `${statusEmoji} ${payment.status.charAt(0).toUpperCase() + payment.status.slice(1)}`,
       new Date(payment.created_at).toLocaleDateString('en-US', { 
-        year: 'numeric', 
         month: 'short', 
-        day: 'numeric' 
+        day: 'numeric',
+        year: '2-digit'
       }),
-      payment.transaction_ref?.slice(0, 15) || 'N/A',
+      payment.payment_type?.title || 'N/A',
+      formatNairaPDF(Number(payment.amount || 0)),
+      payment.payment_method || 'N/A',
+      payment.transaction_ref?.slice(0, 12) || 'N/A',
+      `${statusEmoji} ${payment.status.charAt(0).toUpperCase() + payment.status.slice(1)}`,
     ];
   });
   
   autoTable(doc, {
     startY: yPos,
-    head: [['#', 'Payment Type', 'Amount', 'Method', 'Status', 'Date', 'Reference']],
+    head: [['#', 'Date', 'Payment Type', 'Amount (₦)', 'Method', 'Reference', 'Status']],
     body: tableData,
     theme: 'striped',
     headStyles: {
@@ -389,22 +536,24 @@ export function exportPaymentsToPDF(
       textColor: [255, 255, 255],
       fontStyle: 'bold',
       fontSize: 9,
+      cellPadding: 4,
     },
     bodyStyles: {
       fontSize: 8,
       textColor: [51, 51, 51],
+      cellPadding: 3,
     },
     alternateRowStyles: {
       fillColor: [249, 250, 251],
     },
     columnStyles: {
-      0: { cellWidth: 10 },
-      1: { cellWidth: 35 },
-      2: { cellWidth: 25 },
-      3: { cellWidth: 22 },
+      0: { cellWidth: 8, halign: 'center' },
+      1: { cellWidth: 22 },
+      2: { cellWidth: 38, fontStyle: 'bold' },
+      3: { cellWidth: 26, halign: 'right' },
       4: { cellWidth: 22 },
       5: { cellWidth: 28 },
-      6: { cellWidth: 35 },
+      6: { cellWidth: 24, halign: 'center' },
     },
     margin: { left: 15, right: 15 },
     didDrawPage: (data: { pageNumber: number }) => {
@@ -412,6 +561,16 @@ export function exportPaymentsToPDF(
       addFooter(doc, data.pageNumber, pageCount);
     },
   });
+  
+  yPos = doc.lastAutoTable.finalY + 10;
+  
+  // Important Notes Section
+  yPos = addImportantNotes(doc, yPos, [
+    'Only APPROVED payments count toward your total class dues paid.',
+    'PENDING payments are under admin review and do NOT yet count.',
+    'REJECTED payments do NOT count and may need to be resubmitted.',
+    'Keep this document for personal records and parent verification.'
+  ]);
   
   // Update footers
   const pageCount = doc.getNumberOfPages();
@@ -421,7 +580,7 @@ export function exportPaymentsToPDF(
   }
   
   const filename = student 
-    ? `payment_history_${student.reg_number.replace('/', '-')}_${new Date().toISOString().split('T')[0]}.pdf`
+    ? `payment_statement_${student.reg_number.replace('/', '-')}_${new Date().toISOString().split('T')[0]}.pdf`
     : `all_payments_${new Date().toISOString().split('T')[0]}.pdf`;
   
   doc.save(filename);
@@ -449,8 +608,8 @@ export function exportExpensesToPDF(
   
   // Stats boxes
   const boxWidth = (pageWidth - 50) / 4;
-  addInfoBox(doc, 'Total Spent', `₦${totalApproved.toLocaleString()}`, 15, yPos, boxWidth);
-  addInfoBox(doc, 'Pending', `₦${totalPending.toLocaleString()}`, 15 + boxWidth + 5, yPos, boxWidth);
+  addInfoBox(doc, 'Total Spent', formatNairaPDF(totalApproved), 15, yPos, boxWidth);
+  addInfoBox(doc, 'Pending', formatNairaPDF(totalPending), 15 + boxWidth + 5, yPos, boxWidth);
   addInfoBox(doc, 'Approved', approvedExpenses.length.toString(), 15 + (boxWidth + 5) * 2, yPos, boxWidth);
   addInfoBox(doc, 'Total Records', expenses.length.toString(), 15 + (boxWidth + 5) * 3, yPos, boxWidth);
   
@@ -479,14 +638,14 @@ export function exportExpensesToPDF(
     const categoryData = Object.entries(byCategory)
       .sort(([, a], [, b]) => b - a)
       .map(([category, amount]) => [
-        category,
-        `₦${amount.toLocaleString()}`,
+        formatCategory(category),
+        formatNairaPDF(amount),
         `${((amount / totalApproved) * 100).toFixed(1)}%`
       ]);
     
     autoTable(doc, {
       startY: yPos,
-      head: [['Category', 'Amount', 'Percentage']],
+      head: [['Category', 'Amount (₦)', 'Percentage']],
       body: categoryData,
       theme: 'grid',
       headStyles: {
@@ -494,15 +653,17 @@ export function exportExpensesToPDF(
         textColor: [255, 255, 255],
         fontStyle: 'bold',
         fontSize: 10,
+        cellPadding: 4,
       },
       bodyStyles: {
         fontSize: 9,
         textColor: [51, 51, 51],
+        cellPadding: 3,
       },
       columnStyles: {
-        0: { cellWidth: 60 },
-        1: { cellWidth: 50 },
-        2: { cellWidth: 40 },
+        0: { cellWidth: 60, fontStyle: 'bold' },
+        1: { cellWidth: 50, halign: 'right' },
+        2: { cellWidth: 40, halign: 'center' },
       },
       margin: { left: 15, right: 15 },
       tableWidth: 150,
@@ -519,8 +680,8 @@ export function exportExpensesToPDF(
     return [
       (index + 1).toString(),
       expense.title,
-      expense.category,
-      `₦${Number(expense.amount || 0).toLocaleString()}`,
+      formatCategory(expense.category),
+      formatNairaPDF(Number(expense.amount || 0)),
       `${statusEmoji} ${expense.status.charAt(0).toUpperCase() + expense.status.slice(1)}`,
       new Date(expense.created_at).toLocaleDateString('en-US', { 
         year: 'numeric', 
@@ -532,21 +693,31 @@ export function exportExpensesToPDF(
   
   autoTable(doc, {
     startY: yPos,
-    head: [['#', 'Title', 'Category', 'Amount', 'Status', 'Date']],
+    head: [['#', 'Title', 'Category', 'Amount (₦)', 'Status', 'Date']],
     body: tableData,
     theme: 'striped',
     headStyles: {
       fillColor: [255, 107, 53],
       textColor: [255, 255, 255],
       fontStyle: 'bold',
-      fontSize: 9,
+      fontSize: 10,
+      cellPadding: 4,
     },
     bodyStyles: {
-      fontSize: 8,
+      fontSize: 9,
       textColor: [51, 51, 51],
+      cellPadding: 3,
     },
     alternateRowStyles: {
       fillColor: [249, 250, 251],
+    },
+    columnStyles: {
+      0: { cellWidth: 10, halign: 'center' },
+      1: { cellWidth: 45, fontStyle: 'bold' },
+      2: { cellWidth: 35 },
+      3: { cellWidth: 30, halign: 'right' },
+      4: { cellWidth: 25, halign: 'center' },
+      5: { cellWidth: 30 },
     },
     margin: { left: 15, right: 15 },
     didDrawPage: (data: { pageNumber: number }) => {
@@ -554,6 +725,16 @@ export function exportExpensesToPDF(
       addFooter(doc, data.pageNumber, pageCount);
     },
   });
+  
+  yPos = doc.lastAutoTable.finalY + 10;
+  
+  // Important Notes Section
+  yPos = addImportantNotes(doc, yPos, [
+    'Only APPROVED expenses are deducted from class funds.',
+    'PENDING expenses are awaiting admin approval.',
+    'All expenses must have receipts for proper documentation.',
+    'Contact FinSec for any expense disputes or clarifications.'
+  ]);
   
   // Update footers
   const pageCount = doc.getNumberOfPages();
@@ -619,9 +800,9 @@ export function exportCollectedPaymentsToPDF(data: CollectedPaymentsExportData):
   
   // Main stats boxes - 3 columns
   const boxWidth = (pageWidth - 45) / 3;
-  addInfoBox(doc, 'Total Collected', `₦${data.totalCollected.toLocaleString()}`, 15, yPos, boxWidth);
-  addInfoBox(doc, 'Total Expenses', `₦${data.totalExpenses.toLocaleString()}`, 15 + boxWidth + 5, yPos, boxWidth);
-  addInfoBox(doc, 'Net Balance', `₦${data.netBalance.toLocaleString()}`, 15 + (boxWidth + 5) * 2, yPos, boxWidth);
+  addInfoBox(doc, 'Total Collected', formatNairaPDF(data.totalCollected), 15, yPos, boxWidth);
+  addInfoBox(doc, 'Total Expenses', formatNairaPDF(data.totalExpenses), 15 + boxWidth + 5, yPos, boxWidth);
+  addInfoBox(doc, 'Net Balance', formatNairaPDF(data.netBalance), 15 + (boxWidth + 5) * 2, yPos, boxWidth);
   
   yPos += 35;
   
@@ -662,34 +843,36 @@ export function exportCollectedPaymentsToPDF(data: CollectedPaymentsExportData):
     yPos = addSectionTitle(doc, 'Category Breakdown', yPos, '📊');
     
     const categoryData = data.categoriesBreakdown.map(cat => [
-      cat.category.replace(/_/g, ' '),
-      `₦${cat.total_collected.toLocaleString()}`,
-      `₦${cat.total_expenses.toLocaleString()}`,
-      `₦${cat.net_balance.toLocaleString()}`,
+      formatCategory(cat.category),
+      formatNairaPDF(cat.total_collected),
+      formatNairaPDF(cat.total_expenses),
+      formatNairaPDF(cat.net_balance),
       cat.payment_count.toString()
     ]);
     
     autoTable(doc, {
       startY: yPos,
-      head: [['Category', 'Collected', 'Expenses', 'Net Balance', 'Payments']],
+      head: [['Category', 'Collected (₦)', 'Expenses (₦)', 'Net Balance (₦)', 'Payments']],
       body: categoryData,
       theme: 'grid',
       headStyles: {
         fillColor: [80, 200, 120],
         textColor: [255, 255, 255],
         fontStyle: 'bold',
-        fontSize: 9,
+        fontSize: 10,
+        cellPadding: 4,
       },
       bodyStyles: {
-        fontSize: 8,
+        fontSize: 9,
         textColor: [51, 51, 51],
+        cellPadding: 3,
       },
       columnStyles: {
-        0: { cellWidth: 35 },
-        1: { cellWidth: 30 },
-        2: { cellWidth: 30 },
-        3: { cellWidth: 30 },
-        4: { cellWidth: 20 },
+        0: { cellWidth: 38, fontStyle: 'bold' },
+        1: { cellWidth: 32, halign: 'right' },
+        2: { cellWidth: 32, halign: 'right' },
+        3: { cellWidth: 32, halign: 'right' },
+        4: { cellWidth: 22, halign: 'center' },
       },
       margin: { left: 15, right: 15 },
     });
@@ -706,37 +889,39 @@ export function exportCollectedPaymentsToPDF(data: CollectedPaymentsExportData):
     student.student_name,
     student.reg_number,
     student.is_active ? '✓ Active' : '✗ Inactive',
-    `₦${student.total_paid.toLocaleString()}`,
+    formatNairaPDF(student.total_paid),
     student.payment_count.toString(),
     student.categories_paid.join('; ') || 'None'
   ]);
   
   autoTable(doc, {
     startY: yPos,
-    head: [['#', 'Student Name', 'Reg Number', 'Status', 'Total Paid', 'Payments', 'Categories']],
+    head: [['#', 'Student Name', 'Reg Number', 'Status', 'Total Paid (₦)', 'Payments', 'Categories']],
     body: studentTableData,
     theme: 'striped',
     headStyles: {
       fillColor: [255, 107, 53],
       textColor: [255, 255, 255],
       fontStyle: 'bold',
-      fontSize: 9,
+      fontSize: 10,
+      cellPadding: 4,
     },
     bodyStyles: {
-      fontSize: 7,
+      fontSize: 8,
       textColor: [51, 51, 51],
+      cellPadding: 3,
     },
     alternateRowStyles: {
       fillColor: [249, 250, 251],
     },
     columnStyles: {
-      0: { cellWidth: 8 },
-      1: { cellWidth: 40 },
+      0: { cellWidth: 8, halign: 'center' },
+      1: { cellWidth: 40, fontStyle: 'bold' },
       2: { cellWidth: 25 },
-      3: { cellWidth: 18 },
-      4: { cellWidth: 25 },
-      5: { cellWidth: 18 },
-      6: { cellWidth: 43 },
+      3: { cellWidth: 18, halign: 'center' },
+      4: { cellWidth: 28, halign: 'right' },
+      5: { cellWidth: 18, halign: 'center' },
+      6: { cellWidth: 40 },
     },
     margin: { left: 15, right: 15 },
     didDrawPage: (tableData: { pageNumber: number }) => {
@@ -762,22 +947,22 @@ export function exportCollectedPaymentsToPDF(data: CollectedPaymentsExportData):
       
       // Student header
       doc.setFont(STYLES.headerFont, 'bold');
-      doc.setFontSize(10);
+      doc.setFontSize(11);
       doc.setTextColor(COLORS.primary);
       doc.text(`${student.student_name} (${student.reg_number})`, 20, yPos);
       
       doc.setFont(STYLES.bodyFont, 'normal');
-      doc.setFontSize(8);
+      doc.setFontSize(9);
       doc.setTextColor(COLORS.textLight);
-      doc.text(`Total: ₦${student.total_paid.toLocaleString()} | ${student.payment_count} payment(s)`, 20, yPos + 6);
+      doc.text(`Total: ${formatNaira(student.total_paid)} | ${student.payment_count} payment(s)`, 20, yPos + 6);
       
       yPos += 12;
       
       // Payment details table for this student
       const paymentData = student.payments.slice(0, 5).map(p => [ // Limit to 5 most recent
         p.payment_type,
-        p.category,
-        `₦${p.amount.toLocaleString()}`,
+        formatCategory(p.category),
+        formatNaira(p.amount),
         p.status.charAt(0).toUpperCase() + p.status.slice(1),
         new Date(p.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: '2-digit' }),
         p.transaction_ref?.slice(0, 12) || 'N/A'
@@ -785,24 +970,26 @@ export function exportCollectedPaymentsToPDF(data: CollectedPaymentsExportData):
       
       autoTable(doc, {
         startY: yPos,
-        head: [['Type', 'Category', 'Amount', 'Status', 'Date', 'Ref']],
+        head: [['Type', 'Category', 'Amount (₦)', 'Status', 'Date', 'Ref']],
         body: paymentData,
         theme: 'plain',
         headStyles: {
           fillColor: [240, 240, 240],
           textColor: [100, 100, 100],
           fontStyle: 'bold',
-          fontSize: 7,
+          fontSize: 8,
+          cellPadding: 3,
         },
         bodyStyles: {
-          fontSize: 7,
+          fontSize: 8,
           textColor: [80, 80, 80],
+          cellPadding: 2,
         },
         columnStyles: {
-          0: { cellWidth: 30 },
-          1: { cellWidth: 25 },
-          2: { cellWidth: 22 },
-          3: { cellWidth: 18 },
+          0: { cellWidth: 32, fontStyle: 'bold' },
+          1: { cellWidth: 28 },
+          2: { cellWidth: 24, halign: 'right' },
+          3: { cellWidth: 18, halign: 'center' },
           4: { cellWidth: 22 },
           5: { cellWidth: 25 },
         },
@@ -818,7 +1005,20 @@ export function exportCollectedPaymentsToPDF(data: CollectedPaymentsExportData):
       doc.setFontSize(8);
       doc.setTextColor(COLORS.textLight);
       doc.text(`... and ${studentsWithPayments.length - 10} more students with payment history`, 20, yPos);
+      yPos += 10;
     }
+  }
+  
+  // Important Notes Section - Add on first page
+  doc.setPage(1);
+  const firstPageY = doc.lastAutoTable?.finalY ? doc.lastAutoTable.finalY + 10 : 250;
+  if (firstPageY < 260) {
+    addImportantNotes(doc, firstPageY, [
+      'Net Balance = Total Collected - Total Expenses',
+      'Only APPROVED payments are counted in collected totals.',
+      'This report can be used for financial auditing purposes.',
+      'Contact FinSec for any discrepancies or questions.'
+    ]);
   }
   
   // Update footers on all pages
@@ -852,9 +1052,9 @@ export function exportFinancialSummaryToPDF(data: {
   
   // Main stats boxes
   const boxWidth = (pageWidth - 45) / 3;
-  addInfoBox(doc, 'Total Collected', `₦${data.totalCollected.toLocaleString()}`, 15, yPos, boxWidth);
-  addInfoBox(doc, 'Total Expenses', `₦${data.totalExpenses.toLocaleString()}`, 15 + boxWidth + 5, yPos, boxWidth);
-  addInfoBox(doc, 'Balance', `₦${data.balance.toLocaleString()}`, 15 + (boxWidth + 5) * 2, yPos, boxWidth);
+  addInfoBox(doc, 'Total Collected', formatNaira(data.totalCollected), 15, yPos, boxWidth);
+  addInfoBox(doc, 'Total Expenses', formatNaira(data.totalExpenses), 15 + boxWidth + 5, yPos, boxWidth);
+  addInfoBox(doc, 'Balance', formatNaira(data.balance), 15 + (boxWidth + 5) * 2, yPos, boxWidth);
   
   yPos += 35;
   
@@ -872,18 +1072,30 @@ export function exportFinancialSummaryToPDF(data: {
     const collectionsData = data.collectionsByType.map(item => [
       item.title,
       item.count.toString(),
-      `₦${item.amount.toLocaleString()}`
+      formatNaira(item.amount)
     ]);
     
     autoTable(doc, {
       startY: yPos,
-      head: [['Payment Type', 'Count', 'Total Amount']],
+      head: [['Payment Type', 'Count', 'Total Amount (₦)']],
       body: collectionsData,
       theme: 'grid',
       headStyles: {
         fillColor: [80, 200, 120],
         textColor: [255, 255, 255],
         fontStyle: 'bold',
+        fontSize: 10,
+        cellPadding: 4,
+      },
+      bodyStyles: {
+        fontSize: 9,
+        textColor: [51, 51, 51],
+        cellPadding: 3,
+      },
+      columnStyles: {
+        0: { cellWidth: 70, fontStyle: 'bold' },
+        1: { cellWidth: 30, halign: 'center' },
+        2: { cellWidth: 50, halign: 'right' },
       },
       margin: { left: 15, right: 15 },
     });
@@ -896,24 +1108,46 @@ export function exportFinancialSummaryToPDF(data: {
     yPos = addSectionTitle(doc, 'Expenses by Category', yPos, '📊');
     
     const expensesData = data.expensesByCategory.map(item => [
-      item.category,
-      `₦${item.amount.toLocaleString()}`,
+      formatCategory(item.category),
+      formatNaira(item.amount),
       `${((item.amount / data.totalExpenses) * 100).toFixed(1)}%`
     ]);
     
     autoTable(doc, {
       startY: yPos,
-      head: [['Category', 'Amount', 'Percentage']],
+      head: [['Category', 'Amount (₦)', 'Percentage']],
       body: expensesData,
       theme: 'grid',
       headStyles: {
         fillColor: [255, 107, 53],
         textColor: [255, 255, 255],
         fontStyle: 'bold',
+        fontSize: 10,
+        cellPadding: 4,
+      },
+      bodyStyles: {
+        fontSize: 9,
+        textColor: [51, 51, 51],
+        cellPadding: 3,
+      },
+      columnStyles: {
+        0: { cellWidth: 70, fontStyle: 'bold' },
+        1: { cellWidth: 50, halign: 'right' },
+        2: { cellWidth: 40, halign: 'center' },
       },
       margin: { left: 15, right: 15 },
     });
+    
+    yPos = doc.lastAutoTable.finalY + 10;
   }
+  
+  // Important Notes Section
+  yPos = addImportantNotes(doc, yPos, [
+    'Balance = Total Collected - Total Expenses',
+    'All amounts shown are from APPROVED transactions only.',
+    'This summary is for financial planning and auditing purposes.',
+    'Contact class administration for detailed transaction records.'
+  ]);
   
   // Footer
   const pageCount = doc.getNumberOfPages();
@@ -926,7 +1160,12 @@ export function exportFinancialSummaryToPDF(data: {
 }
 
 /**
- * Generate student payment receipt PDF
+ * Generate professional payment receipt — World-class HTML receipt
+ * Matches the premium QuickPaymentSummary design language:
+ * Inter font, accent-bar gradient, watermark, document-style layout,
+ * 3-column info grid, QR verification, signature line.
+ *
+ * Opens in a print window for perfect rendering (supports ₦, custom fonts, etc.)
  */
 export function generatePaymentReceiptPDF(payment: {
   id: string;
@@ -939,120 +1178,437 @@ export function generatePaymentReceiptPDF(payment: {
   payment_type: { title: string; amount: number };
   student: { full_name: string; reg_number: string; email?: string; level?: string };
 }): void {
-  const doc = new jsPDF();
-  const pageWidth = doc.internal.pageSize.getWidth();
-  const pageHeight = doc.internal.pageSize.getHeight();
-  
-  // Header with branding
-  doc.setFillColor(COLORS.secondary);
-  doc.rect(0, 0, pageWidth, 50, 'F');
-  
-  doc.setFillColor(COLORS.primary);
-  doc.rect(0, 50, pageWidth, 5, 'F');
-  
-  doc.setFont(STYLES.headerFont, 'bold');
-  doc.setFontSize(28);
-  doc.setTextColor(COLORS.white);
-  doc.text('PAYMENT RECEIPT', pageWidth / 2, 30, { align: 'center' });
-  
-  doc.setFont(STYLES.bodyFont, 'normal');
-  doc.setFontSize(10);
-  doc.setTextColor(COLORS.primary);
-  doc.text('Class Dues Tracker - ECE Department', pageWidth / 2, 42, { align: 'center' });
-  
-  let yPos = 70;
-  
-  // Status badge
-  const statusColor = payment.status === 'approved' ? COLORS.accent : 
-                     payment.status === 'pending' ? COLORS.warning : COLORS.danger;
-  
-  doc.setFillColor(statusColor);
-  doc.roundedRect(pageWidth / 2 - 30, yPos - 5, 60, 18, 5, 5, 'F');
-  doc.setFont(STYLES.headerFont, 'bold');
-  doc.setFontSize(12);
-  doc.setTextColor(COLORS.white);
-  doc.text(payment.status.toUpperCase(), pageWidth / 2, yPos + 6, { align: 'center' });
-  
-  yPos += 25;
-  
-  // Receipt details box
-  doc.setFillColor(COLORS.background);
-  doc.setDrawColor(COLORS.border);
-  doc.roundedRect(20, yPos, pageWidth - 40, 120, 5, 5, 'FD');
-  
-  const leftCol = 30;
-  const rightCol = pageWidth / 2 + 10;
-  yPos += 15;
-  
-  const addDetail = (label: string, value: string, x: number, y: number) => {
-    doc.setFont(STYLES.bodyFont, 'normal');
-    doc.setFontSize(9);
-    doc.setTextColor(COLORS.textLight);
-    doc.text(label, x, y);
-    
-    doc.setFont(STYLES.headerFont, 'bold');
-    doc.setFontSize(11);
-    doc.setTextColor(COLORS.text);
-    doc.text(value, x, y + 10);
-  };
-  
-  addDetail('Receipt No.', `#${payment.id.slice(0, 8).toUpperCase()}`, leftCol, yPos);
-  addDetail('Date', new Date(payment.created_at).toLocaleDateString('en-US', {
-    year: 'numeric', month: 'long', day: 'numeric'
-  }), rightCol, yPos);
-  
-  yPos += 30;
-  
-  addDetail('Student Name', payment.student.full_name, leftCol, yPos);
-  addDetail('Reg. Number', payment.student.reg_number, rightCol, yPos);
-  
-  yPos += 30;
-  
-  addDetail('Payment Type', payment.payment_type.title, leftCol, yPos);
-  addDetail('Payment Method', payment.payment_method, rightCol, yPos);
-  
-  yPos += 30;
-  
-  addDetail('Transaction Ref', payment.transaction_ref || 'N/A', leftCol, yPos);
-  
-  yPos += 45;
-  
-  // Amount box
-  doc.setFillColor(COLORS.primary);
-  doc.roundedRect(20, yPos, pageWidth - 40, 40, 5, 5, 'F');
-  
-  doc.setFont(STYLES.bodyFont, 'normal');
-  doc.setFontSize(10);
-  doc.setTextColor(COLORS.white);
-  doc.text('AMOUNT PAID', pageWidth / 2, yPos + 12, { align: 'center' });
-  
-  doc.setFont(STYLES.headerFont, 'bold');
-  doc.setFontSize(24);
-  doc.text(`₦${Number(payment.amount).toLocaleString()}`, pageWidth / 2, yPos + 30, { align: 'center' });
-  
-  yPos += 55;
-  
-  // Approval info if approved
-  if (payment.status === 'approved' && payment.approved_at) {
-    doc.setFont(STYLES.bodyFont, 'italic');
-    doc.setFontSize(9);
-    doc.setTextColor(COLORS.textLight);
-    doc.text(`Approved on: ${new Date(payment.approved_at).toLocaleString()}`, pageWidth / 2, yPos, { align: 'center' });
-    yPos += 15;
+  const isWaived = payment.transaction_ref?.startsWith('WAIVED-');
+  const isApproved = payment.status === 'approved';
+  const isPending = payment.status === 'pending';
+
+  // Deterministic receipt reference
+  const docRef = (() => {
+    const raw = payment.id + '-' + payment.amount + '-' + payment.status;
+    let hash = 0;
+    for (let i = 0; i < raw.length; i++) {
+      hash = ((hash << 5) - hash) + raw.charCodeAt(i);
+      hash |= 0;
+    }
+    return 'DT-' + Math.abs(hash).toString(36).toUpperCase().padStart(6, '0').slice(0, 6);
+  })();
+
+  const statusCfg = isWaived
+    ? { bg: '#6366f1', light: '#eef2ff', text: '#4338ca', label: 'WAIVED', dot: '#6366f1' }
+    : isApproved
+      ? { bg: '#059669', light: '#ecfdf5', text: '#065f46', label: 'APPROVED', dot: '#059669' }
+      : isPending
+        ? { bg: '#d97706', light: '#fffbeb', text: '#92400e', label: 'PENDING', dot: '#d97706' }
+        : { bg: '#dc2626', light: '#fef2f2', text: '#991b1b', label: 'REJECTED', dot: '#dc2626' };
+
+  const fmtDate = (d: string, opts?: Intl.DateTimeFormatOptions) =>
+    new Date(d).toLocaleDateString('en-US', opts || { year: 'numeric', month: 'long', day: 'numeric' });
+  const fmtDateTime = (d: string) =>
+    new Date(d).toLocaleString('en-US', { year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+  const fmtCurrency = (n: number) => `₦${Number(n).toLocaleString('en-NG', { minimumFractionDigits: 0, maximumFractionDigits: 2 })}`;
+
+  // Pseudo-QR pattern (deterministic from payment.id)
+  const qrSeed = payment.id.replace(/-/g, '');
+  const qrCells = Array.from({ length: 49 }, (_, i) => {
+    const row = Math.floor(i / 7), col = i % 7;
+    if (row < 2 || col < 2 || row > 4 || col > 4) {
+      return qrSeed.charCodeAt(i % qrSeed.length) % 3 !== 0 ? 'f' : 'e';
+    }
+    return (row + col) % 2 === 0 ? 'f' : 'e';
+  });
+
+  const logoSVG = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 40 40" width="40" height="40">
+    <rect width="40" height="40" rx="8" fill="#0F0703"/>
+    <rect x="8" y="22" width="6" height="11" rx="2" fill="#FF6803"/>
+    <rect x="17" y="14" width="6" height="19" rx="2" fill="#FF6803"/>
+    <rect x="26" y="8" width="6" height="25" rx="2" fill="#FF6803"/>
+    <path d="M6 35 Q20 28 34 35" stroke="#30FFAC" stroke-width="2.2" fill="none" stroke-linecap="round"/>
+  </svg>`;
+
+  const html = `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Receipt - ${payment.student.full_name}</title>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap');
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --amber: #FF6803; --amber-light: #FFAC5F; --amber-dark: #CC5202;
+      --mint: #30FFAC; --charcoal: #0F0703;
+      --slate-900: #0f172a; --slate-700: #334155; --slate-500: #64748b;
+      --slate-300: #cbd5e1; --slate-100: #f1f5f9; --slate-50: #f8fafc;
+    }
+    body {
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      color: var(--slate-900); background: var(--slate-100);
+      line-height: 1.6; -webkit-font-smoothing: antialiased;
+    }
+    .page {
+      max-width: 720px; margin: 24px auto; background: white;
+      border-radius: 2px; position: relative; overflow: hidden;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.08), 0 20px 60px rgba(0,0,0,0.06);
+    }
+    .watermark {
+      position: absolute; top: 50%; left: 50%;
+      transform: translate(-50%, -50%) rotate(-35deg);
+      font-size: 72px; font-weight: 800; letter-spacing: 14px;
+      color: rgba(255, 104, 3, 0.02); white-space: nowrap;
+      pointer-events: none; z-index: 0;
+    }
+    .accent-bar { height: 4px; background: linear-gradient(90deg, var(--amber) 0%, var(--amber-light) 50%, var(--mint) 100%); }
+    .header {
+      padding: 28px 36px 22px; display: flex;
+      justify-content: space-between; align-items: flex-start;
+      position: relative; z-index: 1;
+    }
+    .header-left { display: flex; align-items: center; gap: 14px; }
+    .brand-name { font-size: 18px; font-weight: 800; color: var(--charcoal); letter-spacing: -0.5px; }
+    .brand-name span { color: var(--amber); }
+    .brand-tagline { font-size: 9px; color: var(--slate-500); text-transform: uppercase; letter-spacing: 2.5px; margin-top: 1px; }
+    .header-right { text-align: right; }
+    .doc-title { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 3px; color: var(--amber); margin-bottom: 6px; }
+    .doc-meta { font-size: 10px; color: var(--slate-500); line-height: 1.9; }
+    .doc-meta strong { color: var(--slate-700); font-weight: 600; }
+    .divider { height: 1px; background: linear-gradient(90deg, transparent 0%, var(--slate-300) 15%, var(--slate-300) 85%, transparent 100%); margin: 0 36px; }
+    .body { padding: 24px 36px 28px; position: relative; z-index: 1; }
+    .section { margin-bottom: 22px; }
+    .section-header { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; }
+    .section-icon { width: 26px; height: 26px; border-radius: 6px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; font-size: 13px; }
+    .section-icon.amber { background: rgba(255, 104, 3, 0.08); }
+    .section-icon.blue { background: rgba(59, 130, 246, 0.08); }
+    .section-icon.green { background: rgba(5, 150, 105, 0.08); }
+    .section-title { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 1.5px; color: var(--slate-700); }
+    .section-line { flex: 1; height: 1px; background: var(--slate-300); }
+
+    /* Status + Amount Hero */
+    .hero-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 22px; }
+    .hero-card {
+      border-radius: 10px; padding: 20px; text-align: center;
+      position: relative; overflow: hidden;
+    }
+    .hero-card::after {
+      content: ''; position: absolute; top: 0; left: 0; right: 0; height: 3px;
+    }
+    .hero-card.status { background: ${statusCfg.light}; }
+    .hero-card.status::after { background: ${statusCfg.bg}; }
+    .hero-card.amount { background: linear-gradient(135deg, var(--amber), var(--amber-light)); }
+    .hero-card.amount::after { background: var(--amber-dark); }
+    .hero-label { font-size: 9px; font-weight: 700; text-transform: uppercase; letter-spacing: 2px; margin-bottom: 8px; }
+    .hero-card.status .hero-label { color: ${statusCfg.text}; }
+    .hero-card.amount .hero-label { color: rgba(255,255,255,0.8); }
+    .hero-value { font-size: 26px; font-weight: 800; line-height: 1.2; }
+    .hero-card.status .hero-value { color: ${statusCfg.bg}; }
+    .hero-card.amount .hero-value { color: white; }
+    .status-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: ${statusCfg.dot}; margin-right: 6px; vertical-align: middle; }
+
+    /* Info Grid */
+    .info-grid {
+      display: grid; grid-template-columns: repeat(3, 1fr); gap: 0;
+      border: 1px solid var(--slate-300); border-radius: 8px; overflow: hidden;
+    }
+    .info-cell { padding: 11px 14px; border-bottom: 1px solid var(--slate-300); border-right: 1px solid var(--slate-300); }
+    .info-cell:nth-child(3n) { border-right: none; }
+    .info-cell:nth-last-child(-n+3) { border-bottom: none; }
+    .info-label { font-size: 8px; font-weight: 600; text-transform: uppercase; letter-spacing: 1px; color: var(--slate-500); margin-bottom: 3px; }
+    .info-value { font-size: 12px; font-weight: 600; color: var(--slate-900); word-break: break-word; }
+    .info-value.mono { font-family: 'Courier New', monospace; font-size: 11px; }
+    .info-value.amber { color: var(--amber); }
+
+    /* Payment Summary Table */
+    .pay-table { width: 100%; border: 1px solid var(--slate-300); border-radius: 8px; overflow: hidden; border-collapse: collapse; }
+    .pay-table thead th {
+      background: var(--slate-900); color: white; padding: 9px 12px;
+      text-align: left; font-weight: 600; font-size: 9px;
+      text-transform: uppercase; letter-spacing: 0.8px;
+    }
+    .pay-table tbody td { padding: 10px 12px; border-bottom: 1px solid var(--slate-100); color: var(--slate-700); font-size: 12px; }
+    .pay-table tbody tr:last-child td { border-bottom: none; }
+    .pay-table .td-amount { font-weight: 700; color: var(--slate-900); font-variant-numeric: tabular-nums; }
+    .pay-table .td-mono { font-family: 'Courier New', monospace; font-size: 10px; color: var(--slate-500); }
+    .pay-table .badge {
+      display: inline-flex; align-items: center; gap: 4px;
+      padding: 2px 8px; border-radius: 20px; font-size: 9px; font-weight: 600;
+    }
+    .pay-table .badge::before { content: ''; width: 5px; height: 5px; border-radius: 50%; }
+    .badge.approved { background: #ecfdf5; color: #065f46; }
+    .badge.approved::before { background: #059669; }
+    .badge.pending { background: #fffbeb; color: #92400e; }
+    .badge.pending::before { background: #d97706; }
+    .badge.rejected { background: #fef2f2; color: #991b1b; }
+    .badge.rejected::before { background: #dc2626; }
+    .badge.waived { background: #eef2ff; color: #4338ca; }
+    .badge.waived::before { background: #6366f1; }
+
+    /* Amount strip */
+    .amount-strip {
+      display: flex; justify-content: space-between; align-items: center;
+      background: linear-gradient(135deg, var(--amber) 0%, var(--amber-light) 100%);
+      border-radius: 8px; padding: 14px 18px; margin-top: 12px;
+    }
+    .amount-strip-label { font-size: 11px; font-weight: 600; color: rgba(255,255,255,0.85); text-transform: uppercase; letter-spacing: 1px; }
+    .amount-strip-value { font-size: 24px; font-weight: 800; color: white; }
+
+    /* Verification */
+    .verification {
+      margin-top: 24px; padding-top: 18px;
+      border-top: 2px dashed var(--slate-300);
+      display: flex; justify-content: space-between; align-items: flex-end;
+    }
+    .verification-left { display: flex; gap: 12px; align-items: center; }
+    .qr-box {
+      width: 52px; height: 52px; border: 2px solid var(--slate-300); border-radius: 5px;
+      display: grid; grid-template-columns: repeat(7, 1fr); grid-template-rows: repeat(7, 1fr);
+      gap: 0; padding: 3px; overflow: hidden;
+    }
+    .qr-cell { border-radius: 0; }
+    .qr-cell.f { background: var(--slate-900); }
+    .qr-cell.e { background: transparent; }
+    .verify-text { font-size: 9px; color: var(--slate-500); line-height: 1.9; }
+    .verify-text strong { color: var(--slate-700); font-weight: 600; }
+    .verify-code {
+      font-family: 'Courier New', monospace; font-size: 10px;
+      background: var(--slate-100); padding: 1px 5px; border-radius: 3px;
+      color: var(--amber); font-weight: 700; letter-spacing: 1px;
+    }
+    .sig-block { text-align: center; width: 170px; }
+    .sig-line { border-top: 1px solid var(--slate-400); margin-bottom: 5px; margin-top: 36px; }
+    .sig-name { font-size: 9px; color: var(--slate-500); text-transform: uppercase; letter-spacing: 1px; }
+
+    /* Footer */
+    .footer {
+      background: var(--slate-50); border-top: 1px solid var(--slate-300);
+      padding: 14px 36px; display: flex;
+      justify-content: space-between; align-items: center;
+      position: relative; z-index: 1;
+    }
+    .footer-brand { display: flex; align-items: center; gap: 8px; }
+    .footer-info { font-size: 9px; color: var(--slate-500); line-height: 1.6; }
+    .footer-info strong { color: var(--amber); font-weight: 700; }
+    .footer-right { text-align: right; font-size: 8px; color: var(--slate-500); line-height: 1.8; }
+
+    /* Print Button */
+    .print-actions { max-width: 720px; margin: 16px auto 32px; display: flex; justify-content: center; }
+    .btn-print {
+      padding: 12px 32px; border: none; border-radius: 8px; cursor: pointer;
+      font-size: 14px; font-weight: 600; font-family: 'Inter', sans-serif;
+      display: flex; align-items: center; gap: 8px; transition: all 0.2s;
+      background: linear-gradient(135deg, var(--amber) 0%, var(--amber-light) 100%);
+      color: white; box-shadow: 0 4px 14px rgba(255, 104, 3, 0.3);
+    }
+    .btn-print:hover { transform: translateY(-1px); box-shadow: 0 6px 20px rgba(255, 104, 3, 0.4); }
+    @media print {
+      body { background: white; }
+      .page { margin: 0; box-shadow: none; border-radius: 0; }
+      .no-print { display: none !important; }
+      .watermark { color: rgba(255, 104, 3, 0.015); }
+    }
+    @media (max-width: 640px) {
+      .header { padding: 20px; flex-direction: column; gap: 14px; }
+      .header-right { text-align: left; }
+      .body { padding: 16px; }
+      .footer { padding: 12px 16px; flex-direction: column; gap: 8px; text-align: center; }
+      .footer-right { text-align: center; }
+      .info-grid { grid-template-columns: repeat(2, 1fr); }
+      .info-cell:nth-child(2n) { border-right: none; }
+      .info-cell:nth-child(3n) { border-right: 1px solid var(--slate-300); }
+      .hero-row { grid-template-columns: 1fr; }
+      .divider { margin: 0 16px; }
+      .verification { flex-direction: column; align-items: flex-start; gap: 16px; }
+    }
+  </style>
+</head>
+<body>
+  <div class="page">
+    <div class="watermark">DUESTRACKER</div>
+    <div class="accent-bar"></div>
+
+    <!-- HEADER -->
+    <div class="header">
+      <div class="header-left">
+        ${logoSVG}
+        <div>
+          <div class="brand-name">Dues<span>Tracker</span></div>
+          <div class="brand-tagline">Payment Receipt</div>
+        </div>
+      </div>
+      <div class="header-right">
+        <div class="doc-title">Official Receipt</div>
+        <div class="doc-meta">
+          <strong>Date:</strong> ${fmtDate(payment.created_at)}<br>
+          <strong>Ref:</strong> ${docRef}<br>
+          <strong>ID:</strong> #${payment.id.slice(0, 8).toUpperCase()}
+        </div>
+      </div>
+    </div>
+    <div class="divider"></div>
+
+    <div class="body">
+      <!-- STATUS + AMOUNT HERO -->
+      <div class="hero-row">
+        <div class="hero-card status">
+          <div class="hero-label">Payment Status</div>
+          <div class="hero-value"><span class="status-dot"></span>${statusCfg.label}</div>
+        </div>
+        <div class="hero-card amount">
+          <div class="hero-label">${isWaived ? 'Amount Waived' : 'Amount Paid'}</div>
+          <div class="hero-value">${fmtCurrency(payment.amount)}</div>
+        </div>
+      </div>
+
+      <!-- STUDENT INFORMATION -->
+      <div class="section">
+        <div class="section-header">
+          <div class="section-icon amber">👤</div>
+          <div class="section-title">Student Information</div>
+          <div class="section-line"></div>
+        </div>
+        <div class="info-grid">
+          <div class="info-cell">
+            <div class="info-label">Full Name</div>
+            <div class="info-value">${payment.student.full_name}</div>
+          </div>
+          <div class="info-cell">
+            <div class="info-label">Reg. Number</div>
+            <div class="info-value mono amber">${payment.student.reg_number}</div>
+          </div>
+          <div class="info-cell">
+            <div class="info-label">Level</div>
+            <div class="info-value">${payment.student.level || 'Not specified'}</div>
+          </div>
+          <div class="info-cell">
+            <div class="info-label">Email</div>
+            <div class="info-value">${payment.student.email || 'Not provided'}</div>
+          </div>
+          <div class="info-cell">
+            <div class="info-label">Department</div>
+            <div class="info-value">ECE</div>
+          </div>
+          <div class="info-cell">
+            <div class="info-label">Academic Session</div>
+            <div class="info-value">${new Date().getFullYear()}/${new Date().getFullYear() + 1}</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- PAYMENT DETAILS -->
+      <div class="section">
+        <div class="section-header">
+          <div class="section-icon blue">💳</div>
+          <div class="section-title">Transaction Details</div>
+          <div class="section-line"></div>
+        </div>
+        <table class="pay-table">
+          <thead>
+            <tr>
+              <th>Description</th>
+              <th>Details</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>Payment Type</td>
+              <td style="font-weight:600;">${payment.payment_type.title}</td>
+            </tr>
+            <tr>
+              <td>Target Amount</td>
+              <td class="td-amount">${fmtCurrency(payment.payment_type.amount)}</td>
+            </tr>
+            <tr>
+              <td>Amount ${isWaived ? 'Waived' : 'Paid'}</td>
+              <td class="td-amount" style="color:var(--amber);">${fmtCurrency(payment.amount)}</td>
+            </tr>
+            <tr>
+              <td>Payment Method</td>
+              <td>${payment.payment_method ? payment.payment_method.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase()) : 'Bank Transfer'}</td>
+            </tr>
+            <tr>
+              <td>Transaction Reference</td>
+              <td class="td-mono">${payment.transaction_ref || 'N/A'}</td>
+            </tr>
+            <tr>
+              <td>Submitted On</td>
+              <td>${fmtDateTime(payment.created_at)}</td>
+            </tr>
+            ${payment.approved_at ? `<tr>
+              <td>${isWaived ? 'Waived On' : 'Approved On'}</td>
+              <td>${fmtDateTime(payment.approved_at)}</td>
+            </tr>` : ''}
+            <tr>
+              <td>Status</td>
+              <td><span class="badge ${isWaived ? 'waived' : payment.status}">${statusCfg.label}</span></td>
+            </tr>
+          </tbody>
+        </table>
+
+        <div class="amount-strip">
+          <span class="amount-strip-label">${isWaived ? 'Total Waived' : 'Total Paid'}</span>
+          <span class="amount-strip-value">${fmtCurrency(payment.amount)}</span>
+        </div>
+      </div>
+
+      <!-- VERIFICATION -->
+      <div class="verification">
+        <div class="verification-left">
+          <div class="qr-box">
+            ${qrCells.map(c => `<div class="qr-cell ${c}"></div>`).join('')}
+          </div>
+          <div class="verify-text">
+            <strong>Verification</strong><br>
+            Document Ref: <span class="verify-code">${docRef}</span><br>
+            This is electronically generated.<br>
+            No signature required.
+          </div>
+        </div>
+        <div class="sig-block">
+          <div class="sig-line"></div>
+          <div class="sig-name">Authorized Signatory</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- FOOTER -->
+    <div class="footer">
+      <div class="footer-brand">
+        ${logoSVG.replace('width="40"', 'width="28"').replace('height="40"', 'height="28"')}
+        <div class="footer-info">
+          <strong>DuesTracker</strong><br>
+          Powered by Dev_Wishot
+        </div>
+      </div>
+      <div class="footer-right">
+        Official Payment Receipt<br>
+        Generated ${new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
+      </div>
+    </div>
+  </div>
+
+  <div class="print-actions no-print">
+    <button class="btn-print" onclick="window.print()">🖨️ Print / Save as PDF</button>
+  </div>
+</body>
+</html>`;
+
+  // Open in print window
+  const isIOSDevice = /iPad|iPhone|iPod/.test(navigator.userAgent) ||
+    (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+
+  if (isIOSDevice) {
+    let printFrame = document.getElementById('receipt-print-frame') as HTMLIFrameElement;
+    if (!printFrame) {
+      printFrame = document.createElement('iframe');
+      printFrame.id = 'receipt-print-frame';
+      printFrame.style.cssText = 'position:fixed;right:0;bottom:0;width:0;height:0;border:none';
+      document.body.appendChild(printFrame);
+    }
+    const fd = printFrame.contentDocument || printFrame.contentWindow?.document;
+    if (fd) { fd.open(); fd.write(html); fd.close(); }
+    setTimeout(() => { printFrame.contentWindow?.focus(); printFrame.contentWindow?.print(); }, 500);
+  } else {
+    const win = window.open('', '_blank');
+    if (win) { win.document.write(html); win.document.close(); }
   }
-  
-  // Footer
-  doc.setDrawColor(COLORS.border);
-  doc.setLineWidth(0.5);
-  doc.line(20, pageHeight - 40, pageWidth - 20, pageHeight - 40);
-  
-  doc.setFont(STYLES.bodyFont, 'normal');
-  doc.setFontSize(8);
-  doc.setTextColor(COLORS.textLight);
-  doc.text('This is an electronically generated receipt.', pageWidth / 2, pageHeight - 30, { align: 'center' });
-  doc.text('For verification, please contact the class administration.', pageWidth / 2, pageHeight - 22, { align: 'center' });
-  
-  doc.save(`receipt_${payment.transaction_ref || payment.id.slice(0, 8)}.pdf`);
 }
 
 export default {

@@ -20,7 +20,7 @@ export const colors: Record<string, string> = {
   statusPaid: '#16F456',
   statusUnpaid: '#FF4D4D',
   statusPartial: '#FFC300',
-  statusPending: '#30FFAC',
+  statusPending: '#F59E0B',
   statusRejected: '#FF4D4D',
   statusWaived: '#8A2BE2',
   success: '#16F456',

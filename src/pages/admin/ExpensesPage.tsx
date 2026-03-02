@@ -12,6 +12,7 @@ import { useNavigate } from 'react-router-dom'
 export default function ExpensesPage() {
   const { hasPermission } = useAuth()
   const navigate = useNavigate()
+  // no-op here; ExpenseList will handle payment-type filtering
 
   return (
     <div className="min-h-screen py-6 px-4 relative overflow-hidden" style={{ background: 'radial-gradient(ellipse at top, #1A0E09 0%, #0F0703 100%)' }}>

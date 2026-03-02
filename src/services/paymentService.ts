@@ -1,5 +1,8 @@
+/* eslint-disable @typescript-eslint/no-unused-vars */
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import { supabase } from '@/config/supabase';
 import type { Payment, PaymentType, PaymentStats } from '@/types';
+import notificationService from '@/services/notificationService';
 
 /**
  * Payment Service
@@ -28,10 +31,10 @@ class PaymentService {
         };
       }
 
-      // Get all active payment types for this student's level
+      // Get all active payment types for this student's level (include deadline and late fee)
       const { data: activePaymentTypes, error: typesError } = await supabase
         .from('payment_types')
-        .select('id, amount')
+        .select('id, amount, deadline, late_fee_per_day')
         .eq('is_active', true)
         .contains('target_levels', [student.level]);
 
@@ -77,9 +80,43 @@ class PaymentService {
         
         // Calculate outstanding for this payment type (0 if waived)
         if (!isWaived) {
-          const outstanding = pt.amount - paidForType;
+          const outstanding = (Number(pt.amount) || 0) - paidForType;
           if (outstanding > 0) {
+            // Base outstanding
             totalDue += outstanding;
+
+            // If past deadline, add accumulated late fees only if student still owed at deadline
+            try {
+              if (pt.deadline) {
+                const deadlineDate = new Date(pt.deadline);
+                const now = new Date();
+                if (now > deadlineDate) {
+                  const perDay = Number(pt.late_fee_per_day || 0);
+                  if (perDay > 0) {
+                    // Calculate how much was paid before deadline
+                    const paidBeforeDeadline = studentPayments
+                      .filter(p => p.status === 'approved' && !p.transaction_ref?.startsWith('WAIVED-'))
+                      .reduce((sum, p) => {
+                        const submittedAt = (p as any).submitted_at ? new Date((p as any).submitted_at) : ((p as any).created_at ? new Date((p as any).created_at) : null);
+                        if (submittedAt && submittedAt.getTime() <= deadlineDate.getTime()) {
+                          return sum + Number(p.amount || 0);
+                        }
+                        return sum;
+                      }, 0);
+                    const remainingAtDeadline = Math.max(0, (Number(pt.amount) || 0) - paidBeforeDeadline);
+                    // Only apply late fees if student still owed at deadline
+                    if (remainingAtDeadline > 0) {
+                      const daysOverdue = Math.floor((now.getTime() - deadlineDate.getTime()) / (1000 * 60 * 60 * 24));
+                      if (daysOverdue > 0) {
+                        totalDue += daysOverdue * perDay;
+                      }
+                    }
+                  }
+                }
+              }
+            } catch (e) {
+              // ignore date parsing issues and continue
+            }
           }
         }
       });
@@ -294,6 +331,18 @@ class PaymentService {
 
       if (error) throw error;
 
+      // Notify approvers (admins / finsec) that a new payment was submitted
+      try {
+        await notificationService.notifyApproversOfNewPayment(
+          data.id,
+          paymentData.studentId,
+          Number(paymentData.amountPaid || 0),
+          paymentData.paymentTypeId
+        );
+      } catch (e) {
+        console.error('Failed to notify approvers of new payment:', e);
+      }
+
       return data;
     } catch (error) {
       console.error('Error submitting payment:', error);
@@ -329,10 +378,10 @@ class PaymentService {
         };
       }
 
-      // Get all active payment types for this student's level
+      // Get all active payment types for this student's level (include deadline and late fee)
       const { data: activePaymentTypes } = await supabase
         .from('payment_types')
-        .select('id, amount')
+        .select('id, amount, deadline, late_fee_per_day')
         .eq('is_active', true)
         .contains('target_levels', [student.level]);
 
@@ -377,9 +426,43 @@ class PaymentService {
         
         // Calculate outstanding for this payment type (0 if waived)
         if (!isWaived) {
-          const outstanding = pt.amount - paidForType;
+          const outstanding = (Number(pt.amount) || 0) - paidForType;
           if (outstanding > 0) {
+            // Base outstanding
             totalOutstanding += outstanding;
+
+            // If past deadline, add accumulated late fees only if student still owed at deadline
+            try {
+              if (pt.deadline) {
+                const deadlineDate = new Date(pt.deadline);
+                const now = new Date();
+                if (now > deadlineDate) {
+                  const perDay = Number(pt.late_fee_per_day || 0);
+                  if (perDay > 0) {
+                    // Calculate how much was paid before deadline
+                    const paidBeforeDeadline = studentPayments
+                      .filter(p => p.status === 'approved' && !p.transaction_ref?.startsWith('WAIVED-'))
+                      .reduce((sum, p) => {
+                        const submittedAt = (p as any).submitted_at ? new Date((p as any).submitted_at) : ((p as any).created_at ? new Date((p as any).created_at) : null);
+                        if (submittedAt && submittedAt.getTime() <= deadlineDate.getTime()) {
+                          return sum + Number(p.amount || 0);
+                        }
+                        return sum;
+                      }, 0);
+                    const remainingAtDeadline = Math.max(0, (Number(pt.amount) || 0) - paidBeforeDeadline);
+                    // Only apply late fees if student still owed at deadline
+                    if (remainingAtDeadline > 0) {
+                      const daysOverdue = Math.floor((now.getTime() - deadlineDate.getTime()) / (1000 * 60 * 60 * 24));
+                      if (daysOverdue > 0) {
+                        totalOutstanding += daysOverdue * perDay;
+                      }
+                    }
+                  }
+                }
+              }
+            } catch (e) {
+              // ignore date parsing issues
+            }
           }
         }
       });

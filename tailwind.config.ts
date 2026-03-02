@@ -35,7 +35,7 @@ export default {
           unpaid: '#FF4D4D',
           partial: '#FFC300',
           pending: '#30FFAC',
-          waived: '#8A2BE2',
+          waived: '#6366F1', // Professional Indigo
         },
         
         // Semantic

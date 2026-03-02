@@ -247,12 +247,18 @@ export async function fetchExpenses(limit = 50, status?: 'pending' | 'approved' 
 }
 
 // Fetch expense categories
-export async function fetchExpenseCategories(): Promise<ExpenseCategory[]> {
-  const { data, error } = await supabase
+export async function fetchExpenseCategories(includeInactive = false): Promise<ExpenseCategory[]> {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  let query: any = supabase
     .from('expense_categories')
     .select('*')
-    .eq('is_active', true)
     .order('name')
+
+  if (!includeInactive) {
+    query = query.eq('is_active', true)
+  }
+
+  const { data, error } = await query
 
   if (error) throw error
   return data || []

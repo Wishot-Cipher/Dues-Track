@@ -42,6 +42,7 @@ interface PaymentType {
   amount: number;
   description: string;
   deadline: string;
+  late_fee_per_day?: number;
 }
 
 export default function WaivePaymentPage() {

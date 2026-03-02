@@ -1,4 +1,5 @@
-import { useState, useMemo } from 'react'
+/* eslint-disable @typescript-eslint/no-unused-vars */
+import { useState, useMemo, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import GlassCard from '@/components/ui/GlassCard'
 import ConfirmDialog from '@/components/ui/ConfirmDialog'
@@ -9,10 +10,11 @@ import { useAuth } from '@/hooks/useAuth'
 import { getPublicUrl, supabase } from '@/config/supabase'
 import { useToast } from '@/hooks/useToast'
 import { deleteExpense, updateExpenseFields, fetchExpenseCategories, type ExpenseCategory } from '@/services/expenseService'
+import ProfessionalDropdown from '@/components/ui/ProfessionalDropdown'
 import type { Expense } from '@/services/expenseService'
 import { CheckCircle, Clock, XCircle, Calendar, Tag, FileText, X, Download, Eye, User, ChevronLeft, ChevronRight, ChevronDown, FileSpreadsheet, Trash2, Edit3, Save, Loader2 } from 'lucide-react'
 import * as LucideIcons from 'lucide-react'
-import { exportExpensesToPDF } from '@/utils/pdfExport'
+import { exportExpensesToPDF } from '@/utils/htmlPrintExports'
 
 const ITEMS_PER_PAGE = 10
 
@@ -67,8 +69,59 @@ function StatusBadge({ status }: { status: 'pending' | 'approved' | 'rejected' }
   )
 }
 
-export default function ExpenseList() {
+export default function ExpenseList({ categoryFilter = 'all' }: { categoryFilter?: string }) {
   const { expenses, loading, error, reload } = useExpenses()
+  const [paymentTypes, setPaymentTypes] = useState<{ id: string; title: string }[]>([])
+  const [paymentFilter, setPaymentFilter] = useState<string>('all')
+
+  useEffect(() => {
+    let mounted = true
+    ;(async () => {
+      try {
+        const { data } = await supabase.from('payment_types').select('id, title').eq('is_active', true).order('title')
+        if (mounted) setPaymentTypes(data || [])
+      } catch (err) {
+        console.error('Failed to load payment types:', err)
+      }
+    })()
+    return () => { mounted = false }
+  }, [])
+  // Collected totals for selected payment type (exclude waived)
+  const [collectedAmount, setCollectedAmount] = useState<number>(0)
+
+  useEffect(() => {
+    let mounted = true
+    ;(async () => {
+      try {
+        // Fetch approved payments; if paymentFilter != 'all', filter by payment_type_id
+        let query = supabase
+          .from('payments')
+          .select('amount, transaction_ref, status, payment_type_id')
+          .eq('status', 'approved')
+          .limit(2000)
+
+        if (paymentFilter && paymentFilter !== 'all') {
+          query = query.eq('payment_type_id', paymentFilter)
+        }
+
+        // Exclude waived transaction refs
+        query = query.not('transaction_ref', 'like', 'WAIVED-%')
+
+        const { data } = await query
+        if (!mounted) return
+        const payments = data || []
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const total = payments.reduce((s: number, p: any) => s + Number(p.amount || 0), 0)
+        setCollectedAmount(total)
+      } catch (err) {
+        console.error('Failed to fetch collected totals:', err)
+        if (mounted) {
+          setCollectedAmount(0)
+        }
+      }
+    })()
+    return () => { mounted = false }
+  }, [paymentFilter])
   const { hasPermission } = useAuth()
   const { success: showSuccess, error: showError } = useToast()
   const [selected, setSelected] = useState<Expense | null>(null)
@@ -83,7 +136,7 @@ export default function ExpenseList() {
   const [editingExpense, setEditingExpense] = useState<Partial<Expense> | null>(null)
   const [editLoading, setEditLoading] = useState(false)
   const [categories, setCategories] = useState<ExpenseCategory[]>([])
-  const [paymentTypes, setPaymentTypes] = useState<{ id: string; name: string }[]>([])
+  
 
   // Load categories and payment types for edit modal
   useMemo(() => {
@@ -91,7 +144,7 @@ export default function ExpenseList() {
       try {
         const cats = await fetchExpenseCategories()
         setCategories(cats)
-        const { data } = await supabase.from('payment_types').select('id, name').eq('is_active', true)
+        const { data } = await supabase.from('payment_types').select('id, title').eq('is_active', true)
         setPaymentTypes(data || [])
       } catch (err) {
         console.error('Failed to load categories/payment types:', err)
@@ -100,14 +153,39 @@ export default function ExpenseList() {
     loadData()
   }, [])
 
-  // Sort expenses by newest first (created_at or expense_date)
+  // Filter by funding/payment type if set
+  const filteredExpenses = useMemo(() => {
+    if (!expenses) return []
+    // First apply optional paymentType filter from this component
+    let list = expenses
+    if (paymentFilter && paymentFilter !== 'all') {
+      list = list.filter(e => (e.funded_by === paymentFilter) || (e.payment_type_id === paymentFilter))
+    }
+    // Then apply any external categoryFilter (legacy) if provided
+    if (categoryFilter && categoryFilter !== 'all') {
+      list = list.filter(e => e.category_id === categoryFilter || e.category === categoryFilter)
+    }
+    return list
+  }, [expenses, paymentFilter, categoryFilter])
+
+  // Sort filtered expenses by newest first
   const sortedExpenses = useMemo(() => {
-    return [...expenses].sort((a, b) => {
+    return [...filteredExpenses].sort((a, b) => {
       const dateA = new Date(a.expense_date || a.created_at).getTime()
       const dateB = new Date(b.expense_date || b.created_at).getTime()
       return dateB - dateA // Newest first
     })
-  }, [expenses])
+  }, [filteredExpenses])
+
+  // Pre-calculate expense stats to avoid repeated filter/reduce in render
+  const expenseStats = useMemo(() => {
+    const approved = sortedExpenses.filter(e => e.status === 'approved')
+    const pending = sortedExpenses.filter(e => e.status === 'pending')
+    const totalApproved = approved.reduce((sum, e) => sum + (e.amount || 0), 0)
+    const totalPending = pending.reduce((sum, e) => sum + (e.amount || 0), 0)
+    const netBalance = collectedAmount - totalApproved
+    return { approved, pending, totalApproved, totalPending, netBalance }
+  }, [sortedExpenses, collectedAmount])
 
   // Pagination
   const totalPages = Math.ceil(sortedExpenses.length / ITEMS_PER_PAGE)
@@ -133,6 +211,7 @@ export default function ExpenseList() {
       // Add title and metadata
       csvRows.push('EXPENSE REPORT')
       csvRows.push(`Generated on: ${new Date().toLocaleString()}`)
+      csvRows.push('Developed by Dev_Wishot | @wishotstudio')
       csvRows.push('') // Empty line
       
       // Add headers
@@ -145,13 +224,13 @@ export default function ExpenseList() {
         const description = (exp.description || 'N/A').replace(/"/g, '""')
         const category = ((exp as unknown as { category?: { name?: string } }).category?.name || exp.category || 'N/A').replace(/"/g, '""')
         const fundedBy = ((exp as unknown as { payment_types?: { title?: string } }).payment_types?.title || 'N/A').replace(/"/g, '""')
-        const amount = exp.amount || 0
+        const amount = `₦${(exp.amount || 0).toLocaleString()}`
         const status = exp.status?.toUpperCase() || 'PENDING'
         const recordedBy = ((exp as unknown as { admins?: { full_name?: string } }).admins?.full_name || 'N/A').replace(/"/g, '""')
         const approvedBy = ((exp as unknown as { approved_by?: { full_name?: string } }).approved_by?.full_name || 'N/A').replace(/"/g, '""')
         const notes = (exp.rejection_reason || '').replace(/"/g, '""')
         
-        csvRows.push(`"${date}","${title}","${description}","${category}","${fundedBy}",${amount},"${status}","${recordedBy}","${approvedBy}","${notes}"`)
+        csvRows.push(`"${date}","${title}","${description}","${category}","${fundedBy}","${amount}","${status}","${recordedBy}","${approvedBy}","${notes}"`)
       })
       
       // Add summary at the bottom
@@ -200,7 +279,12 @@ export default function ExpenseList() {
         approved_at: exp.approved_at || undefined,
       }))
 
-      exportExpensesToPDF(expenseData)
+      // Determine payment source title for header (if any)
+      const paymentSourceTitle = paymentFilter && paymentFilter !== 'all'
+        ? (paymentTypes.find(pt => pt.id === paymentFilter)?.title || undefined)
+        : undefined
+
+      exportExpensesToPDF(expenseData, { paymentSource: paymentSourceTitle })
       showSuccess('Expenses exported to PDF!')
     } catch (err) {
       console.error('Export error:', err)
@@ -319,6 +403,39 @@ export default function ExpenseList() {
           </div>
           {sortedExpenses.length > 0 && (
             <div className="flex flex-wrap items-center gap-2">
+              {/* Payment source filter (funding/payment type) */}
+              <div className="mr-2 w-full sm:w-auto">
+                <ProfessionalDropdown
+                  options={[{ value: 'all', label: 'All Funding Sources' }, ...paymentTypes.map(pt => ({ value: pt.id, label: pt.title }))]}
+                  value={paymentFilter}
+                  onChange={(v) => setPaymentFilter(v as string)}
+                  placeholder="Filter by funding source"
+                  className="w-full sm:w-56"
+                  clearable
+                />
+              </div>
+              {/* Collected / Expenses / Net Balance for selected funding source */}
+              <div className="flex flex-wrap items-center gap-2 mt-2 sm:mt-0">
+                <div className="flex items-center gap-2 px-4 py-2 rounded-xl" style={{ background: 'rgba(255,255,255,0.03)', border: `1px solid rgba(255,255,255,0.04)` }}>
+                  <div className="text-xs" style={{ color: colors.textSecondary }}>Collected</div>
+                  <div className="font-semibold ml-2 whitespace-nowrap" style={{ color: colors.statusPaid }}>₦{collectedAmount.toLocaleString()}</div>
+                </div>
+                <div className="flex items-center gap-2 px-4 py-2 rounded-xl" style={{ background: 'rgba(255,255,255,0.03)', border: `1px solid rgba(255,255,255,0.04)` }}>
+                  <div className="text-xs" style={{ color: colors.textSecondary }}>Spent</div>
+                  <div className="font-semibold ml-2 whitespace-nowrap" style={{ color: colors.statusFailed }}>₦{expenseStats.totalApproved.toLocaleString()}</div>
+                </div>
+                <div className="flex items-center gap-2 px-4 py-2 rounded-xl" style={{ background: expenseStats.netBalance >= 0 ? 'rgba(34, 197, 94, 0.08)' : 'rgba(239, 68, 68, 0.08)', border: `1px solid ${expenseStats.netBalance >= 0 ? 'rgba(34, 197, 94, 0.2)' : 'rgba(239, 68, 68, 0.2)'}` }}>
+                  <div className="text-xs" style={{ color: colors.textSecondary }}>Available</div>
+                  <div className="font-semibold ml-2 whitespace-nowrap" style={{ color: expenseStats.netBalance >= 0 ? colors.statusPaid : colors.statusFailed }}>₦{expenseStats.netBalance.toLocaleString()}</div>
+                </div>
+                {expenseStats.pending.length > 0 && (
+                  <div className="flex items-center gap-2 px-3 py-2 rounded-xl" style={{ background: 'rgba(251, 191, 36, 0.08)', border: '1px solid rgba(251, 191, 36, 0.2)' }}>
+                    <Clock className="w-3.5 h-3.5" style={{ color: '#FBBF24' }} />
+                    <div className="text-xs whitespace-nowrap" style={{ color: '#FBBF24' }}>{expenseStats.pending.length} pending (₦{expenseStats.totalPending.toLocaleString()})</div>
+                  </div>
+                )}
+              </div>
+
               {/* Export Dropdown */}
               <div className="relative">
                 <button
@@ -343,55 +460,50 @@ export default function ExpenseList() {
 
                 <AnimatePresence>
                   {showExportMenu && (
-                    <motion.div
-                      initial={{ opacity: 0, y: -10, scale: 0.95 }}
-                      animate={{ opacity: 1, y: 0, scale: 1 }}
-                      exit={{ opacity: 0, y: -10, scale: 0.95 }}
-                      className="absolute right-0 top-full mt-2 w-48 rounded-xl overflow-hidden shadow-2xl z-50"
-                      style={{
-                        background: 'linear-gradient(135deg, rgba(30, 20, 15, 0.98), rgba(20, 12, 8, 0.98))',
-                        border: '1px solid rgba(255, 255, 255, 0.1)',
-                        backdropFilter: 'blur(20px)',
-                      }}
-                    >
-                      <div className="p-2">
-                        <motion.button
-                          whileHover={{ x: 4 }}
-                          onClick={() => {
-                            setShowExportMenu(false)
-                            exportToPDF()
-                          }}
-                          className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg hover:bg-white/5"
-                        >
-                          <FileText className="w-4 h-4" style={{ color: colors.statusUnpaid }} />
-                          <span className="text-sm text-white">PDF Report</span>
-                        </motion.button>
-                        <motion.button
-                          whileHover={{ x: 4 }}
-                          onClick={() => {
-                            setShowExportMenu(false)
-                            exportToCSV()
-                          }}
-                          className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg hover:bg-white/5"
-                        >
-                          <FileSpreadsheet className="w-4 h-4" style={{ color: colors.accentMint }} />
-                          <span className="text-sm text-white">CSV Spreadsheet</span>
-                        </motion.button>
-                      </div>
-                    </motion.div>
+                    <>
+                      {/* Backdrop */}
+                      <div className="fixed inset-0 z-40" onClick={() => setShowExportMenu(false)} />
+                      
+                      {/* Dropdown Menu */}
+                      <motion.div
+                        initial={{ opacity: 0, y: -10, scale: 0.95 }}
+                        animate={{ opacity: 1, y: 0, scale: 1 }}
+                        exit={{ opacity: 0, y: -10, scale: 0.95 }}
+                        className="absolute right-0 top-full mt-2 w-48 rounded-xl overflow-hidden shadow-2xl z-50"
+                        style={{
+                          background: 'linear-gradient(135deg, rgba(30, 20, 15, 0.98), rgba(20, 12, 8, 0.98))',
+                          border: '1px solid rgba(255, 255, 255, 0.1)',
+                          backdropFilter: 'blur(20px)',
+                        }}
+                      >
+                        <div className="p-2">
+                          <motion.button
+                            whileHover={{ x: 4 }}
+                            onClick={() => {
+                              setShowExportMenu(false)
+                              exportToPDF()
+                            }}
+                            className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg hover:bg-white/5"
+                          >
+                            <FileText className="w-4 h-4" style={{ color: colors.statusUnpaid }} />
+                            <span className="text-sm text-white">PDF Report</span>
+                          </motion.button>
+                          <motion.button
+                            whileHover={{ x: 4 }}
+                            onClick={() => {
+                              setShowExportMenu(false)
+                              exportToCSV()
+                            }}
+                            className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg hover:bg-white/5"
+                          >
+                            <FileSpreadsheet className="w-4 h-4" style={{ color: colors.accentMint }} />
+                            <span className="text-sm text-white">CSV Spreadsheet</span>
+                          </motion.button>
+                        </div>
+                      </motion.div>
+                    </>
                   )}
                 </AnimatePresence>
-                {showExportMenu && <div className="fixed inset-0 z-40" onClick={() => setShowExportMenu(false)} />}
-              </div>
-
-              <div className="flex items-center gap-2 px-4 py-2 rounded-xl" style={{ 
-                background: `${colors.statusPaid}10`, 
-                border: `1px solid ${colors.statusPaid}20` 
-              }}>
-                <CheckCircle className="w-4 h-4" style={{ color: colors.statusPaid }} />
-                <span className="text-sm font-medium" style={{ color: colors.statusPaid }}>
-                  ₦{sortedExpenses.filter(exp => exp.status === 'approved').reduce((sum, exp) => sum + (exp.amount || 0), 0).toLocaleString()}
-                </span>
               </div>
             </div>
           )}
@@ -987,7 +1099,7 @@ export default function ExpenseList() {
                 <option value="">Select payment type</option>
                 {paymentTypes.map((pt) => (
                   <option key={pt.id} value={pt.id}>
-                    {pt.name}
+                    {pt.title}
                   </option>
                 ))}
               </select>

@@ -1,3 +1,5 @@
+/* eslint-disable @typescript-eslint/no-unused-vars */
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { colors, gradients } from '@/config/colors';
@@ -24,6 +26,7 @@ interface Student {
   full_name: string;
   reg_number: string;
   level: string;
+  outstanding?: number; // computed outstanding including late fees
 }
 
 interface PayForOthersModalProps {
@@ -50,6 +53,7 @@ export default function PayForOthersModal({
   const [students, setStudents] = useState<Student[]>([]);
   const [selectedStudents, setSelectedStudents] = useState<Student[]>([]);
   const [includeSelf, setIncludeSelf] = useState(!currentUserHasPaid);
+  const [currentUserOutstanding, setCurrentUserOutstanding] = useState<number | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [loading, setLoading] = useState(false);
   const { error: showError } = useToast();
@@ -81,7 +85,106 @@ export default function PayForOthersModal({
       // Filter out students who already paid
       const unpaidStudents = allStudents?.filter(s => !paidStudentIds.has(s.id)) || [];
 
-      setStudents(unpaidStudents);
+      // Fetch payment type details to compute late fees
+      const { data: paymentType } = await supabase
+        .from('payment_types')
+        .select('deadline, late_fee_per_day')
+        .eq('id', paymentTypeId)
+        .single();
+
+      // Fetch payments for these students for the given payment type
+      const studentIds = unpaidStudents.map(s => s.id);
+      if (includeSelf && !currentUserHasPaid) {
+        studentIds.push(currentStudentId);
+      }
+
+      let paymentsForType: any[] = [];
+      if (studentIds.length > 0) {
+        const { data: paymentsData } = await supabase
+          .from('payments')
+          .select('student_id, amount, status, transaction_ref')
+          .eq('payment_type_id', paymentTypeId)
+          .in('student_id', studentIds as string[]);
+
+        paymentsForType = paymentsData || [];
+      }
+
+      // Compute outstanding per student (base outstanding + accumulated late fees)
+      const now = new Date();
+      const deadlineDate = paymentType?.deadline ? new Date(paymentType.deadline) : null;
+      const perDay = Number(paymentType?.late_fee_per_day || 0);
+
+      const studentsWithOutstanding = unpaidStudents.map(s => {
+        const studentPayments = paymentsForType.filter(p => p.student_id === s.id) || [];
+        const paidForType = studentPayments
+          .filter((p: any) => p.status === 'approved' && !p.transaction_ref?.startsWith('WAIVED-'))
+          .reduce((sum: number, p: any) => sum + Number(p.amount || 0), 0);
+
+        const baseOutstanding = Math.max(0, amount - paidForType);
+        let accumulated = 0;
+        try {
+          if (deadlineDate && now > deadlineDate && perDay > 0) {
+            // Check how much was paid before deadline
+            const paidBeforeDeadline = studentPayments
+              .filter((p: any) => p.status === 'approved' && !p.transaction_ref?.startsWith('WAIVED-'))
+              .reduce((sum: number, p: any) => {
+                const submittedAt = p.submitted_at ? new Date(p.submitted_at) : (p.created_at ? new Date(p.created_at) : null);
+                if (submittedAt && submittedAt.getTime() <= deadlineDate.getTime()) {
+                  return sum + Number(p.amount || 0);
+                }
+                return sum;
+              }, 0);
+            const remainingAtDeadline = Math.max(0, amount - paidBeforeDeadline);
+            // Only apply late fees if student still owed at deadline
+            if (remainingAtDeadline > 0) {
+              const daysOverdue = Math.floor((now.getTime() - deadlineDate.getTime()) / (1000 * 60 * 60 * 24));
+              if (daysOverdue > 0) accumulated = daysOverdue * perDay;
+            }
+          }
+        } catch (e) {
+          // ignore
+        }
+
+        return { ...s, outstanding: baseOutstanding + accumulated } as Student;
+      });
+
+      setStudents(studentsWithOutstanding);
+      // Compute current user's outstanding if applicable
+      if (!currentUserHasPaid) {
+        const userPayments = paymentsForType.filter(p => p.student_id === currentStudentId) || [];
+        const paidForCurrent = userPayments
+          .filter((p: any) => p.status === 'approved' && !p.transaction_ref?.startsWith('WAIVED-'))
+          .reduce((sum: number, p: any) => sum + Number(p.amount || 0), 0);
+
+        const baseOutstandingCurrent = Math.max(0, amount - paidForCurrent);
+        let accumulatedCurrent = 0;
+        try {
+          if (deadlineDate && now > deadlineDate && perDay > 0) {
+            // Check how much current user paid before deadline
+            const paidBeforeDeadlineCurrent = userPayments
+              .filter((p: any) => p.status === 'approved' && !p.transaction_ref?.startsWith('WAIVED-'))
+              .reduce((sum: number, p: any) => {
+                const submittedAt = p.submitted_at ? new Date(p.submitted_at) : (p.created_at ? new Date(p.created_at) : null);
+                if (submittedAt && submittedAt.getTime() <= deadlineDate.getTime()) {
+                  return sum + Number(p.amount || 0);
+                }
+                return sum;
+              }, 0);
+            const remainingAtDeadlineCurrent = Math.max(0, amount - paidBeforeDeadlineCurrent);
+            // Only apply late fees if user still owed at deadline
+            if (remainingAtDeadlineCurrent > 0) {
+              const daysOverdue = Math.floor((now.getTime() - deadlineDate.getTime()) / (1000 * 60 * 60 * 24));
+              if (daysOverdue > 0) accumulatedCurrent = daysOverdue * perDay;
+            }
+          }
+        } catch (e) {
+          // ignore
+        }
+
+        setCurrentUserOutstanding(baseOutstandingCurrent + accumulatedCurrent);
+      } else {
+        setCurrentUserOutstanding(null);
+      }
     } catch (error) {
       console.error('Error fetching students:', error);
       showError('Failed to load students');
@@ -117,7 +220,9 @@ export default function PayForOthersModal({
     student.reg_number.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
-  const totalAmount = (selectedStudents.length + (includeSelf && !currentUserHasPaid ? 1 : 0)) * amount;
+  // Compute total amount from selected students' outstanding (if computed), otherwise fallback to base amount
+  const totalAmount = selectedStudents.reduce((sum, s) => sum + (s.outstanding ?? amount), 0)
+    + ((includeSelf && !currentUserHasPaid) ? (currentUserOutstanding ?? amount) : 0);
 
   const handleProceed = () => {
     if (selectedStudents.length === 0 && !includeSelf) {
@@ -128,6 +233,8 @@ export default function PayForOthersModal({
       showError('You have already paid. Please select other students.');
       return;
     }
+    // Don't inject current user into the selected list here — keep selectedStudents as others only.
+    // Pass includeSelf flag to let the parent page include the current user when needed.
     onProceed(selectedStudents, totalAmount, includeSelf && !currentUserHasPaid);
   };
 
@@ -200,7 +307,10 @@ export default function PayForOthersModal({
                     </span>
                   </div>
                   <p className="text-sm" style={{ color: colors.textSecondary }}>
-                    {paymentTypeName} • <span style={{ color: colors.primary, fontWeight: 600 }}>{formatCurrency(amount)}</span> per student
+                    {paymentTypeName} • <span style={{ color: colors.primary, fontWeight: 600 }}>{formatCurrency(currentUserOutstanding ?? amount)}</span> per student
+                    {currentUserOutstanding != null && currentUserOutstanding !== amount && (
+                      <span className="ml-2 text-xs" style={{ color: colors.textSecondary }}>Includes overdue late fees</span>
+                    )}
                   </p>
                 </div>
               </div>
@@ -257,7 +367,7 @@ export default function PayForOthersModal({
                           </div>
                           {includeSelf && (
                             <span className="text-sm font-bold px-3 py-1 rounded-lg" style={{ background: `${colors.primary}20`, color: colors.primary }}>
-                              +{formatCurrency(amount)}
+                              +{formatCurrency(currentUserOutstanding ?? amount)}
                             </span>
                           )}
                         </label>
@@ -361,7 +471,7 @@ export default function PayForOthersModal({
                               </div>
                               <div className="flex items-center gap-3">
                                 <span className="text-sm font-semibold" style={{ color: colors.primary }}>
-                                  {formatCurrency(amount)}
+                                  {formatCurrency(student.outstanding ?? amount)}
                                 </span>
                                 <motion.div
                                   className="w-7 h-7 rounded-lg flex items-center justify-center"
@@ -463,7 +573,7 @@ export default function PayForOthersModal({
                               </div>
                               <div className="flex items-center gap-2">
                                 <span className="text-sm font-semibold" style={{ color: colors.primary }}>
-                                  {formatCurrency(amount)}
+                                  {formatCurrency(student.outstanding ?? amount)}
                                 </span>
                                 <motion.button
                                   onClick={() => removeStudent(student.id)}
@@ -501,7 +611,7 @@ export default function PayForOthersModal({
                             <p className="font-semibold text-white text-sm">You are included</p>
                             <p className="text-xs" style={{ color: colors.textSecondary }}>Paying for yourself too</p>
                           </div>
-                          <span className="font-bold" style={{ color: colors.primary }}>+{formatCurrency(amount)}</span>
+                          <span className="font-bold" style={{ color: colors.primary }}>+{formatCurrency(currentUserOutstanding ?? amount)}</span>
                         </motion.div>
                       )}
 
@@ -528,8 +638,8 @@ export default function PayForOthersModal({
                           <div className="h-px bg-white/20 my-3" />
                           <div className="flex items-center justify-between">
                             <span className="text-white font-medium">Total Amount</span>
-                            <div className="flex items-center gap-2">
-                              <DollarSign className="w-6 h-6 text-white" />
+                              <div className="flex items-center gap-2">
+                                <DollarSign className="w-6 h-6 text-white" />
                               <span className="text-3xl font-bold text-white">
                                 {formatCurrency(totalAmount)}
                               </span>
