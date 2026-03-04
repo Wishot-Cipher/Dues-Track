@@ -1,4 +1,10 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
+/**
+ * Mark Notification(s) as Read API
+ *
+ * - POST { userId, notificationId }  → marks a single notification as read
+ * - POST { userId }                  → marks ALL unread notifications as read
+ */
 import { createClient } from '@supabase/supabase-js'
 
 const supabaseUrl = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL
@@ -15,13 +21,21 @@ export default async function handler(req: any, res: any) {
 
   try {
     const { notificationId, userId } = req.body
-    if (!notificationId || !userId) return res.status(400).json({ error: 'Missing required fields' })
+    if (!userId) return res.status(400).json({ error: 'Missing required field: userId' })
 
-    const { error } = await supabaseAdmin
+    let query = supabaseAdmin
       .from('notifications')
       .update({ is_read: true })
-      .eq('id', notificationId)
-      .eq('recipient_id', userId)
+
+    if (notificationId) {
+      // Mark single notification
+      query = query.eq('id', notificationId).eq('recipient_id', userId)
+    } else {
+      // Mark all unread notifications for user
+      query = query.eq('recipient_id', userId).eq('is_read', false)
+    }
+
+    const { error } = await query
 
     if (error) {
       return res.status(500).json({ error: error.message || error })

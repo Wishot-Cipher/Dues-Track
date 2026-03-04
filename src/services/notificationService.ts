@@ -318,7 +318,7 @@ class NotificationService {
         throw new Error('Not authenticated or mismatched user');
       }
 
-      const res = await fetch('/api/notifications/mark-all-read', {
+      const res = await fetch('/api/notifications/mark-read', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ userId }),
@@ -327,7 +327,7 @@ class NotificationService {
       if (!res.ok) {
         // Fallback for local dev when serverless API routes are not present
         if (res.status === 404) {
-          console.warn('mark-all-read endpoint not found (404). Falling back to direct Supabase update for local dev.');
+          console.warn('mark-read endpoint not found (404). Falling back to direct Supabase update for local dev.');
           const naScope = getOrgScope();
           let marQ = supabase
             .from('notifications')

@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Bell, BellRing, BellOff, Smartphone, Check, X, Loader2, Info } from 'lucide-react';
+import { Bell, BellRing, BellOff, Smartphone, X, Loader2, Send, Shield } from 'lucide-react';
 import { colors, gradients } from '@/config/colors';
 import { useAppAuth as useAuth } from '@/hooks/useAppAuth';
 import { useToast } from '@/hooks/useToast';
@@ -301,149 +301,157 @@ function SettingsView({
     }
   };
 
-  if (!isSupported) {
-    return (
-      <div 
-        className="p-4 rounded-xl"
-        style={{ background: 'rgba(255, 255, 255, 0.03)', border: '1px solid rgba(255, 255, 255, 0.1)' }}
-      >
-        <div className="flex items-center gap-3">
-          <div 
-            className="w-10 h-10 rounded-xl flex items-center justify-center"
-            style={{ background: 'rgba(255, 255, 255, 0.05)' }}
-          >
-            <BellOff className="w-5 h-5" style={{ color: colors.textSecondary }} />
-          </div>
-          <div>
-            <p className="text-sm font-medium text-white">Push Notifications</p>
-            <p className="text-xs" style={{ color: colors.textSecondary }}>
-              Not supported in this browser
-            </p>
-          </div>
-        </div>
-      </div>
-    );
-  }
-
-  if (permission === 'denied') {
-    return (
-      <div 
-        className="p-4 rounded-xl"
-        style={{ background: `${colors.statusUnpaid}08`, border: `1px solid ${colors.statusUnpaid}20` }}
-      >
-        <div className="flex items-start gap-3">
-          <div 
-            className="w-10 h-10 rounded-xl flex items-center justify-center"
-            style={{ background: `${colors.statusUnpaid}20` }}
-          >
-            <BellOff className="w-5 h-5" style={{ color: colors.statusUnpaid }} />
-          </div>
-          <div>
-            <p className="text-sm font-medium text-white">Push Notifications Blocked</p>
-            <p className="text-xs mt-1" style={{ color: colors.textSecondary }}>
-              Notifications are blocked in your browser settings. To enable them:
-            </p>
-            <ol className="text-xs mt-2 space-y-1" style={{ color: colors.textSecondary }}>
-              <li>1. Click the lock/info icon in your browser's address bar</li>
-              <li>2. Find "Notifications" and set it to "Allow"</li>
-              <li>3. Refresh this page</li>
-            </ol>
-          </div>
-        </div>
-      </div>
-    );
-  }
+  // Status config
+  const statusCfg = !isSupported
+    ? { label: 'Unsupported', color: colors.textSecondary, dotColor: colors.textSecondary }
+    : permission === 'denied'
+    ? { label: 'Blocked', color: '#ef4444', dotColor: '#ef4444' }
+    : isSubscribed
+    ? { label: 'Active', color: '#22c55e', dotColor: '#22c55e' }
+    : { label: 'Off', color: colors.textSecondary, dotColor: colors.textSecondary };
 
   return (
-    <div 
-      className="p-4 rounded-xl"
-      style={{ 
-        background: isSubscribed ? `${colors.accentMint}08` : 'rgba(255, 255, 255, 0.03)', 
-        border: `1px solid ${isSubscribed ? colors.accentMint + '20' : 'rgba(255, 255, 255, 0.1)'}` 
+    <motion.div
+      className="rounded-2xl overflow-hidden"
+      style={{
+        background: 'rgba(255, 255, 255, 0.03)',
+        backdropFilter: 'blur(12px)',
+        border: `1px solid ${isSubscribed ? 'rgba(34,197,94,0.15)' : 'rgba(255,255,255,0.08)'}`,
       }}
+      initial={{ opacity: 0, y: 12 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.3 }}
     >
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-3">
-          <div 
-            className="w-10 h-10 rounded-xl flex items-center justify-center"
-            style={{ background: isSubscribed ? `${colors.accentMint}20` : `${colors.primary}20` }}
-          >
-            {isSubscribed ? (
-              <BellRing className="w-5 h-5" style={{ color: colors.accentMint }} />
-            ) : (
-              <Bell className="w-5 h-5" style={{ color: colors.primary }} />
-            )}
-          </div>
-          <div>
-            <p className="text-sm font-medium text-white">Push Notifications</p>
-            <p className="text-xs" style={{ color: colors.textSecondary }}>
-              {isSubscribed ? 'Enabled - You\'ll receive alerts' : 'Get notified when app is closed'}
+      {/* ── Header Row ── */}
+      <div className="px-4 py-3.5 flex items-center gap-3">
+        {/* Icon with pulse */}
+        <div
+          className="w-10 h-10 rounded-xl flex items-center justify-center shrink-0 relative"
+          style={{
+            background: isSubscribed
+              ? 'linear-gradient(135deg, rgba(34,197,94,0.15), rgba(34,197,94,0.05))'
+              : `${colors.primary}15`,
+          }}
+        >
+          {isSubscribed ? (
+            <BellRing className="w-[18px] h-[18px]" style={{ color: '#22c55e' }} />
+          ) : !isSupported ? (
+            <BellOff className="w-[18px] h-[18px]" style={{ color: colors.textSecondary }} />
+          ) : (
+            <Bell className="w-[18px] h-[18px]" style={{ color: colors.primary }} />
+          )}
+          {isSubscribed && (
+            <motion.div
+              className="absolute -top-0.5 -right-0.5 w-2.5 h-2.5 rounded-full"
+              style={{ background: '#22c55e', boxShadow: '0 0 6px rgba(34,197,94,0.6)' }}
+              animate={{ scale: [1, 1.3, 1] }}
+              transition={{ repeat: Infinity, duration: 2, ease: 'easeInOut' }}
+            />
+          )}
+        </div>
+
+        {/* Title & subtitle */}
+        <div className="flex-1 min-w-0">
+          <p className="text-sm font-semibold text-white">Push Notifications</p>
+          <p className="text-[11px] mt-0.5" style={{ color: colors.textSecondary }}>
+            {isSubscribed
+              ? 'Receiving real-time alerts'
+              : permission === 'denied'
+              ? 'Blocked by browser settings'
+              : !isSupported
+              ? 'Not available in this browser'
+              : 'Get notified even when app is closed'}
+          </p>
+        </div>
+
+        {/* Status pill */}
+        <div
+          className="flex items-center gap-1.5 px-2.5 py-1 rounded-full shrink-0"
+          style={{ background: `${statusCfg.dotColor}18` }}
+        >
+          <div className="w-1.5 h-1.5 rounded-full" style={{ background: statusCfg.dotColor }} />
+          <span className="text-[11px] font-semibold" style={{ color: statusCfg.color }}>
+            {statusCfg.label}
+          </span>
+        </div>
+      </div>
+
+      {/* ── Content ── */}
+      <div className="px-4 pb-4 space-y-3" style={{ borderTop: '1px solid rgba(255,255,255,0.04)' }}>
+        {/* Not supported info */}
+        {!isSupported && (
+          <div className="p-3 rounded-xl flex items-start gap-3 mt-1" style={{ background: 'rgba(255,255,255,0.03)' }}>
+            <Shield size={14} className="mt-0.5 shrink-0" style={{ color: colors.textSecondary }} />
+            <p className="text-[11px] leading-relaxed" style={{ color: colors.textSecondary }}>
+              Requires Chrome, Edge, Firefox, or Safari 16.4+. Try a supported browser.
             </p>
           </div>
-        </div>
-        <motion.button
-          onClick={isSubscribed ? onDisable : onEnable}
-          disabled={loading}
-          className="px-4 py-2 rounded-xl text-sm font-semibold flex items-center gap-2"
-          style={{
-            background: isSubscribed ? 'rgba(255, 255, 255, 0.05)' : gradients.primary,
-            color: isSubscribed ? colors.textSecondary : 'white',
-          }}
-          whileHover={{ scale: 1.02 }}
-          whileTap={{ scale: 0.98 }}
-        >
-          {loading ? (
-            <Loader2 className="w-4 h-4 animate-spin" />
-          ) : isSubscribed ? (
-            <>
-              <Check className="w-4 h-4" style={{ color: colors.accentMint }} />
-              Enabled
-            </>
-          ) : (
-            'Enable'
-          )}
-        </motion.button>
-      </div>
-      
-      {!isSubscribed && (
-        <div 
-          className="mt-3 p-3 rounded-lg flex items-start gap-2"
-          style={{ background: 'rgba(255, 255, 255, 0.03)' }}
-        >
-          <Info className="w-4 h-4 shrink-0 mt-0.5" style={{ color: colors.accentBlue }} />
-          <p className="text-xs" style={{ color: colors.textSecondary }}>
-            Receive instant push notifications when your payments are approved, rejected, or waived - even when the app is closed!
-          </p>
-        </div>
-      )}
+        )}
 
-      {isSubscribed && (
-        <div className="mt-3 flex items-center justify-between">
-          <p className="text-xs" style={{ color: colors.textSecondary }}>
-            Test if notifications work on your device
-          </p>
-          <motion.button
-            onClick={handleTestPush}
-            disabled={testing}
-            className="px-3 py-1.5 rounded-lg text-xs font-medium flex items-center gap-1.5"
-            style={{ 
-              background: `${colors.accentBlue}20`, 
-              color: colors.accentBlue,
-              border: `1px solid ${colors.accentBlue}30`
-            }}
-            whileHover={{ scale: 1.02 }}
-            whileTap={{ scale: 0.98 }}
-          >
-            {testing ? (
-              <Loader2 className="w-3 h-3 animate-spin" />
-            ) : (
-              <Bell className="w-3 h-3" />
+        {/* Permission denied steps */}
+        {isSupported && permission === 'denied' && (
+          <div className="p-3 rounded-xl space-y-2 mt-1" style={{ background: 'rgba(239,68,68,0.05)' }}>
+            <p className="text-[11px] font-medium" style={{ color: '#fca5a5' }}>To unblock notifications:</p>
+            <div className="space-y-1">
+              {['Click the lock icon in your address bar', 'Set "Notifications" to Allow', 'Refresh this page'].map((step, i) => (
+                <div key={i} className="flex items-center gap-2">
+                  <span className="w-4 h-4 rounded-full flex items-center justify-center text-[9px] font-bold shrink-0"
+                    style={{ background: 'rgba(239,68,68,0.12)', color: '#fca5a5' }}>{i + 1}</span>
+                  <span className="text-[11px]" style={{ color: colors.textSecondary }}>{step}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Enable / Disable + Test */}
+        {isSupported && permission !== 'denied' && (
+          <div className="flex items-center gap-2 mt-1">
+            {/* Main action button */}
+            <motion.button
+              onClick={isSubscribed ? onDisable : onEnable}
+              disabled={loading}
+              className="flex-1 py-2.5 rounded-xl text-sm font-semibold flex items-center justify-center gap-2"
+              style={{
+                background: isSubscribed ? 'rgba(255,255,255,0.04)' : gradients.primary,
+                color: isSubscribed ? colors.textSecondary : 'white',
+                border: isSubscribed ? '1px solid rgba(255,255,255,0.08)' : 'none',
+              }}
+              whileHover={{ scale: 1.01 }}
+              whileTap={{ scale: 0.98 }}
+            >
+              {loading ? (
+                <Loader2 className="w-4 h-4 animate-spin" />
+              ) : isSubscribed ? (
+                <X className="w-4 h-4" />
+              ) : (
+                <BellRing className="w-4 h-4" />
+              )}
+              <span>{loading ? (isSubscribed ? 'Disabling...' : 'Enabling...') : isSubscribed ? 'Disable' : 'Enable'}</span>
+            </motion.button>
+
+            {/* Test button (when subscribed) */}
+            {isSubscribed && (
+              <motion.button
+                onClick={handleTestPush}
+                disabled={testing}
+                className="px-4 py-2.5 rounded-xl text-sm font-medium flex items-center gap-2 shrink-0"
+                style={{
+                  background: 'rgba(59,130,246,0.08)',
+                  color: '#60a5fa',
+                  border: '1px solid rgba(59,130,246,0.1)',
+                }}
+                whileHover={{ scale: 1.01 }}
+                whileTap={{ scale: 0.98 }}
+              >
+                {testing ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Send className="w-3.5 h-3.5" />}
+                <span>Test</span>
+              </motion.button>
             )}
-            Test
-          </motion.button>
-        </div>
-      )}
-    </div>
+          </div>
+        )}
+      </div>
+    </motion.div>
   );
 }
 

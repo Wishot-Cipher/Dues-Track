@@ -325,9 +325,31 @@ class PushNotificationService {
         body: JSON.stringify({ userId }),
       });
 
-      const result = await res.json();
-      console.log('🔔 Test push result:', result);
-      return result;
+      // In local dev (Vite), serverless endpoints don't exist — handle gracefully
+      if (res.status === 404 || res.status === 500) {
+        const isDev = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+        return {
+          ok: false,
+          message: isDev
+            ? 'Test push is only available in production. Deploy to Vercel to test.'
+            : `Server error (${res.status}). Check Vercel function logs.`,
+        };
+      }
+
+      // Safely parse response — may be empty or non-JSON
+      const text = await res.text();
+      if (!text) {
+        return { ok: false, message: 'Empty response from server' };
+      }
+
+      try {
+        const result = JSON.parse(text);
+        console.log('🔔 Test push result:', result);
+        return result;
+      } catch {
+        console.warn('🔔 Test push: non-JSON response:', text.slice(0, 200));
+        return { ok: false, message: 'Server returned an invalid response', details: text.slice(0, 200) };
+      }
     } catch (error) {
       console.error('Test push error:', error);
       return { ok: false, message: 'Failed to call test API', details: error };

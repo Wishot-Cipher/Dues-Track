@@ -311,7 +311,7 @@ export const NotificationCenter = () => {
               animate={{ opacity: 1, y: 0, scale: 1 }}
               exit={{ opacity: 0, y: -10, scale: 0.95 }}
               transition={{ type: 'spring', damping: 25, stiffness: 300 }}
-              className="absolute right-0 top-full mt-3 w-[380px] max-w-[calc(100vw-2rem)] rounded-2xl overflow-hidden z-50"
+              className="fixed top-16 left-3 right-3 sm:left-auto sm:right-4 sm:w-[380px] rounded-2xl overflow-hidden z-50"
               style={{ 
                 background: '#0D0907',
                 border: `1px solid rgba(255, 107, 53, 0.15)`,
@@ -374,7 +374,7 @@ export const NotificationCenter = () => {
 
               {/* Notifications List */}
               <div 
-                className="max-h-[400px] overflow-y-auto custom-scrollbar overscroll-contain"
+                className="max-h-[min(400px,calc(100vh-14rem))] overflow-y-auto custom-scrollbar overscroll-contain"
                 onWheel={(e) => e.stopPropagation()}
               >
                 {loading ? (

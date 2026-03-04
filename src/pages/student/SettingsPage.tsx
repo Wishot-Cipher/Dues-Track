@@ -1,12 +1,13 @@
 ﻿import { useState, useEffect, useCallback, useRef } from 'react';
-import { motion } from 'framer-motion';
-import { 
+import { motion, AnimatePresence } from 'framer-motion';
+import {
   ArrowLeft,
   Bell,
   Shield,
   Key,
   Palette,
   ChevronRight,
+  ChevronDown,
   CheckCircle2,
   Zap,
   User,
@@ -14,6 +15,7 @@ import {
   Eye,
   Sliders,
   Loader2,
+  ShieldCheck,
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useAppNav } from '@/hooks/useAppNav';
@@ -365,6 +367,7 @@ export default function SettingsPage() {
   const [visibilitySettings, setVisibilitySettings] = useState<ExpenseVisibilitySetting[]>([]);
   const [adminLoading, setAdminLoading] = useState(false);
   const [togglingKeys, setTogglingKeys] = useState<Set<string>>(new Set());
+  const [adminOpen, setAdminOpen] = useState<{ features: boolean; visibility: boolean }>({ features: false, visibility: false });
 
   const loadAdminSettings = useCallback(async () => {
     if (!admin) return;
@@ -585,133 +588,173 @@ export default function SettingsPage() {
               onTestSound={handleSoundTest}
             />
 
-            {/* Push Notifications - Always Visible */}
-            <div className="space-y-2">
-              <h3 className="text-sm font-semibold px-1" style={{ color: colors.textSecondary }}>
-                Push Notifications
-              </h3>
+            {/* Push Notifications */}
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.15 }}
+            >
               <PushNotificationPrompt mode="settings" />
-            </div>
+            </motion.div>
 
             {/* Settings Sections */}
             {sections.map((section, index) => (
               <SettingSectionCard key={section.id} section={section} index={index} />
             ))}
 
-            {/* ═══════════ Admin: Feature Toggles ═══════════ */}
+            {/* ═══════════ Admin Controls ═══════════ */}
             {admin && (
               <motion.div
                 initial={{ opacity: 0, y: 20 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ delay: 0.35 }}
               >
-                <div className="flex items-center gap-2 mb-3 px-1">
-                  <Sliders size={14} style={{ color: colors.primary }} />
-                  <h3 className="text-sm font-semibold" style={{ color: colors.primary }}>
-                    Admin — Member Features
-                  </h3>
-                </div>
                 <div
                   className="rounded-2xl overflow-hidden"
                   style={{
                     background: 'rgba(255, 255, 255, 0.03)',
-                    backdropFilter: 'blur(10px)',
-                    border: '1px solid rgba(255, 255, 255, 0.1)',
+                    backdropFilter: 'blur(12px)',
+                    border: '1px solid rgba(255, 255, 255, 0.08)',
                   }}
                 >
-                  <div
-                    className="px-4 py-3 flex items-center gap-3"
-                    style={{ borderBottom: `1px solid rgba(255,255,255,0.06)`, background: 'rgba(255,107,53,0.05)' }}
-                  >
-                    <div className="w-8 h-8 rounded-lg flex items-center justify-center" style={{ background: `${colors.primary}20` }}>
-                      <Sliders size={16} style={{ color: colors.primary }} />
+                  {/* Top accent gradient line */}
+                  <div className="h-0.5" style={{ background: 'linear-gradient(90deg, #FF6B35, #8B5CF6, #22C55E)' }} />
+
+                  {/* Header */}
+                  <div className="px-5 py-4 flex items-center gap-3">
+                    <div
+                      className="w-10 h-10 rounded-xl flex items-center justify-center"
+                      style={{ background: 'linear-gradient(135deg, rgba(255,107,53,0.12), rgba(139,92,246,0.08))' }}
+                    >
+                      <ShieldCheck size={18} style={{ color: colors.primary }} />
                     </div>
-                    <div>
-                      <p className="text-sm font-semibold text-white">Member Features</p>
-                      <p className="text-[11px]" style={{ color: colors.textTertiary }}>Control what members can see and do</p>
+                    <div className="flex-1">
+                      <h3 className="text-sm font-semibold text-white">Admin Controls</h3>
+                      <p className="text-[11px] mt-0.5" style={{ color: colors.textSecondary }}>
+                        Manage features & visibility for members
+                      </p>
                     </div>
+                    {!adminLoading && (
+                      <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full" style={{ background: 'rgba(139,92,246,0.1)' }}>
+                        <div className="w-1.5 h-1.5 rounded-full" style={{ background: '#8B5CF6' }} />
+                        <span className="text-[11px] font-semibold" style={{ color: '#A78BFA' }}>Admin</span>
+                      </div>
+                    )}
                   </div>
+
                   {adminLoading ? (
-                    <div className="p-6 flex items-center justify-center">
+                    <div className="p-8 flex items-center justify-center">
                       <Loader2 size={20} className="animate-spin" style={{ color: colors.primary }} />
                     </div>
                   ) : (
-                    <div className="divide-y" style={{ borderColor: 'rgba(255,255,255,0.04)' }}>
-                      {featureSettings.map((feature) => (
-                        <div key={feature.feature_key} className="px-4 py-3 flex items-center justify-between gap-3">
-                          <div className="flex-1 min-w-0">
-                            <p className="text-sm font-medium text-white">{feature.display_name}</p>
-                            {feature.description && (
-                              <p className="text-xs mt-0.5" style={{ color: colors.textTertiary }}>{feature.description}</p>
-                            )}
+                    <div className="px-4 pb-4 flex flex-col gap-2">
+                      {/* ── Member Features (collapsible) ── */}
+                      <div
+                        className="rounded-xl overflow-hidden"
+                        style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.04)' }}
+                      >
+                        <button
+                          type="button"
+                          onClick={() => setAdminOpen(p => ({ ...p, features: !p.features }))}
+                          className="w-full px-4 py-2.5 flex items-center gap-2 transition-colors hover:bg-white/2"
+                        >
+                          <div className="w-6 h-6 rounded-lg flex items-center justify-center" style={{ background: `${colors.primary}12` }}>
+                            <Sliders size={12} style={{ color: colors.primary }} />
                           </div>
-                          <ToggleSwitch
-                            enabled={feature.is_enabled}
-                            onChange={(v) => handleToggleFeature(feature.feature_key, v)}
-                            disabled={togglingKeys.has(feature.feature_key)}
+                          <span className="text-xs font-semibold text-white">Member Features</span>
+                          <span className="text-[10px] px-1.5 py-0.5 rounded-md ml-auto" style={{ background: 'rgba(255,107,53,0.08)', color: colors.primary }}>
+                            {featureSettings.filter(f => f.is_enabled).length}/{featureSettings.length}
+                          </span>
+                          <ChevronDown
+                            size={14}
+                            className="transition-transform duration-200"
+                            style={{ color: colors.textSecondary, transform: adminOpen.features ? 'rotate(180deg)' : 'rotate(0deg)' }}
                           />
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              </motion.div>
-            )}
+                        </button>
+                        <AnimatePresence initial={false}>
+                          {adminOpen.features && (
+                            <motion.div
+                              initial={{ height: 0, opacity: 0 }}
+                              animate={{ height: 'auto', opacity: 1 }}
+                              exit={{ height: 0, opacity: 0 }}
+                              transition={{ duration: 0.2, ease: 'easeInOut' }}
+                              className="overflow-hidden"
+                            >
+                              <div style={{ borderTop: '1px solid rgba(255,255,255,0.04)' }}>
+                                {featureSettings.map((feature) => (
+                                  <div key={feature.feature_key} className="px-4 py-2.5 flex items-center justify-between gap-3" style={{ borderBottom: '1px solid rgba(255,255,255,0.03)' }}>
+                                    <div className="flex-1 min-w-0">
+                                      <p className="text-[13px] font-medium text-white">{feature.display_name}</p>
+                                      {feature.description && (
+                                        <p className="text-[11px] mt-0.5" style={{ color: colors.textTertiary }}>{feature.description}</p>
+                                      )}
+                                    </div>
+                                    <ToggleSwitch
+                                      enabled={feature.is_enabled}
+                                      onChange={(v) => handleToggleFeature(feature.feature_key, v)}
+                                      disabled={togglingKeys.has(feature.feature_key)}
+                                    />
+                                  </div>
+                                ))}
+                              </div>
+                            </motion.div>
+                          )}
+                        </AnimatePresence>
+                      </div>
 
-            {/* ═══════════ Admin: Expense Visibility ═══════════ */}
-            {admin && (
-              <motion.div
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: 0.4 }}
-              >
-                <div className="flex items-center gap-2 mb-3 px-1">
-                  <Eye size={14} style={{ color: colors.accentMint }} />
-                  <h3 className="text-sm font-semibold" style={{ color: colors.accentMint }}>
-                    Admin — Expense Visibility
-                  </h3>
-                </div>
-                <div
-                  className="rounded-2xl overflow-hidden"
-                  style={{
-                    background: 'rgba(255, 255, 255, 0.03)',
-                    backdropFilter: 'blur(10px)',
-                    border: '1px solid rgba(255, 255, 255, 0.1)',
-                  }}
-                >
-                  <div
-                    className="px-4 py-3 flex items-center gap-3"
-                    style={{ borderBottom: `1px solid rgba(255,255,255,0.06)`, background: 'rgba(34,197,94,0.05)' }}
-                  >
-                    <div className="w-8 h-8 rounded-lg flex items-center justify-center" style={{ background: `${colors.accentMint}20` }}>
-                      <Eye size={16} style={{ color: colors.accentMint }} />
-                    </div>
-                    <div>
-                      <p className="text-sm font-semibold text-white">Expense Visibility</p>
-                      <p className="text-[11px]" style={{ color: colors.textTertiary }}>Control what financial data members can see</p>
-                    </div>
-                  </div>
-                  {adminLoading ? (
-                    <div className="p-6 flex items-center justify-center">
-                      <Loader2 size={20} className="animate-spin" style={{ color: colors.accentMint }} />
-                    </div>
-                  ) : (
-                    <div className="divide-y" style={{ borderColor: 'rgba(255,255,255,0.04)' }}>
-                      {visibilitySettings.map((setting) => (
-                        <div key={setting.setting_key} className="px-4 py-3 flex items-center justify-between gap-3">
-                          <div className="flex-1 min-w-0">
-                            <p className="text-sm font-medium text-white">{setting.display_name}</p>
-                            {setting.description && (
-                              <p className="text-xs mt-0.5" style={{ color: colors.textTertiary }}>{setting.description}</p>
-                            )}
+                      {/* ── Expense Visibility (collapsible) ── */}
+                      <div
+                        className="rounded-xl overflow-hidden"
+                        style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.04)' }}
+                      >
+                        <button
+                          type="button"
+                          onClick={() => setAdminOpen(p => ({ ...p, visibility: !p.visibility }))}
+                          className="w-full px-4 py-2.5 flex items-center gap-2 transition-colors hover:bg-white/2"
+                        >
+                          <div className="w-6 h-6 rounded-lg flex items-center justify-center" style={{ background: `${colors.accentMint}12` }}>
+                            <Eye size={12} style={{ color: colors.accentMint }} />
                           </div>
-                          <ToggleSwitch
-                            enabled={setting.is_visible}
-                            onChange={(v) => handleToggleVisibility(setting.setting_key, v)}
-                            disabled={togglingKeys.has(setting.setting_key)}
+                          <span className="text-xs font-semibold text-white">Expense Visibility</span>
+                          <span className="text-[10px] px-1.5 py-0.5 rounded-md ml-auto" style={{ background: 'rgba(34,197,94,0.08)', color: colors.accentMint }}>
+                            {visibilitySettings.filter(v => v.is_visible).length}/{visibilitySettings.length}
+                          </span>
+                          <ChevronDown
+                            size={14}
+                            className="transition-transform duration-200"
+                            style={{ color: colors.textSecondary, transform: adminOpen.visibility ? 'rotate(180deg)' : 'rotate(0deg)' }}
                           />
-                        </div>
-                      ))}
+                        </button>
+                        <AnimatePresence initial={false}>
+                          {adminOpen.visibility && (
+                            <motion.div
+                              initial={{ height: 0, opacity: 0 }}
+                              animate={{ height: 'auto', opacity: 1 }}
+                              exit={{ height: 0, opacity: 0 }}
+                              transition={{ duration: 0.2, ease: 'easeInOut' }}
+                              className="overflow-hidden"
+                            >
+                              <div style={{ borderTop: '1px solid rgba(255,255,255,0.04)' }}>
+                                {visibilitySettings.map((setting) => (
+                                  <div key={setting.setting_key} className="px-4 py-2.5 flex items-center justify-between gap-3" style={{ borderBottom: '1px solid rgba(255,255,255,0.03)' }}>
+                                    <div className="flex-1 min-w-0">
+                                      <p className="text-[13px] font-medium text-white">{setting.display_name}</p>
+                                      {setting.description && (
+                                        <p className="text-[11px] mt-0.5" style={{ color: colors.textTertiary }}>{setting.description}</p>
+                                      )}
+                                    </div>
+                                    <ToggleSwitch
+                                      enabled={setting.is_visible}
+                                      onChange={(v) => handleToggleVisibility(setting.setting_key, v)}
+                                      disabled={togglingKeys.has(setting.setting_key)}
+                                    />
+                                  </div>
+                                ))}
+                              </div>
+                            </motion.div>
+                          )}
+                        </AnimatePresence>
+                      </div>
                     </div>
                   )}
                 </div>
