@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/no-unused-vars */
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { createClient } from '@supabase/supabase-js'
 
@@ -6,10 +5,12 @@ const supabaseUrl = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL ||
 const serviceRole = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SERVICE_ROLE
 
 export default async function handler(req: any, res: any) {
+  res.setHeader('Content-Type', 'application/json')
+
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' })
 
   if (!supabaseUrl || !serviceRole) {
-    return res.status(500).json({ error: 'Missing Supabase admin credentials on server (SUPABASE_SERVICE_ROLE_KEY).' })
+    return res.status(500).json({ error: 'Missing Supabase admin credentials on server.' })
   }
 
   const supabaseAdmin = createClient(supabaseUrl, serviceRole)
@@ -22,7 +23,7 @@ export default async function handler(req: any, res: any) {
     // Verify token
     const { data: resetRow, error: tokenError } = await supabaseAdmin
       .from('password_reset_tokens')
-      .select('id, student_id, used, expires_at')
+      .select('id, member_id, used, expires_at')
       .eq('token', token)
       .maybeSingle()
 
@@ -33,15 +34,20 @@ export default async function handler(req: any, res: any) {
     if (resetRow.used) return res.status(400).json({ error: 'Reset link already used' })
     if (new Date(resetRow.expires_at) < new Date()) return res.status(400).json({ error: 'Reset link expired' })
 
-    // Use a server-side RPC to set password with pgcrypto (keeps format consistent)
-    const { data: rpcData, error: rpcError } = await supabaseAdmin.rpc('admin_reset_student_password', {
-      p_student_id: resetRow.student_id,
+    // Use reset_member_password RPC to hash with pgcrypto and update
+    const { data: rpcData, error: rpcError } = await supabaseAdmin.rpc('reset_member_password', {
+      p_member_id: resetRow.member_id,
       p_new_password: newPassword,
     })
 
     if (rpcError) {
       console.error('RPC error setting password:', rpcError)
       return res.status(500).json({ error: 'Failed to update password' })
+    }
+
+    // Check RPC result
+    if (rpcData && rpcData.success === false) {
+      return res.status(400).json({ error: rpcData.error || 'Failed to reset password' })
     }
 
     // Mark token used

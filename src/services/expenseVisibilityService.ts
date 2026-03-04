@@ -1,4 +1,5 @@
 import { supabase } from '@/config/supabase'
+import { getOrgScope } from '@/utils/orgScope'
 
 export interface ExpenseVisibilitySetting {
   id: string
@@ -10,107 +11,110 @@ export interface ExpenseVisibilitySetting {
   updated_by: string | null
 }
 
+// Default visibility definitions
+const DEFAULT_VISIBILITY: Record<string, { display_name: string; description: string; default_visible: boolean }> = {
+  show_total_collected: { display_name: 'Total Collected', description: 'Show total amount collected', default_visible: true },
+  show_total_spent: { display_name: 'Total Spent', description: 'Show total amount spent on expenses', default_visible: true },
+  show_remaining_balance: { display_name: 'Remaining Balance', description: 'Show remaining class balance', default_visible: true },
+  show_expense_categories: { display_name: 'Expense Categories', description: 'Show expense category breakdown', default_visible: true },
+  show_recent_expenses: { display_name: 'Recent Expenses', description: 'Show recent expense entries', default_visible: true },
+  show_budget_usage: { display_name: 'Budget Usage', description: 'Show budget usage charts', default_visible: true },
+}
+
 class ExpenseVisibilityService {
+  private getOrgId(): string | null {
+    const scope = getOrgScope()
+    if (scope?.orgId) return scope.orgId
+    try {
+      const orgId = localStorage.getItem('pvx_org_id')
+      if (orgId) return orgId
+    } catch { /* ignore */ }
+    return null
+  }
+
   /**
-   * Get all expense visibility settings (admin view)
+   * Read visibility flags from organization_settings.custom_settings JSONB.
+   * Stored under the key "expense_visibility".
    */
-  async getAllSettings(): Promise<ExpenseVisibilitySetting[]> {
-    // console.log('expenseVisibilityService: Fetching all settings...')
+  private async getVisibilityMap(): Promise<Record<string, boolean>> {
+    const orgId = this.getOrgId()
+    if (!orgId) return {}
+
     const { data, error } = await supabase
-      .from('expense_visibility_settings')
-      .select('*')
-      .order('display_name', { ascending: true })
+      .from('organization_settings')
+      .select('custom_settings')
+      .eq('organization_id', orgId)
+      .maybeSingle()
 
     if (error) {
       console.error('expenseVisibilityService: Error fetching settings:', error)
-      return []
+      return {}
     }
 
-    // console.log('expenseVisibilityService: Fetched settings:', data)
-    return data || []
+    const customSettings = (data?.custom_settings as Record<string, unknown>) || {}
+    return (customSettings.expense_visibility as Record<string, boolean>) || {}
   }
 
-  /**
-   * Get only visible settings (student view)
-   */
+  async getAllSettings(): Promise<ExpenseVisibilitySetting[]> {
+    const visMap = await this.getVisibilityMap()
+
+    return Object.entries(DEFAULT_VISIBILITY).map(([key, def]) => ({
+      id: key,
+      setting_key: key,
+      is_visible: visMap[key] ?? def.default_visible,
+      display_name: def.display_name,
+      description: def.description,
+      updated_at: new Date().toISOString(),
+      updated_by: null,
+    }))
+  }
+
   async getVisibleSettings(): Promise<string[]> {
-    const { data, error } = await supabase
-      .from('expense_visibility_settings')
-      .select('setting_key')
-      .eq('is_visible', true)
+    const visMap = await this.getVisibilityMap()
 
-    if (error) {
-      console.error('Error fetching visible expense settings:', error)
-      // Return all settings by default if table doesn't exist yet
-      return [
-        'show_total_collected',
-        'show_total_spent', 
-        'show_remaining_balance',
-        'show_expense_categories',
-        'show_recent_expenses',
-        'show_budget_usage'
-      ]
-    }
-
-    return data?.map(s => s.setting_key) || []
+    return Object.entries(DEFAULT_VISIBILITY)
+      .filter(([key, def]) => visMap[key] ?? def.default_visible)
+      .map(([key]) => key)
   }
 
-  /**
-   * Check if a specific setting is visible
-   */
   async isVisible(settingKey: string): Promise<boolean> {
-    const { data, error } = await supabase
-      .from('expense_visibility_settings')
-      .select('is_visible')
-      .eq('setting_key', settingKey)
-      .single()
-
-    if (error) {
-      console.error(`Error checking visibility for ${settingKey}:`, error)
-      return true // Default to visible if error
-    }
-
-    return data?.is_visible || false
+    const visMap = await this.getVisibilityMap()
+    const def = DEFAULT_VISIBILITY[settingKey]
+    return visMap[settingKey] ?? def?.default_visible ?? true
   }
 
-  /**
-   * Toggle setting visibility (admin only)
-   */
-  async toggleVisibility(settingKey: string, isVisible: boolean, studentId: string): Promise<boolean> {
-    // First, get the admin ID from the student ID
-    const { data: adminData, error: adminError } = await supabase
-      .from('admins')
-      .select('id')
-      .eq('student_id', studentId)
-      .single()
-
-    if (adminError || !adminData) {
-      console.error(`Error finding admin for student ${studentId}:`, adminError)
-      // Still try to update without updated_by (it's nullable)
-      const { error } = await supabase
-        .from('expense_visibility_settings')
-        .update({ 
-          is_visible: isVisible,
-          updated_at: new Date().toISOString()
-        })
-        .eq('setting_key', settingKey)
-
-      if (error) {
-        console.error(`Error toggling visibility for ${settingKey}:`, error)
-        return false
-      }
-      return true
+  async toggleVisibility(settingKey: string, isVisible: boolean, _memberId?: string): Promise<boolean> { // eslint-disable-line @typescript-eslint/no-unused-vars
+    const orgId = this.getOrgId()
+    if (!orgId) {
+      console.error('expenseVisibilityService: No org scope')
+      return false
     }
 
-    // Update with admin ID
+    // Read current custom_settings
+    const { data: settingsRow, error: fetchError } = await supabase
+      .from('organization_settings')
+      .select('custom_settings')
+      .eq('organization_id', orgId)
+      .maybeSingle()
+
+    if (fetchError) {
+      console.error(`Error fetching settings for toggle ${settingKey}:`, fetchError)
+      return false
+    }
+
+    const customSettings = (settingsRow?.custom_settings as Record<string, unknown>) || {}
+    const visMap = (customSettings.expense_visibility as Record<string, boolean>) || {}
+    visMap[settingKey] = isVisible
+
+    const updatedCustomSettings = { ...customSettings, expense_visibility: visMap }
+
     const { error } = await supabase
-      .from('expense_visibility_settings')
-      .update({ 
-        is_visible: isVisible,
-        updated_by: adminData.id,
-        updated_at: new Date().toISOString()
+      .from('organization_settings')
+      .update({
+        custom_settings: updatedCustomSettings,
+        updated_at: new Date().toISOString(),
       })
-      .eq('setting_key', settingKey)
+      .eq('organization_id', orgId)
 
     if (error) {
       console.error(`Error toggling visibility for ${settingKey}:`, error)
@@ -120,16 +124,46 @@ class ExpenseVisibilityService {
     return true
   }
 
-  /**
-   * Update multiple settings in bulk (admin only)
-   */
   async updateBulkSettings(
     updates: Array<{ setting_key: string; is_visible: boolean }>,
-    studentId: string
+    _memberId?: string // eslint-disable-line @typescript-eslint/no-unused-vars
   ): Promise<boolean> {
     try {
+      const orgId = this.getOrgId()
+      if (!orgId) return false
+
+      // Read current custom_settings
+      const { data: settingsRow, error: fetchError } = await supabase
+        .from('organization_settings')
+        .select('custom_settings')
+        .eq('organization_id', orgId)
+        .maybeSingle()
+
+      if (fetchError) {
+        console.error('Error fetching settings for bulk update:', fetchError)
+        return false
+      }
+
+      const customSettings = (settingsRow?.custom_settings as Record<string, unknown>) || {}
+      const visMap = (customSettings.expense_visibility as Record<string, boolean>) || {}
+
       for (const update of updates) {
-        await this.toggleVisibility(update.setting_key, update.is_visible, studentId)
+        visMap[update.setting_key] = update.is_visible
+      }
+
+      const updatedCustomSettings = { ...customSettings, expense_visibility: visMap }
+
+      const { error } = await supabase
+        .from('organization_settings')
+        .update({
+          custom_settings: updatedCustomSettings,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('organization_id', orgId)
+
+      if (error) {
+        console.error('Error updating bulk settings:', error)
+        return false
       }
       return true
     } catch (error) {

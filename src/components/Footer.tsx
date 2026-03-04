@@ -67,7 +67,7 @@ export default function Footer() {
 
           {/* Copyright + Version */}
           <p className="text-[10px] sm:text-xs order-3 sm:order-2" style={{ color: colors.textSecondary }}>
-            © {new Date().getFullYear()} Class Dues Tracker · <span style={{ color: colors.primary }}>v2.0</span>
+            © {new Date().getFullYear()} Payvexo · <span style={{ color: colors.primary }}>v2.0</span>
           </p>
         </div>
       </div>

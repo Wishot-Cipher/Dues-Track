@@ -20,6 +20,7 @@ import {
   UserCheck
 } from 'lucide-react';
 import { formatCurrency } from '@/utils/formatters';
+import { getOrgScope } from '@/utils/orgScope';
 
 interface Student {
   id: string;
@@ -62,25 +63,29 @@ export default function PayForOthersModal({
     try {
       setLoading(true);
 
+      const scope = getOrgScope();
+
       // Get all students EXCEPT the current user (who is the one paying)
-      const { data: allStudents, error: studentsError } = await supabase
-        .from('students')
+      let qStudents = supabase
+        .from('organization_members')
         .select('id, full_name, reg_number, level')
         .neq('id', currentStudentId) // Exclude current user from the list
         .order('full_name');
+      if (scope) qStudents = qStudents.eq('organization_id', scope.orgId);
+      const { data: allStudents, error: studentsError } = await qStudents;
 
       if (studentsError) throw studentsError;
 
       // Get students who already paid for this payment type
-      const { data: paidPayments, error: paymentsError } = await supabase
+      let qPaid = supabase
         .from('payments')
-        .select('student_id')
+        .select('member_id')
         .eq('payment_type_id', paymentTypeId)
         .eq('status', 'approved');
+      if (scope) qPaid = qPaid.eq('organization_id', scope.orgId);
+      const { data: paidPayments } = await qPaid;
 
-      if (paymentsError) throw paymentsError;
-
-      const paidStudentIds = new Set(paidPayments?.map(p => p.student_id) || []);
+      const paidStudentIds = new Set(paidPayments?.map(p => p.member_id) || []);
 
       // Filter out students who already paid
       const unpaidStudents = allStudents?.filter(s => !paidStudentIds.has(s.id)) || [];
@@ -100,11 +105,13 @@ export default function PayForOthersModal({
 
       let paymentsForType: any[] = [];
       if (studentIds.length > 0) {
-        const { data: paymentsData } = await supabase
+        let qPaymentsForType = supabase
           .from('payments')
-          .select('student_id, amount, status, transaction_ref')
+          .select('member_id, amount, status, transaction_ref')
           .eq('payment_type_id', paymentTypeId)
-          .in('student_id', studentIds as string[]);
+          .in('member_id', studentIds as string[]);
+        if (scope) qPaymentsForType = qPaymentsForType.eq('organization_id', scope.orgId);
+        const { data: paymentsData } = await qPaymentsForType;
 
         paymentsForType = paymentsData || [];
       }
@@ -115,7 +122,7 @@ export default function PayForOthersModal({
       const perDay = Number(paymentType?.late_fee_per_day || 0);
 
       const studentsWithOutstanding = unpaidStudents.map(s => {
-        const studentPayments = paymentsForType.filter(p => p.student_id === s.id) || [];
+        const studentPayments = paymentsForType.filter(p => p.member_id === s.id) || [];
         const paidForType = studentPayments
           .filter((p: any) => p.status === 'approved' && !p.transaction_ref?.startsWith('WAIVED-'))
           .reduce((sum: number, p: any) => sum + Number(p.amount || 0), 0);
@@ -151,7 +158,7 @@ export default function PayForOthersModal({
       setStudents(studentsWithOutstanding);
       // Compute current user's outstanding if applicable
       if (!currentUserHasPaid) {
-        const userPayments = paymentsForType.filter(p => p.student_id === currentStudentId) || [];
+        const userPayments = paymentsForType.filter(p => p.member_id === currentStudentId) || [];
         const paidForCurrent = userPayments
           .filter((p: any) => p.status === 'approved' && !p.transaction_ref?.startsWith('WAIVED-'))
           .reduce((sum: number, p: any) => sum + Number(p.amount || 0), 0);
@@ -640,7 +647,7 @@ export default function PayForOthersModal({
                             <span className="text-white font-medium">Total Amount</span>
                               <div className="flex items-center gap-2">
                                 <DollarSign className="w-6 h-6 text-white" />
-                              <span className="text-3xl font-bold text-white">
+                              <span className="text-2xl sm:text-3xl font-bold text-white truncate">
                                 {formatCurrency(totalAmount)}
                               </span>
                             </div>
@@ -693,7 +700,7 @@ export default function PayForOthersModal({
                 <motion.button
                   onClick={handleProceed}
                   disabled={selectedStudents.length === 0 && !includeSelf}
-                  className="flex items-center gap-3 px-8 py-3 rounded-xl font-semibold text-white transition-all disabled:opacity-40 disabled:cursor-not-allowed"
+                  className="flex items-center gap-2 sm:gap-3 px-5 sm:px-8 py-3 rounded-xl font-semibold text-white transition-all disabled:opacity-40 disabled:cursor-not-allowed"
                   style={{ 
                     background: gradients.primary,
                     boxShadow: `0 4px 20px ${colors.primary}40`

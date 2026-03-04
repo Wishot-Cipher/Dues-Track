@@ -223,17 +223,17 @@ export default function PaymentSubmissionFlow({
       </div>
 
       {/* Progress Steps */}
-      <div className="flex items-center justify-between px-2">
+      <div className="flex items-center justify-between px-0 sm:px-2 overflow-hidden">
         {steps.map((step, index) => {
           const Icon = step.icon;
           const isActive = currentStep === step.id;
           const isCompleted = currentStep > step.id;
 
           return (
-            <div key={step.id} className="flex items-center">
-              <div className="flex flex-col items-center">
+            <div key={step.id} className="flex items-center min-w-0">
+              <div className="flex flex-col items-center min-w-0">
                 <motion.div
-                  className="w-10 h-10 rounded-full flex items-center justify-center relative"
+                  className="w-8 h-8 sm:w-10 sm:h-10 rounded-full flex items-center justify-center relative shrink-0"
                   style={{
                     background: isCompleted
                       ? colors.statusPaid
@@ -246,13 +246,13 @@ export default function PaymentSubmissionFlow({
                   transition={{ duration: 0.3 }}
                 >
                   {isCompleted ? (
-                    <Check className="w-5 h-5 text-white" />
+                    <Check className="w-4 h-4 sm:w-5 sm:h-5 text-white" />
                   ) : (
-                    <Icon className="w-5 h-5" style={{ color: isActive ? 'white' : colors.textSecondary }} />
+                    <Icon className="w-4 h-4 sm:w-5 sm:h-5" style={{ color: isActive ? 'white' : colors.textSecondary }} />
                   )}
                 </motion.div>
                 <span
-                  className="text-[10px] mt-1.5 font-medium text-center"
+                  className="text-[9px] sm:text-[10px] mt-1 sm:mt-1.5 font-medium text-center truncate max-w-[60px] sm:max-w-none"
                   style={{ color: isActive ? colors.primary : colors.textSecondary }}
                 >
                   {step.title}
@@ -260,7 +260,7 @@ export default function PaymentSubmissionFlow({
               </div>
               {index < steps.length - 1 && (
                 <div
-                  className="w-8 sm:w-12 h-0.5 mx-1"
+                  className="w-5 sm:w-12 h-0.5 mx-0.5 sm:mx-1 shrink-0"
                   style={{
                     background: currentStep > step.id ? colors.statusPaid : 'rgba(255, 255, 255, 0.1)',
                   }}
@@ -282,12 +282,12 @@ export default function PaymentSubmissionFlow({
         animate={{ opacity: 1, y: 0 }}
       >
         <div className="absolute top-0 left-0 w-full h-1" style={{ background: gradients.primary }} />
-        <div className="flex items-center justify-between">
-          <div>
+        <div className="flex items-center justify-between gap-3 min-w-0">
+          <div className="min-w-0">
             <p className="text-xs uppercase tracking-wider" style={{ color: colors.textSecondary }}>
               Total to Pay
             </p>
-            <p className="text-2xl font-bold text-white">{formatCurrency(totalToPay)}</p>
+            <p className="text-xl sm:text-2xl font-bold text-white truncate">{formatCurrency(totalToPay)}</p>
             {accumulatedLateFees > 0 && (
               <p className="text-xs mt-1" style={{ color: colors.warning }}>
                 Includes {formatCurrency(accumulatedLateFees)} in late fees
@@ -359,8 +359,8 @@ export default function PaymentSubmissionFlow({
                       <p className="text-xs uppercase tracking-wider mb-1" style={{ color: colors.primary }}>
                         Account Number
                       </p>
-                      <div className="flex items-center justify-between gap-3">
-                        <p className="text-2xl font-bold tracking-wider text-white">
+                      <div className="flex items-center justify-between gap-2 sm:gap-3">
+                        <p className="text-lg sm:text-2xl font-bold tracking-wider text-white truncate min-w-0">
                           {paymentType.account_number}
                         </p>
                         <motion.button
@@ -396,7 +396,7 @@ export default function PaymentSubmissionFlow({
                       <p className="text-xs uppercase tracking-wider mb-1" style={{ color: colors.accentMint }}>
                         Amount to Transfer
                       </p>
-                      <p className="text-2xl font-bold" style={{ color: colors.accentMint }}>
+                      <p className="text-xl sm:text-2xl font-bold" style={{ color: colors.accentMint }}>
                         {formatCurrency(totalToPay)}
                       </p>
                     </div>
@@ -454,7 +454,7 @@ export default function PaymentSubmissionFlow({
                       <p className="text-xs uppercase tracking-wider mb-1" style={{ color: colors.accentMint }}>
                         Amount to Pay
                       </p>
-                      <p className="text-3xl font-bold" style={{ color: colors.accentMint }}>
+                      <p className="text-2xl sm:text-3xl font-bold" style={{ color: colors.accentMint }}>
                         {formatCurrency(totalToPay)}
                       </p>
                     </div>
@@ -849,7 +849,7 @@ export default function PaymentSubmissionFlow({
       </AnimatePresence>
 
       {/* Navigation Buttons */}
-      <div className="flex gap-3">
+      <div className="flex gap-2 sm:gap-3">
         {currentStep > 1 && (
           <motion.button
             onClick={() => {
@@ -857,7 +857,7 @@ export default function PaymentSubmissionFlow({
               setCurrentStep(currentStep - 1);
             }}
             disabled={submitting}
-            className="flex-1 py-4 px-6 rounded-xl font-semibold disabled:opacity-50 disabled:cursor-not-allowed"
+            className="flex-1 py-3 px-4 sm:py-4 sm:px-6 rounded-xl font-semibold disabled:opacity-50 disabled:cursor-not-allowed min-w-0"
             style={{
               background: 'rgba(255, 255, 255, 0.05)',
               border: '1px solid rgba(255, 255, 255, 0.1)',
@@ -873,7 +873,7 @@ export default function PaymentSubmissionFlow({
         {currentStep < 4 ? (
           <motion.button
             onClick={handleContinue}
-            className="flex-1 py-4 px-6 rounded-xl font-semibold flex items-center justify-center gap-2"
+            className="flex-1 py-3 px-4 sm:py-4 sm:px-6 rounded-xl font-semibold flex items-center justify-center gap-2 min-w-0"
             style={{
               background: canProceedToNext() ? gradients.primary : 'rgba(255, 255, 255, 0.1)',
               color: canProceedToNext() ? 'white' : colors.textSecondary,
@@ -888,7 +888,7 @@ export default function PaymentSubmissionFlow({
           <motion.button
             onClick={handleSubmit}
             disabled={submitting}
-            className="flex-1 py-4 px-6 rounded-xl font-semibold flex items-center justify-center gap-2"
+            className="flex-1 py-3 px-4 sm:py-4 sm:px-6 rounded-xl font-semibold flex items-center justify-center gap-2 min-w-0"
             style={{
               background: gradients.primary,
               boxShadow: `0 4px 20px ${colors.primary}40`,

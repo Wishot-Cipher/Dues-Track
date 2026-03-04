@@ -24,13 +24,13 @@ export default function Logo({ size = 'md', showText = true, variant = 'default'
   return (
     <div className={`flex items-center gap-3 ${className}`}>
       <motion.div
-        className={`${icon} flex items-center justify-center relative flex-shrink-0`}
+        className={`${icon} flex items-center justify-center relative shrink-0`}
         whileHover={{ scale: 1.04 }}
         whileTap={{ scale: 0.96 }}
       >
         <img 
           src={src} 
-          alt="DuesTracker" 
+          alt="Payvexo" 
           className="w-full h-full object-contain"
           draggable={false}
         />
@@ -39,7 +39,7 @@ export default function Logo({ size = 'md', showText = true, variant = 'default'
       {showText && (
         <div className="leading-tight">
           <h1 className={`${text} font-extrabold text-white tracking-tight`}>
-            Dues<span style={{ color: colors.primary }}>Tracker</span>
+            Pay<span style={{ color: colors.primary }}>vexo</span>
           </h1>
           <p className={`${sub} font-medium tracking-widest uppercase`} style={{ color: colors.textTertiary }}>
             Payment Management
@@ -54,7 +54,7 @@ export default function Logo({ size = 'md', showText = true, variant = 'default'
 export function LogoCompact({ className = '' }: { className?: string }) {
   return (
     <motion.div
-      className={`w-12 h-12 sm:w-14 sm:h-14 flex-shrink-0 ${className}`}
+      className={`w-12 h-12 sm:w-14 sm:h-14 shrink-0 ${className}`}
       style={{ 
         minWidth: '48px',
         minHeight: '48px',
@@ -64,7 +64,7 @@ export function LogoCompact({ className = '' }: { className?: string }) {
     >
       <img 
         src={logoLight} 
-        alt="DuesTracker" 
+        alt="Payvexo" 
         width={56}
         height={56}
         className="block w-full h-full object-contain"

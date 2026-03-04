@@ -1,12 +1,16 @@
-import { useState, useEffect, useCallback } from 'react'
+﻿import { useState, useEffect, useCallback } from 'react'
 import { motion } from 'framer-motion'
 import { ArrowLeft, Heart, Building2, Save, Loader2, Settings, Info, ExternalLink, Users, DollarSign, CheckCircle, RefreshCw, Edit3, Sparkles, AlertTriangle } from 'lucide-react'
-import { Link, useNavigate } from 'react-router-dom'
+import { Link } from 'react-router-dom'
+import { useAppNav } from '@/hooks/useAppNav';
 import { colors, gradients } from '@/config/colors'
 import { supabase } from '@/config/supabase'
 import { useToast } from '@/hooks/useToast'
+import { getOrgScope } from '@/utils/orgScope'
 import GlassCard from '@/components/ui/GlassCard'
 import Modal from '@/components/ui/Modal'
+import ProfessionalDropdown from '@/components/ui/ProfessionalDropdown'
+import LoadingSpinner from '@/components/ui/LoadingSpinner'
 
 interface BankDetails {
   bank_name: string
@@ -40,7 +44,7 @@ const NIGERIAN_BANKS = [
 
 export default function DonationSettingsPage() {
   const toast = useToast()
-  const navigate = useNavigate()
+  const { go: navigate, path } = useAppNav();
   
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
@@ -67,17 +71,25 @@ export default function DonationSettingsPage() {
   })
 
   const fetchData = useCallback(async () => {
+    if (!navigator.onLine) return;
     try {
       setLoading(true)
       
+      const scope = getOrgScope();
+      let settingsQ = supabase
+        .from('general_settings')
+        .select('key, value')
+        .in('key', ['donation_bank_details', 'class_info']);
+      if (scope) settingsQ = settingsQ.eq('organization_id', scope.orgId);
+
+      let contribQ = supabase
+        .from('public_payments')
+        .select('amount, status');
+      if (scope) contribQ = contribQ.eq('organization_id', scope.orgId);
+
       const [settingsRes, contributionsRes] = await Promise.all([
-        supabase
-          .from('general_settings')
-          .select('key, value')
-          .in('key', ['donation_bank_details', 'class_info']),
-        supabase
-          .from('public_payments')
-          .select('amount, status')
+        settingsQ,
+        contribQ
       ])
       
       // Process settings
@@ -159,13 +171,16 @@ export default function DonationSettingsPage() {
     
     setSaving(true)
     try {
+      const scope = getOrgScope();
+      const upsertData: Record<string, unknown> = {
+        key: 'donation_bank_details',
+        value: bankDetails,
+        updated_at: new Date().toISOString()
+      };
+      if (scope) upsertData.organization_id = scope.orgId;
       const { error } = await supabase
         .from('general_settings')
-        .upsert({
-          key: 'donation_bank_details',
-          value: bankDetails,
-          updated_at: new Date().toISOString()
-        }, { onConflict: 'key' })
+        .upsert(upsertData, { onConflict: scope ? 'key,organization_id' : 'key' })
       
       if (error) throw error
       
@@ -187,13 +202,16 @@ export default function DonationSettingsPage() {
     
     setSaving(true)
     try {
+      const scope = getOrgScope();
+      const upsertData: Record<string, unknown> = {
+        key: 'class_info',
+        value: classInfo,
+        updated_at: new Date().toISOString()
+      };
+      if (scope) upsertData.organization_id = scope.orgId;
       const { error } = await supabase
         .from('general_settings')
-        .upsert({
-          key: 'class_info',
-          value: classInfo,
-          updated_at: new Date().toISOString()
-        }, { onConflict: 'key' })
+        .upsert(upsertData, { onConflict: scope ? 'key,organization_id' : 'key' })
       
       if (error) throw error
       
@@ -210,11 +228,7 @@ export default function DonationSettingsPage() {
   const formatCurrency = (amount: number) => `₦${amount.toLocaleString()}`
 
   if (loading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center" style={{ background: 'radial-gradient(ellipse at top, #1A0E09 0%, #0F0703 100%)' }}>
-        <Loader2 className="w-8 h-8 animate-spin" style={{ color: colors.primary }} />
-      </div>
-    )
+    return <LoadingSpinner fullScreen text="Loading settings..." />
   }
 
   return (
@@ -250,7 +264,7 @@ export default function DonationSettingsPage() {
 
           {/* Action Buttons - Stack on Mobile */}
           <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
-            <Link to="/admin/contributions" className="flex-1 sm:flex-none">
+            <Link to={path('/admin/contributions')} className="flex-1 sm:flex-none">
               <motion.button 
                 whileHover={{ scale: 1.02 }} 
                 whileTap={{ scale: 0.98 }} 
@@ -262,7 +276,7 @@ export default function DonationSettingsPage() {
               </motion.button>
             </Link>
             
-            <Link to="/contribute" target="_blank" className="flex-1 sm:flex-none">
+            <Link to={path('/contribute')} target="_blank" className="flex-1 sm:flex-none">
               <motion.button 
                 whileHover={{ scale: 1.02 }} 
                 whileTap={{ scale: 0.98 }} 
@@ -357,11 +371,17 @@ export default function DonationSettingsPage() {
                 <div className="space-y-4">
                   <div>
                     <label className="block text-sm font-medium text-white mb-2">Bank Name</label>
-                    <select value={bankDetails.bank_name} onChange={(e) => setBankDetails({ ...bankDetails, bank_name: e.target.value })} className="w-full px-4 py-3 rounded-xl text-white focus:outline-none focus:ring-2 focus:ring-amber-500/50" style={{ background: 'rgba(255, 255, 255, 0.05)', border: '1px solid rgba(255, 255, 255, 0.1)' }}>
-                      {NIGERIAN_BANKS.map(bank => (
-                        <option key={bank} value={bank} style={{ background: '#1a1a1a' }}>{bank}</option>
-                      ))}
-                    </select>
+                    <ProfessionalDropdown
+                      label=""
+                      placeholder="Select bank"
+                      value={bankDetails.bank_name}
+                      onChange={(val) => setBankDetails({ ...bankDetails, bank_name: val as string })}
+                      options={NIGERIAN_BANKS.map(bank => ({ value: bank, label: bank }))}
+                      searchable
+                      variant="outlined"
+                      size="md"
+                      icon={<Building2 className="w-4 h-4" />}
+                    />
                   </div>
                   
                   <div>
@@ -471,10 +491,10 @@ export default function DonationSettingsPage() {
             <div className="text-sm" style={{ color: colors.textSecondary }}>
               <p className="font-medium text-white mb-1">How it works:</p>
               <ul className="space-y-1 list-disc list-inside">
-                <li>Public visitors can donate via <Link to="/contribute" target="_blank" className="underline" style={{ color: colors.primary }}>/contribute</Link></li>
+                <li>Public visitors can donate via <Link to={path('/contribute')} target="_blank" className="underline" style={{ color: colors.primary }}>/contribute</Link></li>
                 <li>They'll see the bank details you configure here for general donations</li>
-                <li>You can also create specific campaigns by marking payment types as "Public" in <Link to="/admin/manage-dues" className="underline" style={{ color: colors.primary }}>Manage Dues</Link></li>
-                <li>Review pending contributions in <Link to="/admin/contributions" className="underline" style={{ color: colors.primary }}>View Contributions</Link></li>
+                <li>You can also create specific campaigns by marking payment types as "Public" in <Link to={path('/admin/manage-dues')} className="underline" style={{ color: colors.primary }}>Manage Dues</Link></li>
+                <li>Review pending contributions in <Link to={path('/admin/contributions')} className="underline" style={{ color: colors.primary }}>View Contributions</Link></li>
               </ul>
             </div>
           </div>

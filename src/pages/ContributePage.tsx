@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react'
+import { useParams } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import { Heart, Users, Copy, Check, ExternalLink, ArrowRight, Star, Zap, Shield, CreditCard, Building2, CheckCircle, Info, Loader2, AlertCircle, ChevronRight, Banknote, GraduationCap, Clock, Mail, Phone, User, MessageSquare, Gift, Sparkles } from 'lucide-react'
 import { colors, gradients } from '@/config/colors'
@@ -50,6 +51,7 @@ const SUGGESTED_AMOUNTS = [500, 1000, 2000, 5000, 10000, 20000]
 
 export default function ContributePage() {
   const { success: toastSuccess, error: toastError } = useToast()
+  const { orgSlug } = useParams<{ orgSlug: string }>()
   
   const [publicPaymentTypes, setPublicPaymentTypes] = useState<PublicPaymentType[]>([])
   const [selectedPaymentType, setSelectedPaymentType] = useState<PublicPaymentType | null>(null)
@@ -76,25 +78,58 @@ export default function ContributePage() {
 
   useEffect(() => {
     fetchData()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   const fetchData = async () => {
     try {
       setLoading(true)
       
-      // Fetch public payment types and settings in parallel
-      const [paymentTypesRes, settingsRes] = await Promise.all([
-        supabase
-          .from('payment_types')
-          .select('id, title, description, amount, allow_partial, bank_name, account_name, account_number, icon, color, deadline')
-          .eq('is_public', true)
-          .eq('is_active', true)
-          .order('created_at', { ascending: false }),
-        supabase
-          .from('general_settings')
-          .select('key, value')
-          .in('key', ['donation_bank_details', 'class_info'])
-      ])
+      // Strict org enforcement - must have org slug
+      if (!orgSlug) {
+        setLoading(false)
+        return
+      }
+
+      // Look up org by slug for data isolation
+      const { data: org } = await supabase
+        .from('organizations')
+        .select('id, name, short_name, organization_type')
+        .eq('slug', orgSlug)
+        .eq('is_active', true)
+        .single();
+      
+      if (!org) {
+        setLoading(false)
+        return
+      }
+
+      const orgId = org.id;
+
+      // Update class info with actual org data
+      setClassInfo(prev => ({
+        ...prev,
+        class_name: org.name,
+        department: org.short_name || prev.department,
+        institution: org.organization_type || prev.institution,
+      }))
+      
+      // Fetch public payment types and settings in parallel (scoped to org)
+      const ptQ = supabase
+        .from('payment_types')
+        .select('id, title, description, amount, allow_partial, bank_name, account_name, account_number, icon, color, deadline')
+        .eq('is_public', true)
+        .eq('is_active', true)
+        .eq('organization_id', orgId)
+        .order('created_at', { ascending: false });
+
+      const settQ = supabase
+        .from('general_settings')
+        .select('key, value')
+        .in('key', ['donation_bank_details', 'class_info'])
+        .eq('organization_id', orgId);
+
+      const [paymentTypesRes, settingsRes] = await Promise.all([ptQ, settQ])
       
       setPublicPaymentTypes(paymentTypesRes.data || [])
       
@@ -152,8 +187,18 @@ export default function ContributePage() {
   const handleSelectCampaign = (pt: PublicPaymentType) => {
     setSelectedPaymentType(pt)
     setIsGeneralDonation(false)
-    setSelectedAmount(null)
-    setCustomAmount('')
+    // Auto-fill the amount if the payment type has a set amount
+    if (pt.amount > 0 && !pt.allow_partial) {
+      setSelectedAmount(pt.amount)
+      setCustomAmount('')
+    } else if (pt.amount > 0 && pt.allow_partial) {
+      // For partial payments, pre-fill amount as suggestion
+      setSelectedAmount(pt.amount)
+      setCustomAmount('')
+    } else {
+      setSelectedAmount(null)
+      setCustomAmount('')
+    }
     setStep('amount')
   }
 
@@ -187,6 +232,23 @@ export default function ContributePage() {
     setSubmitting(true)
     
     try {
+      // Look up org by slug for data isolation
+      if (!orgSlug) {
+        toastError('Organization not found')
+        return
+      }
+
+      const { data: org } = await supabase
+        .from('organizations')
+        .select('id')
+        .eq('slug', orgSlug)
+        .single();
+      
+      if (!org) {
+        toastError('Organization not found')
+        return
+      }
+
       await supabase.from('public_payments').insert({
         payment_type_id: selectedPaymentType?.id || null,
         contributor_name: isAnonymous ? 'Anonymous' : contributorName.trim(),
@@ -196,8 +258,9 @@ export default function ContributePage() {
         message: message.trim() || null,
         is_anonymous: isAnonymous,
         transaction_ref: contributionRef,
-        status: 'pending'
-      })
+        status: 'pending',
+        organization_id: org.id,
+      });
       setShowSuccess(true)
       toastSuccess('Contribution recorded!')
     } catch (err) {
@@ -229,9 +292,27 @@ export default function ContributePage() {
     return (
       <div className="min-h-screen flex items-center justify-center" style={{ background: 'radial-gradient(ellipse at top, #1A0E09 0%, #0F0703 100%)' }}>
         <motion.div initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} className="text-center">
-          <Loader2 className="w-12 h-12 mx-auto mb-4 animate-spin" style={{ color: colors.primary }} />
-          <p className="text-white font-medium">Loading...</p>
+          <Loader2 className="w-10 h-10 mx-auto mb-3 animate-spin" style={{ color: colors.primary }} />
+          <p className="text-sm text-white/70 font-medium">Loading contribution page...</p>
         </motion.div>
+      </div>
+    )
+  }
+
+  // No org slug or org not found
+  if (!orgSlug) {
+    return (
+      <div className="min-h-screen flex items-center justify-center p-4" style={{ background: 'radial-gradient(ellipse at top, #1A0E09 0%, #0F0703 100%)' }}>
+        <div className="text-center max-w-sm">
+          <AlertCircle className="w-12 h-12 mx-auto mb-4" style={{ color: colors.primary }} />
+          <h2 className="text-xl font-bold text-white mb-2">Organization Required</h2>
+          <p className="text-sm mb-6" style={{ color: colors.textSecondary }}>
+            This contribution page is specific to an organization. Please use the link provided by your organization.
+          </p>
+          <a href="/" className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-medium text-white" style={{ background: gradients.primary }}>
+            Go to Homepage <ExternalLink className="w-4 h-4" />
+          </a>
+        </div>
       </div>
     )
   }
@@ -329,7 +410,7 @@ export default function ContributePage() {
                     <div className="flex items-center justify-between p-4 rounded-xl cursor-pointer hover:opacity-90" style={{ background: `linear-gradient(135deg, ${colors.primary}20, ${colors.primary}10)`, border: `1px solid ${colors.primary}40` }} onClick={() => copyToClipboard(bankDetails.account_number, 'number')}>
                       <div>
                         <p className="text-[10px] uppercase tracking-wider" style={{ color: colors.textSecondary }}>Account Number</p>
-                        <p className="font-bold text-2xl text-white tracking-widest">{bankDetails.account_number}</p>
+                        <p className="font-bold text-lg sm:text-2xl text-white tracking-wider sm:tracking-widest truncate">{bankDetails.account_number}</p>
                       </div>
                       <div className="p-2 rounded-lg" style={{ background: `${colors.primary}30` }}>
                         {copiedField === 'number' ? <Check className="w-5 h-5" style={{ color: colors.accentMint }} /> : <Copy className="w-5 h-5" style={{ color: colors.primary }} />}
@@ -361,7 +442,7 @@ export default function ContributePage() {
                   <motion.button whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }} onClick={resetForm} className="py-3 rounded-xl font-medium text-sm flex items-center justify-center gap-2" style={{ background: 'rgba(255, 255, 255, 0.05)', border: '1px solid rgba(255, 255, 255, 0.1)', color: colors.textSecondary }}>
                     <Heart className="w-4 h-4" />Donate Again
                   </motion.button>
-                  <motion.button whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }} onClick={() => window.location.href = '/login'} className="py-3 rounded-xl font-medium text-sm flex items-center justify-center gap-2 text-white" style={{ background: gradients.primary }}>
+                  <motion.button whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }} onClick={() => window.location.href = orgSlug ? `/${orgSlug}/login` : '/login'} className="py-3 rounded-xl font-medium text-sm flex items-center justify-center gap-2 text-white" style={{ background: gradients.primary }}>
                     Member Login<ExternalLink className="w-4 h-4" />
                   </motion.button>
                 </div>
@@ -434,7 +515,7 @@ export default function ContributePage() {
                   <Banknote className="w-5 h-5" style={{ color: colors.accentMint }} />Select Amount
                 </h2>
                 
-                <div className="grid grid-cols-3 gap-2 mb-4">
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 mb-4">
                   {SUGGESTED_AMOUNTS.map((amount) => (
                     <motion.button key={amount} whileHover={{ scale: 1.03 }} whileTap={{ scale: 0.97 }} onClick={() => { setSelectedAmount(amount); setCustomAmount(''); }} className={`p-3 rounded-xl text-center transition-all ${selectedAmount === amount && !customAmount ? 'ring-2 ring-amber-500' : ''}`} style={{ background: selectedAmount === amount && !customAmount ? `${colors.primary}20` : 'rgba(255, 255, 255, 0.05)', border: `1px solid ${selectedAmount === amount && !customAmount ? colors.primary + '50' : 'rgba(255, 255, 255, 0.1)'}` }}>
                       <p className="font-bold text-white">{formatCurrency(amount)}</p>
@@ -560,7 +641,7 @@ export default function ContributePage() {
         {/* Footer */}
         <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.5 }} className="text-center mt-6 space-y-2">
           <p className="text-xs" style={{ color: colors.textSecondary }}>Made with ❤️ by {classInfo.class_name}</p>
-          <a href="/login" className="text-xs font-medium inline-flex items-center gap-1 hover:underline" style={{ color: colors.primary }}>
+          <a href={orgSlug ? `/${orgSlug}/login` : '/login'} className="text-xs font-medium inline-flex items-center gap-1 hover:underline" style={{ color: colors.primary }}>
             <GraduationCap className="w-3.5 h-3.5" />Class member? Login here
           </a>
           <p className="text-[10px] pt-2" style={{ color: colors.textSecondary }}>

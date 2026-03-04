@@ -1,7 +1,9 @@
-import { useState, useEffect } from 'react';
+﻿import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { useNavigate } from 'react-router-dom';
+import {  } from 'react-router-dom';
+import { useAppNav } from '@/hooks/useAppNav';
 import { supabase } from '@/config/supabase';
+import { getOrgScope } from '@/utils/orgScope';
 import { colors, gradients } from '@/config/colors';
 import GlassCard from '@/components/ui/GlassCard';
 import AnimatedCounter from '@/components/ui/AnimatedCounter';
@@ -37,7 +39,7 @@ import {
   GraduationCap,
 } from 'lucide-react';
 import Footer from '@/components/Footer';
-import { useAuth } from '@/hooks/useAuth';
+import { useAuth } from '@/hooks/useAppAuth';
 import authService from '@/services/authService';
 import { exportStudentsToPDF } from '@/utils/htmlPrintExports';
 import BulkStudentImport from '@/components/admin/BulkStudentImport';
@@ -70,7 +72,7 @@ interface Student {
 }
 
 export default function ManageStudentsPage() {
-  const navigate = useNavigate();
+  const { go: navigate } = useAppNav();
   const { success, error: showError } = useToast();
   const { hasPermission, user } = useAuth();
   const [loading, setLoading] = useState(true);
@@ -167,37 +169,40 @@ export default function ManageStudentsPage() {
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
-  interface AdminRecord {
-    id: string;
-    role: string;
-    can_create_payments: boolean;
-    can_approve_payments: boolean;
-    can_manage_students: boolean;
-    can_view_analytics: boolean;
-  }
-
-  const computeRoleFlags = (s: Partial<Student> & { admins?: AdminRecord[] }): Student => {
-    const admins = s.admins || [];
-    return {
-      ...(s as Student),
-      admins,
-        is_admin: admins.some(a => a.role === 'admin'),
-        is_finsec: admins.some(a => a.role === 'finsec'),
-        is_class_rep: admins.some(a => a.role === 'class_rep'),
-    } as Student;
-  };
-
   const fetchStudents = async () => {
+    if (!navigator.onLine) return;
     try {
       setLoading(true);
-      const { data, error } = await supabase
-        .from('students')
-        .select(`*, admins (id, role, can_create_payments, can_approve_payments, can_manage_students, can_view_analytics)`)
+      const scope = getOrgScope();
+      let fetchQ = supabase
+        .from('organization_members')
+        .select(`*, member_admins (id, role, can_create_payments, can_approve_payments, can_manage_members, can_view_analytics)`)
         .order('created_at', { ascending: false });
+      if (scope) fetchQ = fetchQ.eq('organization_id', scope.orgId);
+      const { data, error } = await fetchQ;
 
       if (error) throw error;
 
-  const mapped = (data || []).map((s: Partial<Student> & { admins?: AdminRecord[] }) => computeRoleFlags(s));
+  interface MemberAdminRecord { role: string; can_create_payments?: boolean; can_approve_payments?: boolean; can_manage_members?: boolean; can_view_analytics?: boolean }
+  const mapped = (data || []).map((s: Record<string, unknown>) => {
+    const admins = (s.member_admins || []) as MemberAdminRecord[];
+    return {
+      ...s,
+      reg_number: s.member_id || s.reg_number,
+      department: s.section || s.department || '',
+      admins,
+      roles: admins.map((a: MemberAdminRecord) => a.role),
+      admin_permissions: {
+        can_create_payments: admins.some((a: MemberAdminRecord) => a.can_create_payments),
+        can_approve_payments: admins.some((a: MemberAdminRecord) => a.can_approve_payments),
+        can_manage_students: admins.some((a: MemberAdminRecord) => a.can_manage_members),
+        can_view_analytics: admins.some((a: MemberAdminRecord) => a.can_view_analytics),
+      },
+      is_admin: admins.some((a: MemberAdminRecord) => ['admin', 'org_admin', 'org_owner', 'super_admin'].includes(a.role)),
+      is_finsec: admins.some((a: MemberAdminRecord) => a.role === 'treasurer'),
+      is_class_rep: admins.some((a: MemberAdminRecord) => a.role === 'group_admin'),
+    } as unknown as Student;
+  });
   setStudents(mapped);
   setFilteredStudents(mapped);
     } catch (error) {
@@ -281,44 +286,43 @@ export default function ManageStudentsPage() {
     try {
       setEditLoading(true);
       
-      // Use the SECURITY DEFINER function to bypass RLS
-      const { data: result, error } = await supabase.rpc('admin_update_student', {
-        p_student_id: selectedStudent.id,
-        p_full_name: selectedStudent.full_name,
-        p_reg_number: selectedStudent.reg_number,
-        p_email: selectedStudent.email,
-        p_phone: selectedStudent.phone,
-        p_level: selectedStudent.level,
-        p_department: selectedStudent.department,
-        p_section: selectedStudent.section,
-        p_force_password_change: selectedStudent.force_password_change ?? false,
-        p_is_active: selectedStudent.is_active,
-        p_admin_id: user?.id
-      });
+      // Direct update on organization_members table
+      const scope = getOrgScope();
+      const updateData: Record<string, unknown> = {
+        full_name: selectedStudent.full_name,
+        member_id: selectedStudent.reg_number,
+        email: selectedStudent.email,
+        phone: selectedStudent.phone,
+        level: selectedStudent.level,
+        section: selectedStudent.department || selectedStudent.section,
+        force_password_change: selectedStudent.force_password_change ?? false,
+        is_active: selectedStudent.is_active,
+      };
+      let updateQ = supabase
+        .from('organization_members')
+        .update(updateData)
+        .eq('id', selectedStudent.id);
+      if (scope) updateQ = updateQ.eq('organization_id', scope.orgId);
+      const { error } = await updateQ;
 
       if (error) {
-        console.error('RPC error:', error);
-        throw error;
-      }
-
-      // Check the result
-      const response = result?.[0];
-      if (!response?.success) {
-        const msg = response?.message || 'Failed to update student';
-        if (msg.toLowerCase().includes('registration number already exists')) {
+        console.error('Update error:', error);
+        if (error.message?.includes('duplicate') || error.message?.includes('unique')) {
           showError('Registration number already exists. Choose another one.');
           setEditLoading(false);
           return;
         }
-        throw new Error(msg);
+        throw error;
       }
 
       success('Student updated successfully');
       // If admin forced a password change, notify the student
       try {
         if (selectedStudent.force_password_change) {
+          const scopeN = getOrgScope();
           await supabase.from('notifications').insert({
-            recipient_id: selectedStudent.id,
+            member_id: selectedStudent.id,
+            organization_id: scopeN?.orgId,
             type: 'force_password',
             title: 'Password Reset Required',
             message: 'An administrator has required you to change your password. Please update it on next login.',
@@ -348,23 +352,27 @@ export default function ManageStudentsPage() {
     }
 
     try {
-      // Use the SECURITY DEFINER function to bypass RLS
-      const { data: result, error } = await supabase.rpc('admin_toggle_student_status', {
-        p_student_id: student.id,
-        p_admin_id: user?.id
-      });
+      // Direct update on organization_members
+      const scope = getOrgScope();
+      const newStatus = !student.is_active;
+      let toggleQ = supabase
+        .from('organization_members')
+        .update({
+          is_active: newStatus,
+          is_suspended: !newStatus,
+          suspension_reason: newStatus ? null : 'Suspended by admin',
+          suspended_at: newStatus ? null : new Date().toISOString(),
+        })
+        .eq('id', student.id);
+      if (scope) toggleQ = toggleQ.eq('organization_id', scope.orgId);
+      const { error } = await toggleQ;
 
       if (error) {
-        console.error('RPC error:', error);
+        console.error('Update error:', error);
         throw error;
       }
 
-      const response = result?.[0];
-      if (!response?.success) {
-        throw new Error(response?.message || 'Failed to update student status');
-      }
-
-      success(response.message);
+      success(newStatus ? 'Student activated' : 'Student suspended');
       await fetchStudents();
     } catch (error) {
       console.error('Error toggling student status:', error);
@@ -389,9 +397,29 @@ export default function ManageStudentsPage() {
         return;
       }
       
-      // Check if already has finsec role using RPC function
+      // Resolve org scope once with fallback
+      const scope = getOrgScope();
+      let orgId = scope?.orgId || null;
+      if (!orgId) {
+        const { data: memberRow } = await supabase
+          .from('organization_members')
+          .select('organization_id')
+          .eq('id', student.id)
+          .single();
+        orgId = memberRow?.organization_id || null;
+      }
+      if (!orgId) {
+        showError('No org scope available. Please re-login.');
+        return;
+      }
+
+      // Check if already has finsec role directly
       const { data: existingRole, error: fetchError } = await supabase
-        .rpc('has_admin_role', { p_student_id: student.id, p_role: 'finsec' });
+        .from('member_admins')
+        .select('id')
+        .eq('member_id', student.id)
+        .eq('role', 'treasurer')
+        .eq('organization_id', orgId);
 
       if (fetchError) {
         console.error('Error checking finsec status:', fetchError);
@@ -399,44 +427,45 @@ export default function ManageStudentsPage() {
       }
 
       if (existingRole && existingRole.length > 0) {
-        // Remove existing finsec role using RPC function
-        const { data: removed, error } = await supabase
-          .rpc('remove_admin_role', { p_admin_id: existingRole[0].admin_id });
+        // Remove existing finsec role directly
+        const { error } = await supabase
+          .from('member_admins')
+          .delete()
+          .eq('id', existingRole[0].id);
         
         if (error) {
           console.error('Delete error:', error);
           throw error;
         }
         
-        if (!removed) {
-          throw new Error('Failed to remove role - no rows affected');
-        }
-        
         success('Finsec role removed successfully');
         
         // Notify the user
         await supabase.from('notifications').insert({
-          recipient_id: student.id,
+          member_id: student.id,
+          organization_id: orgId,
           type: 'role_removed',
           title: 'Finsec Role Removed',
           message: 'Your Finsec role has been removed. Contact admin for more details.',
           link: '/profile',
         });
       } else {
-        // Add finsec role using RPC function
-        const { error } = await supabase.rpc('add_admin_role', {
-          p_student_id: student.id,
-          p_role: 'finsec',
-          p_can_create_payments: true,
-          p_can_approve_payments: true,
-          p_can_manage_students: false,
-          p_can_view_analytics: true,
+        // Add finsec role directly
+        const { error } = await supabase.from('member_admins').insert({
+          member_id: student.id,
+          organization_id: orgId,
+          role: 'treasurer',
+          can_create_payments: true,
+          can_approve_payments: true,
+          can_manage_members: false,
+          can_view_analytics: true,
         });
         
         if (error) throw error;
         success('Finsec role granted successfully');
         await supabase.from('notifications').insert({
-          recipient_id: student.id,
+          member_id: student.id,
+          organization_id: orgId,
           type: 'role_assigned',
           title: 'Finsec Role Granted',
           message: 'You have been granted Finsec permissions. You can now approve and create payments.',
@@ -475,9 +504,29 @@ export default function ManageStudentsPage() {
         return;
       }
       
-      // Check if admin record exists using RPC function
+      // Resolve org scope once with fallback
+      const scope = getOrgScope();
+      let orgId = scope?.orgId || null;
+      if (!orgId) {
+        const { data: memberRow } = await supabase
+          .from('organization_members')
+          .select('organization_id')
+          .eq('id', student.id)
+          .single();
+        orgId = memberRow?.organization_id || null;
+      }
+      if (!orgId) {
+        showError('No org scope available. Please re-login.');
+        return;
+      }
+
+      // Check if admin record exists directly
       const { data: existingRole, error: fetchError } = await supabase
-        .rpc('has_admin_role', { p_student_id: student.id, p_role: 'admin' });
+        .from('member_admins')
+        .select('id')
+        .eq('member_id', student.id)
+        .in('role', ['admin', 'org_admin'])
+        .eq('organization_id', orgId);
 
       if (fetchError) {
         console.error('Error checking admin status:', fetchError);
@@ -485,43 +534,44 @@ export default function ManageStudentsPage() {
       }
 
       if (existingRole && existingRole.length > 0) {
-        // Remove existing admin role using RPC function
-        const { data: removed, error } = await supabase
-          .rpc('remove_admin_role', { p_admin_id: existingRole[0].admin_id });
+        // Remove existing admin role directly
+        const { error } = await supabase
+          .from('member_admins')
+          .delete()
+          .eq('id', existingRole[0].id);
         
         if (error) {
           console.error('Delete error:', error);
           throw error;
         }
         
-        if (!removed) {
-          throw new Error('Failed to remove role - no rows affected');
-        }
-        
         success('Admin role removed successfully');
         
         await supabase.from('notifications').insert({
-          recipient_id: student.id,
+          member_id: student.id,
+          organization_id: orgId,
           type: 'role_removed',
           title: 'Admin Role Removed',
           message: 'Your Admin role has been removed. Contact admin for more details.',
           link: '/profile',
         });
       } else {
-        // Add admin role using RPC function
-        const { error } = await supabase.rpc('add_admin_role', {
-          p_student_id: student.id,
-          p_role: 'admin',
-          p_can_create_payments: true,
-          p_can_approve_payments: true,
-          p_can_manage_students: true,
-          p_can_view_analytics: true,
+        // Add admin role directly
+        const { error } = await supabase.from('member_admins').insert({
+          member_id: student.id,
+          organization_id: orgId,
+          role: 'org_admin',
+          can_create_payments: true,
+          can_approve_payments: true,
+          can_manage_members: true,
+          can_view_analytics: true,
         });
         
         if (error) throw error;
         success('Admin role granted successfully');
         await supabase.from('notifications').insert({
-          recipient_id: student.id,
+          member_id: student.id,
+          organization_id: orgId,
           type: 'role_assigned',
           title: 'Admin Role Granted',
           message: 'You have been granted Admin permissions. You can now manage students, create payments, and view analytics.',
@@ -559,9 +609,29 @@ export default function ManageStudentsPage() {
         return;
       }
       
-      // Check if class_rep record exists using RPC function
+      // Resolve org scope once with fallback
+      const scope = getOrgScope();
+      let orgId = scope?.orgId || null;
+      if (!orgId) {
+        const { data: memberRow } = await supabase
+          .from('organization_members')
+          .select('organization_id')
+          .eq('id', student.id)
+          .single();
+        orgId = memberRow?.organization_id || null;
+      }
+      if (!orgId) {
+        showError('No org scope available. Please re-login.');
+        return;
+      }
+
+      // Check if class_rep record exists directly
       const { data: existingRole, error: fetchError } = await supabase
-        .rpc('has_admin_role', { p_student_id: student.id, p_role: 'class_rep' });
+        .from('member_admins')
+        .select('id')
+        .eq('member_id', student.id)
+        .eq('role', 'group_admin')
+        .eq('organization_id', orgId);
 
       if (fetchError) {
         console.error('Error checking classrep status:', fetchError);
@@ -569,44 +639,44 @@ export default function ManageStudentsPage() {
       }
 
       if (existingRole && existingRole.length > 0) {
-        // Remove existing classrep role using RPC function
-        const { data: removed, error } = await supabase
-          .rpc('remove_admin_role', { p_admin_id: existingRole[0].admin_id });
+        // Remove existing classrep role directly
+        const { error } = await supabase
+          .from('member_admins')
+          .delete()
+          .eq('id', existingRole[0].id);
         
         if (error) {
           console.error('Delete error:', error);
           throw error;
         }
         
-        if (!removed) {
-          throw new Error('Failed to remove role - no rows affected');
-        }
-        
-        success('class_rep role removed successfully');
+        success('Class Rep role removed successfully');
         
         await supabase.from('notifications').insert({
-          recipient_id: student.id,
+          member_id: student.id,
+          organization_id: orgId,
           type: 'role_removed',
-          title: 'class_rep Role Removed',
+          title: 'Class Rep Role Removed',
           message: 'Your Class Rep role has been removed. Contact admin for more details.',
           link: '/profile',
         });
       } else {
-        // Add classrep role using RPC function
-        // Class Rep has FULL access (same as admin) - can manage students, payments, etc.
-        const { error } = await supabase.rpc('add_admin_role', {
-          p_student_id: student.id,
-          p_role: 'class_rep',
-          p_can_create_payments: true,
-          p_can_approve_payments: true,
-          p_can_manage_students: true,
-          p_can_view_analytics: true,
+        // Add classrep role directly
+        const { error } = await supabase.from('member_admins').insert({
+          member_id: student.id,
+          organization_id: orgId,
+          role: 'group_admin',
+          can_create_payments: true,
+          can_approve_payments: true,
+          can_manage_members: true,
+          can_view_analytics: true,
         });
         
         if (error) throw error;
         success('Class Rep role granted successfully');
         await supabase.from('notifications').insert({
-          recipient_id: student.id,
+          member_id: student.id,
+          organization_id: orgId,
           type: 'role_assigned',
           title: 'Class Rep Role Granted',
           message: 'You have been granted Class Rep permissions with full admin access. You can now manage students, create and approve payments, and view analytics.',
@@ -645,23 +715,21 @@ export default function ManageStudentsPage() {
     }
 
     try {
-      // Use the SECURITY DEFINER function to bypass RLS
-      const { data: result, error } = await supabase.rpc('admin_delete_student', {
-        p_student_id: student.id,
-        p_admin_id: user?.id
-      });
+      // Direct delete from organization_members (cascades to member_admins, payments, notifications)
+      const scope = getOrgScope();
+      let delQ = supabase
+        .from('organization_members')
+        .delete()
+        .eq('id', student.id);
+      if (scope) delQ = delQ.eq('organization_id', scope.orgId);
+      const { error } = await delQ;
 
       if (error) {
-        console.error('RPC error:', error);
+        console.error('Delete error:', error);
         throw error;
       }
 
-      const response = result?.[0];
-      if (!response?.success) {
-        throw new Error(response?.message || 'Failed to delete student');
-      }
-
-      success(response.message);
+      success('Student deleted successfully');
       await fetchStudents();
     } catch (error) {
       console.error('Error deleting student:', error);
@@ -691,30 +759,39 @@ export default function ManageStudentsPage() {
     }
 
     try {
-      // Use the PostgreSQL RPC function to reset password
-      // This ensures the password is hashed correctly with pgcrypto
-      const { data: result, error: rpcError } = await supabase
-        .rpc('admin_reset_student_password', { p_student_id: student.id });
+      // Generate a temp password and hash it via PostgreSQL
+      const tempPassword = student.full_name.split(' ')[0].toLowerCase() + Math.random().toString(36).slice(2, 6);
+      const { data: hashResult, error: hashError } = await supabase
+        .rpc('hash_password', { p_password: tempPassword });
 
-      if (rpcError) {
-        // If RPC doesn't exist, show error with instructions
-        if (rpcError.message.includes('function') || rpcError.code === '42883') {
-          showError('Password reset function not found. Please run the SQL migration in Supabase.');
-          console.error('Run this SQL in Supabase SQL Editor:', 
-            'See: supabase/migrations/admin_reset_password_function.sql');
+      if (hashError) {
+        if (hashError.message.includes('function') || hashError.code === '42883') {
+          showError('Password hash function not found. Please run the SQL migration in Supabase.');
           return;
         }
-        throw new Error(rpcError.message);
+        throw new Error(hashError.message);
       }
 
-      if (!result || !result.success) {
-        throw new Error(result?.error || 'Password reset failed');
-      }
+      // Update the member's password
+      const scope = getOrgScope();
+      let resetQ = supabase
+        .from('organization_members')
+        .update({
+          password_hash: hashResult,
+          force_password_change: true,
+        })
+        .eq('id', student.id);
+      if (scope) resetQ = resetQ.eq('organization_id', scope.orgId);
+      const { error: updateError } = await resetQ;
+
+      if (updateError) throw new Error(updateError.message);
 
       // Create notification for the student
       try {
+        const scopeN = getOrgScope();
         await supabase.from('notifications').insert({
-          recipient_id: student.id,
+          member_id: student.id,
+          organization_id: scopeN?.orgId,
           type: 'force_password',
           title: 'Password Reset by Admin',
           message: 'Your password was reset by an administrator. Please use the temporary password provided to you and change it immediately upon login.',
@@ -726,8 +803,8 @@ export default function ManageStudentsPage() {
 
       setPasswordResetResult({
         isOpen: true,
-        studentName: result.student_name || student.full_name,
-        tempPassword: result.temp_password
+        studentName: student.full_name,
+        tempPassword: tempPassword
       });
 
       success(`Password reset for ${student.full_name}`);
@@ -756,8 +833,8 @@ export default function ManageStudentsPage() {
       const lines: string[] = [];
       
       // Header info
-      lines.push('CLASS DUES TRACKER - STUDENT DIRECTORY');
-      lines.push('Developed by Dev_Wishot | @wishotstudio');
+      lines.push('PAYVEXO - MEMBER DIRECTORY');
+      lines.push('Powered by Payvexo | payvexo.com');
       lines.push('');
       lines.push(`Generated Date,${new Date().toLocaleDateString('en-US', { dateStyle: 'full', timeStyle: 'short' })}`);
       lines.push(`Total Students,${dataToExport.length}`);
@@ -855,31 +932,59 @@ export default function ManageStudentsPage() {
     try {
       setAddLoading(true);
       
-      // Call the RPC function to add student with hashed password
-      const { data: result, error } = await supabase.rpc('admin_add_student', {
-        p_full_name: newStudent.full_name.trim(),
-        p_reg_number: newStudent.reg_number.trim().toUpperCase(),
-        p_email: newStudent.email.trim() || null,
-        p_phone: newStudent.phone.trim() || null,
-        p_level: newStudent.level,
-        p_department: newStudent.department,
-        p_section: newStudent.section,
-      });
+      // Direct insert into organization_members with hashed password
+      const scope = getOrgScope();
+      const tempPassword = newStudent.reg_number.trim().toUpperCase();
+      const { data: hashResult, error: hashError } = await supabase
+        .rpc('hash_password', { p_password: tempPassword });
+
+      if (hashError) {
+        console.error('Hash error:', hashError);
+        if (hashError.message.includes('function') || hashError.code === '42883') {
+          showError('Password hash function not found. Please run the SQL migration.');
+          return;
+        }
+        throw hashError;
+      }
+
+      // Get member's group
+      let groupId: string | null = null;
+      if (scope) {
+        const { data: memberData } = await supabase
+          .from('organization_members')
+          .select('group_id')
+          .eq('id', user?.id)
+          .single();
+        groupId = memberData?.group_id || null;
+      }
+
+      const insertData: Record<string, unknown> = {
+        full_name: newStudent.full_name.trim(),
+        member_id: newStudent.reg_number.trim().toUpperCase(),
+        email: newStudent.email.trim() || null,
+        phone: newStudent.phone.trim() || null,
+        level: newStudent.level,
+        section: newStudent.section || newStudent.department,
+        password_hash: hashResult,
+        force_password_change: true,
+        is_active: true,
+      };
+      if (scope) {
+        insertData.organization_id = scope.orgId;
+        if (groupId) insertData.group_id = groupId;
+      }
+
+      const { error } = await supabase
+        .from('organization_members')
+        .insert(insertData);
 
       if (error) {
-        console.error('RPC error:', error);
-        if (error.message.includes('function') || error.code === '42883') {
-          showError('Add student function not found. Please run the SQL migration.');
-          console.error('Run: supabase/migrations/admin_add_student_function.sql');
+        console.error('Insert error:', error);
+        if (error.message?.includes('duplicate') || error.message?.includes('unique') || error.code === '23505') {
+          showError('Member ID already exists. Choose another one.');
           return;
         }
         throw error;
-      }
-
-      const response = result?.[0];
-      if (!response?.success) {
-        showError(response?.message || 'Failed to add student');
-        return;
       }
 
       // Show success modal with temp password
@@ -887,7 +992,7 @@ export default function ManageStudentsPage() {
         isOpen: true,
         studentName: newStudent.full_name.trim(),
         regNumber: newStudent.reg_number.trim().toUpperCase(),
-        tempPassword: response.temp_password,
+        tempPassword: tempPassword,
       });
 
       // Reset form
@@ -1763,10 +1868,12 @@ export default function ManageStudentsPage() {
 
             {loading ? (
               <div className="text-center py-12">
-                <div className="animate-spin rounded-full h-12 w-12 border-4 border-t-transparent mx-auto"
-                  style={{ borderColor: colors.primary, borderTopColor: 'transparent' }}
-                />
-                <p className="mt-4" style={{ color: colors.textSecondary }}>Loading students...</p>
+                <div className="flex flex-col items-center gap-3">
+                  <div className="animate-spin rounded-full h-10 w-10 border-3 border-t-transparent"
+                    style={{ borderColor: colors.primary, borderTopColor: 'transparent' }}
+                  />
+                  <p className="text-sm" style={{ color: colors.textSecondary }}>Loading members...</p>
+                </div>
               </div>
             ) : finalFilteredStudents.length === 0 ? (
               <div className="text-center py-12">

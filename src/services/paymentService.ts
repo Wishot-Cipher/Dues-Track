@@ -3,26 +3,48 @@
 import { supabase } from '@/config/supabase';
 import type { Payment, PaymentType, PaymentStats } from '@/types';
 import notificationService from '@/services/notificationService';
+import { getOrgScope } from '@/utils/orgScope';
 
 /**
  * Payment Service
- * Handles all payment-related data fetching and mutations
+ * Handles all payment-related data fetching and mutations.
+ *
+ * MULTI-TENANT: When an org session is active (pvx_auth), queries are
+ * automatically scoped to the current organization via organization_id filters.
  */
 
 class PaymentService {
   /**
-   * Get payment statistics for a student
+   * Get the current member's level info.
+   * In multi-tenant mode queries organization_members; in legacy mode queries students.
+   */
+  private async getMemberLevel(memberId: string): Promise<{ level: string; department: string } | null> {
+    const scope = getOrgScope();
+    if (scope) {
+      const { data } = await supabase
+        .from('organization_members')
+        .select('level, section')
+        .eq('id', memberId)
+        .eq('organization_id', scope.orgId)
+        .single();
+      if (!data) return null;
+      return { level: data.level || '', department: data.section || '' };
+    }
+    const { data } = await supabase
+      .from('organization_members')
+      .select('level, section')
+      .eq('id', memberId)
+      .single();
+    return data ? { level: data.level || '', department: data.section || '' } : null;
+  }
+  /**
+   * Get payment statistics for a student/member
    */
   async getStudentPaymentStats(studentId: string): Promise<PaymentStats> {
     try {
-      // Get student info first
-      const { data: student } = await supabase
-        .from('students')
-        .select('level, department')
-        .eq('id', studentId)
-        .single();
+      const member = await this.getMemberLevel(studentId);
 
-      if (!student) {
+      if (!member) {
         return {
           totalPaid: 0,
           totalDue: 0,
@@ -31,20 +53,26 @@ class PaymentService {
         };
       }
 
-      // Get all active payment types for this student's level (include deadline and late fee)
-      const { data: activePaymentTypes, error: typesError } = await supabase
+      // Get all active payment types for this member's level (include deadline and late fee)
+      const scope = getOrgScope();
+      let ptQuery = supabase
         .from('payment_types')
         .select('id, amount, deadline, late_fee_per_day')
         .eq('is_active', true)
-        .contains('target_levels', [student.level]);
+        .contains('target_levels', [member.level]);
+      if (scope) ptQuery = ptQuery.eq('organization_id', scope.orgId);
+
+      const { data: activePaymentTypes, error: typesError } = await ptQuery;
 
       if (typesError) throw typesError;
 
-      // Get all payments for this student
-      const { data: allPayments } = await supabase
+      // Get all payments for this member
+      let pmtQuery = supabase
         .from('payments')
         .select('payment_type_id, amount, status, transaction_ref')
-        .eq('student_id', studentId);
+        .eq('member_id', studentId);
+      if (scope) pmtQuery = pmtQuery.eq('organization_id', scope.orgId);
+      const { data: allPayments } = await pmtQuery;
 
       // Calculate stats
       let totalPaid = 0;
@@ -177,7 +205,8 @@ class PaymentService {
    */
   async getRecentPayments(studentId: string, limit = 5): Promise<Payment[]> {
     try {
-      const { data, error } = await supabase
+      const scope = getOrgScope();
+      let query = supabase
         .from('payments')
         .select(`
           *,
@@ -188,9 +217,11 @@ class PaymentService {
             color
           )
         `)
-        .eq('student_id', studentId)
-        .order('submitted_at', { ascending: false })
-        .limit(limit);
+        .eq('member_id', studentId);
+      if (scope) query = query.eq('organization_id', scope.orgId);
+      query = query.order('created_at', { ascending: false }).limit(limit);
+
+      const { data, error } = await query;
 
       if (error) throw error;
 
@@ -206,56 +237,44 @@ class PaymentService {
    */
   async getUpcomingPaymentTypes(studentId: string): Promise<PaymentType[]> {
     try {
-      // Get student info
-      const { data: student } = await supabase
-        .from('students')
-        .select('level, department')
-        .eq('id', studentId)
-        .single();
+      const member = await this.getMemberLevel(studentId);
+      if (!member) return [];
 
-      if (!student) return [];
+      const scope = getOrgScope();
 
-      // Debug logs removed for production security
-
-      // Get ALL active payment types first (easier filtering)
-      // Temporarily remove deadline filter to see all payment types
-      const { data: allPaymentTypes, error } = await supabase
+      // Get ALL active payment types (scoped to org if applicable)
+      let ptQuery = supabase
         .from('payment_types')
         .select('*')
         .eq('is_active', true)
-        // .gte('deadline', new Date().toISOString()) // Commented out for debugging
         .order('deadline', { ascending: true });
+      if (scope) ptQuery = ptQuery.eq('organization_id', scope.orgId);
+
+      const { data: allPaymentTypes, error } = await ptQuery;
 
       if (error) {
         console.error('Error fetching payment types:', error);
         throw error;
       }
 
-      console.log('All active payment types:', allPaymentTypes);
-      console.log('Current time:', new Date().toISOString());
-      
-      // Log deadline comparison for each payment type
-      allPaymentTypes?.forEach(pt => {
-        console.log(`${pt.title}: deadline=${pt.deadline}, isFuture=${new Date(pt.deadline) > new Date()}`);
-      });
-
-      // Filter payment types for this student's level
+      // Filter payment types for this member's level
       const paymentTypes = allPaymentTypes?.filter(pt => 
-        pt.target_levels?.includes(student.level)
+        pt.target_levels?.includes(member.level)
       ) || [];
-
-      console.log('Filtered payment types for level:', paymentTypes);
 
       // Filter out payment types already fully paid
       const filteredTypes: PaymentType[] = [];
       
       for (const type of paymentTypes) {
-        const { data: payments } = await supabase
+        let pQuery = supabase
           .from('payments')
           .select('amount')
-          .eq('student_id', studentId)
+          .eq('member_id', studentId)
           .eq('payment_type_id', type.id)
           .eq('status', 'approved');
+        if (scope) pQuery = pQuery.eq('organization_id', scope.orgId);
+
+        const { data: payments } = await pQuery;
 
         const totalPaid = payments?.reduce((sum, p) => sum + Number(p.amount), 0) || 0;
 
@@ -265,7 +284,6 @@ class PaymentService {
         }
       }
 
-      // Debug logs removed for production security
       return filteredTypes;
     } catch (error) {
       console.error('Error fetching upcoming payment types:', error);
@@ -274,11 +292,12 @@ class PaymentService {
   }
 
   /**
-   * Get all payments for a student (for payment history)
+   * Get all payments for a student/member (for payment history)
    */
   async getAllPayments(studentId: string): Promise<Payment[]> {
     try {
-      const { data, error } = await supabase
+      const scope = getOrgScope();
+      let query = supabase
         .from('payments')
         .select(`
           *,
@@ -289,8 +308,11 @@ class PaymentService {
             color
           )
         `)
-        .eq('student_id', studentId)
-        .order('submitted_at', { ascending: false });
+        .eq('member_id', studentId);
+      if (scope) query = query.eq('organization_id', scope.orgId);
+      query = query.order('created_at', { ascending: false });
+
+      const { data, error } = await query;
 
       if (error) throw error;
 
@@ -314,18 +336,25 @@ class PaymentService {
     notes?: string;
   }): Promise<Payment | null> {
     try {
+      const scope = getOrgScope();
+      const insertData: Record<string, unknown> = {
+        member_id: paymentData.studentId,
+        payment_type_id: paymentData.paymentTypeId,
+        amount: paymentData.amountPaid,
+        payment_method: paymentData.paymentMethod,
+        transaction_ref: paymentData.transactionRef,
+        receipt_url: paymentData.receiptUrl,
+        notes: paymentData.notes,
+        status: 'pending',
+      };
+      // Include org and group IDs for multi-tenant data isolation
+      if (scope) {
+        insertData.organization_id = scope.orgId;
+      }
+
       const { data, error } = await supabase
         .from('payments')
-        .insert({
-          student_id: paymentData.studentId,
-          payment_type_id: paymentData.paymentTypeId,
-          amount: paymentData.amountPaid,
-          payment_method: paymentData.paymentMethod,
-          transaction_ref: paymentData.transactionRef,
-          receipt_url: paymentData.receiptUrl,
-          notes: paymentData.notes,
-          status: 'pending',
-        })
+        .insert(insertData)
         .select()
         .single();
 
@@ -361,12 +390,8 @@ class PaymentService {
     pendingPayments: number;
   }> {
     try {
-      // Get student info for level
-      const { data: student } = await supabase
-        .from('students')
-        .select('level')
-        .eq('id', studentId)
-        .single();
+      // Get member info for level
+      const student = await this.getMemberLevel(studentId);
 
       if (!student) {
         return {
@@ -378,18 +403,23 @@ class PaymentService {
         };
       }
 
-      // Get all active payment types for this student's level (include deadline and late fee)
-      const { data: activePaymentTypes } = await supabase
+      // Get all active payment types for this member's level
+      const scope2 = getOrgScope();
+      let ptQuery2 = supabase
         .from('payment_types')
         .select('id, amount, deadline, late_fee_per_day')
         .eq('is_active', true)
         .contains('target_levels', [student.level]);
+      if (scope2) ptQuery2 = ptQuery2.eq('organization_id', scope2.orgId);
+      const { data: activePaymentTypes } = await ptQuery2;
 
-      // Get all payments for this student
-      const { data: allPayments } = await supabase
+      // Get all payments for this member
+      let pmtQuery2 = supabase
         .from('payments')
         .select('payment_type_id, amount, status, transaction_ref')
-        .eq('student_id', studentId);
+        .eq('member_id', studentId);
+      if (scope2) pmtQuery2 = pmtQuery2.eq('organization_id', scope2.orgId);
+      const { data: allPayments } = await pmtQuery2;
 
       let totalPaid = 0;
       let totalOutstanding = 0;
@@ -491,22 +521,21 @@ class PaymentService {
    */
   async getActivePaymentTypesForStudent(studentId: string): Promise<PaymentType[]> {
     try {
-      // Get student info
-      const { data: student } = await supabase
-        .from('students')
-        .select('level, department')
-        .eq('id', studentId)
-        .single();
+      // Get member info
+      const student = await this.getMemberLevel(studentId);
 
       if (!student) return [];
 
-      // Get all active payment types for this student's level
-      const { data: paymentTypes, error } = await supabase
+      const scope = getOrgScope();
+      // Get all active payment types for this member's level
+      let ptQuery = supabase
         .from('payment_types')
         .select('*')
         .eq('is_active', true)
         .contains('target_levels', [student.level])
         .order('deadline', { ascending: true });
+      if (scope) ptQuery = ptQuery.eq('organization_id', scope.orgId);
+      const { data: paymentTypes, error } = await ptQuery;
 
       if (error) throw error;
 
@@ -522,7 +551,8 @@ class PaymentService {
    */
   async getStudentPayments(studentId: string): Promise<Payment[]> {
     try {
-      const { data, error } = await supabase
+      const scope = getOrgScope();
+      let query = supabase
         .from('payments')
         .select(`
           *,
@@ -534,14 +564,17 @@ class PaymentService {
             amount
           )
         `)
-        .eq('student_id', studentId)
-        .order('created_at', { ascending: false });
+        .eq('member_id', studentId);
+      if (scope) query = query.eq('organization_id', scope.orgId);
+      query = query.order('created_at', { ascending: false });
+
+      const { data, error } = await query;
 
       if (error) throw error;
 
       return data || [];
     } catch (error) {
-      console.error('Error fetching student payments:', error);
+      console.error('Error fetching member payments:', error);
       return [];
     }
   }
@@ -551,18 +584,19 @@ class PaymentService {
    */
   async getPaymentTypeById(paymentTypeId: string): Promise<PaymentType | null> {
     try {
-      const { data, error } = await supabase
+      const scope = getOrgScope();
+      let query = supabase
         .from('payment_types')
         .select(`
           *,
-          admins!payment_types_created_by_fkey (
+          created_by_admin:member_admins!payment_types_created_by_fkey (
             id,
-            full_name,
             role
           )
         `)
-        .eq('id', paymentTypeId)
-        .single();
+        .eq('id', paymentTypeId);
+      if (scope) query = query.eq('organization_id', scope.orgId);
+      const { data, error } = await query.single();
 
       if (error) throw error;
 
@@ -588,7 +622,7 @@ class PaymentService {
       // Get payment type info
       const { data: paymentType } = await supabase
         .from('payment_types')
-        .select('amount, target_levels')
+        .select('amount, target_levels, organization_id')
         .eq('id', paymentTypeId)
         .single();
 
@@ -596,25 +630,36 @@ class PaymentService {
         throw new Error('Payment type not found');
       }
 
-      // Count total students in target levels
-      const { count: totalStudents } = await supabase
-        .from('students')
+      // Count total members in target levels (scoped to org)
+      const scope = getOrgScope();
+      let memberQuery = supabase
+        .from('organization_members')
         .select('*', { count: 'exact', head: true })
+        .eq('is_active', true)
         .in('level', paymentType.target_levels || []);
+      if (scope) memberQuery = memberQuery.eq('organization_id', scope.orgId);
+      else if (paymentType.organization_id) memberQuery = memberQuery.eq('organization_id', paymentType.organization_id);
+      const { count: totalStudents } = await memberQuery;
 
       // Count paid (approved)
-      const { count: paidCount, data: paidPayments } = await supabase
+      let paidQuery = supabase
         .from('payments')
         .select('amount', { count: 'exact' })
         .eq('payment_type_id', paymentTypeId)
         .eq('status', 'approved');
+      if (scope) paidQuery = paidQuery.eq('organization_id', scope.orgId);
+      else if (paymentType.organization_id) paidQuery = paidQuery.eq('organization_id', paymentType.organization_id);
+      const { count: paidCount, data: paidPayments } = await paidQuery;
 
       // Count pending
-      const { count: pendingCount } = await supabase
+      let pendingQuery = supabase
         .from('payments')
         .select('*', { count: 'exact', head: true })
         .eq('payment_type_id', paymentTypeId)
         .eq('status', 'pending');
+      if (scope) pendingQuery = pendingQuery.eq('organization_id', scope.orgId);
+      else if (paymentType.organization_id) pendingQuery = pendingQuery.eq('organization_id', paymentType.organization_id);
+      const { count: pendingCount } = await pendingQuery;
 
       const totalCollected = paidPayments?.reduce((sum, p) => sum + Number(p.amount), 0) || 0;
       const totalExpected = (totalStudents || 0) * paymentType.amount;
@@ -655,25 +700,30 @@ class PaymentService {
   }> {
     try {
       // Get payment type
-      const { data: paymentType } = await supabase
+      const scope = getOrgScope();
+      let ptQuery = supabase
         .from('payment_types')
         .select('amount')
-        .eq('id', paymentTypeId)
-        .single();
+        .eq('id', paymentTypeId);
+      if (scope) ptQuery = ptQuery.eq('organization_id', scope.orgId);
+      const { data: paymentType } = await ptQuery.single();
 
       if (!paymentType) {
         throw new Error('Payment type not found');
       }
 
       // Get student's payment
-      const { data: payment } = await supabase
+      let pmtQuery = supabase
         .from('payments')
         .select('*')
-        .eq('student_id', studentId)
+        .eq('member_id', studentId)
         .eq('payment_type_id', paymentTypeId)
         .order('created_at', { ascending: false })
-        .limit(1)
-        .single();
+        .limit(1);
+      if (scope) pmtQuery = pmtQuery.eq('organization_id', scope.orgId);
+      const { data: payments } = await pmtQuery;
+
+      const payment = payments?.[0] || null;
 
       if (!payment) {
         return {

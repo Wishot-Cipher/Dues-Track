@@ -1,56 +1,26 @@
 /**
  * Organization Context
- * Manages organization and department state for multi-tenant support
+ * Manages organization and group state for Payvexo multi-tenant support
+ * Supports: Universities, Churches, Clubs, Associations, Cooperatives, NGOs
  */
 
-import { createContext, useContext, useState, useEffect, useCallback, type ReactNode } from 'react';
-import type { Organization, Department, OrganizationSettings } from '@/types/multiTenant';
+import { createContext, useState, useEffect, useCallback, type ReactNode } from 'react';
+import type { Organization, OrganizationGroup, OrganizationSettings, OrganizationContextType } from '@/types/multiTenant';
+import { ORG_TYPE_DEFAULTS } from '@/types/multiTenant';
 import { supabase } from '@/config/supabase';
 
-// ============================================================
-// CONTEXT TYPES
-// ============================================================
-
-export interface OrganizationContextType {
-  // Current organization & department
-  organization: Organization | null;
-  department: Department | null;
-  settings: OrganizationSettings | null;
-  
-  // Available departments (for switching)
-  departments: Department[];
-  
-  // Loading state
-  loading: boolean;
-  error: string | null;
-  
-  // Actions
-  setOrganization: (org: Organization | null) => void;
-  setDepartment: (dept: Department | null) => void;
-  switchDepartment: (departmentId: string) => Promise<void>;
-  fetchOrganizationBySlug: (slug: string) => Promise<Organization | null>;
-  refreshOrganization: () => Promise<void>;
-  clearOrganization: () => void;
-  
-  // Helpers
-  formatCurrency: (amount: number) => string;
-  getLevels: () => string[];
-  getSections: () => string[];
-  
-  // Multi-tenant mode detection
-  isMultiTenant: boolean;
-}
-
 const OrganizationContext = createContext<OrganizationContextType | null>(null);
+
+export { OrganizationContext };
 
 // ============================================================
 // STORAGE KEYS
 // ============================================================
 
 const STORAGE_KEYS = {
-  ORGANIZATION: 'current_organization',
-  DEPARTMENT: 'current_department',
-  SETTINGS: 'organization_settings',
+  ORGANIZATION: 'pvx_organization',
+  GROUP: 'pvx_group',
+  SETTINGS: 'pvx_settings',
 };
 
 // ============================================================
@@ -63,15 +33,15 @@ interface OrganizationProviderProps {
 
 export function OrganizationProvider({ children }: OrganizationProviderProps) {
   const [organization, setOrganizationState] = useState<Organization | null>(null);
-  const [department, setDepartmentState] = useState<Department | null>(null);
+  const [group, setGroupState] = useState<OrganizationGroup | null>(null);
   const [settings, setSettings] = useState<OrganizationSettings | null>(null);
-  const [departments, setDepartments] = useState<Department[]>([]);
+  const [groups, setGroups] = useState<OrganizationGroup[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  // Detect if we're in multi-tenant mode based on env or database
+  // Detect multi-tenant mode
   const isMultiTenant = Boolean(
-    import.meta.env.VITE_MULTI_TENANT === 'true' || 
+    import.meta.env.VITE_MULTI_TENANT === 'true' ||
     organization !== null
   );
 
@@ -110,18 +80,18 @@ export function OrganizationProvider({ children }: OrganizationProviderProps) {
     saveToStorage(STORAGE_KEYS.ORGANIZATION, org);
   }, [saveToStorage]);
 
-  const setDepartment = useCallback((dept: Department | null) => {
-    setDepartmentState(dept);
-    saveToStorage(STORAGE_KEYS.DEPARTMENT, dept);
+  const setGroup = useCallback((grp: OrganizationGroup | null) => {
+    setGroupState(grp);
+    saveToStorage(STORAGE_KEYS.GROUP, grp);
   }, [saveToStorage]);
 
   const clearOrganization = useCallback(() => {
     setOrganizationState(null);
-    setDepartmentState(null);
+    setGroupState(null);
     setSettings(null);
-    setDepartments([]);
+    setGroups([]);
     localStorage.removeItem(STORAGE_KEYS.ORGANIZATION);
-    localStorage.removeItem(STORAGE_KEYS.DEPARTMENT);
+    localStorage.removeItem(STORAGE_KEYS.GROUP);
     localStorage.removeItem(STORAGE_KEYS.SETTINGS);
   }, []);
 
@@ -140,7 +110,7 @@ export function OrganizationProvider({ children }: OrganizationProviderProps) {
           *,
           settings:organization_settings(*)
         `)
-        .eq('slug', slug)
+        .eq('slug', slug.toLowerCase())
         .eq('is_active', true)
         .single();
 
@@ -152,22 +122,23 @@ export function OrganizationProvider({ children }: OrganizationProviderProps) {
 
       const org = data as Organization;
       setOrganization(org);
-      
+
       if (data.settings) {
         setSettings(data.settings as OrganizationSettings);
         saveToStorage(STORAGE_KEYS.SETTINGS, data.settings);
       }
 
-      // Fetch departments for this organization
-      const { data: depts } = await supabase
-        .from('departments')
+      // Fetch groups for this organization
+      const { data: orgGroups } = await supabase
+        .from('organization_groups')
         .select('*')
         .eq('organization_id', org.id)
         .eq('is_active', true)
+        .order('display_order', { ascending: true })
         .order('name');
 
-      if (depts) {
-        setDepartments(depts as Department[]);
+      if (orgGroups) {
+        setGroups(orgGroups as OrganizationGroup[]);
       }
 
       return org;
@@ -180,12 +151,12 @@ export function OrganizationProvider({ children }: OrganizationProviderProps) {
     }
   }, [setOrganization, saveToStorage]);
 
-  const switchDepartment = useCallback(async (departmentId: string) => {
-    const dept = departments.find(d => d.id === departmentId);
-    if (dept) {
-      setDepartment(dept);
+  const switchGroup = useCallback(async (groupId: string) => {
+    const grp = groups.find(g => g.id === groupId);
+    if (grp) {
+      setGroup(grp);
     }
-  }, [departments, setDepartment]);
+  }, [groups, setGroup]);
 
   const refreshOrganization = useCallback(async () => {
     if (organization?.slug) {
@@ -194,63 +165,87 @@ export function OrganizationProvider({ children }: OrganizationProviderProps) {
   }, [organization?.slug, fetchOrganizationBySlug]);
 
   // ============================================================
-  // HELPERS
+  // HELPERS (context-aware, uses org terminology)
   // ============================================================
 
   const formatCurrency = useCallback((amount: number): string => {
     const symbol = organization?.currency_symbol || '₦';
     const code = organization?.currency_code || 'NGN';
-    
+
     try {
-      const formatted = new Intl.NumberFormat('en-NG', {
+      const formatted = new Intl.NumberFormat(organization?.locale || 'en-NG', {
         style: 'currency',
         currency: code,
         minimumFractionDigits: 0,
         maximumFractionDigits: 2,
       }).format(amount);
-      
-      // Replace currency code with symbol if needed
+
       return formatted.replace(code, symbol);
     } catch {
-      // Fallback for unsupported currencies
       return `${symbol}${amount.toLocaleString()}`;
     }
-  }, [organization?.currency_symbol, organization?.currency_code]);
+  }, [organization?.currency_symbol, organization?.currency_code, organization?.locale]);
 
   const getLevels = useCallback((): string[] => {
-    // Department levels override org defaults
-    if (department?.levels && department.levels.length > 0) {
-      return department.levels;
+    let levels: string[];
+    // Group levels override org-type defaults
+    if (group?.levels && group.levels.length > 0) {
+      levels = group.levels;
+    } else if (organization?.organization_type) {
+      // Fall back to org type defaults
+      const defaults = ORG_TYPE_DEFAULTS[organization.organization_type];
+      levels = defaults ? defaults.default_levels : ['Level 1', 'Level 2', 'Level 3'];
+    } else {
+      levels = ['Level 1', 'Level 2', 'Level 3'];
     }
-    // Default levels
-    return ['100L', '200L', '300L', '400L', '500L'];
-  }, [department?.levels]);
+    // Always deduplicate (trim + case-insensitive, preserve first casing)
+    const seen = new Set<string>();
+    return levels.filter(l => {
+      const key = l.trim().toLowerCase();
+      if (!key || seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+  }, [group?.levels, organization?.organization_type]);
 
   const getSections = useCallback((): string[] => {
-    if (department?.sections && department.sections.length > 0) {
-      return department.sections;
+    if (group?.sections && group.sections.length > 0) {
+      return group.sections;
     }
     return ['A', 'B', 'C'];
-  }, [department?.sections]);
+  }, [group?.sections]);
+
+  const getMemberLabel = useCallback((plural = false): string => {
+    if (plural) return organization?.member_label_plural || 'Members';
+    return organization?.member_label || 'Member';
+  }, [organization?.member_label, organization?.member_label_plural]);
+
+  const getGroupLabel = useCallback((plural = false): string => {
+    if (plural) return organization?.group_label_plural || 'Groups';
+    return organization?.group_label || 'Group';
+  }, [organization?.group_label, organization?.group_label_plural]);
+
+  const getPaymentLabel = useCallback((): string => {
+    return organization?.payment_label || 'Payments';
+  }, [organization?.payment_label]);
 
   // ============================================================
   // INITIALIZATION
   // ============================================================
 
   useEffect(() => {
-    // Load persisted organization data on mount
     const storedOrg = loadFromStorage<Organization>(STORAGE_KEYS.ORGANIZATION);
-    const storedDept = loadFromStorage<Department>(STORAGE_KEYS.DEPARTMENT);
+    const storedGroup = loadFromStorage<OrganizationGroup>(STORAGE_KEYS.GROUP);
     const storedSettings = loadFromStorage<OrganizationSettings>(STORAGE_KEYS.SETTINGS);
 
     if (storedOrg) {
       setOrganizationState(storedOrg);
-      // Refresh in background to ensure data is current
+      // Refresh in background
       fetchOrganizationBySlug(storedOrg.slug).catch(console.error);
     }
 
-    if (storedDept) {
-      setDepartmentState(storedDept);
+    if (storedGroup) {
+      setGroupState(storedGroup);
     }
 
     if (storedSettings) {
@@ -266,20 +261,23 @@ export function OrganizationProvider({ children }: OrganizationProviderProps) {
 
   const value: OrganizationContextType = {
     organization,
-    department,
+    group,
     settings,
-    departments,
+    groups,
     loading,
     error,
     setOrganization,
-    setDepartment,
-    switchDepartment,
+    setGroup,
+    switchGroup,
     fetchOrganizationBySlug,
     refreshOrganization,
     clearOrganization,
     formatCurrency,
     getLevels,
     getSections,
+    getMemberLabel,
+    getGroupLabel,
+    getPaymentLabel,
     isMultiTenant,
   };
 
@@ -290,16 +288,5 @@ export function OrganizationProvider({ children }: OrganizationProviderProps) {
   );
 }
 
-// ============================================================
-// HOOK
-// ============================================================
-
-export function useOrganization(): OrganizationContextType {
-  const context = useContext(OrganizationContext);
-  if (!context) {
-    throw new Error('useOrganization must be used within an OrganizationProvider');
-  }
-  return context;
-}
 
 export default OrganizationContext;

@@ -14,19 +14,35 @@ type ToastItem = {
 
 export const ToastProvider: React.FC<{ children?: React.ReactNode; position?: 'bottom-right' | 'top-right' | 'top-left' | 'bottom-left' }> = ({ children, position = 'bottom-right' }) => {
   const [toasts, setToasts] = useState<ToastItem[]>([])
+  const toastsRef = useRef<ToastItem[]>([])
   const timers = useRef<Record<string, number | null>>({})
 
   const remove = useCallback((id: string) => {
-    setToasts((t) => t.filter((x) => x.id !== id))
+    setToasts((t) => {
+      const next = t.filter((x) => x.id !== id)
+      toastsRef.current = next
+      return next
+    })
     const handle = timers.current[id]
     if (handle) window.clearTimeout(handle)
     delete timers.current[id]
   }, [])
 
   const add = useCallback((message: React.ReactNode, type: ToastType = 'info', duration = 4000) => {
+    // Deduplicate: if the same message+type is already visible, skip
+    const msgStr = typeof message === 'string' ? message : String(message)
+    const isDuplicate = toastsRef.current.some(
+      (t) => t.type === type && (typeof t.message === 'string' ? t.message : String(t.message)) === msgStr
+    )
+    if (isDuplicate) return ''
+
     const id = `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`
     const item: ToastItem = { id, type, message, duration }
-    setToasts((t) => [...t, item])
+    setToasts((t) => {
+      const next = [...t, item]
+      toastsRef.current = next
+      return next
+    })
 
     if (duration > 0) {
       const handle = window.setTimeout(() => remove(id), duration)

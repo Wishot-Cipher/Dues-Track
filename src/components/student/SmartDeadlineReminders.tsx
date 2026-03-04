@@ -3,7 +3,8 @@ import { motion } from 'framer-motion'
 import { Bell, Clock, AlertCircle, Calendar as CalendarIcon, X } from 'lucide-react'
 import { colors } from '@/config/colors'
 import { supabase } from '@/config/supabase'
-import { useAuth } from '@/hooks/useAuth'
+import { useAppAuth as useAuth } from '@/hooks/useAppAuth'
+import { getOrgScope } from '@/utils/orgScope'
 
 interface DeadlineReminder {
   id: string
@@ -37,20 +38,26 @@ export default function SmartDeadlineReminders() {
     try {
       setLoading(true)
 
+      const scope = getOrgScope()
+
       // Get active payment types with deadlines
-      const { data: paymentTypes } = await supabase
+      let qTypes = supabase
         .from('payment_types')
         .select('id, title, amount, deadline, allow_partial, late_fee_per_day')
         .eq('is_active', true)
         .not('deadline', 'is', null)
+      if (scope) qTypes = qTypes.eq('organization_id', scope.orgId)
+      const { data: paymentTypes } = await qTypes
 
       if (!paymentTypes) return
 
       // Get user's payments
-      const { data: payments } = await supabase
+      let qPayments = supabase
         .from('payments')
         .select('payment_type_id, amount, status')
-        .eq('student_id', user?.id)
+        .eq('member_id', user?.id)
+      if (scope) qPayments = qPayments.eq('organization_id', scope.orgId)
+      const { data: payments } = await qPayments
 
       const now = new Date()
       const remindersList: DeadlineReminder[] = []

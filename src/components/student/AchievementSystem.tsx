@@ -3,7 +3,8 @@ import { motion, AnimatePresence } from 'framer-motion'
 import { Trophy, Award, Star, Zap, Target, Clock, Users, Heart } from 'lucide-react'
 import { colors, gradients } from '@/config/colors'
 import { supabase } from '@/config/supabase'
-import { useAuth } from '@/hooks/useAuth'
+import { useAppAuth as useAuth } from '@/hooks/useAppAuth'
+import { getOrgScope } from '@/utils/orgScope'
 
 interface Achievement {
   id: string
@@ -40,21 +41,27 @@ export default function AchievementSystem() {
     try {
       setLoading(true)
 
+      const scope = getOrgScope()
+
       // Get user's payment history
-      const { data: payments } = await supabase
+      let qPayments = supabase
         .from('payments')
         .select('id, amount, created_at, status, payment_type_id')
-        .eq('student_id', user?.id)
+        .eq('member_id', user?.id)
         .eq('status', 'approved')
         .order('created_at', { ascending: true })
+      if (scope) qPayments = qPayments.eq('organization_id', scope.orgId)
+      const { data: payments } = await qPayments
 
       // Get payments made for others
-      const { data: helpedPayments } = await supabase
+      let qHelped = supabase
         .from('payments')
         .select('id, created_at')
         .eq('paid_by', user?.id)
-        .neq('student_id', user?.id)
+        .neq('member_id', user?.id)
         .eq('status', 'approved')
+      if (scope) qHelped = qHelped.eq('organization_id', scope.orgId)
+      const { data: helpedPayments } = await qHelped
 
       const paymentCount = payments?.length || 0
       const helpedCount = helpedPayments?.length || 0
@@ -65,9 +72,11 @@ export default function AchievementSystem() {
       setStreak(streakData)
 
       // Check for early payments (paid before deadline)
-      const { data: paymentTypes } = await supabase
+      let qTypes = supabase
         .from('payment_types')
         .select('id, deadline')
+      if (scope) qTypes = qTypes.eq('organization_id', scope.orgId)
+      const { data: paymentTypes } = await qTypes
 
       const earlyPayments = payments?.filter(p => {
         const pt = paymentTypes?.find(t => t.id === p.payment_type_id)

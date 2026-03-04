@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { Settings, Eye, EyeOff, Save, RefreshCw, ChevronDown, ChevronUp } from 'lucide-react'
 import { colors, gradients } from '@/config/colors'
-import { useAuth } from '@/hooks/useAuth'
+import { useAppAuth as useAuth } from '@/hooks/useAppAuth'
 import studentFeatureService, { type StudentFeatureSetting } from '@/services/studentFeatureService'
 
 const INITIAL_VISIBLE_COUNT = 3;

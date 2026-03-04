@@ -31,7 +31,7 @@ async function sendEmailNotification(to: string, subject: string, html: string):
         'Content-Type': 'application/json'
       },
       body: JSON.stringify({
-        from: 'Class Dues <notifications@resend.dev>',
+        from: 'Payvexo <notifications@resend.dev>',
         to,
         subject,
         html
@@ -84,17 +84,17 @@ export default async function handler(req: any, res: any) {
       return res.status(400).json({ error: 'Missing required fields' })
     }
 
-    // Validate the payment exists and belongs to this student (security check)
+    // Validate the payment exists and belongs to this member (security check)
     const { data: payment, error: paymentError } = await supabaseAdmin
       .from('payments')
-      .select('id, student_id, amount, status')
+      .select('id, member_id, amount, status, organization_id')
       .eq('id', paymentId)
-      .eq('student_id', studentId)
+      .eq('member_id', studentId)
       .single();
 
     if (paymentError || !payment) {
       console.log('❌ Payment validation failed:', paymentError);
-      return res.status(403).json({ error: 'Payment not found or does not belong to student' });
+      return res.status(403).json({ error: 'Payment not found or does not belong to member' });
     }
 
     // Validate amount
@@ -103,57 +103,78 @@ export default async function handler(req: any, res: any) {
       return res.status(400).json({ error: 'Invalid amount' })
     }
 
-    // Fetch names for message
+    const organizationId = payment.organization_id;
+
+    // Fetch names for message (multi-tenant: organization_members table)
     const { data: pt } = await supabaseAdmin.from('payment_types').select('title').eq('id', paymentTypeId).single()
-    const { data: student } = await supabaseAdmin.from('students').select('full_name, reg_number').eq('id', studentId).single()
+    const { data: member } = await supabaseAdmin
+      .from('organization_members')
+      .select('full_name, member_id')
+      .eq('id', studentId)
+      .single()
+
+    // Get org slug for notification links
+    const { data: org } = await supabaseAdmin
+      .from('organizations')
+      .select('slug')
+      .eq('id', organizationId)
+      .single()
+    const orgSlug = org?.slug || ''
 
     const paymentTypeName = pt?.title || 'Payment'
-    const studentName = student?.full_name || 'A student'
-    const studentReg = student?.reg_number || ''
+    const memberName = member?.full_name || 'A member'
+    const memberId = member?.member_id || ''
     const formattedAmount = `₦${Number(amount || 0).toLocaleString()}`
 
-    // Find approvers: admins who can approve payments or have role finsec
-    // Also get their email addresses for email notifications
+    // Find approvers: admins who can approve payments or have role treasurer
+    // Scoped to the same organization as the payment
     const { data: approvers } = await supabaseAdmin
-      .from('admins')
+      .from('member_admins')
       .select(`
-        student_id,
-        students!admins_student_id_fkey (
+        member_id,
+        organization_members!member_admins_member_id_fkey (
+          id,
           email,
           full_name
         )
       `)
-      .or('can_approve_payments.eq.true,role.eq.finsec')
+      .eq('organization_id', organizationId)
+      .eq('is_active', true)
+      .or('can_approve_payments.eq.true,role.eq.treasurer,role.eq.org_owner,role.eq.org_admin')
 
     if (!approvers || approvers.length === 0) return res.status(200).json({ ok: true, inserted: 0 })
 
-    // Insert in-app notifications
+    const reviewLink = orgSlug ? `/${orgSlug}/admin/review` : `/admin/review`
+
+    // Insert in-app notifications (multi-tenant: member_id + organization_id)
     const inserts = approvers.map((a: any) => ({
-      recipient_id: a.student_id,
+      member_id: a.member_id,
+      organization_id: organizationId,
       type: 'payment_pending',
       title: `💰 New Payment - ${paymentTypeName}`,
-      message: `${studentName} (${studentReg}) submitted ${formattedAmount} for "${paymentTypeName}". Tap to review.`,
-      link: `/admin/review`,
+      message: `${memberName} (${memberId}) submitted ${formattedAmount} for "${paymentTypeName}". Tap to review.`,
+      link: reviewLink,
       is_read: false,
     }))
 
     const { error } = await supabaseAdmin.from('notifications').insert(inserts)
     if (error) {
+      console.error('❌ Notification insert error:', error);
       // Non-critical, continue with other notifications
     }
 
     // Send email notifications to admins with valid emails
-    const reviewUrl = `${appUrl.replace(/\/$/, '')}/admin/review`
+    const reviewUrl = `${appUrl.replace(/\/$/, '')}${reviewLink}`
     let emailsSent = 0
 
     for (const approver of approvers) {
-      const adminEmail = (approver.students as any)?.email
-      const adminName = (approver.students as any)?.full_name || 'Admin'
+      const adminEmail = (approver.organization_members as any)?.email
+      const adminName = (approver.organization_members as any)?.full_name || 'Admin'
       
       if (adminEmail && adminEmail.includes('@')) {
         const emailSent = await sendEmailNotification(
           adminEmail,
-          `💰 New Payment: ${studentName} - ${formattedAmount}`,
+          `💰 New Payment: ${memberName} - ${formattedAmount}`,
           `
             <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
               <div style="background: linear-gradient(135deg, #FF6803, #FF8534); padding: 20px; border-radius: 12px 12px 0 0; text-align: center;">
@@ -168,12 +189,12 @@ export default async function handler(req: any, res: any) {
                 <div style="background: #2A2A2A; padding: 16px; border-radius: 8px; margin-bottom: 20px;">
                   <table style="width: 100%; color: #E5E5E5; font-size: 14px;">
                     <tr>
-                      <td style="padding: 8px 0; color: #888;">Student:</td>
-                      <td style="padding: 8px 0; font-weight: bold;">${studentName}</td>
+                      <td style="padding: 8px 0; color: #888;">Member:</td>
+                      <td style="padding: 8px 0; font-weight: bold;">${memberName}</td>
                     </tr>
                     <tr>
-                      <td style="padding: 8px 0; color: #888;">Reg Number:</td>
-                      <td style="padding: 8px 0;">${studentReg}</td>
+                      <td style="padding: 8px 0; color: #888;">Member ID:</td>
+                      <td style="padding: 8px 0;">${memberId}</td>
                     </tr>
                     <tr>
                       <td style="padding: 8px 0; color: #888;">Payment Type:</td>
@@ -191,7 +212,7 @@ export default async function handler(req: any, res: any) {
                 </a>
                 
                 <p style="margin: 24px 0 0; font-size: 12px; color: #666;">
-                  This is an automated notification from Class Dues Tracker.
+                  This is an automated notification from Payvexo.
                 </p>
               </div>
             </div>
@@ -206,20 +227,20 @@ export default async function handler(req: any, res: any) {
     if (vapidPublicKey && vapidPrivateKey) {
       for (const approver of approvers) {
         try {
-          // Get push subscription for this admin
+          // Get push subscription for this admin (user_id = organization_members.id)
           const { data: subscription } = await supabaseAdmin
             .from('push_subscriptions')
             .select('endpoint, p256dh, auth')
-            .eq('user_id', approver.student_id)
+            .eq('user_id', approver.member_id)
             .single();
 
           if (subscription) {
             const pushPayload = JSON.stringify({
               title: `💰 New Payment - ${paymentTypeName}`,
-              body: `${studentName} submitted ${formattedAmount}. Tap to review.`,
+              body: `${memberName} submitted ${formattedAmount}. Tap to review.`,
               icon: '/icons/icon-192.png',
               badge: '/icons/icon-72.png',
-              url: '/admin/review',
+              url: reviewLink,
               tag: 'new-payment',
             });
 

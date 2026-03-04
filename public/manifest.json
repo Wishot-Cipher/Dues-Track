@@ -1,11 +1,11 @@
 {
-  "name": "Class Dues Tracker - By Wishot",
-  "short_name": "DuesTracker",
-  "description": "Modern class payment management system for ECE students. Track dues, manage payments, and stay organized. Built by Wishot Electronics.",
+  "name": "Payvexo - Smart Payment & Dues Management",
+  "short_name": "Payvexo",
+  "description": "The all-in-one payment tracking and dues management platform for universities, churches, clubs, and organizations.",
   "start_url": "/",
   "display": "standalone",
-  "background_color": "#0F0703",
-  "theme_color": "#FF6803",
+  "background_color": "#0A0118",
+  "theme_color": "#6C3AED",
   "orientation": "portrait-primary",
   "categories": ["finance", "education", "utilities"],
   "icons": [
@@ -46,7 +46,7 @@
       "sizes": "512x512",
       "type": "image/png",
       "form_factor": "narrow",
-      "label": "DuesTracker Dashboard"
+      "label": "Payvexo Dashboard"
     }
   ],
   "shortcuts": [

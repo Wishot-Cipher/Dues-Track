@@ -1,5 +1,5 @@
-/* eslint-disable @typescript-eslint/no-unused-vars */
-import { useState, useEffect } from 'react';
+﻿/* eslint-disable @typescript-eslint/no-unused-vars */
+import { useState, useEffect, useRef } from 'react';
 import { motion} from 'framer-motion';
 import { 
   User, 
@@ -20,12 +20,17 @@ import {
   Hash,
   KeyRound,
   History,
-  ChevronRight
+  ChevronRight,
+  Camera,
+  Building2,
+  Upload,
+  Loader2
 } from 'lucide-react';
 import Footer from '@/components/Footer';
 import { colors, gradients } from '@/config/colors';
-import { useAuth } from '@/hooks/useAuth';
-import { useNavigate } from 'react-router-dom';
+import { useAuth } from '@/hooks/useAppAuth';
+import {  } from 'react-router-dom';
+import { useAppNav } from '@/hooks/useAppNav';
 import GlassCard from '@/components/ui/GlassCard';
 import Input from '@/components/ui/Input';
 import CustomButton from '@/components/ui/CustomButton';
@@ -33,10 +38,13 @@ import { formatCurrency, formatDate } from '@/utils/formatters';
 import paymentService from '@/services/paymentService';
 import PageWrapper from '@/components/ui/PageWrapper';
 import { ProfileSkeleton } from '@/components/ui/Skeleton';
+import { useMultiTenantAuth } from '@/hooks/useMultiTenantAuth';
+import { supabase } from '@/config/supabase';
 
 export default function ProfilePage() {
   const { user, updateProfile, loading: authLoading } = useAuth();
-  const navigate = useNavigate();
+  const { organization, isAnyAdmin, refreshSession } = useMultiTenantAuth();
+  const { go: navigate } = useAppNav();
   const [isEditing, setIsEditing] = useState(false);
   const [loading, setLoading] = useState(false);
   const [pageLoading, setPageLoading] = useState(true);
@@ -54,6 +62,98 @@ export default function ProfilePage() {
     phone: user?.phone || '',
     section: user?.section || '',
   });
+
+  // Org logo state
+  const logoInputRef = useRef<HTMLInputElement>(null);
+  const [orgLogoUrl, setOrgLogoUrl] = useState(organization?.logo_url || '');
+  const [logoUploading, setLogoUploading] = useState(false);
+  const [logoMessage, setLogoMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+
+  useEffect(() => {
+    setOrgLogoUrl(organization?.logo_url || '');
+  }, [organization?.logo_url]);
+
+  const handleLogoUpload = async (file: File) => {
+    if (!organization?.id) return;
+    if (!file.type.startsWith('image/')) {
+      setLogoMessage({ type: 'error', text: 'Please select an image file (PNG, JPG, etc.)' });
+      return;
+    }
+    if (file.size > 2 * 1024 * 1024) {
+      setLogoMessage({ type: 'error', text: 'Image must be smaller than 2MB' });
+      return;
+    }
+
+    try {
+      setLogoUploading(true);
+      setLogoMessage(null);
+
+      const fileExt = file.name.split('.').pop() || 'png';
+      const fileName = `org_${organization.id}_${Date.now()}.${fileExt}`;
+      const filePath = `org-logos/${fileName}`;
+
+      // Upload to Supabase Storage
+      const { error: uploadError } = await supabase.storage
+        .from('profile-images')
+        .upload(filePath, file, { upsert: true });
+
+      if (uploadError) {
+        throw new Error(uploadError.message);
+      }
+
+      // Get public URL
+      const { data: urlData } = supabase.storage
+        .from('profile-images')
+        .getPublicUrl(filePath);
+
+      const publicUrl = urlData.publicUrl;
+
+      // Update organization record
+      const { error: updateError } = await supabase
+        .from('organizations')
+        .update({ logo_url: publicUrl, updated_at: new Date().toISOString() })
+        .eq('id', organization.id);
+
+      if (updateError) {
+        throw new Error(updateError.message);
+      }
+
+      setOrgLogoUrl(publicUrl);
+      setLogoMessage({ type: 'success', text: 'Organization logo updated successfully!' });
+
+      // Refresh session to update the org data in context
+      try { await refreshSession(); } catch { /* best effort */ }
+    } catch (error: unknown) {
+      const msg = error instanceof Error ? error.message : 'Failed to upload logo';
+      setLogoMessage({ type: 'error', text: msg });
+    } finally {
+      setLogoUploading(false);
+    }
+  };
+
+  const handleRemoveLogo = async () => {
+    if (!organization?.id) return;
+    try {
+      setLogoUploading(true);
+      setLogoMessage(null);
+
+      const { error } = await supabase
+        .from('organizations')
+        .update({ logo_url: null, updated_at: new Date().toISOString() })
+        .eq('id', organization.id);
+
+      if (error) throw new Error(error.message);
+
+      setOrgLogoUrl('');
+      setLogoMessage({ type: 'success', text: 'Organization logo removed' });
+      try { await refreshSession(); } catch { /* best effort */ }
+    } catch (error: unknown) {
+      const msg = error instanceof Error ? error.message : 'Failed to remove logo';
+      setLogoMessage({ type: 'error', text: msg });
+    } finally {
+      setLogoUploading(false);
+    }
+  };
 
   // Fetch payment summary
   useEffect(() => {
@@ -137,7 +237,7 @@ export default function ProfilePage() {
             <div className="flex items-center gap-3 sm:gap-4">
               <motion.button
                 onClick={() => navigate('/dashboard')}
-                className="flex items-center justify-center px-3 py-2 rounded-lg transition-all duration-300 outline outline-1"
+                className="flex items-center justify-center px-3 py-2 rounded-lg transition-all duration-300 outline-1"
                 style={{ 
                   color: colors.textSecondary,
                   outlineColor: colors.primary,
@@ -283,7 +383,7 @@ export default function ProfilePage() {
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: 0.35 }}
             >
-              <GlassCard className="!p-0 overflow-hidden">
+              <GlassCard className="p-0! overflow-hidden">
                 <div className="px-4 pt-4 pb-2">
                   <h3 className="text-sm font-semibold text-white">Quick Actions</h3>
                 </div>
@@ -314,6 +414,133 @@ export default function ProfilePage() {
                 ))}
               </GlassCard>
             </motion.div>
+
+            {/* Organization Logo - Admin Only */}
+            {isAnyAdmin() && organization && (
+              <motion.div
+                className="mt-4"
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 0.45 }}
+              >
+                <GlassCard>
+                  <div className="flex items-center gap-3 mb-4">
+                    <div
+                      className="w-8 h-8 rounded-lg flex items-center justify-center shrink-0"
+                      style={{ background: `${colors.primary}15` }}
+                    >
+                      <Building2 size={16} style={{ color: colors.primary }} />
+                    </div>
+                    <div>
+                      <h3 className="text-sm font-semibold text-white">Organization Logo</h3>
+                      <p className="text-[11px]" style={{ color: colors.textSecondary }}>
+                        {organization.short_name || organization.name}
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* Current Logo Preview */}
+                  <div className="flex flex-col items-center gap-3">
+                    <div className="relative group">
+                      {orgLogoUrl ? (
+                        <img
+                          src={orgLogoUrl}
+                          alt={organization.short_name}
+                          className="w-20 h-20 rounded-xl object-cover ring-2 ring-white/10"
+                        />
+                      ) : (
+                        <div
+                          className="w-20 h-20 rounded-xl flex items-center justify-center text-2xl font-bold ring-2 ring-white/10"
+                          style={{ background: `linear-gradient(135deg, ${organization.primary_color || colors.primary}, ${organization.primary_color || colors.primary}88)` }}
+                        >
+                          {organization.short_name?.charAt(0) || 'O'}
+                        </div>
+                      )}
+
+                      {/* Camera overlay */}
+                      <motion.button
+                        onClick={() => logoInputRef.current?.click()}
+                        disabled={logoUploading}
+                        className="absolute inset-0 rounded-xl flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer"
+                        style={{ background: 'rgba(0,0,0,0.5)' }}
+                        whileTap={{ scale: 0.95 }}
+                      >
+                        {logoUploading ? (
+                          <Loader2 size={20} className="text-white animate-spin" />
+                        ) : (
+                          <Camera size={20} className="text-white" />
+                        )}
+                      </motion.button>
+                    </div>
+
+                    <input
+                      ref={logoInputRef}
+                      type="file"
+                      accept="image/png,image/jpeg,image/webp,image/gif"
+                      className="hidden"
+                      onChange={(e) => {
+                        const file = e.target.files?.[0];
+                        if (file) handleLogoUpload(file);
+                        e.target.value = '';
+                      }}
+                    />
+
+                    <div className="flex items-center gap-2">
+                      <motion.button
+                        onClick={() => logoInputRef.current?.click()}
+                        disabled={logoUploading}
+                        className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors"
+                        style={{ background: `${colors.primary}20`, color: colors.primary }}
+                        whileHover={{ scale: 1.02 }}
+                        whileTap={{ scale: 0.98 }}
+                      >
+                        <Upload size={12} />
+                        {orgLogoUrl ? 'Change' : 'Upload'}
+                      </motion.button>
+                      {orgLogoUrl && (
+                        <motion.button
+                          onClick={handleRemoveLogo}
+                          disabled={logoUploading}
+                          className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors"
+                          style={{ background: 'rgba(239, 68, 68, 0.15)', color: '#ef4444' }}
+                          whileHover={{ scale: 1.02 }}
+                          whileTap={{ scale: 0.98 }}
+                        >
+                          <X size={12} />
+                          Remove
+                        </motion.button>
+                      )}
+                    </div>
+
+                    <p className="text-[10px] text-center" style={{ color: colors.textSecondary }}>
+                      PNG, JPG or WebP • Max 2MB
+                    </p>
+                  </div>
+
+                  {/* Logo upload message */}
+                  {logoMessage && (
+                    <motion.div
+                      className="mt-3 p-2.5 rounded-lg flex items-center gap-2"
+                      initial={{ opacity: 0, y: -5 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      style={{
+                        background: logoMessage.type === 'success' ? 'rgba(34, 197, 94, 0.1)' : 'rgba(239, 68, 68, 0.1)',
+                        border: `1px solid ${logoMessage.type === 'success' ? 'rgba(34, 197, 94, 0.3)' : 'rgba(239, 68, 68, 0.3)'}`,
+                      }}
+                    >
+                      {logoMessage.type === 'success' ? (
+                        <CheckCircle2 size={14} className="text-green-400 shrink-0" />
+                      ) : (
+                        <AlertCircle size={14} className="text-red-400 shrink-0" />
+                      )}
+                      <p className={`text-[11px] font-medium ${logoMessage.type === 'success' ? 'text-green-400' : 'text-red-400'}`}>
+                        {logoMessage.text}
+                      </p>
+                    </motion.div>
+                  )}
+                </GlassCard>
+              </motion.div>
+            )}
 
             {/* Payment Summary Card - Mobile */}
             <motion.div
@@ -581,7 +808,7 @@ export default function ProfilePage() {
                   >
                     <div className="flex items-start gap-3">
                       <div
-                        className="w-10 h-10 rounded-lg flex items-center justify-center flex-shrink-0"
+                        className="w-10 h-10 rounded-lg flex items-center justify-center shrink-0"
                         style={{ background: `${colors.primary}15` }}
                       >
                         <BookOpen size={18} style={{ color: colors.primary }} />
@@ -609,7 +836,7 @@ export default function ProfilePage() {
                 >
                   <div className="flex items-start gap-3">
                     <div
-                      className="w-10 h-10 rounded-lg flex items-center justify-center flex-shrink-0"
+                      className="w-10 h-10 rounded-lg flex items-center justify-center shrink-0"
                       style={{ background: `${colors.accentMint}15` }}
                     >
                       <GraduationCap size={18} style={{ color: colors.accentMint }} />
@@ -642,7 +869,7 @@ export default function ProfilePage() {
                 >
                   <div className="flex items-start gap-3">
                     <div
-                      className="w-10 h-10 rounded-lg flex items-center justify-center flex-shrink-0"
+                      className="w-10 h-10 rounded-lg flex items-center justify-center shrink-0"
                       style={{ background: `${colors.statusPaid}15` }}
                     >
                       <Calendar size={18} style={{ color: colors.statusPaid }} />
@@ -711,7 +938,7 @@ export default function ProfilePage() {
                         Total Paid
                       </p>
                     </div>
-                    <p className="text-2xl font-bold text-white mb-1">
+                    <p className="text-xl sm:text-2xl font-bold text-white mb-1">
                       {formatCurrency(paymentSummary.totalPaid)}
                     </p>
                     <p className="text-xs" style={{ color: colors.textSecondary }}>
@@ -728,7 +955,7 @@ export default function ProfilePage() {
                         Outstanding
                       </p>
                     </div>
-                    <p className="text-2xl font-bold" style={{ color: colors.warning }}>
+                    <p className="text-xl sm:text-2xl font-bold" style={{ color: colors.warning }}>
                       {formatCurrency(paymentSummary.totalOutstanding)}
                     </p>
                     <p className="text-xs" style={{ color: colors.textSecondary }}>

@@ -1,5 +1,6 @@
 import { supabase, STORAGE_BUCKETS, getPublicUrl } from '../config/supabase'
 import type { PostgrestError } from '@supabase/supabase-js'
+import { getOrgScope } from '@/utils/orgScope'
 
 export interface Expense {
   id: string
@@ -197,9 +198,49 @@ export async function createExpense(payload: CreateExpensePayload) {
       funded_by: string | null
       amount: number
       expense_date: string
-      recorded_by: string | null
+      created_by: string | null
       receipt_url: string | null
       status: string
+      organization_id?: string
+      group_id?: string
+    }
+
+    const scope = getOrgScope()
+
+    // Resolve org/group IDs
+    let orgId = scope?.orgId || null
+    let groupId: string | null = null
+
+    // If scope not available, try to derive from member record
+    if (!orgId && payload.recorded_by) {
+      const { data: adminRow } = await supabase
+        .from('member_admins')
+        .select('organization_id, group_id')
+        .eq('id', payload.recorded_by)
+        .single()
+      if (adminRow) {
+        orgId = adminRow.organization_id
+        groupId = adminRow.group_id
+      }
+    }
+
+    // If we still need groupId, fetch it from the admin/member record
+    if (orgId && !groupId && payload.recorded_by) {
+      const { data: adminRow } = await supabase
+        .from('member_admins')
+        .select('group_id, member_id')
+        .eq('id', payload.recorded_by)
+        .single()
+      if (adminRow?.group_id) {
+        groupId = adminRow.group_id
+      } else if (adminRow?.member_id) {
+        const { data: memberRow } = await supabase
+          .from('organization_members')
+          .select('group_id')
+          .eq('id', adminRow.member_id)
+          .single()
+        groupId = memberRow?.group_id || null
+      }
     }
 
     const insertPayload: ExpenseInsert = {
@@ -211,10 +252,12 @@ export async function createExpense(payload: CreateExpensePayload) {
       funded_by: payload.funded_by ?? null,
       amount: payload.amount,
       expense_date: payload.expense_date ?? new Date().toISOString(),
-      recorded_by: payload.recorded_by ?? null,
+      created_by: payload.recorded_by ?? null,
       receipt_url,
       status: 'pending', // New expenses start as pending
     }
+    if (orgId) insertPayload.organization_id = orgId
+    if (groupId) insertPayload.group_id = groupId
 
     const { data, error } = await supabase.from('expenses').insert([insertPayload]).select().single()
 
@@ -228,6 +271,7 @@ export async function createExpense(payload: CreateExpensePayload) {
 
 // Fetch expenses with optional status filter
 export async function fetchExpenses(limit = 50, status?: 'pending' | 'approved' | 'rejected') {
+  const scope = getOrgScope()
   let query = supabase
     .from('expenses')
     .select(`
@@ -237,6 +281,7 @@ export async function fetchExpenses(limit = 50, status?: 'pending' | 'approved' 
     .order('expense_date', { ascending: false })
     .limit(limit)
 
+  if (scope) query = query.eq('organization_id', scope.orgId)
   if (status) {
     query = query.eq('status', status)
   }
@@ -248,6 +293,7 @@ export async function fetchExpenses(limit = 50, status?: 'pending' | 'approved' 
 
 // Fetch expense categories
 export async function fetchExpenseCategories(includeInactive = false): Promise<ExpenseCategory[]> {
+  const scope = getOrgScope()
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   let query: any = supabase
     .from('expense_categories')
@@ -257,6 +303,7 @@ export async function fetchExpenseCategories(includeInactive = false): Promise<E
   if (!includeInactive) {
     query = query.eq('is_active', true)
   }
+  if (scope) query = query.eq('organization_id', scope.orgId)
 
   const { data, error } = await query
 
@@ -322,14 +369,18 @@ export async function getBudgetHealth() {
 
 // Get expense audit log
 export async function getExpenseAuditLog(expenseId: string) {
-  const { data, error } = await supabase
+  const scope = getOrgScope()
+  let query = supabase
     .from('expense_audit_log')
     .select(`
       *,
-      admin:admins!expense_audit_log_performed_by_fkey(id, name)
+      admin:member_admins!expense_audit_log_performed_by_fkey(id, role)
     `)
     .eq('expense_id', expenseId)
     .order('created_at', { ascending: false })
+  if (scope) query = query.eq('organization_id', scope.orgId)
+
+  const { data, error } = await query
 
   if (error) throw error
   return data || []
@@ -337,10 +388,14 @@ export async function getExpenseAuditLog(expenseId: string) {
 
 // Delete expense (admin only)
 export async function deleteExpense(expenseId: string) {
-  const { error } = await supabase
+  const scope = getOrgScope()
+  let query = supabase
     .from('expenses')
     .delete()
     .eq('id', expenseId)
+  if (scope) query = query.eq('organization_id', scope.orgId)
+
+  const { error } = await query
 
   if (error) throw error
   return { success: true }
@@ -358,15 +413,16 @@ export async function updateExpenseFields(
     expense_date: string
   }>
 ) {
-  const { data, error } = await supabase
+  const scope = getOrgScope()
+  let query = supabase
     .from('expenses')
     .update({
       ...updates,
       updated_at: new Date().toISOString()
     })
     .eq('id', expenseId)
-    .select()
-    .single()
+  if (scope) query = query.eq('organization_id', scope.orgId)
+  const { data, error } = await query.select().single()
 
   if (error) throw error
   return data

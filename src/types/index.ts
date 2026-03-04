@@ -62,7 +62,7 @@ export interface ProfileUpdateData {
 // Payment Record
 export interface Payment {
   id: string;
-  student_id: string;
+  member_id: string;
   payment_type_id: string;
   amount: number;
   payment_method: 'bank_transfer' | 'cash' | 'pos';

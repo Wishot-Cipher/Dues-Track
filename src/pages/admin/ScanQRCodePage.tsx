@@ -5,6 +5,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/config/supabase";
+import { getOrgScope } from "@/utils/orgScope";
 import { colors } from "@/config/colors";
 import GlassCard from "@/components/ui/GlassCard";
 import { useToast } from "@/hooks/useToast";
@@ -402,22 +403,26 @@ export default function ScanQRCodePage() {
 
       // Scanner is already stopped by the caller, no need to stop again
 
-      const { data: payerData, error: payerError } = await supabase
-        .from("students")
+      const scope = getOrgScope();
+
+      let payerQ = supabase
+        .from("organization_members")
         .select("id, full_name, reg_number")
-        .eq("id", data.paidBy)
-        .single();
+        .eq("id", data.paidBy);
+      if (scope) payerQ = payerQ.eq('organization_id', scope.orgId);
+      const { data: payerData, error: payerError } = await payerQ.single();
 
       if (payerError || !payerData) {
         toast.error("Payer not found in system");
         return false;
       }
 
-      const { data: paymentTypeData, error: paymentTypeError } = await supabase
+      let ptQ = supabase
         .from("payment_types")
         .select("id, title, amount")
-        .eq("id", data.paymentTypeId)
-        .single();
+        .eq("id", data.paymentTypeId);
+      if (scope) ptQ = ptQ.eq('organization_id', scope.orgId);
+      const { data: paymentTypeData, error: paymentTypeError } = await ptQ.single();
 
       if (paymentTypeError || !paymentTypeData) {
         toast.error("Payment type not found");
@@ -426,11 +431,13 @@ export default function ScanQRCodePage() {
 
       const alreadyPaidStudents: string[] = [];
       for (const stu of data.students) {
-        const { data: existingPayments } = await supabase
+        let epQ = supabase
           .from("payments")
           .select("status, amount")
-          .eq("student_id", stu.id)
+          .eq("member_id", stu.id)
           .eq("payment_type_id", data.paymentTypeId);
+        if (scope) epQ = epQ.eq('organization_id', scope.orgId);
+        const { data: existingPayments } = await epQ;
 
         const totalPaid =
           existingPayments
@@ -926,11 +933,14 @@ export default function ScanQRCodePage() {
       for (let i = 0; i < qrData.students.length; i++) {
         const studentToPay = qrData.students[i];
         
-        const { data: existingPayments } = await supabase
+        const cScope = getOrgScope();
+        let epChkQ = supabase
           .from("payments")
           .select("status, amount")
-          .eq("student_id", studentToPay.id)
+          .eq("member_id", studentToPay.id)
           .eq("payment_type_id", qrData.paymentTypeId);
+        if (cScope) epChkQ = epChkQ.eq('organization_id', cScope.orgId);
+        const { data: existingPayments } = await epChkQ;
 
         const totalPaid =
           existingPayments
@@ -945,10 +955,8 @@ export default function ScanQRCodePage() {
 
         const amountToInsert = (studentToPay as any).outstanding ?? qrData.amountPerStudent ?? paymentType.amount;
 
-        const paymentResponse = await supabase
-          .from("payments")
-          .insert({
-            student_id: studentToPay.id,
+        const payInsert: Record<string, unknown> = {
+            member_id: studentToPay.id,
             payment_type_id: qrData.paymentTypeId,
             amount: amountToInsert,
             payment_method: "cash",
@@ -961,7 +969,12 @@ export default function ScanQRCodePage() {
               : `Cash payment verified via QR code scan by ${user.email}`,
             paid_by: studentToPay.id !== qrData.paidBy ? qrData.paidBy : null,
             receipt_url: "",
-          })
+        };
+        if (cScope) payInsert.organization_id = cScope.orgId;
+
+        const paymentResponse = await supabase
+          .from("payments")
+          .insert(payInsert)
           .select()
           .single();
 
@@ -973,8 +986,10 @@ export default function ScanQRCodePage() {
 
         successfulPayments.push(studentToPay.name);
 
+        const nScope = getOrgScope();
         await supabase.from("notifications").insert({
-          recipient_id: studentToPay.id,
+          member_id: studentToPay.id,
+          ...(nScope ? { organization_id: nScope.orgId } : {}),
           type: "payment_approved",
           title: `Cash Payment Received - ${qrData.paymentTypeName}`,
           message: qrData.totalStudents > 1
@@ -1030,6 +1045,7 @@ export default function ScanQRCodePage() {
 
 const handleMultiPayCode = async (codeInput: string) => {
   try {
+    const mcScope = getOrgScope();
     console.log('🔍 Multi-pay code received:', codeInput);
     
     const withoutPrefix = codeInput.substring(3);
@@ -1082,9 +1098,11 @@ const handleMultiPayCode = async (codeInput: string) => {
       return;
     }
 
-    const { data: allStudents, error: studentError } = await supabase
-      .from("students")
+    let memMcQ = supabase
+      .from("organization_members")
       .select("id, full_name, reg_number");
+    if (mcScope) memMcQ = memMcQ.eq('organization_id', mcScope.orgId);
+    const { data: allStudents, error: studentError } = await memMcQ;
 
     if (studentError) {
       console.error('❌ Error fetching students:', studentError);
@@ -1173,11 +1191,13 @@ const handleMultiPayCode = async (codeInput: string) => {
     const studentsToPay: Array<{ id: string; name: string; regNumber: string }> = [];
 
     for (const stu of allRecipients) {
-      const { data: existingPayments } = await supabase
+      let epMcQ = supabase
         .from("payments")
         .select("status, amount")
-        .eq("student_id", stu.id)
+        .eq("member_id", stu.id)
         .eq("payment_type_id", matchingPT.id);
+      if (mcScope) epMcQ = epMcQ.eq('organization_id', mcScope.orgId);
+      const { data: existingPayments } = await epMcQ;
 
       const totalPaid = existingPayments
         ?.filter(p => p.status === "approved")
@@ -1207,25 +1227,28 @@ const handleMultiPayCode = async (codeInput: string) => {
     // Compute outstanding per student (includes late fees) and build detailed QR payload
     try {
       // Fetch payment type details (deadline, late_fee_per_day) to compute late fees
-      const { data: fullPT } = await supabase
+      let ptDetQ = supabase
         .from('payment_types')
         .select('id, title, amount, deadline, late_fee_per_day')
-        .eq('id', matchingPT.id)
-        .single();
+        .eq('id', matchingPT.id);
+      if (mcScope) ptDetQ = ptDetQ.eq('organization_id', mcScope.orgId);
+      const { data: fullPT } = await ptDetQ.single();
 
       // Fetch payments for these students in bulk
-      const { data: paymentsData } = await supabase
+      let bulkPayQ = supabase
         .from('payments')
-        .select('student_id, amount, status, transaction_ref')
+        .select('member_id, amount, status, transaction_ref')
         .eq('payment_type_id', matchingPT.id)
-        .in('student_id', studentsToPay.map(s => s.id));
+        .in('member_id', studentsToPay.map(s => s.id));
+      if (mcScope) bulkPayQ = bulkPayQ.eq('organization_id', mcScope.orgId);
+      const { data: paymentsData } = await bulkPayQ;
 
       const now = new Date();
       const deadlineDate = fullPT?.deadline ? new Date(fullPT.deadline) : null;
       const perDay = Number(fullPT?.late_fee_per_day || 0);
 
       const studentsWithOutstanding = studentsToPay.map(s => {
-        const studentPayments = (paymentsData || []).filter((p: any) => p.student_id === s.id) || [];
+        const studentPayments = (paymentsData || []).filter((p: any) => p.member_id === s.id) || [];
         const paidForType = studentPayments
           .filter((p: any) => p.status === 'approved' && !p.transaction_ref?.startsWith('WAIVED-'))
           .reduce((sum: number, p: any) => sum + Number(p.amount || 0), 0);
@@ -1402,9 +1425,12 @@ const handlePaymentCodeSubmit = async () => {
     }
     
     // Fetch all students and find matches
-    const { data: allStudents, error: studentError } = await supabase
-      .from("students")
+    const lgScope = getOrgScope();
+    let lgMemQ = supabase
+      .from("organization_members")
       .select("id, full_name, reg_number");
+    if (lgScope) lgMemQ = lgMemQ.eq('organization_id', lgScope.orgId);
+    const { data: allStudents, error: studentError } = await lgMemQ;
 
     if (studentError) throw studentError;
 
@@ -1420,10 +1446,12 @@ const handlePaymentCodeSubmit = async () => {
     }
 
     // Find the payment type
-    const { data: allPaymentTypes, error: ptError } = await supabase
+    let lgPtQ = supabase
       .from("payment_types")
       .select("id, title, amount")
       .eq("is_active", true);
+    if (lgScope) lgPtQ = lgPtQ.eq('organization_id', lgScope.orgId);
+    const { data: allPaymentTypes, error: ptError } = await lgPtQ;
 
     if (ptError) throw ptError;
 
@@ -1460,11 +1488,13 @@ const handlePaymentCodeSubmit = async () => {
     }
 
     // Check if this student has already paid for this payment type
-    const { data: existingPayments } = await supabase
+    let lgPayQ = supabase
       .from("payments")
       .select("status, amount")
-      .eq("student_id", matchedStudent.id)
+      .eq("member_id", matchedStudent.id)
       .eq("payment_type_id", matchingPT.id);
+    if (lgScope) lgPayQ = lgPayQ.eq('organization_id', lgScope.orgId);
+    const { data: existingPayments } = await lgPayQ;
 
     const totalPaid = existingPayments
       ?.filter(p => p.status === "approved")

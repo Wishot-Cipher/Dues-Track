@@ -1,13 +1,15 @@
-import { useState, useEffect } from 'react'
+﻿import { useState, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { ArrowLeft, Heart, Users, Search, Check, X, Eye, Clock, Loader2, Gift, Filter, ChevronDown, Mail, Phone, MessageSquare, DollarSign, RefreshCw, CheckCircle, XCircle, ExternalLink } from 'lucide-react'
-import { Link, useNavigate } from 'react-router-dom'
+import { Link } from 'react-router-dom'
+import { useAppNav } from '@/hooks/useAppNav';
 import { colors, gradients } from '@/config/colors'
 import { supabase } from '@/config/supabase'
 import { useToast } from '@/hooks/useToast'
-import { useAuth } from '@/hooks/useAuth'
+import { useAuth } from '@/hooks/useAppAuth'
 import { formatNaira } from '@/utils/printStyles'
 import ConfirmDialog from '@/components/ui/ConfirmDialog'
+import { getOrgScope } from '@/utils/orgScope'
 
 interface PublicContribution {
   id: string
@@ -33,7 +35,7 @@ type StatusFilter = 'all' | 'pending' | 'verified' | 'rejected'
 
 export default function PublicContributionsPage() {
   const { hasPermission, user } = useAuth()
-  const navigate = useNavigate()
+  const { go: navigate, path } = useAppNav();
   const toast = useToast()
   
   const [contributions, setContributions] = useState<PublicContribution[]>([])
@@ -71,8 +73,10 @@ export default function PublicContributionsPage() {
   })
 
   const fetchContributions = async () => {
+    if (!navigator.onLine) return;
     try {
       setLoading(true)
+      const scope = getOrgScope();
       
       let query = supabase
         .from('public_payments')
@@ -81,6 +85,8 @@ export default function PublicContributionsPage() {
           payment_type:payment_types(title, icon)
         `)
         .order('created_at', { ascending: false })
+
+      if (scope) query = query.eq('organization_id', scope.orgId)
 
       if (statusFilter !== 'all') {
         query = query.eq('status', statusFilter)
@@ -292,7 +298,7 @@ export default function PublicContributionsPage() {
               </motion.button>
             </div>
 
-            <Link to="/contribute" target="_blank" className="w-full sm:w-auto">
+            <Link to={path('/contribute')} target="_blank" className="w-full sm:w-auto">
               <motion.button 
                 whileHover={{ scale: 1.02 }} 
                 whileTap={{ scale: 0.98 }} 
@@ -399,8 +405,9 @@ export default function PublicContributionsPage() {
         {/* Contributions List */}
         <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.3 }}>
           {loading ? (
-            <div className="flex items-center justify-center py-20">
+            <div className="flex flex-col items-center justify-center py-20 gap-3">
               <Loader2 className="w-8 h-8 animate-spin" style={{ color: colors.primary }} />
+              <p className="text-sm" style={{ color: colors.textSecondary }}>Loading contributions...</p>
             </div>
           ) : filteredContributions.length === 0 ? (
             <div className="rounded-2xl p-12 text-center" style={{ background: 'rgba(255, 255, 255, 0.03)', border: '1px solid rgba(255, 255, 255, 0.1)' }}>

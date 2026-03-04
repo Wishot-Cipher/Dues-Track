@@ -16,21 +16,22 @@ import {
 } from 'lucide-react';
 import { supabase } from '@/config/supabase';
 import notificationService from '@/services/notificationService';
-import { useAuth } from '@/hooks/useAuth';
+import { useAppAuth as useAuth } from '@/hooks/useAppAuth';
 import { formatCurrency } from '@/utils/formatters';
 import { colors, gradients } from '@/config/colors';
-import { useNavigate } from 'react-router-dom';
+import { useAppNav } from '@/hooks/useAppNav';
 import { useSettings } from '@/contexts/SettingsContext';
 import { notificationSound } from '@/utils/notificationSound';
+import { getOrgScope } from '@/utils/orgScope';
 
 interface PendingPayment {
   id: string;
   amount: number;
   created_at: string;
   receipt_url: string | null;
-  students: {
+  member: {
     full_name: string;
-    reg_number: string;
+    member_id: string;
   } | null;
   payment_types: {
     title: string;
@@ -46,7 +47,7 @@ interface DashboardStats {
 
 export const AdminNotificationCenter = () => {
   const { user } = useAuth();
-  const navigate = useNavigate();
+  const { go: navigate } = useAppNav();
   const { playNotificationSound } = useSettings();
   const [pendingPayments, setPendingPayments] = useState<PendingPayment[]>([]);
   const [stats, setStats] = useState<DashboardStats>({
@@ -66,16 +67,19 @@ export const AdminNotificationCenter = () => {
   const fetchPendingPayments = useCallback(async () => {
     try {
       setLoading(true);
-      const { data, error } = await supabase
+      const scope = getOrgScope();
+      let q = supabase
         .from('payments')
         .select(`
           id, amount, created_at, receipt_url,
-          students!payments_student_id_fkey ( full_name, reg_number ),
+          member:organization_members!payments_member_id_fkey ( full_name, member_id ),
           payment_types ( title )
         `)
         .eq('status', 'pending')
         .order('created_at', { ascending: false })
         .limit(10);
+      if (scope) q = q.eq('organization_id', scope.orgId);
+      const { data, error } = await q;
       if (error) throw error;
       
       // Transform data to flatten the joined objects
@@ -84,7 +88,7 @@ export const AdminNotificationCenter = () => {
         amount: payment.amount,
         created_at: payment.created_at,
         receipt_url: payment.receipt_url,
-        students: Array.isArray(payment.students) ? payment.students[0] : payment.students,
+        member: Array.isArray(payment.member) ? payment.member[0] : payment.member,
         payment_types: Array.isArray(payment.payment_types) ? payment.payment_types[0] : payment.payment_types,
       }));
       
@@ -99,29 +103,37 @@ export const AdminNotificationCenter = () => {
 
   const fetchStats = useCallback(async () => {
     try {
-      const { count: pendingCount } = await supabase
+      const scope = getOrgScope();
+
+      let qPending = supabase
         .from('payments')
         .select('*', { count: 'exact', head: true })
         .eq('status', 'pending');
+      if (scope) qPending = qPending.eq('organization_id', scope.orgId);
+      const { count: pendingCount } = await qPending;
 
       const today = new Date();
       today.setHours(0, 0, 0, 0);
-      const { data: todayPayments } = await supabase
+      let qToday = supabase
         .from('payments')
         .select('amount, transaction_ref')
         .eq('status', 'approved')
         .gte('approved_at', today.toISOString());
+      if (scope) qToday = qToday.eq('organization_id', scope.orgId);
+      const { data: todayPayments } = await qToday;
 
       const todayFiltered = todayPayments?.filter(p => !p.transaction_ref?.startsWith('WAIVED-')) || [];
       const todayAmount = todayFiltered.reduce((sum, p) => sum + Number(p.amount || 0), 0);
 
       const weekAgo = new Date();
       weekAgo.setDate(weekAgo.getDate() - 7);
-      const { data: weekPayments } = await supabase
+      let qWeek = supabase
         .from('payments')
         .select('amount, transaction_ref')
         .eq('status', 'approved')
         .gte('approved_at', weekAgo.toISOString());
+      if (scope) qWeek = qWeek.eq('organization_id', scope.orgId);
+      const { data: weekPayments } = await qWeek;
 
       const weekFiltered = weekPayments?.filter(p => !p.transaction_ref?.startsWith('WAIVED-')) || [];
       const weekAmount = weekFiltered.reduce((sum, p) => sum + Number(p.amount || 0), 0);
@@ -129,11 +141,13 @@ export const AdminNotificationCenter = () => {
       setStats({ pendingCount: pendingCount || 0, todayApproved: todayFiltered.length, todayAmount, weekAmount });
 
       if (user?.id) {
-        const { count: unread } = await supabase
+        let qNotif = supabase
           .from('notifications')
           .select('*', { count: 'exact', head: true })
-          .eq('recipient_id', user.id)
+          .eq('member_id', user.id)
           .eq('is_read', false);
+        if (scope) qNotif = qNotif.eq('organization_id', scope.orgId);
+        const { count: unread } = await qNotif;
         setUnreadCount(unread || 0);
       }
     } catch (error) {
@@ -472,10 +486,10 @@ export const AdminNotificationCenter = () => {
                               <div className="flex items-start justify-between gap-2">
                                 <div className="min-w-0">
                                   <p className="text-sm font-semibold text-white truncate">
-                                    {payment.students?.full_name || 'Unknown Student'}
+                                    {payment.member?.full_name || 'Unknown Member'}
                                   </p>
                                   <p className="text-xs truncate" style={{ color: colors.textSecondary }}>
-                                    {payment.students?.reg_number} • {payment.payment_types?.title || 'Payment'}
+                                    {payment.member?.member_id} • {payment.payment_types?.title || 'Payment'}
                                   </p>
                                 </div>
                                 <div className="text-right shrink-0">

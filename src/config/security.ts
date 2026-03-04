@@ -55,7 +55,7 @@ export const initSecurityMeasures = (): void => {
       'color: orange; font-size: 14px;'
     );
     console.log(
-      '%c© ECE Class Dues Tracker Team. All rights reserved.',
+      '%c© Payvexo Team. All rights reserved.',
       'color: gray; font-size: 12px;'
     );
     
@@ -69,9 +69,9 @@ export const initSecurityMeasures = (): void => {
 
 // Watermark for identifying unauthorized copies
 export const APP_SIGNATURE = {
-  name: 'Class Dues Tracker',
-  version: '1.0.0',
-  organization: 'ECE Department',
+  name: 'Payvexo',
+  version: '2.0.0',
+  organization: 'Payvexo',
   developer: 'Dev_Wishot',
   twitter: '@wishotstudio',
   buildDate: new Date().toISOString().split('T')[0],

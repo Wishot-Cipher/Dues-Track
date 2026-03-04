@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/no-unused-vars */
 /// <reference lib="webworker" />
 import { clientsClaim } from 'workbox-core';
 import { precacheAndRoute, cleanupOutdatedCaches } from 'workbox-precaching';
@@ -64,7 +63,7 @@ self.addEventListener('push', (event) => {
   console.log('[SW] Push event received:', event);
   
   let data = {
-    title: 'Class Dues Tracker',
+    title: 'Payvexo',
     body: 'You have a new notification',
     icon: '/app-icon.png',
     badge: '/app-icon.png',

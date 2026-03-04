@@ -1,8 +1,10 @@
-import { useState, useEffect } from 'react';
+﻿import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { useNavigate } from 'react-router-dom';
-import { useAuth } from '@/hooks/useAuth';
+import {  } from 'react-router-dom';
+import { useAppNav } from '@/hooks/useAppNav';
+import { useAuth } from '@/hooks/useAppAuth';
 import { supabase } from '@/config/supabase';
+import { getOrgScope } from '@/utils/orgScope';
 import { colors, gradients } from '@/config/colors';
 import GlassCard from '@/components/ui/GlassCard';
 import DashboardSwitcher from '@/components/DashboardSwitcher';
@@ -59,9 +61,9 @@ interface RecentPayment {
   receipt_url: string;
   transaction_ref: string;
   notes: string | null;
-  students: {
+  member: {
     full_name: string;
-    reg_number: string;
+    member_id: string;
   } | null;
   payment_types: {
     name: string;
@@ -69,8 +71,9 @@ interface RecentPayment {
 }
 
 export default function AdminDashboardPage() {
-  const navigate = useNavigate();
+  const { go: navigate, orgSlug } = useAppNav();
   const { hasPermission } = useAuth();
+  const isMultiTenant = !!orgSlug;
   
   // Debug: Check permissions
   // Debug logs removed for production security
@@ -117,7 +120,8 @@ export default function AdminDashboardPage() {
   const fetchRecentExpenses = async () => {
     try {
       setRecentExpensesLoading(true);
-      const { data } = await supabase
+      const scope = getOrgScope();
+      let expQ = supabase
         .from('expenses')
         .select(`
           id,
@@ -132,6 +136,8 @@ export default function AdminDashboardPage() {
         `)
         .order('created_at', { ascending: false })
         .limit(20);
+      if (scope) expQ = expQ.eq('organization_id', scope.orgId);
+      const { data } = await expQ;
 
       const formatted = (data || []).map(exp => ({
         id: exp.id,
@@ -163,29 +169,38 @@ export default function AdminDashboardPage() {
     try {
       setLoading(true);
 
-      // Total students
-      const { count: studentCount } = await supabase
-        .from('students')
+      // Total members
+      const scope = getOrgScope();
+      let memberQ = supabase
+        .from('organization_members')
         .select('*', { count: 'exact', head: true })
         .eq('is_active', true);
+      if (scope) memberQ = memberQ.eq('organization_id', scope.orgId);
+      const { count: studentCount } = await memberQ;
 
       // Total payment types
-      const { count: paymentTypeCount } = await supabase
+      let ptQ = supabase
         .from('payment_types')
         .select('*', { count: 'exact', head: true })
         .eq('is_active', true);
+      if (scope) ptQ = ptQ.eq('organization_id', scope.orgId);
+      const { count: paymentTypeCount } = await ptQ;
 
       // Pending review
-      const { count: pendingCount } = await supabase
+      let pendQ = supabase
         .from('payments')
         .select('*', { count: 'exact', head: true })
         .eq('status', 'pending');
+      if (scope) pendQ = pendQ.eq('organization_id', scope.orgId);
+      const { count: pendingCount } = await pendQ;
 
       // Total collected (approved payments excluding waived)
-      const { data: approvedPayments } = await supabase
+      let apprQ = supabase
         .from('payments')
         .select('amount, transaction_ref')
         .eq('status', 'approved');
+      if (scope) apprQ = apprQ.eq('organization_id', scope.orgId);
+      const { data: approvedPayments } = await apprQ;
 
       const totalCollected = approvedPayments
         ?.filter(p => !p.transaction_ref?.startsWith('WAIVED-'))
@@ -194,21 +209,25 @@ export default function AdminDashboardPage() {
       // Approved today (excluding waived)
       const today = new Date();
       today.setHours(0, 0, 0, 0);
-      const { data: approvedTodayPayments } = await supabase
+      let todayQ = supabase
         .from('payments')
         .select('transaction_ref')
         .eq('status', 'approved')
         .gte('approved_at', today.toISOString());
+      if (scope) todayQ = todayQ.eq('organization_id', scope.orgId);
+      const { data: approvedTodayPayments } = await todayQ;
 
       const approvedTodayCount = approvedTodayPayments
         ?.filter(p => !p.transaction_ref?.startsWith('WAIVED-'))
         .length || 0;
 
       // Rejected payments
-      const { count: rejectedCount } = await supabase
+      let rejQ = supabase
         .from('payments')
         .select('*', { count: 'exact', head: true })
         .eq('status', 'rejected');
+      if (scope) rejQ = rejQ.eq('organization_id', scope.orgId);
+      const { count: rejectedCount } = await rejQ;
 
       setStats({
         totalStudents: studentCount || 0,
@@ -228,15 +247,16 @@ export default function AdminDashboardPage() {
   const fetchRecentPayments = async () => {
     try {
       setRecentPaymentsLoading(true);
+      const scope = getOrgScope();
       
       // Fetch all payments for the modal (including pending)
-      const { data: allData } = await supabase
+      let payQ = supabase
         .from('payments')
         .select(`
           *,
-          students!payments_student_id_fkey (
+          member:organization_members!payments_member_id_fkey (
             full_name,
-            reg_number
+            member_id
           ),
           payment_types (
             title
@@ -244,6 +264,8 @@ export default function AdminDashboardPage() {
         `)
         .in('status', ['approved', 'rejected', 'pending'])
         .order('updated_at', { ascending: false });
+      if (scope) payQ = payQ.eq('organization_id', scope.orgId);
+      const { data: allData } = await payQ;
 
       setAllPayments(allData || []);
       
@@ -356,13 +378,15 @@ export default function AdminDashboardPage() {
             />
             
             <div className="relative z-10 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-              {/* Mobile Dashboard Switcher - At Top */}
+              {/* Mobile Dashboard Switcher - Single-tenant only */}
+              {!isMultiTenant && (
               <div className="sm:hidden w-full mb-3 flex items-center justify-between">
                 <DashboardSwitcher variant="compact" />
                 <div className="relative">
                   <AdminNotificationCenter />
                 </div>
               </div>
+              )}
               
               <div className="flex items-center gap-4">
                 <div>
@@ -393,11 +417,13 @@ export default function AdminDashboardPage() {
                 </div>
               </div>
 
-              {/* Dashboard Switcher + Notification Bell */}
+              {/* Dashboard Switcher + Notification Bell — single-tenant only */}
+              {!isMultiTenant && (
               <div className="hidden sm:flex items-center gap-3 relative">
                 <AdminNotificationCenter />
                 <DashboardSwitcher />
               </div>
+              )}
               
               <div className="flex flex-wrap gap-3">
                 {hasPermission('can_create_payments') && (
@@ -477,7 +503,7 @@ export default function AdminDashboardPage() {
               transition={{ delay: 0.1 }}
               whileHover={{ scale: hasPermission('can_manage_students') ? 1.02 : 1, y: hasPermission('can_manage_students') ? -4 : 0 }}
               className={hasPermission('can_manage_students') ? "cursor-pointer" : "cursor-default"}
-              onClick={() => hasPermission('can_manage_students') && navigate('/admin/manage-students')}
+              onClick={() => hasPermission('can_manage_students') && navigate('admin/members')}
             >
               <GlassCard className="relative overflow-hidden group">
                 {/* Gradient border on hover */}
@@ -798,10 +824,10 @@ export default function AdminDashboardPage() {
                                background: `linear-gradient(135deg, ${colors.primary}40, ${colors.primary}20)`,
                                color: colors.primary
                              }}>
-                          {payment.students?.full_name?.charAt(0) || '?'}
+                          {payment.member?.full_name?.charAt(0) || '?'}
                         </div>
                         <div className="flex-1 min-w-0">
-                          <p className="text-white font-medium truncate text-sm sm:text-base">{payment.students?.full_name}</p>
+                          <p className="text-white font-medium truncate text-sm sm:text-base">{payment.member?.full_name}</p>
                           <p className="text-xs sm:text-sm truncate" style={{ color: colors.textSecondary }}>
                             {payment.payment_types?.name}
                           </p>
@@ -945,7 +971,7 @@ export default function AdminDashboardPage() {
               <motion.button
                 whileHover={{ scale: 1.02, y: -2 }}
                 whileTap={{ scale: 0.98 }}
-                onClick={() => navigate('/admin/manage-students')}
+                onClick={() => navigate('admin/members')}
                 className="flex items-center gap-3 p-4 rounded-xl transition-all group"
                 style={{ 
                   background: 'rgba(255, 255, 255, 0.03)',
@@ -1342,10 +1368,10 @@ export default function AdminDashboardPage() {
                               {selectedPayment.status}
                             </span>
                           </div>
-                          <h3 className="text-xl font-bold text-white">{selectedPayment.students?.full_name}</h3>
+                          <h3 className="text-xl font-bold text-white">{selectedPayment.member?.full_name}</h3>
                           <p className="text-sm flex items-center gap-2" style={{ color: colors.textSecondary }}>
                             <Users className="w-4 h-4" />
-                            {selectedPayment.students?.reg_number}
+                            {selectedPayment.member?.member_id}
                           </p>
                         </div>
                       </div>
@@ -1619,17 +1645,17 @@ export default function AdminDashboardPage() {
                                      background: `linear-gradient(135deg, ${getStatusColor(payment.status)}40, ${getStatusColor(payment.status)}20)`,
                                      color: getStatusColor(payment.status)
                                    }}>
-                                {payment.students?.full_name?.charAt(0) || '?'}
+                                {payment.member?.full_name?.charAt(0) || '?'}
                               </div>
                               <div className="flex-1 min-w-0">
-                                <p className="text-white font-medium truncate text-sm sm:text-base">{payment.students?.full_name}</p>
+                                <p className="text-white font-medium truncate text-sm sm:text-base">{payment.member?.full_name}</p>
                                 <div className="flex items-center gap-2 flex-wrap">
                                   <p className="text-xs sm:text-sm truncate" style={{ color: colors.textSecondary }}>
                                     {payment.payment_types?.name}
                                   </p>
                                   <span className="text-[10px] sm:text-xs px-1.5 sm:px-2 py-0.5 rounded-full hidden xs:inline"
                                         style={{ background: 'rgba(255, 255, 255, 0.05)', color: colors.textSecondary }}>
-                                    {payment.students?.reg_number}
+                                    {payment.member?.member_id}
                                   </span>
                                 </div>
                                 {/* Mobile: Show amount and date inline */}

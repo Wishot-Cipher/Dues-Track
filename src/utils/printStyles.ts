@@ -42,9 +42,9 @@ export function generateDocId(seed?: string): string {
       hash = ((hash << 5) - hash) + seed.charCodeAt(i);
       hash |= 0;
     }
-    return 'DT-' + Math.abs(hash).toString(36).toUpperCase().padStart(6, '0').slice(0, 6);
+    return 'PVX-' + Math.abs(hash).toString(36).toUpperCase().padStart(6, '0').slice(0, 6);
   }
-  return 'DT-' + Math.random().toString(36).substring(2, 8).toUpperCase();
+  return 'PVX-' + Math.random().toString(36).substring(2, 8).toUpperCase();
 }
 
 /**
@@ -539,7 +539,7 @@ export function generatePrintHTML(title: string, content: string): string {
     <head>
       <meta charset="UTF-8">
       <meta name="viewport" content="width=device-width, initial-scale=1.0">
-      <title>${title} — DuesTracker</title>
+      <title>${title} — Payvexo</title>
       <style>${PRINT_STYLES}</style>
     </head>
     <body>
@@ -566,8 +566,8 @@ export function generateHeader(title: string, subtitle: string, badgeText?: stri
       <div class="header-left">
         ${BRAND_SVG}
         <div>
-          <h1>Dues<span>Tracker</span></h1>
-          <div class="header-tagline">Class Financial Management</div>
+          <h1>Pay<span>vexo</span></h1>
+          <div class="header-tagline">Payment & Dues Management</div>
         </div>
       </div>
       <div class="header-right">
@@ -594,7 +594,7 @@ export function generateFooter(docSeed?: string): string {
       <div class="footer-brand">
         ${BRAND_SVG_SM}
         <div class="footer-text">
-          <strong>DuesTracker</strong> — Class Financial Management<br>
+          <strong>Payvexo</strong> — Financial Management<br>
           Powered by Dev_Wishot • @wishotstudio
         </div>
       </div>
@@ -742,8 +742,8 @@ export function generatePaginatedReport(
         <div class="header-left">
           ${BRAND_SVG}
           <div>
-            <h1>Dues<span>Tracker</span></h1>
-            <div class="header-tagline">Class Financial Management</div>
+            <h1>Pay<span>vexo</span></h1>
+            <div class="header-tagline">Payment & Dues Management</div>
           </div>
         </div>
         <div class="header-right">
@@ -765,7 +765,7 @@ export function generatePaginatedReport(
         ` : ''}
       </div>
       <div class="page-footer">
-        <div><strong style="color:#FF6803;">DuesTracker</strong> • Powered by Dev_Wishot</div>
+        <div><strong style="color:#FF6803;">Payvexo</strong> • Powered by Dev_Wishot</div>
         <div>Generated: ${generatedDate} • Ref: ${docId}</div>
       </div>
     </div>
@@ -793,7 +793,7 @@ export function generatePaginatedReport(
           ${isLastPage && options?.notesContent ? options.notesContent : ''}
         </div>
         <div class="page-footer">
-          <div><strong style="color:#FF6803;">DuesTracker</strong> • Powered by Dev_Wishot</div>
+          <div><strong style="color:#FF6803;">Payvexo</strong> • Powered by Dev_Wishot</div>
           <div>Generated: ${generatedDate} • Ref: ${docId} • Page ${pageNum}/${totalPages}</div>
         </div>
       </div>
@@ -809,8 +809,8 @@ export function generatePaginatedReport(
           <div class="header-left">
             ${BRAND_SVG}
             <div>
-              <h1>Dues<span>Tracker</span></h1>
-              <div class="header-tagline">Class Financial Management</div>
+              <h1>Pay<span>vexo</span></h1>
+              <div class="header-tagline">Payment & Dues Management</div>
             </div>
           </div>
           <div class="header-right">
@@ -839,7 +839,7 @@ export function generatePaginatedReport(
           <div class="footer-brand">
             ${BRAND_SVG_SM}
             <div class="footer-text">
-              <strong>DuesTracker</strong> — Class Financial Management<br>
+              <strong>Payvexo</strong> — Financial Management<br>
               Powered by Dev_Wishot • @wishotstudio
             </div>
           </div>

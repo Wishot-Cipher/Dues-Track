@@ -1,8 +1,10 @@
 import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { useAuth } from "@/hooks/useAuth";
-import { useNavigate } from "react-router-dom";
+import { useAuth } from '@/hooks/useAppAuth';
+import {  } from "react-router-dom";
+import { useAppNav } from '@/hooks/useAppNav';
 import { supabase } from "@/config/supabase";
+import { getOrgScope } from '@/utils/orgScope';
 import { useToast } from "@/hooks/useToast";
 import { colors, gradients } from "@/config/colors";
 import GlassCard from "@/components/ui/GlassCard";
@@ -32,7 +34,7 @@ import notificationService from "@/services/notificationService";
 
 interface PendingPayment {
   id: string;
-  student_id: string;
+  member_id: string;
   payment_type_id: string;
   amount: number;
   transaction_ref: string;
@@ -42,9 +44,9 @@ interface PendingPayment {
   status: "pending" | "approved" | "rejected";
   approved_at?: string;
   rejection_reason?: string;
-  students: {
+  member: {
     full_name: string;
-    reg_number: string;
+    member_id: string;
     level: string;
   };
   payment_types: {
@@ -55,7 +57,7 @@ interface PendingPayment {
 
 export default function AdminReviewPage() {
   const { user, hasPermission } = useAuth();
-  const navigate = useNavigate();
+  const { go: navigate } = useAppNav();
   const { success: showSuccess, error: showError } = useToast();
   const [payments, setPayments] = useState<PendingPayment[]>([]);
   const [loading, setLoading] = useState(true);
@@ -88,16 +90,19 @@ export default function AdminReviewPage() {
   );
 
   const fetchPendingPayments = async () => {
+    // Don't attempt network fetch when offline
+    if (!navigator.onLine) return;
     try {
       setLoading(true);
+      const scope = getOrgScope();
       const { data, error } = await supabase
         .from("payments")
         .select(
           `
           *,
-          students!payments_student_id_fkey (
+          member:organization_members!payments_member_id_fkey (
             full_name,
-            reg_number,
+            member_id,
             level
           ),
           payment_types (
@@ -106,6 +111,7 @@ export default function AdminReviewPage() {
           )
         `
         )
+        .eq('organization_id', scope?.orgId || '')
         .order("created_at", { ascending: true });
 
       if (error) throw error;
@@ -141,7 +147,10 @@ export default function AdminReviewPage() {
           table: "payments",
         },
         () => {
-          fetchPendingPayments();
+          // Don't refetch when offline — prevents toast spam
+          if (navigator.onLine) {
+            fetchPendingPayments();
+          }
         }
       )
       .subscribe();
@@ -170,8 +179,8 @@ export default function AdminReviewPage() {
 
       // Send notification to student using notification service
       await notificationService.sendPaymentApprovedNotification(
-        selectedPayment.student_id,
-        selectedPayment.students.full_name,
+        selectedPayment.member_id,
+        selectedPayment.member.full_name,
         selectedPayment.payment_types?.title || "Payment",
         selectedPayment.amount,
         selectedPayment.id
@@ -243,8 +252,8 @@ export default function AdminReviewPage() {
 
       // Send notification to student using notification service
       await notificationService.sendPaymentRejectedNotification(
-        selectedPayment.student_id,
-        selectedPayment.students.full_name,
+        selectedPayment.member_id,
+        selectedPayment.member.full_name,
         selectedPayment.payment_types?.title || "Payment",
         selectedPayment.amount,
         rejectionReason.trim(),
@@ -494,13 +503,16 @@ export default function AdminReviewPage() {
         {/* Table */}
         {loading ? (
           <div className="flex items-center justify-center py-12">
-            <div
-              className="animate-spin rounded-full h-12 w-12 border-4 border-t-transparent"
-              style={{
-                borderColor: colors.primary,
-                borderTopColor: "transparent",
-              }}
-            />
+            <div className="flex flex-col items-center gap-3">
+              <div
+                className="animate-spin rounded-full h-10 w-10 border-3 border-t-transparent"
+                style={{
+                  borderColor: colors.primary,
+                  borderTopColor: "transparent",
+                }}
+              />
+              <p className="text-sm" style={{ color: colors.textSecondary }}>Loading payments...</p>
+            </div>
           </div>
         ) : paginatedPayments.length === 0 ? (
           <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
@@ -597,14 +609,14 @@ export default function AdminReviewPage() {
                             </div>
                             <div>
                               <p className="text-white font-medium">
-                                {payment.students.full_name}
+                                {payment.member.full_name}
                               </p>
                               <p
                                 className="text-sm"
                                 style={{ color: colors.textSecondary }}
                               >
-                                {payment.students.reg_number} •{" "}
-                                {payment.students.level}
+                                {payment.member.member_id} •{" "}
+                                {payment.member.level}
                               </p>
                             </div>
                           </div>
@@ -729,13 +741,13 @@ export default function AdminReviewPage() {
                         />
                       </div>
                       <p className="text-white font-semibold text-lg">
-                        {payment.students.full_name}
+                        {payment.member.full_name}
                       </p>
                       <p
                         className="text-sm mb-2"
                         style={{ color: colors.textSecondary }}
                       >
-                        {payment.students.reg_number}
+                        {payment.member.member_id}
                       </p>
                       {(() => {
                         const badge = getStatusBadge(
@@ -1069,11 +1081,11 @@ export default function AdminReviewPage() {
                             })()}
                           </div>
                           <h2 className="text-xl sm:text-2xl font-bold text-white">
-                            {selectedPayment.students.full_name}
+                            {selectedPayment.member.full_name}
                           </h2>
                           <p className="flex items-center gap-2 text-sm" style={{ color: colors.textSecondary }}>
                             <User className="w-4 h-4" />
-                            {selectedPayment.students.reg_number} • {selectedPayment.students.level}
+                            {selectedPayment.member.member_id} • {selectedPayment.member.level}
                           </p>
                         </div>
                       </div>
@@ -1279,7 +1291,7 @@ export default function AdminReviewPage() {
                     Student
                   </p>
                   <p className="text-white font-medium mb-3">
-                    {selectedPayment.students.full_name}
+                    {selectedPayment.member.full_name}
                   </p>
 
                   <p
@@ -1392,7 +1404,7 @@ export default function AdminReviewPage() {
                       Student
                     </p>
                     <p className="text-white font-medium">
-                      {selectedPayment.students.full_name}
+                      {selectedPayment.member.full_name}
                     </p>
                   </div>
 

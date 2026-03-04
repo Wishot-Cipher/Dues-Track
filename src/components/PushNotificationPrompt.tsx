@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Bell, BellRing, BellOff, Smartphone, Check, X, Loader2, Info } from 'lucide-react';
 import { colors, gradients } from '@/config/colors';
-import { useAuth } from '@/hooks/useAuth';
+import { useAppAuth as useAuth } from '@/hooks/useAppAuth';
 import { useToast } from '@/hooks/useToast';
 import pushNotificationService from '@/services/pushNotificationService';
 

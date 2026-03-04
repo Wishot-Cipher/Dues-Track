@@ -1,7 +1,8 @@
-/* eslint-disable @typescript-eslint/no-unused-vars */
+﻿/* eslint-disable @typescript-eslint/no-unused-vars */
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { useState, useEffect } from "react";
-import { useParams, useNavigate } from "react-router-dom";
+import { useParams } from "react-router-dom";
+import { useAppNav } from '@/hooks/useAppNav';
 import { motion } from "framer-motion";
 import {
   ArrowLeft,
@@ -16,8 +17,8 @@ import {
   TrendingUp,
   Banknote,
 } from "lucide-react";
-import { supabase } from "@/config/supabase";
-import { useAuth } from "@/hooks/useAuth";
+import { supabase, STORAGE_BUCKETS } from "@/config/supabase";
+import { useAuth } from '@/hooks/useAppAuth';
 import { useToast } from "@/hooks/useToast";
 import { colors, gradients } from "@/config/colors";
 import GlassCard from "@/components/ui/GlassCard";
@@ -31,6 +32,7 @@ import Footer from "@/components/Footer";
 import notificationService from "@/services/notificationService";
 import { SuccessCelebration } from "@/components/ui/Confetti";
 import PageWrapper from "@/components/ui/PageWrapper";
+import { getOrgScope } from "@/utils/orgScope";
 
 type PaymentMethod = "bank_transfer" | "cash" | "pos";
 
@@ -73,7 +75,7 @@ interface Student {
 
 export default function PaymentDetailPage() {
   const { id } = useParams<{ id: string }>();
-  const navigate = useNavigate();
+  const { go: navigate } = useAppNav();
   const { user } = useAuth();
   const toast = useToast();
 
@@ -170,27 +172,32 @@ export default function PaymentDetailPage() {
   }, [paymentOption, paymentType, currentUserOutstanding]);
 
   const fetchPaymentDetails = async () => {
+    if (!navigator.onLine) return;
     try {
       setLoading(true);
+      const scope = getOrgScope();
 
       // Fetch payment type details
-      const { data: typeData, error: typeError } = await supabase
+      let typeQ = supabase
         .from("payment_types")
         .select("*")
-        .eq("id", id)
-        .single();
+        .eq("id", id);
+      if (scope) typeQ = typeQ.eq("organization_id", scope.orgId);
+      const { data: typeData, error: typeError } = await typeQ.single();
 
       if (typeError) throw typeError;
 
       setPaymentType(typeData);
 
       // Get ALL payments for this student and payment type
-      const { data: paymentsData } = await supabase
+      let pmtQ = supabase
         .from("payments")
         .select("*")
         .eq("payment_type_id", id)
-        .eq("student_id", user?.id)
+        .eq("member_id", user?.id)
         .order("created_at", { ascending: false });
+      if (scope) pmtQ = pmtQ.eq("organization_id", scope.orgId);
+      const { data: paymentsData } = await pmtQ;
 
       setExistingPayments(paymentsData || []);
     } catch (error) {
@@ -300,7 +307,7 @@ export default function PaymentDetailPage() {
           const filePath = `receipts/${fileName}`;
 
           const { error: uploadError } = await supabase.storage
-            .from("payment-receipts")
+            .from(STORAGE_BUCKETS.RECEIPTS)
             .upload(filePath, receiptFileValue);
 
           if (uploadError) {
@@ -310,7 +317,7 @@ export default function PaymentDetailPage() {
           }
 
           const { data: urlData } = supabase.storage
-            .from("payment-receipts")
+            .from(STORAGE_BUCKETS.RECEIPTS)
             .getPublicUrl(filePath);
 
           receiptUrl = urlData.publicUrl;
@@ -323,10 +330,33 @@ export default function PaymentDetailPage() {
             : `${transactionRefValue}-${student.reg_number}`;
         // Insert payment (use per-student outstanding when paying full)
         const amountToInsert = paymentOptionValue === 'full' ? (student as any).outstanding ?? currentUserOutstanding : amountValue;
-        const { data: insertedPayment, error: insertError } = await supabase
-          .from("payments")
-          .insert({
-            student_id: student.id,
+
+        // Resolve org/group for multi-tenant
+        const scope = getOrgScope();
+        let orgId = scope?.orgId || null;
+        let groupId: string | null = null;
+        if (!orgId) {
+          const { data: memberRow } = await supabase
+            .from('organization_members')
+            .select('organization_id, group_id')
+            .eq('id', student.id)
+            .single();
+          if (memberRow) {
+            orgId = memberRow.organization_id;
+            groupId = memberRow.group_id;
+          }
+        }
+        if (orgId && !groupId) {
+          const { data: memberRow } = await supabase
+            .from('organization_members')
+            .select('group_id')
+            .eq('id', student.id)
+            .single();
+          groupId = memberRow?.group_id || null;
+        }
+
+        const paymentInsert: Record<string, unknown> = {
+            member_id: student.id,
             payment_type_id: id,
             amount: amountToInsert,
             transaction_ref: finalTransactionRef,
@@ -334,8 +364,14 @@ export default function PaymentDetailPage() {
             notes: notesValue.trim() || null,
             status: "pending",
             payment_method: method,
-            paid_by: student.id !== user.id ? user.id : null, // Track who paid on behalf of others
-          })
+            paid_by: student.id !== user.id ? user.id : null,
+        };
+        if (orgId) paymentInsert.organization_id = orgId;
+        if (groupId) paymentInsert.group_id = groupId;
+
+        const { data: insertedPayment, error: insertError } = await supabase
+          .from("payments")
+          .insert(paymentInsert)
           .select()
           .single();
 
@@ -607,10 +643,10 @@ export default function PaymentDetailPage() {
                   </div>
                 </div>
 
-                <div className="p-5">
-                  <div className="grid grid-cols-3 gap-3 mb-5">
+                <div className="p-4 sm:p-5">
+                  <div className="grid grid-cols-3 gap-2 sm:gap-3 mb-5">
                     <motion.div
-                      className="text-center p-4 rounded-xl relative overflow-hidden"
+                      className="text-center p-2.5 sm:p-4 rounded-xl relative overflow-hidden"
                       style={{ 
                         background: `linear-gradient(135deg, ${colors.primary}10 0%, ${colors.primary}05 100%)`,
                         border: `1px solid ${colors.primary}20`
@@ -621,12 +657,12 @@ export default function PaymentDetailPage() {
                       <p className="text-[10px] sm:text-xs mb-1 font-medium" style={{ color: colors.textSecondary }}>
                         {currentUserAccumulatedLate > 0 ? 'BASE DUE' : 'TOTAL DUE'}
                       </p>
-                      <p className="text-base sm:text-xl font-bold text-white">
+                      <p className="text-sm sm:text-xl font-bold text-white truncate">
                         {formatCurrency(paymentTypeAmount)}
                       </p>
                     </motion.div>
                     <motion.div
-                      className="text-center p-4 rounded-xl relative overflow-hidden"
+                      className="text-center p-2.5 sm:p-4 rounded-xl relative overflow-hidden"
                       style={{ 
                         background: `linear-gradient(135deg, ${colors.statusPaid}10 0%, ${colors.statusPaid}05 100%)`,
                         border: `1px solid ${colors.statusPaid}20`
@@ -637,12 +673,12 @@ export default function PaymentDetailPage() {
                       <p className="text-[10px] sm:text-xs mb-1 font-medium" style={{ color: colors.textSecondary }}>
                         PAID
                       </p>
-                      <p className="text-base sm:text-xl font-bold" style={{ color: colors.statusPaid }}>
+                      <p className="text-sm sm:text-xl font-bold truncate" style={{ color: colors.statusPaid }}>
                         {formatCurrency(totalPaid)}
                       </p>
                     </motion.div>
                     <motion.div
-                      className="text-center p-4 rounded-xl relative overflow-hidden"
+                      className="text-center p-2.5 sm:p-4 rounded-xl relative overflow-hidden"
                       style={{ 
                         background: `linear-gradient(135deg, ${currentUserOutstanding <= 0 ? colors.statusPaid : colors.warning}10 0%, ${currentUserOutstanding <= 0 ? colors.statusPaid : colors.warning}05 100%)`,
                         border: `1px solid ${currentUserOutstanding <= 0 ? colors.statusPaid : colors.warning}20`
@@ -653,7 +689,7 @@ export default function PaymentDetailPage() {
                       <p className="text-[10px] sm:text-xs mb-1 font-medium" style={{ color: colors.textSecondary }}>
                         REMAINING
                       </p>
-                      <p className="text-base sm:text-xl font-bold" style={{ color: currentUserOutstanding <= 0 ? colors.statusPaid : colors.warning }}>
+                      <p className="text-sm sm:text-xl font-bold truncate" style={{ color: currentUserOutstanding <= 0 ? colors.statusPaid : colors.warning }}>
                         {formatCurrency(Math.max(0, currentUserOutstanding))}
                       </p>
                     </motion.div>

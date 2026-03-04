@@ -1,4 +1,5 @@
 import { supabase } from '@/config/supabase';
+import { getOrgScope } from '@/utils/orgScope';
 
 export type NotificationType = 'welcome' | 'payment_approved' | 'payment_rejected' | 'payment_pending' | 'payment_waived' | 'system';
 
@@ -64,15 +65,19 @@ class NotificationService {
   async createNotification(params: CreateNotificationParams): Promise<boolean> {
     try {
       const link = params.relatedPaymentId ? `/payment/${params.relatedPaymentId}` : null;
+      const scope = getOrgScope();
 
-      const { error } = await supabase.from('notifications').insert({
-        recipient_id: params.recipientId,
+      const insertData: Record<string, unknown> = {
+        member_id: params.recipientId,
         type: params.type,
         title: params.title,
         message: params.message,
         link,
         is_read: false,
-      });
+      };
+      if (scope) insertData.organization_id = scope.orgId;
+
+      const { error } = await supabase.from('notifications').insert(insertData);
 
       if (error) {
         console.error('Error creating notification:', error);
@@ -93,8 +98,8 @@ class NotificationService {
     return this.createNotification({
       recipientId: userId,
       type: 'welcome',
-      title: 'Welcome to Class Dues Tracker! 🎉',
-      message: `Hi ${userName}! Your profile has been completed successfully. You can now view and manage your class dues payments. Check your dashboard for active payment types.`,
+      title: 'Welcome to Payvexo! 🎉',
+      message: `Hi ${userName}! Your profile has been completed successfully. You can now view and manage your payments. Check your dashboard for active payment types.`,
     });
   }
 
@@ -276,11 +281,14 @@ class NotificationService {
         // If serverless API isn't available in dev (Vite), fall back to direct Supabase update
         if (res.status === 404) {
           console.warn('mark-read endpoint not found (404). Falling back to direct Supabase update for local dev.');
-          const { error } = await supabase
+          const nScope = getOrgScope();
+          let mrQ = supabase
             .from('notifications')
             .update({ is_read: true })
             .eq('id', notificationId)
-            .eq('recipient_id', userId);
+            .eq('member_id', userId);
+          if (nScope) mrQ = mrQ.eq('organization_id', nScope.orgId);
+          const { error } = await mrQ;
           if (error) {
             console.error('Supabase fallback error marking as read:', error);
             return false;
@@ -320,11 +328,14 @@ class NotificationService {
         // Fallback for local dev when serverless API routes are not present
         if (res.status === 404) {
           console.warn('mark-all-read endpoint not found (404). Falling back to direct Supabase update for local dev.');
-          const { error } = await supabase
+          const naScope = getOrgScope();
+          let marQ = supabase
             .from('notifications')
             .update({ is_read: true })
-            .eq('recipient_id', userId)
+            .eq('member_id', userId)
             .eq('is_read', false);
+          if (naScope) marQ = marQ.eq('organization_id', naScope.orgId);
+          const { error } = await marQ;
           if (error) {
             console.error('Supabase fallback error marking all as read:', error);
             return false;
@@ -349,10 +360,13 @@ class NotificationService {
    */
   async deleteNotification(notificationId: string): Promise<boolean> {
     try {
-      const { error } = await supabase
+      const dScope = getOrgScope();
+      let delQ = supabase
         .from('notifications')
         .delete()
         .eq('id', notificationId);
+      if (dScope) delQ = delQ.eq('organization_id', dScope.orgId);
+      const { error } = await delQ;
 
       if (error) {
         console.error('Error deleting notification:', error);

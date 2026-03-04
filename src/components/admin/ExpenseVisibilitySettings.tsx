@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { Eye, EyeOff, Save, Shield, DollarSign, ChevronDown, ChevronUp } from 'lucide-react'
 import { colors, gradients } from '@/config/colors'
-import { useAuth } from '@/hooks/useAuth'
+import { useAppAuth as useAuth } from '@/hooks/useAppAuth'
 import expenseVisibilityService, { type ExpenseVisibilitySetting } from '@/services/expenseVisibilityService'
 import GlassCard from '@/components/ui/GlassCard'
 

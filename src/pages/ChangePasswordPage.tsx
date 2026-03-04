@@ -1,10 +1,11 @@
-import { useState } from "react";
+﻿import { useState } from "react";
 import { Lock, CheckCircle, AlertCircle, Shield, Info } from "lucide-react";
 import { colors, gradients } from "@/config/colors";
 import CustomButton from "@/components/ui/CustomButton";
 import Input from "@/components/ui/Input";
-import { useAuth } from "@/hooks/useAuth";
-import { useNavigate } from "react-router-dom";
+import { useAuth } from '@/hooks/useAppAuth';
+import {  } from "react-router-dom";
+import { useAppNav } from '@/hooks/useAppNav';
 import { motion, AnimatePresence } from "framer-motion";
 import PageWrapper from "@/components/ui/PageWrapper";
 
@@ -15,7 +16,7 @@ export default function ChangePasswordPage() {
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const { user, changePassword } = useAuth();
-  const navigate = useNavigate();
+  const { go: navigate } = useAppNav();
 
   const validatePassword = () => {
     if (!currentPassword) {
@@ -152,7 +153,7 @@ export default function ChangePasswordPage() {
               animate={{ opacity: 1 }}
               transition={{ delay: 0.4 }}
             >
-              Create a strong, unique password to protect your class dues
+              Create a strong, unique password to protect your Payvexo
               account.
             </motion.p>
           </div>
@@ -216,7 +217,7 @@ export default function ChangePasswordPage() {
             >
               <Lock size={32} className="text-white" />
             </motion.div>
-            <h1 className="text-3xl font-bold">Change Password</h1>
+            <h1 className="text-2xl sm:text-3xl font-bold">Change Password</h1>
             <p className="text-sm mt-1" style={{ color: colors.textSecondary }}>
               Create a new secure password
             </p>

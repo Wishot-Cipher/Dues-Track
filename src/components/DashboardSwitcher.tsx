@@ -1,10 +1,12 @@
 import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { useNavigate, useLocation } from 'react-router-dom';
-import { useAuth } from '@/hooks/useAuth';
+import { useLocation } from 'react-router-dom';
+import { useAppAuth as useAuth } from '@/hooks/useAppAuth';
+import { useAppNav } from '@/hooks/useAppNav';
 import { colors } from '@/config/colors';
 import { supabase } from '@/config/supabase';
 import { appBadge } from '@/utils/appBadge';
+import { getOrgScope } from '@/utils/orgScope';
 import { 
   User, 
   Shield,
@@ -18,14 +20,14 @@ interface DashboardSwitcherProps {
 
 export default function DashboardSwitcher({ variant = 'full' }: DashboardSwitcherProps) {
   const { user, hasPermission } = useAuth();
-  const navigate = useNavigate();
+  const { go } = useAppNav();
   const location = useLocation();
   const [isOpen, setIsOpen] = useState(false);
   const [pendingCount, setPendingCount] = useState(0);
 
   const isAdmin = user?.admins && user.admins.length > 0;
   const canApprovePayments = hasPermission?.('can_approve_payments');
-  const isOnAdminDashboard = location.pathname.startsWith('/admin');
+  const isOnAdminDashboard = location.pathname.includes('/admin');
 
   // Fetch pending payment count for admins and update app badge
   useEffect(() => {
@@ -33,10 +35,13 @@ export default function DashboardSwitcher({ variant = 'full' }: DashboardSwitche
 
     const fetchPendingCount = async () => {
       try {
-        const { count, error } = await supabase
+        const scope = getOrgScope();
+        let q = supabase
           .from('payments')
           .select('*', { count: 'exact', head: true })
           .eq('status', 'pending');
+        if (scope) q = q.eq('organization_id', scope.orgId);
+        const { count, error } = await q;
 
         if (!error && count !== null) {
           setPendingCount(count);
@@ -102,7 +107,7 @@ export default function DashboardSwitcher({ variant = 'full' }: DashboardSwitche
 
   const handleSwitch = (path: string) => {
     setIsOpen(false);
-    navigate(path);
+    go(path);
   };
 
   if (variant === 'compact') {
@@ -228,7 +233,7 @@ export default function DashboardSwitcher({ variant = 'full' }: DashboardSwitche
                               <motion.span 
                                 initial={{ scale: 0 }}
                                 animate={{ scale: 1 }}
-                                className="flex items-center justify-center min-w-[20px] h-5 px-1.5 rounded-full text-[10px] font-bold"
+                                className="flex items-center justify-center min-w-5 h-5 px-1.5 rounded-full text-[10px] font-bold"
                                 style={{ background: colors.statusUnpaid, color: 'white' }}
                               >
                                 {mode.badge > 99 ? '99+' : mode.badge}

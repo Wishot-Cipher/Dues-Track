@@ -14,7 +14,7 @@ export interface PendingPayment {
   notes: string | null;
   payment_method: string;
   created_at: string;
-  student_id: string;
+  member_id: string;
   receipt_file?: File;
 }
 

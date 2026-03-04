@@ -1,10 +1,12 @@
-/* eslint-disable @typescript-eslint/no-unused-vars */
+﻿/* eslint-disable @typescript-eslint/no-unused-vars */
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { useState, useEffect, useRef, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { useNavigate, useLocation } from "react-router-dom";
-import { useAuth } from "@/hooks/useAuth";
+import { useLocation } from "react-router-dom";
+import { useAppNav } from '@/hooks/useAppNav';
+import { useAppAuth as useAuth } from '@/hooks/useAppAuth';
 import { supabase } from "@/config/supabase";
+import { getOrgScope } from "@/utils/orgScope";
 import { colors, gradients } from "@/config/colors";
 import GlassCard from "@/components/ui/GlassCard";
 import { useToast } from "@/hooks/useToast";
@@ -32,6 +34,7 @@ import Footer from "@/components/Footer";
 // QR Data interfaces
 interface QRData {
   type: string;
+  organizationId?: string | null;
   paidBy: string;
   paidByName: string;
   paidByRegNumber: string;
@@ -61,7 +64,7 @@ interface PaymentType {
 const SCANNER_CONTAINER_ID = "qr-scanner";
 
 export default function ScanQRCodePage() {
-  const navigate = useNavigate();
+  const { go: navigate } = useAppNav();
   const location = useLocation();
   const { user, hasPermission } = useAuth();
   const toast = useToast();
@@ -208,6 +211,7 @@ export default function ScanQRCodePage() {
           // Legacy single-student format
           data = {
             type: rawData.type,
+            organizationId: rawData.organizationId || null,
             paidBy: rawData.studentId,
             paidByName: rawData.studentName,
             paidByRegNumber: rawData.studentRegNumber,
@@ -238,12 +242,20 @@ export default function ScanQRCodePage() {
           return false;
         }
 
+        // Verify QR belongs to this organization
+        const scope = getOrgScope();
+        if (scope && data.organizationId && data.organizationId !== scope.orgId) {
+          toast.error("This QR code belongs to a different organization");
+          return false;
+        }
+
         // Verify payer exists
-        const { data: payerData, error: payerError } = await supabase
-          .from("students")
+        let payerQ = supabase
+          .from("organization_members")
           .select("id, full_name, reg_number")
-          .eq("id", data.paidBy)
-          .single();
+          .eq("id", data.paidBy);
+        if (scope) payerQ = payerQ.eq('organization_id', scope.orgId);
+        const { data: payerData, error: payerError } = await payerQ;
 
         if (payerError || !payerData) {
           toast.error("Payer not found in system");
@@ -251,10 +263,12 @@ export default function ScanQRCodePage() {
         }
 
         // Verify payment type exists
-        const { data: paymentTypeData, error: paymentTypeError } = await supabase
+        let ptQ = supabase
           .from("payment_types")
           .select("id, title, amount")
-          .eq("id", data.paymentTypeId)
+          .eq("id", data.paymentTypeId);
+        if (scope) ptQ = ptQ.eq('organization_id', scope.orgId);
+        const { data: paymentTypeData, error: paymentTypeError } = await ptQ
           .single();
 
         if (paymentTypeError || !paymentTypeData) {
@@ -268,7 +282,7 @@ export default function ScanQRCodePage() {
           const { data: existingPayments } = await supabase
             .from("payments")
             .select("status, amount")
-            .eq("student_id", stu.id)
+            .eq("member_id", stu.id)
             .eq("payment_type_id", data.paymentTypeId);
 
           const totalPaid =
@@ -308,7 +322,7 @@ export default function ScanQRCodePage() {
         }
 
         setQrData(data);
-        setStudent(payerData);
+        setStudent(payerData[0]);
         setPaymentType(paymentTypeData);
         setMode("confirm");
         setScanCount((c) => c + 1);
@@ -544,7 +558,7 @@ export default function ScanQRCodePage() {
         const { data: existingPayments } = await supabase
           .from("payments")
           .select("status, amount")
-          .eq("student_id", studentToPay.id)
+          .eq("member_id", studentToPay.id)
           .eq("payment_type_id", qrData.paymentTypeId);
 
         const totalPaid =
@@ -560,8 +574,9 @@ export default function ScanQRCodePage() {
 
         // Insert payment (use per-student outstanding if available)
         const amountToInsert = (studentToPay as any).outstanding ?? qrData.amountPerStudent ?? paymentType.amount;
-        const { error: insertError } = await supabase.from("payments").insert({
-          student_id: studentToPay.id,
+        const scope = getOrgScope();
+        const payInsert: Record<string, unknown> = {
+          member_id: studentToPay.id,
           payment_type_id: qrData.paymentTypeId,
           amount: amountToInsert,
           payment_method: "cash",
@@ -575,7 +590,9 @@ export default function ScanQRCodePage() {
               : `Cash payment via QR scan`,
           paid_by: studentToPay.id !== qrData.paidBy ? qrData.paidBy : null,
           receipt_url: "",
-        });
+        };
+        if (scope) payInsert.organization_id = scope.orgId;
+        const { error: insertError } = await supabase.from("payments").insert(payInsert);
 
         if (insertError) {
           console.error("Payment insert error:", insertError);
@@ -586,7 +603,8 @@ export default function ScanQRCodePage() {
 
         // Send notification
         await supabase.from("notifications").insert({
-          recipient_id: studentToPay.id,
+          member_id: studentToPay.id,
+          ...(scope ? { organization_id: scope.orgId } : {}),
           type: "payment_approved",
           title: `Cash Payment Received - ${qrData.paymentTypeName}`,
           message:
@@ -647,10 +665,13 @@ export default function ScanQRCodePage() {
 
       const [studentPart, paymentPart] = parts;
 
-      // Find student
-      const { data: allStudents } = await supabase
-        .from("students")
-        .select("id, full_name, reg_number");
+      // Find member
+      const scope = getOrgScope();
+      let memQ = supabase
+        .from("organization_members")
+        .select("id, full_name, member_id");
+      if (scope) memQ = memQ.eq('organization_id', scope.orgId);
+      const { data: allStudents } = await memQ;
 
       const matchingStudent = allStudents?.find(
         (s) =>
@@ -663,10 +684,12 @@ export default function ScanQRCodePage() {
       }
 
       // Find payment type
-      const { data: allPaymentTypes } = await supabase
+      let ptManQ = supabase
         .from("payment_types")
         .select("id, title, amount")
         .eq("is_active", true);
+      if (scope) ptManQ = ptManQ.eq('organization_id', scope.orgId);
+      const { data: allPaymentTypes } = await ptManQ;
 
       const matchingPaymentType = allPaymentTypes?.find(
         (pt) =>
@@ -680,17 +703,20 @@ export default function ScanQRCodePage() {
 
       // Compute outstanding (including late fees) for this student
       try {
-        const { data: fullPT } = await supabase
+        let fullPTQ = supabase
           .from('payment_types')
           .select('id, title, amount, deadline, late_fee_per_day')
-          .eq('id', matchingPaymentType.id)
-          .single();
+          .eq('id', matchingPaymentType.id);
+        if (scope) fullPTQ = fullPTQ.eq('organization_id', scope.orgId);
+        const { data: fullPT } = await fullPTQ.single();
 
-        const { data: paymentsData } = await supabase
+        let pmtDataQ = supabase
           .from('payments')
-          .select('student_id, amount, status, transaction_ref')
+          .select('member_id, amount, status, transaction_ref')
           .eq('payment_type_id', matchingPaymentType.id)
-          .eq('student_id', matchingStudent.id);
+          .eq('member_id', matchingStudent.id);
+        if (scope) pmtDataQ = pmtDataQ.eq('organization_id', scope.orgId);
+        const { data: paymentsData } = await pmtDataQ;
 
         const paidForType = (paymentsData || [])
           .filter((p: any) => p.status === 'approved' && !p.transaction_ref?.startsWith('WAIVED-'))
@@ -730,12 +756,12 @@ export default function ScanQRCodePage() {
           type: "CASH_PAYMENT",
           paidBy: matchingStudent.id,
           paidByName: matchingStudent.full_name,
-          paidByRegNumber: matchingStudent.reg_number,
+          paidByRegNumber: matchingStudent.member_id,
           students: [
             {
               id: matchingStudent.id,
               name: matchingStudent.full_name,
-              regNumber: matchingStudent.reg_number,
+              regNumber: matchingStudent.member_id,
               outstanding,
             } as any,
           ],
@@ -749,7 +775,7 @@ export default function ScanQRCodePage() {
         };
 
         setQrData(data);
-        setStudent(matchingStudent);
+        setStudent({ ...matchingStudent, reg_number: matchingStudent.member_id } as any);
         setPaymentType(matchingPaymentType);
         setMode("confirm");
       } catch (err) {
@@ -759,12 +785,12 @@ export default function ScanQRCodePage() {
           type: "CASH_PAYMENT",
           paidBy: matchingStudent.id,
           paidByName: matchingStudent.full_name,
-          paidByRegNumber: matchingStudent.reg_number,
+          paidByRegNumber: matchingStudent.member_id,
           students: [
             {
               id: matchingStudent.id,
               name: matchingStudent.full_name,
-              regNumber: matchingStudent.reg_number,
+              regNumber: matchingStudent.member_id,
             },
           ],
           totalStudents: 1,
@@ -777,7 +803,7 @@ export default function ScanQRCodePage() {
         };
 
         setQrData(data);
-        setStudent(matchingStudent);
+        setStudent({ ...matchingStudent, reg_number: matchingStudent.member_id } as any);
         setPaymentType(matchingPaymentType);
         setMode("confirm");
       }

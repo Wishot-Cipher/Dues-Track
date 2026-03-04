@@ -1,12 +1,13 @@
-import { useState } from 'react';
+﻿import { useState } from 'react';
 import { User, Mail, Phone, AlertCircle, UserCheck, Info } from 'lucide-react';
 import { colors, gradients } from '@/config/colors';
 import { SECTIONS } from '@/config/constants';
 import Input from '@/components/ui/Input';
 import ProfessionalDropdown from '@/components/ui/ProfessionalDropdown';
 import Button from '@/components/ui/CustomButton';
-import { useAuth } from '@/hooks/useAuth';
-import { useNavigate } from 'react-router-dom';
+import { useAuth } from '@/hooks/useAppAuth';
+import {  } from 'react-router-dom';
+import { useAppNav } from '@/hooks/useAppNav';
 import { validateEmail, validatePhone } from '@/utils/validators';
 import { motion, AnimatePresence } from 'framer-motion';
 import notificationService from '@/services/notificationService';
@@ -14,7 +15,7 @@ import PageWrapper from '@/components/ui/PageWrapper';
 
 export default function CompleteProfilePage() {
   const { user, updateProfile } = useAuth();
-  const navigate = useNavigate();
+  const { go: navigate } = useAppNav();
 
   const [formData, setFormData] = useState({
     email: '',
@@ -209,7 +210,7 @@ export default function CompleteProfilePage() {
             >
               <User size={32} className="text-white" />
             </motion.div>
-            <h1 className="text-3xl font-bold">Complete Profile</h1>
+            <h1 className="text-2xl sm:text-3xl font-bold">Complete Profile</h1>
             <p className="text-sm mt-1" style={{ color: colors.textSecondary }}>
               Just a few more details
             </p>

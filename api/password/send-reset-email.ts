@@ -8,27 +8,24 @@ const appUrl = process.env.VITE_APP_URL || process.env.NEXT_PUBLIC_APP_URL || 'h
 const RESEND_API_KEY = process.env.RESEND_API_KEY || process.env.VITE_RESEND_API_KEY
 
 function generateSecureToken(): string {
-  // crypto is always available in Node.js (Vercel) — never fall back to Math.random()
   const crypto = require('crypto')
   return crypto.randomBytes(32).toString('hex')
 }
 
 export default async function handler(req: any, res: any) {
-  // Set CORS headers
   res.setHeader('Content-Type', 'application/json')
   
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Method not allowed' })
   }
 
-  // Check for required env vars
   if (!supabaseUrl) {
-    console.error('❌ Missing SUPABASE_URL environment variable')
+    console.error('Missing SUPABASE_URL')
     return res.status(500).json({ error: 'Server configuration error: Missing database URL' })
   }
   
   if (!serviceRole) {
-    console.error('❌ Missing SUPABASE_SERVICE_ROLE_KEY environment variable')
+    console.error('Missing SUPABASE_SERVICE_ROLE_KEY')
     return res.status(500).json({ error: 'Server configuration error: Missing service role key' })
   }
 
@@ -36,75 +33,99 @@ export default async function handler(req: any, res: any) {
   try {
     supabaseAdmin = createClient(supabaseUrl, serviceRole)
   } catch (err) {
-    console.error('❌ Failed to create Supabase client:', err)
+    console.error('Failed to create Supabase client:', err)
     return res.status(500).json({ error: 'Failed to connect to database' })
   }
 
   try {
-    const { email } = req.body || {}
+    const { email, orgSlug } = req.body || {}
     if (!email) {
       return res.status(400).json({ error: 'Email is required' })
     }
 
     const emailLower = String(email).trim().toLowerCase()
-    // SECURITY: Don't log the email address
 
-    // Lookup student by email from students table (NOT Supabase auth.users)
-    const { data: student, error: studentError } = await supabaseAdmin
-      .from('students')
-      .select('id, email, full_name, reg_number')
+    // --------------------------------------------------
+    // Resolve org name for email branding (optional)
+    // --------------------------------------------------
+    let orgName = 'Payvexo'
+    if (orgSlug) {
+      const { data: orgRow } = await supabaseAdmin
+        .from('organizations')
+        .select('name')
+        .eq('slug', orgSlug)
+        .maybeSingle()
+      if (orgRow?.name) orgName = orgRow.name
+    }
+
+    // --------------------------------------------------
+    // Lookup member by email from organization_members
+    // --------------------------------------------------
+    let memberQ = supabaseAdmin
+      .from('organization_members')
+      .select('id, email, full_name')
       .ilike('email', emailLower)
-      .maybeSingle()
+      .eq('is_active', true)
+
+    // Scope to org if slug provided
+    if (orgSlug) {
+      const { data: org } = await supabaseAdmin
+        .from('organizations')
+        .select('id')
+        .eq('slug', orgSlug)
+        .maybeSingle()
+      if (org?.id) {
+        memberQ = memberQ.eq('organization_id', org.id)
+      }
+    }
+
+    const { data: member, error: memberError } = await memberQ.maybeSingle()
 
     // Always return success to avoid disclosing accounts
-    if (studentError || !student) {
+    if (memberError || !member) {
       return res.status(200).json({ success: true, message: 'If that email exists, a reset link has been sent' })
     }
     
-    // Check if student has a valid email
-    if (!student.email || !student.email.includes('@')) {
+    if (!member.email || !member.email.includes('@')) {
       return res.status(200).json({ success: true, message: 'If that email exists, a reset link has been sent' })
     }
 
-    // Delete previous unused tokens for this student
+    // Delete previous unused tokens for this member
     try {
-      await supabaseAdmin.from('password_reset_tokens').delete().eq('student_id', student.id).eq('used', false)
+      await supabaseAdmin.from('password_reset_tokens').delete().eq('member_id', member.id).eq('used', false)
     } catch (delErr) {
-      console.warn('Could not delete old tokens (table may not exist):', delErr)
+      console.warn('Could not delete old tokens:', delErr)
     }
 
     const resetToken = generateSecureToken()
     const expiresAt = new Date(Date.now() + 60 * 60 * 1000).toISOString() // 1 hour
 
     const { error: insertError } = await supabaseAdmin.from('password_reset_tokens').insert({
-      student_id: student.id,
+      member_id: member.id,
       token: resetToken,
       expires_at: expiresAt,
       used: false
     })
 
     if (insertError) {
-      console.error('❌ Error inserting reset token:', insertError)
-      // Check if table doesn't exist
+      console.error('Error inserting reset token:', insertError)
       if (insertError.message?.includes('relation') || insertError.code === '42P01') {
         return res.status(500).json({ 
-          error: 'Password reset tokens table not set up. Please run the database migration.',
-          details: 'Run: CREATE TABLE password_reset_tokens (id uuid PRIMARY KEY DEFAULT gen_random_uuid(), student_id uuid REFERENCES students(id), token text UNIQUE NOT NULL, expires_at timestamptz NOT NULL, used boolean DEFAULT false, created_at timestamptz DEFAULT now());'
+          error: 'Password reset tokens table not set up. Run migration 016_password_reset_tokens.sql in Supabase SQL Editor.'
         })
       }
       return res.status(500).json({ error: 'Failed to create reset token: ' + insertError.message })
     }
 
     const resetUrl = `${appUrl.replace(/\/$/, '')}/reset-password?token=${resetToken}`
-    // SECURITY: Never log the reset URL — it contains the secret token
 
-    // Send email via Resend (if configured)
+    // Send email via Resend
     if (!RESEND_API_KEY) {
-      console.warn('⚠️ RESEND_API_KEY not configured - cannot send email')
+      console.warn('RESEND_API_KEY not configured')
       return res.status(200).json({ 
         success: false, 
         emailSent: false,
-        message: 'Email service not configured. Please contact your class admin.',
+        message: 'Email service not configured. Please contact your admin.',
         reason: 'RESEND_API_KEY not set'
       })
     }
@@ -116,9 +137,9 @@ export default async function handler(req: any, res: any) {
         'Content-Type': 'application/json'
       },
       body: JSON.stringify({
-        from: process.env.FROM_EMAIL || 'onboarding@resend.dev',
-        to: student.email,
-        subject: 'ECE Class Dues - Reset Your Password',
+        from: process.env.FROM_EMAIL || 'Payvexo <onboarding@resend.dev>',
+        to: member.email,
+        subject: `${orgName} — Reset Your Password`,
         html: `
           <!DOCTYPE html>
           <html>
@@ -139,7 +160,7 @@ export default async function handler(req: any, res: any) {
                     <tr>
                       <td style="padding: 40px 30px; text-align: center;">
                         <h1 style="color: #FFFFFF; margin: 0 0 10px 0; font-size: 28px; font-weight: 700;">Reset Your Password</h1>
-                        <p style="color: rgba(255, 255, 255, 0.6); margin: 0; font-size: 14px;">ECE Class Dues Tracker</p>
+                        <p style="color: rgba(255, 255, 255, 0.6); margin: 0; font-size: 14px;">${orgName}</p>
                       </td>
                     </tr>
                     
@@ -147,10 +168,10 @@ export default async function handler(req: any, res: any) {
                     <tr>
                       <td style="padding: 0 30px 30px 30px;">
                         <p style="color: #FFFFFF; font-size: 16px; line-height: 1.6; margin: 0 0 20px 0;">
-                          Hi <strong>${student.full_name}</strong>,
+                          Hi <strong>${member.full_name}</strong>,
                         </p>
                         <p style="color: rgba(255, 255, 255, 0.8); font-size: 15px; line-height: 1.6; margin: 0 0 25px 0;">
-                          We received a request to reset your password for the ECE Class Dues Tracker. Click the button below to create a new password:
+                          We received a request to reset your password for <strong>${orgName}</strong>. Click the button below to create a new password:
                         </p>
                         
                         <!-- Reset Button -->
@@ -174,8 +195,8 @@ export default async function handler(req: any, res: any) {
                           <tr>
                             <td style="padding: 15px;">
                               <p style="color: #F59E0B; font-size: 13px; margin: 0; line-height: 1.5;">
-                                <strong>⚠️ Security Notice:</strong><br>
-                                This link expires in 1 hour. If you didn't request this reset, please ignore this email or contact your class admin.
+                                <strong>Security Notice:</strong><br>
+                                This link expires in 1 hour. If you didn't request this reset, please ignore this email or contact your admin.
                               </p>
                             </td>
                           </tr>
@@ -187,8 +208,8 @@ export default async function handler(req: any, res: any) {
                     <tr>
                       <td style="padding: 20px 30px; background: rgba(255, 255, 255, 0.03); border-top: 1px solid rgba(255, 255, 255, 0.1);">
                         <p style="color: rgba(255, 255, 255, 0.5); font-size: 12px; margin: 0; text-align: center; line-height: 1.5;">
-                          ECE Class Dues Tracker<br>
-                          Federal University of Technology, Owerri
+                          ${orgName}<br>
+                          Powered by Payvexo
                         </p>
                       </td>
                     </tr>
@@ -204,16 +225,15 @@ export default async function handler(req: any, res: any) {
 
     if (!resendRes.ok) {
       const body = await resendRes.text()
-      console.error('❌ Resend API error:', body)
+      console.error('Resend API error:', body)
       return res.status(200).json({ 
         success: false, 
         emailSent: false,
-        message: 'Failed to send email. Please try again or contact your class admin.',
+        message: 'Failed to send email. Please try again or contact your admin.',
         reason: 'Email service error'
       })
     }
 
-    console.log('✅ Password reset email sent successfully to:', student.email)
     return res.status(200).json({ 
       success: true, 
       emailSent: true,

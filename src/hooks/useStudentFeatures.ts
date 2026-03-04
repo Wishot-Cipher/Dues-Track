@@ -25,7 +25,8 @@ export function useStudentFeatures() {
           'achievements', 
           'deadline_reminders',
           'class_progress',
-          'payment_summary'
+          'payment_summary',
+          'progress_bar'
         ]))
       } else {
         setEnabledFeatures(new Set(features))
@@ -38,7 +39,8 @@ export function useStudentFeatures() {
         'achievements',
         'deadline_reminders', 
         'class_progress',
-        'payment_summary'
+        'payment_summary',
+        'progress_bar'
       ]))
     } finally {
       setLoading(false)
@@ -53,6 +55,7 @@ export function useStudentFeatures() {
       deadlineReminders: enabledFeatures.has('deadline_reminders'),
       classProgress: enabledFeatures.has('class_progress'),
       paymentSummary: enabledFeatures.has('payment_summary'),
+      progressBar: enabledFeatures.has('progress_bar'),
     },
     loading,
     refresh: loadEnabledFeatures

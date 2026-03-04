@@ -5,6 +5,7 @@ import { colors, gradients } from '@/config/colors'
 import { Package, TrendingUp, TrendingDown, DollarSign, Eye, PieChart, HelpCircle } from 'lucide-react'
 import { supabase } from '@/config/supabase'
 import { useExpenseVisibility } from '@/hooks/useExpenseVisibility'
+import { getOrgScope } from '@/utils/orgScope'
 
 interface ExpenseSummary {
   totalSpent: number
@@ -40,17 +41,21 @@ export default function ExpenseTransparencyDashboard() {
     try {
       setLoading(true)
 
+      const scope = getOrgScope()
+
       // Get total collected (approved payments, excluding waived)
-      const { data: payments } = await supabase
+      let qPayments = supabase
         .from('payments')
         .select('amount')
         .eq('status', 'approved')
         .not('transaction_ref', 'like', 'WAIVED-%')
+      if (scope) qPayments = qPayments.eq('organization_id', scope.orgId)
+      const { data: payments } = await qPayments
 
       const totalCollected = payments?.reduce((sum, p) => sum + Number(p.amount), 0) || 0
 
       // Get approved expenses with categories
-      const { data: expenses } = await supabase
+      let qExpenses = supabase
         .from('expenses')
         .select(`
           id,
@@ -62,6 +67,8 @@ export default function ExpenseTransparencyDashboard() {
         `)
         .eq('status', 'approved')
         .order('expense_date', { ascending: false })
+      if (scope) qExpenses = qExpenses.eq('organization_id', scope.orgId)
+      const { data: expenses } = await qExpenses
 
       const totalSpent = expenses?.reduce((sum, e) => sum + Number(e.amount), 0) || 0
       const remainingBalance = totalCollected - totalSpent
@@ -147,7 +154,7 @@ export default function ExpenseTransparencyDashboard() {
                    style={{ background: colors.cardBg, border: `1px solid ${colors.borderLight}` }}>
                 <p className="font-medium text-white mb-1">How this works</p>
                 <p style={{ color: colors.textSecondary }}>
-                  This shows how your class dues are being used. All approved expenses by class reps are displayed here for transparency.
+                  This shows how your contributions are being used. All approved expenses are displayed here for transparency.
                 </p>
               </div>
             </div>
@@ -178,7 +185,7 @@ export default function ExpenseTransparencyDashboard() {
               <span className="text-xs font-medium" style={{ color: colors.textSecondary }}>Total Collected</span>
               <TrendingUp className="w-4 h-4 text-green-500" />
             </div>
-            <p className="text-2xl font-bold text-white">
+            <p className="text-xl sm:text-2xl font-bold text-white">
               ₦{summary.totalCollected.toLocaleString()}
             </p>
           </motion.div>
@@ -195,7 +202,7 @@ export default function ExpenseTransparencyDashboard() {
               <span className="text-xs font-medium" style={{ color: colors.textSecondary }}>Total Spent</span>
               <TrendingDown className="w-4 h-4 text-red-500" />
             </div>
-            <p className="text-2xl font-bold text-white">
+            <p className="text-xl sm:text-2xl font-bold text-white">
               ₦{summary.totalSpent.toLocaleString()}
             </p>
             <p className="text-xs mt-1" style={{ color: colors.textSecondary }}>
@@ -215,7 +222,7 @@ export default function ExpenseTransparencyDashboard() {
               <span className="text-xs font-medium" style={{ color: colors.textSecondary }}>Available Balance</span>
               <DollarSign className="w-4 h-4" style={{ color: colors.primary }} />
             </div>
-            <p className="text-2xl font-bold" style={{ 
+            <p className="text-xl sm:text-2xl font-bold" style={{ 
               background: gradients.primary,
               WebkitBackgroundClip: 'text',
               WebkitTextFillColor: 'transparent',

@@ -6,7 +6,7 @@ self.addEventListener('push', (event) => {
   console.log('[SW] Push event received:', event);
   
   let data = {
-    title: 'Class Dues Tracker',
+    title: 'Payvexo',
     body: 'You have a new notification',
     icon: '/icons/icon-192x192.png',
     badge: '/icons/icon-72x72.png',

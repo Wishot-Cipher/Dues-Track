@@ -47,7 +47,7 @@ interface StudentExport {
 // For payment history exports (PaymentHistoryPage)
 interface PaymentExport {
   id: string;
-  student_id?: string;
+  member_id?: string;
   amount: number;
   status: string;
   payment_method?: string;
@@ -190,7 +190,7 @@ export function exportStudentsToPrint(
   // Generate paginated report
   const content = generatePaginatedReport(
     'Students Report',
-    `Class Dues Tracker • ${getAcademicSession()} Academic Session`,
+    `Payvexo • ${getAcademicSession()} Academic Session`,
     summaryContent,
     tableHeaders,
     tableRows,
@@ -198,7 +198,7 @@ export function exportStudentsToPrint(
     { tableTitle: 'Student Records', notesContent }
   );
   
-  const html = generatePrintHTML('Students Report - Class Dues Tracker', content);
+  const html = generatePrintHTML('Students Report - Payvexo', content);
   openPrintWindow(html);
 }
 
@@ -300,7 +300,7 @@ export function exportPaymentsToPrint(
     { tableTitle: 'Transaction History', notesContent }
   );
   
-  const html = generatePrintHTML('Payment Statement - Class Dues Tracker', content);
+  const html = generatePrintHTML('Payment Statement - Payvexo', content);
   openPrintWindow(html);
 }
 
@@ -389,7 +389,7 @@ export function exportExpensesToPrint(
   // Generate paginated report
   const content = generatePaginatedReport(
     'Expenses Report',
-    `Class Dues Tracker • ${getAcademicSession()} Academic Session`,
+    `Payvexo • ${getAcademicSession()} Academic Session`,
     summaryContent,
     tableHeaders,
     tableRows,
@@ -397,7 +397,7 @@ export function exportExpensesToPrint(
     { tableTitle: 'Expense Records', notesContent }
   );
   
-  const html = generatePrintHTML('Expenses Report - Class Dues Tracker', content);
+  const html = generatePrintHTML('Expenses Report - Payvexo', content);
   openPrintWindow(html);
 }
 
@@ -462,8 +462,7 @@ export function exportCollectedPaymentsToPrint(data: CollectedPaymentsData): voi
   const tableHeaders = ['Student Name', 'Reg Number', 'Status', 'Payments', 'Total Paid', 'Categories'];
   const tableRows = students.map(s => {
     const statusClass = s.is_active ? 'active' : 'inactive';
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const waivedPayments = (s.payments || []).filter(p => Boolean((p as any).waived));
+    const waivedPayments = (s.payments || []).filter((p: Record<string, unknown>) => Boolean(p.waived));
     const waivedCount = waivedPayments.length;
     const waivedTotal = waivedPayments.reduce((sum, p) => sum + Number((p as any).amount || 0), 0);
 
@@ -492,7 +491,7 @@ export function exportCollectedPaymentsToPrint(data: CollectedPaymentsData): voi
   // Generate paginated report
   const content = generatePaginatedReport(
     'Collected Payments Report',
-    `Class Dues Tracker • ${getAcademicSession()} Academic Session`,
+    `Payvexo • ${getAcademicSession()} Academic Session`,
     summaryContent,
     tableHeaders,
     tableRows,
@@ -500,7 +499,7 @@ export function exportCollectedPaymentsToPrint(data: CollectedPaymentsData): voi
     { tableTitle: 'Student Payment Details', notesContent }
   );
   
-  const html = generatePrintHTML('Collected Payments Report - Class Dues Tracker', content);
+  const html = generatePrintHTML('Collected Payments Report - Payvexo', content);
   openPrintWindow(html);
 }
 

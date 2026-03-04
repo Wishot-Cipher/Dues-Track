@@ -82,7 +82,7 @@ export default function InstallPWA() {
               <div className="flex-1 min-w-0">
                 <h3 className="text-white font-bold mb-1">Install App</h3>
                 <p className="text-sm mb-3" style={{ color: colors.textSecondary }}>
-                  Install Class Dues Tracker for quick access and offline support
+                  Install Payvexo for quick access and offline support
                 </p>
 
                 <button

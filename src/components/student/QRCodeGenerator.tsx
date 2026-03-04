@@ -3,6 +3,7 @@ import { useEffect, useRef, useState } from "react";
 import { motion } from "framer-motion";
 import QRCode from "qrcode";
 import { colors, gradients } from "@/config/colors";
+import { getOrgScope } from "@/utils/orgScope";
 import {
   QrCode,
   Download,
@@ -154,8 +155,10 @@ export default function QRCodeGenerator({
             });
           });
           
+          const scope = getOrgScope();
           const qrData = JSON.stringify({
             type: "CASH_PAYMENT",
+            organizationId: scope?.orgId || null,
             paidBy: studentId,
             paidByName: studentName,
             paidByRegNumber: studentRegNumber,

@@ -1,5 +1,5 @@
 import { motion } from 'framer-motion';
-import { useNavigate } from 'react-router-dom';
+import { useAppNav } from '@/hooks/useAppNav';
 import { Download, Eye, CheckCircle, Clock, XCircle, AlertCircle } from 'lucide-react';
 import { StatusBadge } from '../common/StatusBadge';
 
@@ -38,7 +38,7 @@ export function RecentPaymentItem({
   formatCurrency, 
   formatDate 
 }: RecentPaymentItemProps) {
-  const navigate = useNavigate();
+  const { go: navigate } = useAppNav();
 
   const getCategoryEmoji = (category: string) => {
     switch (category) {

@@ -1,12 +1,14 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
+﻿/* eslint-disable @typescript-eslint/no-explicit-any */
 import { useEffect, useState, useCallback, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { useNavigate } from 'react-router-dom';
+import {  } from 'react-router-dom';
+import { useAppNav } from '@/hooks/useAppNav';
 import GlassCard from '@/components/ui/GlassCard';
 import AnimatedCounter from '@/components/ui/AnimatedCounter';
 import DateRangeFilter, { type DateRange } from '@/components/ui/DateRangeFilter';
 import FinancialChart from '@/components/admin/FinancialChart';
 import { supabase } from '@/config/supabase';
+import { getOrgScope } from '@/utils/orgScope';
 import { colors } from '@/config/colors';
 import Footer from '@/components/Footer';
 import { formatCurrency, formatDate } from '@/utils/formatters';
@@ -16,7 +18,7 @@ import { useToast } from '@/hooks/useToast';
 
 interface StudentPayment {
   id: string;
-  student_id: string;
+  member_id: string;
   student_name: string;
   reg_number: string;
   is_active: boolean;
@@ -45,7 +47,7 @@ interface CategoryExpenses {
 }
 
 export default function AdminCollectedPage() {
-  const navigate = useNavigate();
+  const { go: navigate } = useAppNav();
   const { success: showSuccess, error: showError } = useToast();
   const [loading, setLoading] = useState(true);
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
@@ -74,28 +76,31 @@ export default function AdminCollectedPage() {
     try {
       setLoading(true);
 
-      // Fetch ALL students first
-      const { data: studentsData, error: studentsError } = await supabase
-        .from('students')
-        .select('id, full_name, reg_number, is_active')
+      // Fetch ALL members first
+      const scope = getOrgScope();
+      let membersQ = supabase
+        .from('organization_members')
+        .select('id, full_name, member_id, is_active')
         .order('full_name', { ascending: true });
+      if (scope) membersQ = membersQ.eq('organization_id', scope.orgId);
+      const { data: studentsData, error: studentsError } = await membersQ;
 
       if (studentsError) throw studentsError;
 
       // Fetch all approved payments with student and payment type details
-      const { data: paymentsData, error } = await supabase
+      let paymentsQ = supabase
         .from('payments')
         .select(`
           id,
-          student_id,
+          member_id,
           amount,
           transaction_ref,
           status,
           created_at,
-          students!payments_student_id_fkey (
+          member:organization_members!payments_member_id_fkey (
             id,
             full_name,
-            reg_number,
+            member_id,
             is_active
           ),
           payment_types (
@@ -107,12 +112,14 @@ export default function AdminCollectedPage() {
         .in('status', ['approved', 'pending', 'partial'])
         .limit(1000)
         .order('created_at', { ascending: false });
+      if (scope) paymentsQ = paymentsQ.eq('organization_id', scope.orgId);
+      const { data: paymentsData, error } = await paymentsQ;
 
       if (error) throw error;
 
       // Fetch all expenses with better error handling
       // Must specify which relationship to use since expenses has 2 FKs to payment_types
-      const { data: expensesData, error: expensesError } = await supabase
+      let expQ = supabase
         .from('expenses')
         .select(`
           id,
@@ -129,7 +136,9 @@ export default function AdminCollectedPage() {
           ),
           category:expense_categories(id, name)
         `)
-        .eq('status', 'approved'); // Only count approved expenses in net balance
+        .eq('status', 'approved');
+      if (scope) expQ = expQ.eq('organization_id', scope.orgId);
+      const { data: expensesData, error: expensesError } = await expQ;
 
       if (expensesError) {
         console.warn('Error fetching expenses:', expensesError);
@@ -147,9 +156,9 @@ export default function AdminCollectedPage() {
       studentsData?.forEach((student) => {
         studentMap.set(student.id, {
           id: student.id,
-          student_id: student.id,
+          member_id: student.id,
           student_name: student.full_name || 'Unknown',
-          reg_number: student.reg_number || '',
+          reg_number: student.member_id || '',
           is_active: student.is_active || false,
           payments: [],
           total_paid: 0,
@@ -161,20 +170,20 @@ export default function AdminCollectedPage() {
 
       interface PaymentData {
         id: string;
-        student_id: string;
+        member_id: string;
         amount: number;
         transaction_ref: string;
         status: string;
         created_at: string;
-        students: {
+        member: {
           id: string;
           full_name: string;
-          reg_number: string;
+          member_id: string;
           is_active: boolean;
         }[] | {
           id: string;
           full_name: string;
-          reg_number: string;
+          member_id: string;
           is_active: boolean;
         } | null;
         payment_types: {
@@ -196,15 +205,17 @@ export default function AdminCollectedPage() {
 
       const paymentTypesFallback = new Map<string, { id: string; title: string; category: string }>();
       if (missingPaymentTypeIds.length > 0) {
-        const { data: paymentTypesData } = await supabase
+        let ptFallQ = supabase
           .from('payment_types')
           .select('id, title, category')
           .in('id', missingPaymentTypeIds);
+        if (scope) ptFallQ = ptFallQ.eq('organization_id', scope.orgId);
+        const { data: paymentTypesData } = await ptFallQ;
         paymentTypesData?.forEach((pt: any) => paymentTypesFallback.set(pt.id, pt));
       }
 
       paymentsData?.forEach((payment: PaymentData) => {
-        const student = Array.isArray(payment.students) ? payment.students[0] : payment.students;
+        const student = Array.isArray(payment.member) ? payment.member[0] : payment.member;
         const paymentType = Array.isArray(payment.payment_types) ? payment.payment_types[0] : payment.payment_types || paymentTypesFallback.get((payment as any).payment_type_id || '') || null;
         
         if (!student) return;
@@ -299,9 +310,11 @@ export default function AdminCollectedPage() {
       // Fetch all payment types (used to attribute payments and expenses to categories)
       const paymentTypesMap = new Map<string, { category: string; title: string }>();
       try {
-        const { data: paymentTypesData } = await supabase
+        let ptMapQ = supabase
           .from('payment_types')
           .select('id, category, title');
+        if (scope) ptMapQ = ptMapQ.eq('organization_id', scope.orgId);
+        const { data: paymentTypesData } = await ptMapQ;
         if (paymentTypesData) {
           paymentTypesData.forEach(pt => {
             paymentTypesMap.set(pt.id, { category: pt.category, title: pt.title });
@@ -1108,10 +1121,13 @@ export default function AdminCollectedPage() {
         {/* Student Payment List */}
         {loading ? (
           <div className="flex items-center justify-center py-20">
-            <div
-              className="animate-spin rounded-full h-16 w-16 border-4 border-t-transparent"
-              style={{ borderColor: colors.primary, borderTopColor: 'transparent' }}
-            />
+            <div className="flex flex-col items-center gap-3">
+              <div
+                className="animate-spin rounded-full h-12 w-12 border-3 border-t-transparent"
+                style={{ borderColor: colors.primary, borderTopColor: 'transparent' }}
+              />
+              <p className="text-sm" style={{ color: colors.textSecondary }}>Loading students...</p>
+            </div>
           </div>
         ) : paginatedStudents.length === 0 ? (
           <GlassCard>

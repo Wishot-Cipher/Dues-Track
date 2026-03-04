@@ -1,13 +1,15 @@
-import { useState, useEffect, useCallback } from 'react'
+﻿import { useState, useEffect, useCallback } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { useNavigate } from 'react-router-dom'
+import {  } from 'react-router-dom'
+import { useAppNav } from '@/hooks/useAppNav';
 import GlassCard from '@/components/ui/GlassCard'
 import ConfirmDialog from '@/components/ui/ConfirmDialog'
 import ProfessionalDropdown from '@/components/ui/ProfessionalDropdown'
 import { colors } from '@/config/colors'
-import { useAuth } from '@/hooks/useAuth'
+import { useAuth } from '@/hooks/useAppAuth'
 import { useToast } from '@/hooks/useToast'
 import { supabase } from '@/config/supabase'
+import { getOrgScope } from '@/utils/orgScope'
 import { formatDate } from '@/utils/formatters'
 import Footer from '@/components/Footer'
 import DashboardSwitcher from '@/components/DashboardSwitcher'
@@ -58,8 +60,6 @@ const CATEGORIES = [
   { value: 'custom', label: 'Custom', icon: '📦' },
 ]
 
-const LEVELS = ['100L', '200L', '300L', '400L', '500L']
-
 const COLORS = [
   '#3B82F6', '#10B981', '#F59E0B', '#EF4444',
   '#8B5CF6', '#EC4899', '#06B6D4', '#F97316',
@@ -79,7 +79,7 @@ const ICONS = [
 ]
 
 export default function ManageDuesPage() {
-  const navigate = useNavigate()
+  const { go: navigate, orgSlug } = useAppNav();
   const { hasPermission } = useAuth()
   const { success, error: showError } = useToast()
   const [paymentTypes, setPaymentTypes] = useState<PaymentType[]>([])
@@ -107,9 +107,11 @@ export default function ManageDuesPage() {
   const loadPaymentTypes = useCallback(async () => {
     try {
       setLoading(true)
+      const scope = getOrgScope()
       const { data, error } = await supabase
         .from('payment_types')
         .select('*')
+        .eq('organization_id', scope?.orgId || '')
         .order('created_at', { ascending: false })
 
       if (error) throw error
@@ -139,10 +141,13 @@ export default function ManageDuesPage() {
       setActionLoading(true)
       const newStatus = !paymentType.is_active
       
-      const { error } = await supabase
+      const scope = getOrgScope();
+      let updateQ = supabase
         .from('payment_types')
         .update({ is_active: newStatus, updated_at: new Date().toISOString() })
-        .eq('id', paymentType.id)
+        .eq('id', paymentType.id);
+      if (scope) updateQ = updateQ.eq('organization_id', scope.orgId);
+      const { error } = await updateQ;
 
       if (error) throw error
 
@@ -160,7 +165,8 @@ export default function ManageDuesPage() {
 
     try {
       setActionLoading(true)
-      const { error } = await supabase
+      const scope = getOrgScope();
+      let editQ = supabase
         .from('payment_types')
         .update({
           title: editingPaymentType.title,
@@ -176,11 +182,12 @@ export default function ManageDuesPage() {
           bank_name: editingPaymentType.bank_name,
           account_name: editingPaymentType.account_name,
           account_number: editingPaymentType.account_number,
-          target_levels: editingPaymentType.target_levels,
           is_public: editingPaymentType.is_public,
           updated_at: new Date().toISOString()
         })
-        .eq('id', editingPaymentType.id)
+        .eq('id', editingPaymentType.id);
+      if (scope) editQ = editQ.eq('organization_id', scope.orgId);
+      const { error } = await editQ;
 
       if (error) throw error
 
@@ -201,10 +208,13 @@ export default function ManageDuesPage() {
       setActionLoading(true)
       
       // Check if there are any payments associated with this payment type
-      const { count } = await supabase
+      const scope = getOrgScope();
+      let countQ = supabase
         .from('payments')
         .select('id', { count: 'exact', head: true })
-        .eq('payment_type_id', paymentTypeId)
+        .eq('payment_type_id', paymentTypeId);
+      if (scope) countQ = countQ.eq('organization_id', scope.orgId);
+      const { count } = await countQ;
 
       if (count && count > 0) {
         showError(`Cannot delete: ${count} payment(s) are associated with this due. Consider deactivating instead.`)
@@ -212,10 +222,12 @@ export default function ManageDuesPage() {
         return
       }
 
-      const { error } = await supabase
+      let deleteQ = supabase
         .from('payment_types')
         .delete()
-        .eq('id', paymentTypeId)
+        .eq('id', paymentTypeId);
+      if (scope) deleteQ = deleteQ.eq('organization_id', scope.orgId);
+      const { error } = await deleteQ;
 
       if (error) throw error
 
@@ -313,10 +325,12 @@ export default function ManageDuesPage() {
 
       {/* Content */}
       <div className="relative z-10 max-w-6xl mx-auto px-4 py-8">
-        {/* Dashboard Switcher */}
+        {/* Dashboard Switcher — single-tenant only */}
+        {!orgSlug && (
         <div className="mb-6">
           <DashboardSwitcher />
         </div>
+        )}
 
         {/* Header */}
         <motion.div
@@ -658,8 +672,8 @@ export default function ManageDuesPage() {
                             <p className="text-white font-semibold text-sm">{formatDate(pt.deadline)}</p>
                           </div>
                           <div className="p-2.5 rounded-lg text-center" style={{ background: 'rgba(255, 255, 255, 0.03)' }}>
-                            <p className="text-[10px] uppercase tracking-wider mb-0.5" style={{ color: colors.textSecondary }}>Target</p>
-                            <p className="text-white font-semibold text-sm">{pt.target_levels?.join(', ') || 'All Levels'}</p>
+                            <p className="text-[10px] uppercase tracking-wider mb-0.5" style={{ color: colors.textSecondary }}>Category</p>
+                            <p className="text-white font-semibold text-sm capitalize">{pt.category || 'General'}</p>
                           </div>
                           <div className="p-2.5 rounded-lg text-center" style={{ background: 'rgba(255, 255, 255, 0.03)' }}>
                             <p className="text-[10px] uppercase tracking-wider mb-0.5" style={{ color: colors.textSecondary }}>Late Fee / Day</p>
@@ -850,32 +864,6 @@ export default function ManageDuesPage() {
                             className={`w-8 h-8 rounded-lg transition-all ${editingPaymentType.color === color ? 'ring-2 ring-white ring-offset-2 ring-offset-black scale-110' : ''}`}
                             style={{ background: color }}
                           />
-                        ))}
-                      </div>
-                    </div>
-
-                    <div>
-                      <label className="block text-sm font-medium text-white mb-2">Target Levels</label>
-                      <div className="flex flex-wrap gap-2">
-                        {LEVELS.map((level) => (
-                          <button
-                            key={level}
-                            onClick={() => {
-                              const current = editingPaymentType.target_levels || []
-                              const updated = current.includes(level)
-                                ? current.filter(l => l !== level)
-                                : [...current, level]
-                              setEditingPaymentType({ ...editingPaymentType, target_levels: updated })
-                            }}
-                            className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-all`}
-                            style={{
-                              background: editingPaymentType.target_levels?.includes(level) ? `${colors.primary}30` : 'rgba(255, 255, 255, 0.05)',
-                              border: `1px solid ${editingPaymentType.target_levels?.includes(level) ? colors.primary : 'rgba(255, 255, 255, 0.1)'}`,
-                              color: editingPaymentType.target_levels?.includes(level) ? colors.primary : colors.textSecondary
-                            }}
-                          >
-                            {level}
-                          </button>
                         ))}
                       </div>
                     </div>

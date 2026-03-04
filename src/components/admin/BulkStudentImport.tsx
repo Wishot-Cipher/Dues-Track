@@ -17,6 +17,8 @@ import {
 } from 'lucide-react';
 import { colors } from '@/config/colors';
 import { supabase } from '@/config/supabase';
+import { getOrgScope } from '@/utils/orgScope';
+import { parseFile, parseText, getFileAcceptAttribute, getAcceptedFormats } from '@/utils/memberFileParser';
 
 interface ParsedStudent {
   full_name: string;
@@ -32,7 +34,7 @@ interface ImportResult {
   row_index: number;
   success: boolean;
   message: string;
-  student_id: string | null;
+  member_id: string | null;
   full_name: string;
   reg_number: string;
   temp_password: string | null;
@@ -69,152 +71,66 @@ export default function BulkStudentImport({ onComplete, onClose }: BulkStudentIm
     URL.revokeObjectURL(url);
   };
 
-  // Parse CSV text into student objects
-  const parseCSV = useCallback((text: string): { students: ParsedStudent[]; errors: string[] } => {
-    const lines = text.trim().split(/\r?\n/);
-    const parseErrors: string[] = [];
-    const parsed: ParsedStudent[] = [];
 
-    if (lines.length < 2) {
-      return { students: [], errors: ['File must contain a header row and at least one data row.'] };
-    }
 
-    // Parse header
-    const rawHeader = lines[0].toLowerCase().replace(/['"]/g, '');
-    const headers = rawHeader.split(',').map(h => h.trim());
-
-    // Detect columns by matching common names
-    const colMap: Record<string, number> = {};
-    const nameAliases = ['full_name', 'fullname', 'name', 'student_name', 'student name'];
-    const regAliases = ['reg_number', 'regnumber', 'reg_no', 'registration', 'registration_number', 'matric', 'matric_number', 'matric_no'];
-    const emailAliases = ['email', 'email_address', 'e-mail'];
-    const phoneAliases = ['phone', 'phone_number', 'telephone', 'mobile', 'tel'];
-    const levelAliases = ['level', 'class', 'year'];
-    const deptAliases = ['department', 'dept', 'faculty'];
-    const sectionAliases = ['section', 'group', 'stream'];
-
-    const findCol = (aliases: string[]) => {
-      for (const alias of aliases) {
-        const idx = headers.indexOf(alias);
-        if (idx !== -1) return idx;
-      }
-      return -1;
-    };
-
-    colMap.full_name = findCol(nameAliases);
-    colMap.reg_number = findCol(regAliases);
-    colMap.email = findCol(emailAliases);
-    colMap.phone = findCol(phoneAliases);
-    colMap.level = findCol(levelAliases);
-    colMap.department = findCol(deptAliases);
-    colMap.section = findCol(sectionAliases);
-
-    if (colMap.full_name === -1) parseErrors.push('Could not find "full_name" column in header.');
-    if (colMap.reg_number === -1) parseErrors.push('Could not find "reg_number" column in header.');
-
-    if (parseErrors.length > 0) return { students: [], errors: parseErrors };
-
-    // Parse data rows
-    const seenRegs = new Set<string>();
-
-    for (let i = 1; i < lines.length; i++) {
-      const line = lines[i].trim();
-      if (!line) continue;
-
-      // Simple CSV parse (handles quoted fields)
-      const cols = parseCSVLine(line);
-
-      const fullName = cols[colMap.full_name]?.trim() || '';
-      const regNumber = (cols[colMap.reg_number]?.trim() || '').toUpperCase();
-
-      if (!fullName && !regNumber) continue; // skip empty rows
-
-      if (!fullName) {
-        parseErrors.push(`Row ${i + 1}: Missing full name.`);
-        continue;
-      }
-      if (!regNumber) {
-        parseErrors.push(`Row ${i + 1}: Missing registration number.`);
-        continue;
-      }
-
-      if (seenRegs.has(regNumber)) {
-        parseErrors.push(`Row ${i + 1}: Duplicate reg number "${regNumber}" in file.`);
-        continue;
-      }
-      seenRegs.add(regNumber);
-
-      parsed.push({
-        full_name: fullName,
-        reg_number: regNumber,
-        email: colMap.email !== -1 ? (cols[colMap.email]?.trim() || '') : '',
-        phone: colMap.phone !== -1 ? (cols[colMap.phone]?.trim() || '') : '',
-        level: colMap.level !== -1 ? (cols[colMap.level]?.trim() || '200L') : '200L',
-        department: colMap.department !== -1 ? (cols[colMap.department]?.trim() || 'ECE') : 'ECE',
-        section: colMap.section !== -1 ? (cols[colMap.section]?.trim() || 'A') : 'A',
-      });
-    }
-
-    return { students: parsed, errors: parseErrors };
-  }, []);
-
-  // Parse a single CSV line (handles quoted commas)
-  const parseCSVLine = (line: string): string[] => {
-    const result: string[] = [];
-    let current = '';
-    let inQuotes = false;
-    for (let i = 0; i < line.length; i++) {
-      const ch = line[i];
-      if (ch === '"') {
-        if (inQuotes && line[i + 1] === '"') {
-          current += '"';
-          i++;
-        } else {
-          inQuotes = !inQuotes;
-        }
-      } else if (ch === ',' && !inQuotes) {
-        result.push(current);
-        current = '';
-      } else {
-        current += ch;
-      }
-    }
-    result.push(current);
-    return result;
-  };
-
-  // Handle file drop/select
-  const handleFile = useCallback((file: File) => {
-    if (!file.name.match(/\.(csv|txt)$/i)) {
-      setErrors(['Please upload a CSV file (.csv or .txt).']);
-      return;
-    }
+  // Handle file drop/select - supports CSV, Excel, Word
+  const handleFile = useCallback(async (file: File) => {
     setFileName(file.name);
+    setErrors([]);
 
-    const reader = new FileReader();
-    reader.onload = (e) => {
-      const text = e.target?.result as string;
-      const { students: parsed, errors: parseErrs } = parseCSV(text);
+    try {
+      const result = await parseFile(file);
+      
+      // Convert ParsedMember[] to ParsedStudent[]
+      const parsed: ParsedStudent[] = result.members.map(m => ({
+        full_name: m.full_name,
+        reg_number: m.member_id,
+        email: m.email || '',
+        phone: m.phone || '',
+        level: '',
+        department: '',
+        section: '',
+      }));
+
+      if (result.warnings.length > 0) {
+        setErrors(result.warnings);
+      }
+      
       setStudents(parsed);
-      setErrors(parseErrs);
       if (parsed.length > 0) setStage('preview');
-    };
-    reader.readAsText(file);
-  }, [parseCSV]);
+      else if (result.warnings.length === 0) {
+        setErrors(['No valid members found in the file. Make sure it has name and ID columns.']);
+      }
+    } catch (err) {
+      setErrors([err instanceof Error ? err.message : 'Failed to parse file.']);
+    }
+  }, []);
 
   // Handle paste
   const handlePaste = useCallback(() => {
     const text = pasteRef.current?.value || '';
     if (!text.trim()) {
-      setErrors(['Please paste CSV data first.']);
+      setErrors(['Please paste data first.']);
       return;
     }
     setFileName('Pasted data');
-    const { students: parsed, errors: parseErrs } = parseCSV(text);
+    
+    const result = parseText(text);
+    const parsed: ParsedStudent[] = result.members.map(m => ({
+      full_name: m.full_name,
+      reg_number: m.member_id,
+      email: m.email || '',
+      phone: m.phone || '',
+      level: '',
+      department: '',
+      section: '',
+    }));
+    
     setStudents(parsed);
-    setErrors(parseErrs);
+    setErrors(result.warnings);
     if (parsed.length > 0) setStage('preview');
-  }, [parseCSV]);
+    else setErrors(['No valid members found. Make sure data has name and ID columns.']);
+  }, []);
 
   // Drag handlers
   const handleDrag = useCallback((e: React.DragEvent) => {
@@ -245,84 +161,94 @@ export default function BulkStudentImport({ onComplete, onClose }: BulkStudentIm
     setProgress(0);
 
     try {
-      // Send in batches of 25 for progress feedback
-      const BATCH_SIZE = 25;
+      const scope = getOrgScope();
+      if (!scope) {
+        setErrors(['No organization context found. Please log in again.']);
+        setStage('preview');
+        return;
+      }
+
+      // Import one-by-one with hash_password
       const allResults: ImportResult[] = [];
 
-      for (let i = 0; i < students.length; i += BATCH_SIZE) {
-        const batch = students.slice(i, i + BATCH_SIZE);
+      for (let i = 0; i < students.length; i++) {
+        const s = students[i];
+        try {
+          // Use registration number as initial password
+          const tempPassword = s.reg_number;
 
-        const { data, error } = await supabase.rpc('admin_bulk_add_students', {
-          p_students: JSON.stringify(batch),
-        });
+          // Hash the password
+          const { data: hashData, error: hashError } = await supabase.rpc('hash_password', {
+            password: tempPassword,
+          });
 
-        if (error) {
-          // If the bulk function doesn't exist, fall back to single add
-          if (error.code === 'PGRST202' || error.message.includes('function')) {
-            // Fallback: use admin_add_student one-by-one
-            for (let j = 0; j < batch.length; j++) {
-              const s = batch[j];
-              try {
-                const { data: singleResult, error: singleError } = await supabase.rpc('admin_add_student', {
-                  p_full_name: s.full_name,
-                  p_reg_number: s.reg_number,
-                  p_email: s.email || null,
-                  p_phone: s.phone || null,
-                  p_level: s.level,
-                  p_department: s.department,
-                  p_section: s.section,
-                });
-
-                if (singleError) {
-                  allResults.push({
-                    row_index: i + j + 1,
-                    success: false,
-                    message: singleError.message,
-                    student_id: null,
-                    full_name: s.full_name,
-                    reg_number: s.reg_number,
-                    temp_password: null,
-                  });
-                } else {
-                  const r = singleResult?.[0];
-                  allResults.push({
-                    row_index: i + j + 1,
-                    success: r?.success ?? false,
-                    message: r?.message ?? 'Unknown',
-                    student_id: r?.student_id ?? null,
-                    full_name: s.full_name,
-                    reg_number: s.reg_number,
-                    temp_password: r?.temp_password ?? null,
-                  });
-                }
-              } catch {
-                allResults.push({
-                  row_index: i + j + 1,
-                  success: false,
-                  message: 'Unexpected error',
-                  student_id: null,
-                  full_name: s.full_name,
-                  reg_number: s.reg_number,
-                  temp_password: null,
-                });
-              }
-              setProgress(Math.round(((i + j + 1) / students.length) * 100));
-            }
+          if (hashError || !hashData) {
+            allResults.push({
+              row_index: i + 1,
+              success: false,
+              message: hashError?.message || 'Failed to hash password',
+              member_id: null,
+              full_name: s.full_name,
+              reg_number: s.reg_number,
+              temp_password: null,
+            });
+            setProgress(Math.round(((i + 1) / students.length) * 100));
             continue;
           }
-          throw error;
-        }
 
-        if (data) {
-          // Adjust row_index for batch offset
-          const adjusted = (data as ImportResult[]).map(r => ({
-            ...r,
-            row_index: r.row_index + i,
-          }));
-          allResults.push(...adjusted);
-        }
+          // Insert into organization_members
+          const { data: insertData, error: insertError } = await supabase
+            .from('organization_members')
+            .insert({
+              organization_id: scope.orgId,
+              member_id: s.reg_number,
+              full_name: s.full_name,
+              email: s.email || null,
+              phone: s.phone || null,
+              level: s.level || null,
+              section: s.section || s.department || null,
+              password_hash: hashData,
+              force_password_change: true,
+              is_active: true,
+            })
+            .select('id')
+            .single();
 
-        setProgress(Math.round(Math.min(((i + BATCH_SIZE) / students.length) * 100, 100)));
+          if (insertError) {
+            allResults.push({
+              row_index: i + 1,
+              success: false,
+              message: insertError.message.includes('duplicate') 
+                ? `Member with ID ${s.reg_number} already exists`
+                : insertError.message,
+              member_id: null,
+              full_name: s.full_name,
+              reg_number: s.reg_number,
+              temp_password: null,
+            });
+          } else {
+            allResults.push({
+              row_index: i + 1,
+              success: true,
+              message: 'Added successfully',
+              member_id: insertData?.id ?? null,
+              full_name: s.full_name,
+              reg_number: s.reg_number,
+              temp_password: tempPassword,
+            });
+          }
+        } catch {
+          allResults.push({
+            row_index: i + 1,
+            success: false,
+            message: 'Unexpected error',
+            member_id: null,
+            full_name: s.full_name,
+            reg_number: s.reg_number,
+            temp_password: null,
+          });
+        }
+        setProgress(Math.round(((i + 1) / students.length) * 100));
       }
 
       setResults(allResults);
@@ -402,7 +328,7 @@ export default function BulkStudentImport({ onComplete, onClose }: BulkStudentIm
               <input
                 ref={fileInputRef}
                 type="file"
-                accept=".csv,.txt"
+                accept={getFileAcceptAttribute()}
                 className="hidden"
                 onChange={(e) => e.target.files?.[0] && handleFile(e.target.files[0])}
               />
@@ -417,10 +343,10 @@ export default function BulkStudentImport({ onComplete, onClose }: BulkStudentIm
                 <Upload className="w-7 h-7" style={{ color: colors.primary }} />
               </motion.div>
               <p className="text-sm font-semibold text-white mb-1">
-                {dragActive ? 'Drop your CSV file here' : 'Drag & drop your CSV file'}
+                {dragActive ? 'Drop your file here' : 'Drag & drop your file'}
               </p>
               <p className="text-xs" style={{ color: colors.textSecondary }}>
-                or click to browse &bull; CSV files only
+                or click to browse &bull; Supports {getAcceptedFormats()}
               </p>
             </div>
 
@@ -797,7 +723,7 @@ export default function BulkStudentImport({ onComplete, onClose }: BulkStudentIm
               >
                 <AlertTriangle className="w-4 h-4 mt-0.5 shrink-0" style={{ color: colors.info }} />
                 <p className="text-[10px] leading-relaxed" style={{ color: colors.textSecondary }}>
-                  Each student's initial password is their <strong className="text-white">registration number</strong>.
+                  Each member's initial password is their <strong className="text-white">registration number / ID</strong>. They will be prompted to change it on first login.
                   They will be required to change it on first login.
                 </p>
               </div>

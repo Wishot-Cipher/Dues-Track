@@ -1,12 +1,14 @@
-import { useState, useEffect } from "react";
+﻿import { useState, useEffect } from "react";
 import { motion } from "framer-motion";
-import { useNavigate } from "react-router-dom";
+import {  } from "react-router-dom";
+import { useAppNav } from '@/hooks/useAppNav';
 import { supabase } from "@/config/supabase";
+import { getOrgScope } from '@/utils/orgScope';
 import { colors, gradients } from "@/config/colors";
 import GlassCard from "@/components/ui/GlassCard";
 import ProfessionalDropdown from "@/components/ui/ProfessionalDropdown";
 import { formatCurrency } from "@/utils/formatters";
-import { useAuth } from "@/hooks/useAuth";
+import { useAuth } from '@/hooks/useAppAuth';
 import { useToast } from "@/hooks/useToast";
 import {
   Search,
@@ -46,7 +48,7 @@ interface PaymentType {
 }
 
 export default function WaivePaymentPage() {
-  const navigate = useNavigate();
+  const { go: navigate } = useAppNav();
   const { user, hasPermission } = useAuth();
   const { success, error: showError } = useToast();
   const [loading, setLoading] = useState(false);
@@ -79,19 +81,24 @@ export default function WaivePaymentPage() {
 
     try {
       // Fetch all active payment types for student's level
-      const { data: allPaymentTypes, error: ptError } = await supabase
+      const scope = getOrgScope();
+      let ptQ = supabase
         .from("payment_types")
         .select("id, title, amount, description, deadline")
         .eq("is_active", true)
         .contains("target_levels", [selectedStudent.level]);
+      if (scope) ptQ = ptQ.eq('organization_id', scope.orgId);
+      const { data: allPaymentTypes, error: ptError } = await ptQ;
 
       if (ptError) throw ptError;
 
       // Fetch student's existing payments
-      const { data: existingPayments, error: paymentsError } = await supabase
+      let payQ = supabase
         .from("payments")
         .select("payment_type_id, status, amount")
-        .eq("student_id", selectedStudent.id);
+        .eq("member_id", selectedStudent.id);
+      if (scope) payQ = payQ.eq('organization_id', scope.orgId);
+      const { data: existingPayments, error: paymentsError } = await payQ;
 
       if (paymentsError) throw paymentsError;
 
@@ -122,14 +129,17 @@ export default function WaivePaymentPage() {
 
     try {
       setSearching(true);
-      const { data, error } = await supabase
-        .from("students")
+      const scope = getOrgScope();
+      let searchQ = supabase
+        .from("organization_members")
         .select("id, full_name, reg_number, level, department, email")
         .or(
           `full_name.ilike.%${searchQuery}%,reg_number.ilike.%${searchQuery}%`
         )
         .eq("is_active", true)
         .limit(10);
+      if (scope) searchQ = searchQ.eq('organization_id', scope.orgId);
+      const { data, error } = await searchQ;
 
       if (error) throw error;
       setSearchResults(data || []);
@@ -172,22 +182,27 @@ export default function WaivePaymentPage() {
       const reasonLabel = reasonLabels[waiverReason] || waiverReason;
 
       // Create a waived payment record
-      const { error: paymentError } = await supabase
-        .from("payments")
-        .insert({
-          student_id: selectedStudent.id,
+      const scope = getOrgScope();
+      const waiveInsert: Record<string, unknown> = {
+          member_id: selectedStudent.id,
           payment_type_id: selectedPaymentType,
           amount: paymentType.amount,
-          payment_method: "cash", // Using cash method for waived payments
+          payment_method: "cash",
           status: "approved",
           approved_by: user?.id,
           approved_at: new Date().toISOString(),
-          notes: `✅ WAIVED BY ADMIN\n\nReason: ${reasonLabel}\n${
+          notes: `\u2705 WAIVED BY ADMIN\n\nReason: ${reasonLabel}\n${
             customNotes ? `Additional Notes: ${customNotes}` : ""
           }\n\nThis payment has been waived and you are not required to pay.`,
           transaction_ref: `WAIVED-${Date.now()}`,
-          receipt_url: "", // Empty string for waived payments
-        })
+          receipt_url: "",
+      };
+      if (scope) {
+        waiveInsert.organization_id = scope.orgId;
+      }
+      const { error: paymentError } = await supabase
+        .from("payments")
+        .insert(waiveInsert)
         .select()
         .single();
 

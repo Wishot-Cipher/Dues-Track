@@ -7,11 +7,12 @@ import ConfirmDialog from '@/components/ui/ConfirmDialog'
 import ProfessionalDropdown from '@/components/ui/ProfessionalDropdown'
 import { colors } from '@/config/colors'
 import { useExpenses } from '@/hooks/useExpenses'
-import { useAuth } from '@/hooks/useAuth'
+import { useAppAuth as useAuth } from '@/hooks/useAppAuth'
 import { useToast } from '@/hooks/useToast'
 import { fetchExpenseCategories, type ExpenseCategory } from '@/services/expenseService'
 import * as LucideIcons from 'lucide-react'
 import { Wallet, Tag } from 'lucide-react'
+import { getOrgScope } from '@/utils/orgScope'
 
 interface PaymentType {
   id: string
@@ -88,9 +89,10 @@ export default function RecordExpense() {
   async function fetchAvailableBalance() {
     try {
       const { supabase } = await import('@/config/supabase')
+      const scope = getOrgScope()
       
       // Get payments with payment type details (approved only)
-      const { data: paymentsData } = await supabase
+      let qPayments = supabase
         .from('payments')
         .select(`
           amount,
@@ -103,9 +105,11 @@ export default function RecordExpense() {
         `)
         .eq('status', 'approved')
         .not('transaction_ref', 'like', 'WAIVED-%')
+      if (scope) qPayments = qPayments.eq('organization_id', scope.orgId)
+      const { data: paymentsData } = await qPayments
       
       // Get expenses with payment type details (approved only)
-      const { data: expensesData } = await supabase
+      let qExpenses = supabase
         .from('expenses')
         .select(`
           amount,
@@ -117,6 +121,8 @@ export default function RecordExpense() {
           )
         `)
         .eq('status', 'approved')
+      if (scope) qExpenses = qExpenses.eq('organization_id', scope.orgId)
+      const { data: expensesData } = await qExpenses
       
       // Calculate category-specific balances
       const paymentTypeMap = new Map<string, { collected: number; spent: number; available: number }>()
@@ -335,12 +341,13 @@ export default function RecordExpense() {
           </div>
         </div>
         
-        <p className="text-sm mb-4 p-3 rounded-lg" style={{ 
+        <p className="text-xs mb-4 p-3 rounded-lg flex items-center gap-2" style={{ 
           color: colors.textSecondary,
           background: 'rgba(255, 255, 255, 0.03)',
           border: '1px solid rgba(255, 255, 255, 0.05)'
         }}>
-          All expenses require senior admin approval before becoming final.
+          <LucideIcons.ShieldCheck className="w-4 h-4 shrink-0" style={{ color: colors.accentMint }} />
+          Expenses require senior admin approval before becoming final.
         </p>
 
         {/* Available Balance Display */}
@@ -362,11 +369,11 @@ export default function RecordExpense() {
         )}
 
         <form onSubmit={handleSubmit} className="space-y-4">
-          <Input label="Expense Title *" value={title} onChange={(e) => setTitle(e.target.value)} placeholder="e.g., Arduino Kits Purchase" required />
+          <Input label="Expense Title *" value={title} onChange={(e) => setTitle(e.target.value)} placeholder="e.g., Office Supplies, Event Decorations" required />
 
           <div>
             <label className="block text-sm font-medium mb-2" style={{ color: colors.textPrimary }}>Description</label>
-            <textarea value={description} onChange={(e) => setDescription(e.target.value)} rows={4} className="w-full px-4 py-3 rounded-xl bg-white/5 border border-white/10 text-white placeholder:text-gray-500 focus:outline-none focus:ring-2 focus:ring-orange-500" placeholder="Detailed description of the expense..." />
+            <textarea value={description} onChange={(e) => setDescription(e.target.value)} rows={2} className="w-full px-4 py-3 rounded-xl bg-white/5 border border-white/10 text-white placeholder:text-gray-500 focus:outline-none focus:ring-2 focus:ring-orange-500" placeholder="Brief description of the expense..." />
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
@@ -466,7 +473,7 @@ export default function RecordExpense() {
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
             <div>
-              <Input label="Amount (₦) *" value={amount} onChange={(e) => setAmount(e.target.value)} placeholder="3500" required />
+              <Input label="Amount (₦) *" type="number" value={amount} onChange={(e) => setAmount(e.target.value)} placeholder="0.00" required min="1" />
             </div>
 
             <div>
@@ -546,7 +553,10 @@ export default function RecordExpense() {
 // Helper function to fetch payment types
 async function fetchPaymentTypes() {
   const { supabase } = await import('@/config/supabase')
-  const { data, error } = await supabase.from('payment_types').select('id, title, amount').order('title')
+  const scope = getOrgScope()
+  let q = supabase.from('payment_types').select('id, title, amount').order('title')
+  if (scope) q = q.eq('organization_id', scope.orgId)
+  const { data, error } = await q
   if (error) throw error
   return data || []
 }

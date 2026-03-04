@@ -6,10 +6,11 @@ import GlassCard from '@/components/ui/GlassCard'
 import ConfirmDialog from '@/components/ui/ConfirmDialog'
 import ProfessionalDropdown from '@/components/ui/ProfessionalDropdown'
 import { colors } from '@/config/colors'
-import { useAuth } from '@/hooks/useAuth'
+import { useAppAuth as useAuth } from '@/hooks/useAppAuth'
 import { useToast } from '@/hooks/useToast'
 import { fetchExpenses, approveExpense, deleteExpense, updateExpenseFields, fetchExpenseCategories, type Expense, type ExpenseCategory } from '@/services/expenseService'
 import { getPublicUrl, supabase } from '@/config/supabase'
+import { getOrgScope } from '@/utils/orgScope'
 import { 
   CheckCircle, 
   XCircle, 
@@ -111,7 +112,10 @@ export default function ExpenseApprovalQueue() {
 
   async function loadPaymentTypes() {
     try {
-      const { data } = await supabase.from('payment_types').select('id, name').eq('is_active', true)
+      const scope = getOrgScope()
+      let q = supabase.from('payment_types').select('id, name').eq('is_active', true)
+      if (scope) q = q.eq('organization_id', scope.orgId)
+      const { data } = await q
       setPaymentTypes(data || [])
     } catch (err) {
       console.error('Failed to load payment types:', err)
@@ -133,17 +137,23 @@ export default function ExpenseApprovalQueue() {
 
   async function fetchAvailableBalances() {
     try {
+      const scope = getOrgScope()
+
       // Compute balances per category (collected - expenses)
-      const { data: paymentsData } = await supabase
+      let qPayments = supabase
         .from('payments')
         .select('amount, payment_type_id, payment_types ( id, category )')
         .eq('status', 'approved')
         .not('transaction_ref', 'like', 'WAIVED-%')
+      if (scope) qPayments = qPayments.eq('organization_id', scope.orgId)
+      const { data: paymentsData } = await qPayments
 
-      const { data: expensesData } = await supabase
+      let qExpenses = supabase
         .from('expenses')
         .select('amount, category, category_id, payment_type_id, payment_types ( id, category )')
         .eq('status', 'approved')
+      if (scope) qExpenses = qExpenses.eq('organization_id', scope.orgId)
+      const { data: expensesData } = await qExpenses
 
       const balances = new Map<string, number>()
 

@@ -1,7 +1,23 @@
 // App-wide constants
 
-export const APP_NAME = 'Class Dues Tracker'
-export const APP_VERSION = '1.0.0'
+export const APP_NAME = 'Payvexo'
+export const APP_VERSION = '2.0.0'
+export const APP_TAGLINE = 'Smart Payment & Dues Management'
+export const APP_DESCRIPTION = 'The all-in-one platform for collecting dues, tracking payments, and managing finances.'
+
+// Organization types supported
+export const ORGANIZATION_TYPES = {
+  UNIVERSITY: 'university',
+  CHURCH: 'church',
+  CLUB: 'club',
+  ASSOCIATION: 'association',
+  COOPERATIVE: 'cooperative',
+  NGO: 'ngo',
+  SCHOOL: 'school',
+  OTHER: 'other',
+} as const
+
+export type OrganizationType = typeof ORGANIZATION_TYPES[keyof typeof ORGANIZATION_TYPES]
 
 // User roles
 export const USER_ROLES = {

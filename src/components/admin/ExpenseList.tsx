@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/no-unused-vars */
 import { useState, useMemo, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import GlassCard from '@/components/ui/GlassCard'
@@ -6,8 +5,9 @@ import ConfirmDialog from '@/components/ui/ConfirmDialog'
 import Modal from '@/components/ui/Modal'
 import { colors, gradients } from '@/config/colors'
 import { useExpenses } from '@/hooks/useExpenses'
-import { useAuth } from '@/hooks/useAuth'
+import { useAppAuth as useAuth } from '@/hooks/useAppAuth'
 import { getPublicUrl, supabase } from '@/config/supabase'
+import { getOrgScope } from '@/utils/orgScope'
 import { useToast } from '@/hooks/useToast'
 import { deleteExpense, updateExpenseFields, fetchExpenseCategories, type ExpenseCategory } from '@/services/expenseService'
 import ProfessionalDropdown from '@/components/ui/ProfessionalDropdown'
@@ -78,7 +78,10 @@ export default function ExpenseList({ categoryFilter = 'all' }: { categoryFilter
     let mounted = true
     ;(async () => {
       try {
-        const { data } = await supabase.from('payment_types').select('id, title').eq('is_active', true).order('title')
+        const scope = getOrgScope()
+        let q = supabase.from('payment_types').select('id, title').eq('is_active', true).order('title')
+        if (scope) q = q.eq('organization_id', scope.orgId)
+        const { data } = await q
         if (mounted) setPaymentTypes(data || [])
       } catch (err) {
         console.error('Failed to load payment types:', err)
@@ -94,11 +97,14 @@ export default function ExpenseList({ categoryFilter = 'all' }: { categoryFilter
     ;(async () => {
       try {
         // Fetch approved payments; if paymentFilter != 'all', filter by payment_type_id
+        const scope = getOrgScope()
         let query = supabase
           .from('payments')
           .select('amount, transaction_ref, status, payment_type_id')
           .eq('status', 'approved')
           .limit(2000)
+
+        if (scope) query = query.eq('organization_id', scope.orgId)
 
         if (paymentFilter && paymentFilter !== 'all') {
           query = query.eq('payment_type_id', paymentFilter)
@@ -139,12 +145,15 @@ export default function ExpenseList({ categoryFilter = 'all' }: { categoryFilter
   
 
   // Load categories and payment types for edit modal
-  useMemo(() => {
+  useEffect(() => {
     const loadData = async () => {
       try {
         const cats = await fetchExpenseCategories()
         setCategories(cats)
-        const { data } = await supabase.from('payment_types').select('id, title').eq('is_active', true)
+        const scope = getOrgScope()
+        let q = supabase.from('payment_types').select('id, title').eq('is_active', true)
+        if (scope) q = q.eq('organization_id', scope.orgId)
+        const { data } = await q
         setPaymentTypes(data || [])
       } catch (err) {
         console.error('Failed to load categories/payment types:', err)
@@ -196,7 +205,7 @@ export default function ExpenseList({ categoryFilter = 'all' }: { categoryFilter
   }, [sortedExpenses, currentPage])
 
   // Reset to page 1 when expenses change
-  useMemo(() => {
+  useEffect(() => {
     if (currentPage > totalPages && totalPages > 0) {
       setCurrentPage(1)
     }
@@ -544,6 +553,7 @@ export default function ExpenseList({ categoryFilter = 'all' }: { categoryFilter
                 const categoryIcon = categoryData?.icon || '📦'
                 const categoryColor = categoryData?.color || colors.primary
                 const expStatus = exp.status as 'pending' | 'approved' | 'rejected'
+                const fundSourceName = paymentTypes.find(pt => pt.id === exp.funded_by)?.title || null
                 
                 return (
                   <motion.div
@@ -573,6 +583,15 @@ export default function ExpenseList({ categoryFilter = 'all' }: { categoryFilter
                             </h3>
                             <div className="flex items-center gap-2 flex-wrap">
                               <StatusBadge status={expStatus} />
+                              {fundSourceName && (
+                                <span 
+                                  className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium"
+                                  style={{ background: `${colors.accentMint}15`, color: colors.accentMint, border: `1px solid ${colors.accentMint}30` }}
+                                >
+                                  <LucideIcons.Wallet className="w-3 h-3" />
+                                  {fundSourceName}
+                                </span>
+                              )}
                             </div>
                           </div>
                         </div>
@@ -833,6 +852,19 @@ export default function ExpenseList({ categoryFilter = 'all' }: { categoryFilter
                     </div>
                   </div>
 
+                  {/* Funded By */}
+                  <div className="p-4 rounded-xl" style={{ background: 'rgba(255,255,255,0.02)' }}>
+                    <label className="text-xs font-semibold uppercase tracking-wider mb-3 block" style={{ color: colors.textSecondary }}>
+                      Funded By
+                    </label>
+                    <div className="flex items-center gap-2">
+                      <LucideIcons.Wallet className="w-5 h-5" style={{ color: colors.accentMint }} />
+                      <span className="font-medium text-white">
+                        {paymentTypes.find(pt => pt.id === selected.funded_by)?.title || 'Not specified'}
+                      </span>
+                    </div>
+                  </div>
+
                   {/* Recorded By */}
                   <div className="p-4 rounded-xl" style={{ background: 'rgba(255,255,255,0.02)' }}>
                     <label className="text-xs font-semibold uppercase tracking-wider mb-3 block" style={{ color: colors.textSecondary }}>
@@ -1061,48 +1093,34 @@ export default function ExpenseList({ categoryFilter = 'all' }: { categoryFilter
 
             {/* Category */}
             <div>
-              <label className="block text-xs font-medium mb-1.5" style={{ color: colors.textSecondary }}>
-                Category
-              </label>
-              <select
+              <ProfessionalDropdown
+                label="Category"
+                placeholder="Select category"
                 value={editingExpense.category_id || ''}
-                onChange={(e) => setEditingExpense({ ...editingExpense, category_id: e.target.value })}
-                className="w-full px-4 py-2.5 rounded-lg text-white"
-                style={{
-                  background: 'rgba(255, 255, 255, 0.05)',
-                  border: `1px solid ${colors.borderLight}`,
-                }}
-              >
-                <option value="">Select category</option>
-                {categories.map((cat) => (
-                  <option key={cat.id} value={cat.id}>
-                    {cat.name}
-                  </option>
-                ))}
-              </select>
+                onChange={(val) => setEditingExpense({ ...editingExpense, category_id: val as string })}
+                options={categories.map((cat) => ({ value: cat.id, label: cat.name }))}
+                searchable
+                clearable
+                variant="outlined"
+                size="sm"
+                icon={<Tag size={16} />}
+              />
             </div>
 
             {/* Funded By */}
             <div>
-              <label className="block text-xs font-medium mb-1.5" style={{ color: colors.textSecondary }}>
-                Funded By
-              </label>
-              <select
+              <ProfessionalDropdown
+                label="Funded By"
+                placeholder="Select payment type"
                 value={editingExpense.funded_by || ''}
-                onChange={(e) => setEditingExpense({ ...editingExpense, funded_by: e.target.value })}
-                className="w-full px-4 py-2.5 rounded-lg text-white"
-                style={{
-                  background: 'rgba(255, 255, 255, 0.05)',
-                  border: `1px solid ${colors.borderLight}`,
-                }}
-              >
-                <option value="">Select payment type</option>
-                {paymentTypes.map((pt) => (
-                  <option key={pt.id} value={pt.id}>
-                    {pt.title}
-                  </option>
-                ))}
-              </select>
+                onChange={(val) => setEditingExpense({ ...editingExpense, funded_by: val as string })}
+                options={paymentTypes.map((pt) => ({ value: pt.id, label: pt.title }))}
+                searchable
+                clearable
+                variant="outlined"
+                size="sm"
+                icon={<LucideIcons.Wallet size={16} />}
+              />
             </div>
 
             {/* Date */}
@@ -1135,8 +1153,8 @@ export default function ExpenseList({ categoryFilter = 'all' }: { categoryFilter
                   background: 'rgba(255, 255, 255, 0.05)',
                   border: `1px solid ${colors.borderLight}`,
                 }}
-                rows={3}
-                placeholder="Enter description"
+                rows={2}
+                placeholder="Brief description"
               />
             </div>
 

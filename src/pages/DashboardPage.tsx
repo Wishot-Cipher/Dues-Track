@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react';
+﻿import { useState, useEffect, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
   User, 
@@ -20,8 +20,9 @@ import {
   AlertTriangle
 } from 'lucide-react';
 import { colors, gradients } from '@/config/colors';
-import { useAuth } from '@/hooks/useAuth';
-import { useNavigate, useLocation } from 'react-router-dom';
+import { useAppAuth as useAuth } from '@/hooks/useAppAuth';
+import { useAppNav } from '@/hooks/useAppNav';
+import { useLocation } from 'react-router-dom';
 import GlassCard from '@/components/ui/GlassCard';
 import { LogoCompact } from '@/components/ui/Logo';
 import { formatCurrency, formatDate } from '@/utils/formatters';
@@ -37,6 +38,8 @@ import SmartDeadlineReminders from '@/components/student/SmartDeadlineReminders'
 import DashboardSwitcher from '@/components/DashboardSwitcher';
 import ClassProgressVisualization from '@/components/student/ClassProgressVisualization';
 import QuickPaymentSummary from '@/components/student/QuickPaymentSummary';
+import ProgressBar from '@/components/ui/ProgressBar';
+import { Printer } from 'lucide-react';
 import { useStudentFeatures } from '@/hooks/useStudentFeatures';
 import { StatCardSkeleton, PaymentCardSkeleton } from '@/components/ui/Skeleton';
 import EmptyState, { AllPaidState } from '@/components/ui/EmptyState';
@@ -49,13 +52,16 @@ export default function DashboardPage() {
   const { user, logout, hasPermission } = useAuth();
   const { features, loading: featuresLoading } = useStudentFeatures();
   const { settings } = useSettings();
-  const navigate = useNavigate();
+  const { go, orgSlug } = useAppNav();
   const location = useLocation();
   const [showProfileMenu, setShowProfileMenu] = useState(false);
   const [showMobileMenu, setShowMobileMenu] = useState(false);
   const [showLogoutModal, setShowLogoutModal] = useState(false);
   const [loading, setLoading] = useState(true);
   const [refreshKey, setRefreshKey] = useState(0);
+  
+  // When inside OrgLayout (multi-tenant), hide the page's built-in nav
+  const isMultiTenant = !!orgSlug;
 
   // Pull-to-refresh
   const { pullDistance, isRefreshing, isReady } = usePullToRefresh({
@@ -260,10 +266,65 @@ export default function DashboardPage() {
     fetchDashboardData();
   }, [user?.id, refreshKey]);
 
+  // Print a professional payment summary HTML doc
+  const printPaymentSummary = () => {
+    const payments = activePayments.filter(p => p.status !== 'not_paid');
+    if (payments.length === 0) return;
+    const fmtCurr = (n: number) => `₦${Number(n).toLocaleString('en-NG', { minimumFractionDigits: 0, maximumFractionDigits: 2 })}`;
+    const fmtDate = (d: string) => new Date(d).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' });
+    const statusLabel = (s: string) => ({ paid: 'PAID', pending: 'PENDING', partial: 'PARTIAL', waived: 'WAIVED' }[s] || s.toUpperCase());
+    const statusColor = (s: string) => ({ paid: '#059669', pending: '#d97706', partial: '#ea580c', waived: '#6366f1' }[s] || '#64748b');
+    const rows = payments.map(p => `
+      <tr>
+        <td style="padding:10px 12px;border-bottom:1px solid #e2e8f0;font-weight:500;">${p.paymentType.title}</td>
+        <td style="padding:10px 12px;border-bottom:1px solid #e2e8f0;">${p.paymentType.category?.replace('_', ' ') || '—'}</td>
+        <td style="padding:10px 12px;border-bottom:1px solid #e2e8f0;text-align:right;">${fmtCurr(p.totalDue ?? p.paymentType.amount)}</td>
+        <td style="padding:10px 12px;border-bottom:1px solid #e2e8f0;text-align:right;color:${statusColor(p.status)}; font-weight:600;">${fmtCurr(p.amountPaid)}</td>
+        <td style="padding:10px 12px;border-bottom:1px solid #e2e8f0;text-align:center;">
+          <span style="display:inline-block;padding:3px 10px;border-radius:999px;font-size:11px;font-weight:700;color:white;background:${statusColor(p.status)};">${statusLabel(p.status)}</span>
+        </td>
+        <td style="padding:10px 12px;border-bottom:1px solid #e2e8f0;text-align:center;font-size:12px;">${p.paymentType.deadline ? fmtDate(p.paymentType.deadline) : '—'}</td>
+      </tr>`).join('');
+    const html = `<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Payment Summary - ${user?.full_name}</title>
+<style>@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
+*{box-sizing:border-box;margin:0;padding:0}body{font-family:'Inter',sans-serif;color:#0f172a;background:#fff;padding:32px}
+.page{max-width:800px;margin:0 auto}
+.header{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:24px;padding-bottom:16px;border-bottom:2px solid #FF6803}
+.brand{font-size:20px;font-weight:800;color:#0F0703}.brand span{color:#FF6803}
+.meta{text-align:right;font-size:12px;color:#64748b;line-height:1.8}
+.stats{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:24px}
+.stat{background:#f8fafc;border:1px solid #e2e8f0;border-radius:10px;padding:14px;text-align:center}
+.stat-val{font-size:20px;font-weight:800;color:#0F0703}.stat-label{font-size:11px;color:#64748b;text-transform:uppercase;letter-spacing:1px;margin-top:4px}
+table{width:100%;border-collapse:collapse;font-size:13px}
+thead th{padding:10px 12px;text-align:left;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:#64748b;background:#f8fafc;border-bottom:2px solid #e2e8f0}
+.footer{margin-top:24px;padding-top:12px;border-top:1px solid #e2e8f0;text-align:center;font-size:11px;color:#94a3b8}
+.no-print{text-align:center;margin-top:16px}
+.btn-print{padding:10px 28px;border:none;border-radius:8px;cursor:pointer;font-weight:600;font-family:'Inter',sans-serif;
+background:linear-gradient(135deg,#FF6803,#FFAC5F);color:white;font-size:14px}
+@media print{.no-print{display:none!important}}
+</style></head><body>
+<div class="page">
+<div class="header"><div><div class="brand">Pay<span>vexo</span></div><div style="font-size:11px;color:#64748b;margin-top:2px">Payment Summary</div></div>
+<div class="meta"><strong>${user?.full_name}</strong><br>${user?.reg_number || ''}<br>${new Date().toLocaleDateString('en-US',{year:'numeric',month:'long',day:'numeric'})}</div></div>
+<div class="stats">
+<div class="stat"><div class="stat-val">${fmtCurr(stats.totalPaid)}</div><div class="stat-label">Total Paid</div></div>
+<div class="stat"><div class="stat-val">${fmtCurr(stats.totalDue)}</div><div class="stat-label">Total Due</div></div>
+<div class="stat"><div class="stat-val">${stats.paymentsMade}</div><div class="stat-label">Payments</div></div>
+<div class="stat"><div class="stat-val" style="color:${stats.totalPaid>=stats.totalDue?'#059669':'#ea580c'}">${stats.totalDue>0?Math.round((stats.totalPaid/stats.totalDue)*100):0}%</div><div class="stat-label">Progress</div></div>
+</div>
+<table><thead><tr><th>Payment Type</th><th>Category</th><th style="text-align:right">Amount Due</th><th style="text-align:right">Paid</th><th style="text-align:center">Status</th><th style="text-align:center">Deadline</th></tr></thead><tbody>${rows}</tbody></table>
+<div class="footer">Generated by Payvexo &bull; ${new Date().toLocaleString('en-US')}</div>
+</div>
+<div class="no-print"><button class="btn-print" onclick="window.print()">Print / Save as PDF</button></div>
+</body></html>`;
+    const win = window.open('', '_blank');
+    if (win) { win.document.write(html); win.document.close(); }
+  };
+
   const handleLogout = async () => {
     try {
       await logout();
-      navigate('/login');
+      go('/login');
     } catch (error) {
       console.error('Logout error:', error);
     }
@@ -317,11 +378,12 @@ export default function DashboardPage() {
           }}
         />
         
-        {/* ECE Logo Background - Creative Element */}
+        {/* Background watermark — single-tenant only */}
+        {!isMultiTenant && (
         <div className="hidden lg:block absolute right-0 top-1/2 -translate-y-1/2 w-[600px] h-[600px] opacity-[0.08] pointer-events-none">
           <img 
             src="/Ece picture.jpg" 
-            alt="ECE Background"
+            alt="Background"
             className="w-full h-full object-contain"
             style={{
               filter: 'grayscale(0.5) brightness(0.8)',
@@ -329,9 +391,11 @@ export default function DashboardPage() {
             }}
           />
         </div>
+        )}
       </div>
 
-      {/* Top Navigation */}
+      {/* Top Navigation — hidden in multi-tenant mode (OrgLayout provides nav) */}
+      {!isMultiTenant && (
       <motion.nav 
         className="border-b sticky top-0 z-40"
         style={{ 
@@ -349,7 +413,7 @@ export default function DashboardPage() {
             <div className="flex items-center gap-2.5 p-1.5 rounded-xl" style={{ background: 'rgba(255, 104, 3, 0.06)' }}>
               <LogoCompact />
                <div className="hidden sm:block leading-tight pr-2">
-                <h1 className="text-base font-extrabold text-white tracking-tight">Dues<span style={{ color: colors.primary }}>Tracker</span></h1>
+                <h1 className="text-base font-extrabold text-white tracking-tight">Pay<span style={{ color: colors.primary }}>vexo</span></h1>
                 <p className="text-[10px] font-medium tracking-wider uppercase" style={{ color: colors.textTertiary }}>{user?.level || 'N/A'}</p>
                 </div> 
             </div>
@@ -399,7 +463,7 @@ export default function DashboardPage() {
                   >
                     <div className="p-2">
                       <button
-                        onClick={() => navigate('/profile')}
+                        onClick={() => go('/profile')}
                         className="w-full flex items-center gap-3 px-3 py-2 rounded-lg transition-colors text-left"
                         style={{ color: colors.textPrimary }}
                         onMouseEnter={(e) => e.currentTarget.style.background = 'rgba(255, 255, 255, 0.1)'}
@@ -410,7 +474,7 @@ export default function DashboardPage() {
                       </button>
 
                       <button
-                        onClick={() => navigate('/settings')}
+                        onClick={() => go('/settings')}
                         className="w-full flex items-center gap-3 px-3 py-2 rounded-lg transition-colors text-left"
                         style={{ color: colors.textPrimary }}
                         onMouseEnter={(e) => e.currentTarget.style.background = 'rgba(255, 255, 255, 0.1)'}
@@ -495,7 +559,7 @@ export default function DashboardPage() {
 
               <button
                 onClick={() => {
-                  navigate('/profile');
+                  go('/profile');
                   setShowMobileMenu(false);
                 }}
                 className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg transition-colors text-left"
@@ -508,7 +572,7 @@ export default function DashboardPage() {
               </button>
 
               <button
-                onClick={() => { navigate('/settings'); setShowMobileMenu(false); }}
+                onClick={() => { go('/settings'); setShowMobileMenu(false); }}
                 className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg transition-colors text-left"
                 style={{ color: colors.textPrimary }}
                 onMouseEnter={(e) => e.currentTarget.style.background = 'rgba(255, 255, 255, 0.1)'}
@@ -534,6 +598,7 @@ export default function DashboardPage() {
           </motion.div>
         )}
       </motion.nav>
+      )}
 
       {/* Pull to Refresh Indicator */}
       <PullToRefreshIndicator
@@ -683,7 +748,7 @@ export default function DashboardPage() {
                               animate={{ opacity: 1, y: 0 }}
                               transition={{ delay: 0.1 * index }}
                               whileHover={{ scale: 1.02, y: -2 }}
-                              onClick={() => navigate(`/payment/${paymentType.id}`)}
+                              onClick={() => go(`/payment/${paymentType.id}`)}
                             >
                               {/* Overdue badge */}
                               {isOverdue && (
@@ -759,7 +824,7 @@ export default function DashboardPage() {
                                   onClick={(e) => {
                                     e.stopPropagation();
                                     haptics.medium();
-                                    navigate(`/payment/${paymentType.id}`);
+                                    go(`/payment/${paymentType.id}`);
                                   }}
                                   whileHover={{ scale: 1.02 }}
                                   whileTap={{ scale: 0.98 }}
@@ -806,7 +871,7 @@ export default function DashboardPage() {
                               animate={{ opacity: 1, y: 0 }}
                               transition={{ delay: 0.1 * index }}
                               whileHover={{ scale: 1.02, y: -2 }}
-                              onClick={() => navigate(`/payment/${paymentType.id}`)}
+                              onClick={() => go(`/payment/${paymentType.id}`)}
                             >
                               {/* Skip button */}
                               <button
@@ -893,7 +958,7 @@ export default function DashboardPage() {
                                     }}
                                     onClick={(e) => {
                                       e.stopPropagation();
-                                      navigate(`/payment/${paymentType.id}`);
+                                      go(`/payment/${paymentType.id}`);
                                     }}
                                     whileHover={{ scale: 1.02 }}
                                     whileTap={{ scale: 0.98 }}
@@ -980,7 +1045,7 @@ export default function DashboardPage() {
                   {/* View All Button if more than visible dues */}
                   {(mandatoryUnpaidDues.length > 2 || optionalUnpaidDues.length > 2) && (
                     <button
-                      onClick={() => navigate('/payments')}
+                      onClick={() => go('/payments')}
                       className="w-full mt-3 py-2.5 px-4 rounded-lg font-medium text-sm transition-all border"
                       style={{
                         background: 'rgba(255, 255, 255, 0.05)',
@@ -1016,13 +1081,24 @@ export default function DashboardPage() {
                 <h3 className="text-xl font-bold text-white">
                   My Payments ({activePayments.filter(p => p.status !== 'not_paid').length})
                 </h3>
-                <button
-                  onClick={() => navigate('/payments')}
-                  className="text-sm font-medium hover:underline"
-                  style={{ color: colors.primary }}
-                >
-                  View History
-                </button>
+                <div className="flex items-center gap-3">
+                  <button
+                    onClick={printPaymentSummary}
+                    className="flex items-center gap-1.5 text-sm font-medium px-3 py-1.5 rounded-lg transition-all hover:scale-105"
+                    style={{ background: 'rgba(255,255,255,0.08)', color: colors.textSecondary, border: '1px solid rgba(255,255,255,0.1)' }}
+                    title="Print payment summary"
+                  >
+                    <Printer className="w-3.5 h-3.5" />
+                    Print
+                  </button>
+                  <button
+                    onClick={() => go('/payments')}
+                    className="text-sm font-medium hover:underline"
+                    style={{ color: colors.primary }}
+                  >
+                    View History
+                  </button>
+                </div>
               </div>
 
               {loading ? (
@@ -1105,7 +1181,7 @@ export default function DashboardPage() {
                           animate={{ opacity: 1, y: 0 }}
                           transition={{ delay: 0.1 * index }}
                           whileHover={{ scale: 1.01 }}
-                          onClick={() => navigate(`/payment/${paymentType.id}`)}
+                          onClick={() => go(`/payment/${paymentType.id}`)}
                         >
                           {/* Top accent bar */}
                           <div 
@@ -1240,7 +1316,7 @@ export default function DashboardPage() {
                                     }}
                                     onClick={(e) => {
                                       e.stopPropagation();
-                                      navigate(`/payment/${paymentType.id}`);
+                                      go(`/payment/${paymentType.id}`);
                                     }}
                                     whileHover={{ scale: 1.02 }}
                                     whileTap={{ scale: 0.98 }}
@@ -1259,7 +1335,7 @@ export default function DashboardPage() {
                                     }}
                                     onClick={(e) => {
                                       e.stopPropagation();
-                                      navigate('/payments');
+                                      go('/payments');
                                     }}
                                     whileHover={{ background: 'rgba(255,255,255,0.12)' }}
                                     whileTap={{ scale: 0.98 }}
@@ -1269,6 +1345,24 @@ export default function DashboardPage() {
                                   </motion.button>
                                 )}
                                 {(status === 'paid' || status === 'waived') && (
+                                  <>
+                                  <motion.button
+                                    className="p-2 rounded-xl transition-all flex items-center justify-center"
+                                    style={{
+                                      background: 'rgba(255,255,255,0.08)',
+                                      color: colors.textPrimary,
+                                      border: '1px solid rgba(255,255,255,0.1)'
+                                    }}
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      go(`/payment/${paymentType.id}`);
+                                    }}
+                                    whileHover={{ background: 'rgba(255,255,255,0.12)' }}
+                                    whileTap={{ scale: 0.98 }}
+                                    title="Print Receipt"
+                                  >
+                                    <Printer className="w-4 h-4" />
+                                  </motion.button>
                                   <motion.button
                                     className="px-4 py-2 rounded-xl font-semibold text-xs transition-all flex items-center gap-1.5"
                                     style={{
@@ -1278,13 +1372,14 @@ export default function DashboardPage() {
                                     }}
                                     onClick={(e) => {
                                       e.stopPropagation();
-                                      navigate(`/payment/${paymentType.id}`);
+                                      go(`/payment/${paymentType.id}`);
                                     }}
                                     whileHover={{ background: 'rgba(255,255,255,0.12)' }}
                                     whileTap={{ scale: 0.98 }}
                                   >
                                     View Details
                                   </motion.button>
+                                  </>
                                 )}
                               </div>
                             </div>
@@ -1308,6 +1403,39 @@ export default function DashboardPage() {
           {/* Student Features - Controlled by Admin Settings */}
           {!featuresLoading && (
             <>
+              {/* Progress Bar - Payment Overview */}
+              {features.progressBar && stats.totalDue > 0 && (
+                <GlassCard>
+                  <div className="flex items-center justify-between mb-3">
+                    <div className="flex items-center gap-2">
+                      <div className="w-8 h-8 rounded-lg flex items-center justify-center" style={{ background: `${colors.primary}15` }}>
+                        <CheckCircle size={16} style={{ color: colors.primary }} />
+                      </div>
+                      <div>
+                        <h3 className="text-sm font-semibold text-white">Payment Progress</h3>
+                        <p className="text-xs" style={{ color: colors.textSecondary }}>
+                          {formatCurrency(stats.totalPaid)} of {formatCurrency(stats.totalDue)}
+                        </p>
+                      </div>
+                    </div>
+                    <span className="text-lg font-bold" style={{ color: colors.primary }}>
+                      {stats.totalDue > 0 ? Math.round((stats.totalPaid / stats.totalDue) * 100) : 0}%
+                    </span>
+                  </div>
+                  <ProgressBar
+                    progress={stats.totalDue > 0 ? Math.round((stats.totalPaid / stats.totalDue) * 100) : 0}
+                    height="h-3"
+                    animated
+                  />
+                  <div className="flex items-center justify-between mt-2">
+                    <span className="text-[11px]" style={{ color: colors.textSecondary }}>Outstanding: {formatCurrency(Math.max(0, stats.totalDue - stats.totalPaid))}</span>
+                    <span className="text-[11px] font-medium" style={{ color: stats.totalPaid >= stats.totalDue ? colors.success : colors.warning }}>
+                      {stats.totalPaid >= stats.totalDue ? 'Fully Paid!' : 'In Progress'}
+                    </span>
+                  </div>
+                </GlassCard>
+              )}
+
               {/* Deadline Reminders - Full Width */}
               {features.deadlineReminders && <SmartDeadlineReminders />}
 
@@ -1339,7 +1467,7 @@ export default function DashboardPage() {
           }}
           whileHover={{ scale: 1.1 }}
           whileTap={{ scale: 0.9 }}
-          onClick={() => navigate('/admin/create-payment')}
+          onClick={() => go('/admin/create-payment')}
           initial={{ opacity: 0, scale: 0 }}
           animate={{ opacity: 1, scale: 1 }}
           transition={{ delay: 1 }}
@@ -1356,7 +1484,7 @@ export default function DashboardPage() {
       <AnimatePresence>
         {showLogoutModal && (
           <motion.div
-            className="fixed inset-0 z-[100] flex items-center justify-center p-4"
+            className="fixed inset-0 z-100 flex items-center justify-center p-4"
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}

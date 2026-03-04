@@ -1,9 +1,11 @@
-import { useState, useEffect } from 'react';
+﻿import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { useAuth } from '@/hooks/useAuth';
+import { useAuth } from '@/hooks/useAppAuth';
 import { supabase } from '@/config/supabase';
+import { getOrgScope } from '@/utils/orgScope';
 import { useToast } from '@/hooks/useToast';
-import { useNavigate } from 'react-router-dom';
+import {  } from 'react-router-dom';
+import { useAppNav } from '@/hooks/useAppNav';
 import { colors, gradients } from '@/config/colors';
 import PageWrapper from '@/components/ui/PageWrapper';
 import { PaymentCardSkeleton } from '@/components/ui/Skeleton';
@@ -53,7 +55,7 @@ interface Payment {
 
 export default function PaymentHistoryPage() {
   const { user } = useAuth();
-  const navigate = useNavigate();
+  const { go: navigate } = useAppNav();
   const { error: showError, success: showSuccess } = useToast();
   const [payments, setPayments] = useState<Payment[]>([]);
   const [loading, setLoading] = useState(true);
@@ -84,7 +86,8 @@ export default function PaymentHistoryPage() {
               category
             )
           `)
-          .eq('student_id', user?.id)
+          .eq('member_id', user?.id)
+          .eq('organization_id', getOrgScope()?.orgId || '')
           .order('created_at', { ascending: false });
 
         if (error) throw error;
@@ -106,7 +109,7 @@ export default function PaymentHistoryPage() {
             event: '*',
             schema: 'public',
             table: 'payments',
-            filter: `student_id=eq.${user?.id}`,
+            filter: `member_id=eq.${user?.id}`,
           },
           () => {
             fetchPayments();
@@ -213,7 +216,7 @@ export default function PaymentHistoryPage() {
       // Transform payments to match PDF export interface
       const exportData = filteredPayments.map(payment => ({
         id: payment.id,
-        student_id: user?.id || '',
+        member_id: user?.id || '',
         amount: payment.amount,
         status: payment.status,
         payment_method: 'Transfer',

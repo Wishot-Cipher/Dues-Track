@@ -1,23 +1,29 @@
-import { useState } from "react";
+﻿import { useState } from "react";
 import { motion } from "framer-motion";
-import { Building2, Users, Palette, Check, ArrowLeft, Plus, Sparkles, CreditCard, Calendar, CheckCircle, Tag } from "lucide-react";
+import { Building2, Palette, Check, ArrowLeft, Plus, Sparkles, CreditCard, Calendar, CheckCircle, Tag } from "lucide-react";
 import { colors } from "@/config/colors";
-import { useNavigate } from "react-router-dom";
+import { useAppNav } from '@/hooks/useAppNav';
 import GlassCard from "@/components/ui/GlassCard";
 import Input from "@/components/ui/Input";
 import ProfessionalDropdown from "@/components/ui/ProfessionalDropdown";
-import { useAuth } from "@/hooks/useAuth";
+import { useAuth } from '@/hooks/useAppAuth';
 import { useToast } from "@/hooks/useToast";
 import { supabase } from "@/config/supabase";
+import { getOrgScope } from '@/utils/orgScope';
 import { formatCurrency, formatDate } from "@/utils/formatters";
 import Footer from "@/components/Footer";
 
 const CATEGORIES = [
-  { value: "semester_dues", label: "Semester Dues", icon: "🎓" },
-  { value: "books", label: "Books", icon: "📚" },
-  { value: "events", label: "Events", icon: "🎉" },
-  { value: "projects", label: "Projects", icon: "📘" },
+  { value: "dues", label: "Dues", icon: "🎓" },
+  { value: "fees", label: "Fees", icon: "📚" },
+  { value: "levy", label: "Levy", icon: "📋" },
+  { value: "contribution", label: "Contribution", icon: "🤝" },
   { value: "welfare", label: "Welfare", icon: "❤️" },
+  { value: "project", label: "Project", icon: "📘" },
+  { value: "event", label: "Event", icon: "🎉" },
+  { value: "donation", label: "Donation", icon: "💝" },
+  { value: "subscription", label: "Subscription", icon: "🔄" },
+  { value: "savings", label: "Savings", icon: "💰" },
   { value: "custom", label: "Custom", icon: "📦" },
 ];
 
@@ -45,8 +51,6 @@ const COLORS = [
   "#F97316", // Orange
 ];
 
-const LEVELS = ["100L", "200L", "300L", "400L", "500L"];
-
 const NIGERIAN_BANKS = [
   "Access Bank",
   "Zenith Bank",
@@ -70,7 +74,7 @@ const NIGERIAN_BANKS = [
 
 export default function CreatePaymentTypePage() {
   const { user, hasPermission } = useAuth();
-  const navigate = useNavigate();
+  const { go: navigate } = useAppNav();
   const toast = useToast();
   const [loading, setLoading] = useState(false);
   type PaymentFormData = {
@@ -85,7 +89,6 @@ export default function CreatePaymentTypePage() {
     bank_name: string;
     account_name: string;
     account_number: string;
-    target_levels: string[];
     icon: string;
     color: string;
     late_fee_per_day: string | number;
@@ -94,7 +97,7 @@ export default function CreatePaymentTypePage() {
   const [formData, setFormData] = useState<PaymentFormData>({
     title: "",
     description: "",
-    category: "semester_dues",
+    category: "dues",
     amount: "",
     allow_partial: false,
     is_mandatory: false,
@@ -103,7 +106,6 @@ export default function CreatePaymentTypePage() {
     bank_name: "First Bank of Nigeria",
     account_name: "",
     account_number: "",
-    target_levels: ["200L"],
     icon: "🎓",
     color: "#3B82F6",
     late_fee_per_day: '',
@@ -126,12 +128,35 @@ export default function CreatePaymentTypePage() {
     try {
       setLoading(true);
 
+      // Resolve org scope — required for multi-tenant
+      const scope = getOrgScope();
+      let orgId = scope?.orgId || null;
+      let groupId: string | null = null;
+
+      // Fallback: derive org info from the member record
+      if (!orgId && user.id) {
+        const { data: memberRow } = await supabase
+          .from('organization_members')
+          .select('organization_id, group_id')
+          .eq('id', user.id)
+          .single();
+        if (memberRow) {
+          orgId = memberRow.organization_id;
+          groupId = memberRow.group_id;
+        }
+      }
+
+      if (!orgId) {
+        toast.error('Organization context not found. Please log out and log back in.');
+        return;
+      }
+
       // Get admin record for the current user (for created_by field)
-      // Use limit(1) to handle multiple admin roles for same student
       const { data: adminDataArray, error: adminError } = await supabase
-        .from("admins")
+        .from("member_admins")
         .select("id")
-        .eq("student_id", user.id)
+        .eq("member_id", user.id)
+        .eq('organization_id', orgId)
         .limit(1);
 
       if (adminError) {
@@ -147,9 +172,25 @@ export default function CreatePaymentTypePage() {
 
       const adminData = adminDataArray[0];
 
-      const { error } = await supabase
-        .from("payment_types")
-        .insert({
+      // If we don't have groupId yet, fetch from member record
+      if (!groupId) {
+        const { data: memberData } = await supabase
+          .from('organization_members')
+          .select('group_id')
+          .eq('id', user.id)
+          .eq('organization_id', orgId)
+          .single();
+        groupId = memberData?.group_id || null;
+      }
+
+      if (!groupId) {
+        toast.error('Group context not found. Please contact support.');
+        return;
+      }
+
+      const insertData: Record<string, unknown> = {
+          organization_id: orgId,
+          group_id: groupId,
           title: formData.title,
           description: formData.description,
           category: formData.category,
@@ -162,13 +203,16 @@ export default function CreatePaymentTypePage() {
           account_name: formData.account_name,
           account_number: formData.account_number,
           created_by: adminData.id,
-          approver_id: adminData.id, // Creator is the approver
-          target_levels: formData.target_levels,
+          approver_id: adminData.id,
           icon: formData.icon,
           color: formData.color,
           is_active: true,
           is_public: formData.is_public,
-        })
+      };
+
+      const { error } = await supabase
+        .from("payment_types")
+        .insert(insertData)
         .select()
         .single();
 
@@ -183,15 +227,6 @@ export default function CreatePaymentTypePage() {
     } finally {
       setLoading(false);
     }
-  };
-
-  const handleLevelToggle = (level: string) => {
-    setFormData((prev) => ({
-      ...prev,
-      target_levels: prev.target_levels.includes(level)
-        ? prev.target_levels.filter((l) => l !== level)
-        : [...prev.target_levels, level],
-    }));
   };
 
   return (
@@ -234,18 +269,6 @@ export default function CreatePaymentTypePage() {
           }}
         />
 
-        {/* ECE Logo Background - Creative Element */}
-        <div className="hidden lg:block absolute right-0 top-1/2 -translate-y-1/2 w-[600px] h-[600px] opacity-[0.08] pointer-events-none">
-          <img
-            src="/Ece picture.jpg"
-            alt="ECE Background"
-            className="w-full h-full object-contain"
-            style={{
-              filter: "grayscale(0.5) brightness(0.8)",
-              mixBlendMode: "soft-light",
-            }}
-          />
-        </div>
       </div>
 
       {/* Content */}
@@ -269,7 +292,7 @@ export default function CreatePaymentTypePage() {
             <div className="relative z-10">
               <motion.button
                 whileHover={{ x: -4 }}
-                onClick={() => navigate(-1)}
+                onClick={() => window.history.back()}
                 className="flex items-center gap-2 mb-4 px-4 py-2 rounded-xl transition-all"
                 style={{ 
                   background: `${colors.primary}15`,
@@ -314,7 +337,7 @@ export default function CreatePaymentTypePage() {
                     New Payment Type
                   </h1>
                   <p style={{ color: colors.textSecondary }}>
-                    Set up a new payment type for students to pay
+                    Set up a new payment type for your organization
                   </p>
                 </div>
               {/* NOTE: Late fee input moved into the Basic Info form for consistent visibility */}
@@ -322,7 +345,7 @@ export default function CreatePaymentTypePage() {
 
               {/* Progress Steps */}
               <div className="flex items-center justify-center gap-2 mt-6">
-                {['Basic Info', 'Bank Details', 'Target', 'Design'].map((step, index) => (
+                {['Details', 'Bank', 'Customize'].map((step, index) => (
                   <div key={step} className="flex items-center gap-2">
                     <div className="flex items-center gap-2">
                       <div 
@@ -339,7 +362,7 @@ export default function CreatePaymentTypePage() {
                         {step}
                       </span>
                     </div>
-                    {index < 3 && (
+                    {index < 2 && (
                       <div className="w-8 h-0.5 hidden sm:block" style={{ background: `${colors.primary}30` }} />
                     )}
                   </div>
@@ -379,7 +402,7 @@ export default function CreatePaymentTypePage() {
                   onChange={(e) =>
                     setFormData({ ...formData, title: e.target.value })
                   }
-                  placeholder="e.g., CS 200L Project Materials"
+                  placeholder="e.g., Monthly Dues, Event Fee, Project Fund"
                   required
                 />
 
@@ -392,8 +415,8 @@ export default function CreatePaymentTypePage() {
                     onChange={(e) =>
                       setFormData({ ...formData, description: e.target.value })
                     }
-                    placeholder="What is this payment for?"
-                    rows={4}
+                    placeholder="Brief description of what this payment covers (optional)"
+                    rows={2}
                     className="w-full px-4 py-3 rounded-xl bg-white/5 border border-white/10 text-white placeholder:text-gray-500 focus:outline-none focus:ring-2 focus:ring-orange-500"
                   />
                 </div>
@@ -422,7 +445,7 @@ export default function CreatePaymentTypePage() {
                   onChange={(e) =>
                     setFormData({ ...formData, amount: e.target.value })
                   }
-                  placeholder="Enter amount in Naira"
+                  placeholder="Enter amount"
                   required
                   min="0"
                   step="0.01"
@@ -440,57 +463,27 @@ export default function CreatePaymentTypePage() {
                   helperText="Amount charged per day after the payment deadline. Leave empty for no late fee."
                 />
 
-                <div className="space-y-3">
-                  <label className="flex items-center gap-3 cursor-pointer">
-                    <input
-                      type="checkbox"
-                      checked={formData.allow_partial}
-                      onChange={(e) =>
-                        setFormData({
-                          ...formData,
-                          allow_partial: e.target.checked,
-                        })
-                      }
-                      className="w-5 h-5 rounded border-white/20 bg-white/5 text-orange-500 focus:ring-2 focus:ring-orange-500"
-                    />
-                    <span className="text-white text-sm">
-                      Allow partial payments
-                    </span>
-                  </label>
-
-                  <label className="flex items-center gap-3 cursor-pointer">
-                    <input
-                      type="checkbox"
-                      checked={formData.is_mandatory}
-                      onChange={(e) =>
-                        setFormData({
-                          ...formData,
-                          is_mandatory: e.target.checked,
-                        })
-                      }
-                      className="w-5 h-5 rounded border-white/20 bg-white/5 text-orange-500 focus:ring-2 focus:ring-orange-500"
-                    />
-                    <span className="text-white text-sm">
-                      Make payment mandatory
-                    </span>
-                  </label>
-
-                  <label className="flex items-center gap-3 cursor-pointer">
-                    <input
-                      type="checkbox"
-                      checked={formData.is_public}
-                      onChange={(e) =>
-                        setFormData({
-                          ...formData,
-                          is_public: e.target.checked,
-                        })
-                      }
-                      className="w-5 h-5 rounded border-white/20 bg-white/5 text-orange-500 focus:ring-2 focus:ring-orange-500"
-                    />
-                    <span className="text-white text-sm">
-                      Allow public contributions (visible on /contribute page)
-                    </span>
-                  </label>
+                <div className="space-y-1 rounded-xl border border-white/5 overflow-hidden">
+                  {[
+                    { key: 'allow_partial' as const, label: 'Allow partial payments', desc: 'Members can pay in installments' },
+                    { key: 'is_mandatory' as const, label: 'Mandatory payment', desc: 'Required for all members' },
+                    { key: 'is_public' as const, label: 'Public contributions', desc: 'Visible on the public contribute page' },
+                  ].map(toggle => (
+                    <button
+                      key={toggle.key}
+                      type="button"
+                      onClick={() => setFormData(prev => ({ ...prev, [toggle.key]: !prev[toggle.key] }))}
+                      className="flex items-center justify-between w-full px-4 py-3 hover:bg-white/5 transition-colors group"
+                    >
+                      <div className="text-left">
+                        <span className="text-sm text-white/90 group-hover:text-white transition-colors">{toggle.label}</span>
+                        <p className="text-[11px] mt-0.5" style={{ color: colors.textSecondary }}>{toggle.desc}</p>
+                      </div>
+                      <div className={`w-11 h-6 rounded-full relative transition-colors shrink-0 ml-3 ${formData[toggle.key] ? 'bg-orange-500' : 'bg-white/10'}`}>
+                        <div className={`absolute top-1 w-4 h-4 rounded-full transition-all shadow-sm ${formData[toggle.key] ? 'left-[22px] bg-white' : 'left-1 bg-white/50'}`} />
+                      </div>
+                    </button>
+                  ))}
                 </div>
 
                 <div>
@@ -538,15 +531,15 @@ export default function CreatePaymentTypePage() {
                   <Building2 className="w-5 h-5" style={{ color: colors.accentMint }} />
                 </div>
                 <div>
-                  <h2 className="text-xl font-bold text-white">Bank Account Details</h2>
-                  <p className="text-xs" style={{ color: colors.textSecondary }}>Where should payments be sent?</p>
+                  <h2 className="text-xl font-bold text-white">Bank Account</h2>
+                  <p className="text-xs" style={{ color: colors.textSecondary }}>Optional — for bank transfer payments</p>
                 </div>
               </div>
 
               <div className="space-y-4">
                 <div>
                   <ProfessionalDropdown
-                    label="Bank Name *"
+                    label="Bank Name"
                     placeholder="Select Bank"
                     icon={<Building2 className="w-5 h-5" />}
                     value={formData.bank_name}
@@ -562,88 +555,29 @@ export default function CreatePaymentTypePage() {
                 </div>
 
                 <Input
-                  label="Account Name *"
+                  label="Account Name"
                   value={formData.account_name}
                   onChange={(e) =>
                     setFormData({ ...formData, account_name: e.target.value })
                   }
-                  placeholder="e.g., CS 200L Class Rep"
-                  required
+                  placeholder="e.g., Organization Treasury"
                 />
 
                 <Input
-                  label="Account Number *"
+                  label="Account Number"
                   value={formData.account_number}
                   onChange={(e) =>
                     setFormData({ ...formData, account_number: e.target.value })
                   }
                   placeholder="10-digit account number"
-                  required
                   pattern="[0-9]{10}"
                   maxLength={10}
                 />
 
-                <div className="p-4 rounded-xl bg-blue-500/10 border border-blue-500/20">
-                  <p className="text-sm text-blue-300">
-                    <strong>Note:</strong> You'll be the approver for all
-                    payments to this account since you're creating it.
+                <div className="p-3 rounded-xl bg-blue-500/10 border border-blue-500/20">
+                  <p className="text-xs text-blue-300">
+                    💡 You'll be set as the default payment approver. Bank details are optional — useful for bank transfer payments.
                   </p>
-                </div>
-              </div>
-            </GlassCard>
-          </motion.div>
-
-          {/* Target Students */}
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.3 }}
-          >
-            <GlassCard className="mb-6 relative overflow-hidden">
-              <div 
-                className="absolute top-0 left-0 w-full h-1"
-                style={{ background: `linear-gradient(90deg, #3B82F6, transparent)` }}
-              />
-              <div className="flex items-center gap-3 mb-4">
-                <div className="w-10 h-10 rounded-xl flex items-center justify-center"
-                     style={{ background: 'rgba(59, 130, 246, 0.15)', border: '1px solid rgba(59, 130, 246, 0.3)' }}>
-                  <Users className="w-5 h-5" style={{ color: '#3B82F6' }} />
-                </div>
-                <div>
-                  <h2 className="text-xl font-bold text-white">Target Students</h2>
-                  <p className="text-xs" style={{ color: colors.textSecondary }}>Select which students should pay</p>
-                </div>
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-white mb-3">
-                  Select Levels *
-                </label>
-                <div className="flex flex-wrap gap-3">
-                  {LEVELS.map((level) => (
-                    <label
-                      key={level}
-                      className="flex items-center gap-2 px-4 py-2 rounded-lg cursor-pointer transition-all"
-                      style={{
-                        background: formData.target_levels.includes(level)
-                          ? `${colors.primary}20`
-                          : "rgba(255, 255, 255, 0.05)",
-                        border: `2px solid ${
-                          formData.target_levels.includes(level)
-                            ? colors.primary
-                            : "rgba(255, 255, 255, 0.1)"
-                        }`,
-                      }}
-                    >
-                      <input
-                        type="checkbox"
-                        checked={formData.target_levels.includes(level)}
-                        onChange={() => handleLevelToggle(level)}
-                        className="w-5 h-5 rounded border-white/20 bg-white/5 text-orange-500"
-                      />
-                      <span className="text-white font-medium">{level}</span>
-                    </label>
-                  ))}
                 </div>
               </div>
             </GlassCard>
@@ -653,7 +587,7 @@ export default function CreatePaymentTypePage() {
           <motion.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.4 }}
+            transition={{ delay: 0.3 }}
           >
             <GlassCard className="mb-6 relative overflow-hidden">
               <div 
@@ -803,7 +737,7 @@ export default function CreatePaymentTypePage() {
           <motion.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.5 }}
+            transition={{ delay: 0.4 }}
           >
             <GlassCard className="relative overflow-hidden">
               <div 
@@ -832,7 +766,7 @@ export default function CreatePaymentTypePage() {
 
                 <motion.button
                   type="button"
-                  onClick={() => navigate(-1)}
+                  onClick={() => window.history.back()}
                   disabled={loading}
                   whileHover={{ scale: 1.02 }}
                   whileTap={{ scale: 0.98 }}

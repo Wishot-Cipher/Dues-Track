@@ -21,7 +21,7 @@ export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
 
 // Storage bucket names
 export const STORAGE_BUCKETS = {
-  RECEIPTS: 'receipts',
+  RECEIPTS: 'payment-receipts',
   PROFILE_IMAGES: 'profile-images',
   EXPENSE_RECEIPTS: 'expense-receipts',
 }

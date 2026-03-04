@@ -1,6 +1,6 @@
 /**
  * PDF Export Utility
- * Provides professional PDF generation for various data exports in the Class Dues Tracker
+ * Provides professional PDF generation for various data exports in Payvexo
  * 
  * @author Dev_Wishot
  * @copyright Dev_Wishot - @wishotstudio
@@ -83,7 +83,7 @@ interface Student {
 
 interface Payment {
   id: string;
-  student_id: string;
+  member_id: string;
   amount: number;
   status: string;
   payment_method?: string;
@@ -149,12 +149,12 @@ function addHeader(doc: jsPDF, title: string, subtitle?: string): number {
   doc.setFont(STYLES.headerFont, 'bold');
   doc.setFontSize(11);
   doc.setTextColor(255, 255, 255);
-  doc.text('Class Dues Tracker', pageWidth - 15, 18, { align: 'right' });
+  doc.text('Payvexo', pageWidth - 15, 18, { align: 'right' });
   
   doc.setFont(STYLES.bodyFont, 'normal');
   doc.setFontSize(8);
   doc.setTextColor(150, 150, 150);
-  doc.text('ECE Department', pageWidth - 15, 27, { align: 'right' });
+  doc.text('Payvexo', pageWidth - 15, 27, { align: 'right' });
   
   // Date/Time
   doc.setFontSize(7);
@@ -192,7 +192,7 @@ function addFooter(doc: jsPDF, pageNumber: number, totalPages: number): void {
   doc.setFontSize(8);
   doc.setTextColor(COLORS.textLight);
   
-  doc.text('Class Dues Tracker - Official Document', 20, pageHeight - 17);
+  doc.text('Payvexo - Official Document', 20, pageHeight - 17);
   doc.text(`Page ${pageNumber} of ${totalPages}`, pageWidth / 2, pageHeight - 17, { align: 'center' });
   doc.text('Confidential', pageWidth - 20, pageHeight - 17, { align: 'right' });
   
@@ -566,7 +566,7 @@ export function exportPaymentsToPDF(
   
   // Important Notes Section
   yPos = addImportantNotes(doc, yPos, [
-    'Only APPROVED payments count toward your total class dues paid.',
+    'Only APPROVED payments count toward your total dues paid.',
     'PENDING payments are under admin review and do NOT yet count.',
     'REJECTED payments do NOT count and may need to be resubmitted.',
     'Keep this document for personal records and parent verification.'
@@ -1190,7 +1190,7 @@ export function generatePaymentReceiptPDF(payment: {
       hash = ((hash << 5) - hash) + raw.charCodeAt(i);
       hash |= 0;
     }
-    return 'DT-' + Math.abs(hash).toString(36).toUpperCase().padStart(6, '0').slice(0, 6);
+    return 'PVX-' + Math.abs(hash).toString(36).toUpperCase().padStart(6, '0').slice(0, 6);
   })();
 
   const statusCfg = isWaived
@@ -1218,12 +1218,20 @@ export function generatePaymentReceiptPDF(payment: {
   });
 
   const logoSVG = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 40 40" width="40" height="40">
-    <rect width="40" height="40" rx="8" fill="#0F0703"/>
-    <rect x="8" y="22" width="6" height="11" rx="2" fill="#FF6803"/>
-    <rect x="17" y="14" width="6" height="19" rx="2" fill="#FF6803"/>
-    <rect x="26" y="8" width="6" height="25" rx="2" fill="#FF6803"/>
-    <path d="M6 35 Q20 28 34 35" stroke="#30FFAC" stroke-width="2.2" fill="none" stroke-linecap="round"/>
+    <defs>
+      <linearGradient id="lgP" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="#FF6803"/><stop offset="100%" stop-color="#FFAC5F"/></linearGradient>
+    </defs>
+    <rect width="40" height="40" rx="10" fill="#0F0703"/>
+    <rect x="8" y="22" width="6" height="11" rx="2.5" fill="url(#lgP)"/>
+    <rect x="17" y="14" width="6" height="19" rx="2.5" fill="url(#lgP)"/>
+    <rect x="26" y="8" width="6" height="25" rx="2.5" fill="url(#lgP)"/>
+    <path d="M6 35 Q20 28 34 35" stroke="#30FFAC" stroke-width="2" fill="none" stroke-linecap="round" opacity="0.9"/>
   </svg>`;
+
+  // SVG inline icons for PDF sections (no emoji dependency)
+  const userIconSVG = `<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#FF6803" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>`;
+  const cardIconSVG = `<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#3b82f6" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="20" height="14" x="2" y="5" rx="2"/><line x1="2" x2="22" y1="10" y2="10"/></svg>`;
+  const printIconSVG = `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect width="12" height="8" x="6" y="14"/></svg>`;
 
   const html = `<!DOCTYPE html>
 <html lang="en">
@@ -1421,7 +1429,7 @@ export function generatePaymentReceiptPDF(payment: {
 </head>
 <body>
   <div class="page">
-    <div class="watermark">DUESTRACKER</div>
+    <div class="watermark">PAYVEXO</div>
     <div class="accent-bar"></div>
 
     <!-- HEADER -->
@@ -1429,8 +1437,8 @@ export function generatePaymentReceiptPDF(payment: {
       <div class="header-left">
         ${logoSVG}
         <div>
-          <div class="brand-name">Dues<span>Tracker</span></div>
-          <div class="brand-tagline">Payment Receipt</div>
+          <div class="brand-name">Pay<span>vexo</span></div>
+          <div class="brand-tagline">Secure Payment Platform</div>
         </div>
       </div>
       <div class="header-right">
@@ -1460,8 +1468,8 @@ export function generatePaymentReceiptPDF(payment: {
       <!-- STUDENT INFORMATION -->
       <div class="section">
         <div class="section-header">
-          <div class="section-icon amber">👤</div>
-          <div class="section-title">Student Information</div>
+          <div class="section-icon amber">${userIconSVG}</div>
+          <div class="section-title">Member Information</div>
           <div class="section-line"></div>
         </div>
         <div class="info-grid">
@@ -1495,7 +1503,7 @@ export function generatePaymentReceiptPDF(payment: {
       <!-- PAYMENT DETAILS -->
       <div class="section">
         <div class="section-header">
-          <div class="section-icon blue">💳</div>
+          <div class="section-icon blue">${cardIconSVG}</div>
           <div class="section-title">Transaction Details</div>
           <div class="section-line"></div>
         </div>
@@ -1573,8 +1581,8 @@ export function generatePaymentReceiptPDF(payment: {
       <div class="footer-brand">
         ${logoSVG.replace('width="40"', 'width="28"').replace('height="40"', 'height="28"')}
         <div class="footer-info">
-          <strong>DuesTracker</strong><br>
-          Powered by Dev_Wishot
+          <strong>Payvexo</strong><br>
+          Smart Payment & Dues Platform
         </div>
       </div>
       <div class="footer-right">
@@ -1585,7 +1593,7 @@ export function generatePaymentReceiptPDF(payment: {
   </div>
 
   <div class="print-actions no-print">
-    <button class="btn-print" onclick="window.print()">🖨️ Print / Save as PDF</button>
+    <button class="btn-print" onclick="window.print()">${printIconSVG} Print / Save as PDF</button>
   </div>
 </body>
 </html>`;

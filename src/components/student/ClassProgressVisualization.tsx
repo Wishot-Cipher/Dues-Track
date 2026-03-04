@@ -3,6 +3,7 @@ import { motion } from 'framer-motion'
 import { Users, TrendingUp, Target, Sparkles, Gift } from 'lucide-react'
 import { colors, gradients } from '@/config/colors'
 import { supabase } from '@/config/supabase'
+import { getOrgScope } from '@/utils/orgScope'
 
 interface ClassProgress {
   totalStudents: number
@@ -34,24 +35,32 @@ export default function ClassProgressVisualization() {
     try {
       setLoading(true)
 
+      const scope = getOrgScope()
+
       // Get total students count
-      const { count: totalStudents } = await supabase
-        .from('students')
+      let qStudents = supabase
+        .from('organization_members')
         .select('*', { count: 'exact', head: true })
+      if (scope) qStudents = qStudents.eq('organization_id', scope.orgId)
+      const { count: totalStudents } = await qStudents
 
       // Get all active payment types
-      const { data: paymentTypes } = await supabase
+      let qPaymentTypes = supabase
         .from('payment_types')
         .select('id, amount')
         .eq('is_active', true)
+      if (scope) qPaymentTypes = qPaymentTypes.eq('organization_id', scope.orgId)
+      const { data: paymentTypes } = await qPaymentTypes
 
       const totalExpected = (paymentTypes?.reduce((sum, pt) => sum + Number(pt.amount), 0) || 0) * (totalStudents || 0)
 
       // Get ALL approved payments to count unique students and total collected
-      const { data: allPayments } = await supabase
+      let qAllPayments = supabase
         .from('payments')
-        .select('amount, student_id, status, transaction_ref')
+        .select('amount, member_id, status, transaction_ref')
         .eq('status', 'approved')
+      if (scope) qAllPayments = qAllPayments.eq('organization_id', scope.orgId)
+      const { data: allPayments } = await qAllPayments
 
       // Calculate total collected (excluding waived)
       const totalCollected = allPayments
@@ -67,31 +76,33 @@ export default function ClassProgressVisualization() {
       const effectiveTarget = totalExpected - totalWaived
 
       // Count unique students who have paid from ALL payments (including waived as they count as "paid")
-      const uniqueStudents = new Set(allPayments?.map(p => p.student_id) || [])
+      const uniqueStudents = new Set(allPayments?.map(p => p.member_id) || [])
       const studentsWhoPaid = uniqueStudents.size
 
       const percentagePaid = totalStudents ? (studentsWhoPaid / (totalStudents || 1)) * 100 : 0
 
       // Get recent 5 payers with student names (excluding waived)
-      const { data: recentPayments } = await supabase
+      let qRecent = supabase
         .from('payments')
         .select(`
           amount,
-          student_id,
+          member_id,
           created_at,
           transaction_ref,
-          students!inner(full_name)
+          organization_members!inner(full_name)
         `)
         .eq('status', 'approved')
         .not('transaction_ref', 'like', 'WAIVED-%')
         .order('created_at', { ascending: false })
         .limit(5)
+      if (scope) qRecent = qRecent.eq('organization_id', scope.orgId)
+      const { data: recentPayments } = await qRecent
 
       // Recent payers (last 5)
       const recentPayers = recentPayments?.map(p => {
-        const paymentWithStudent = p as unknown as { students?: { full_name: string }; amount: number; created_at: string }
+        const paymentWithStudent = p as unknown as { organization_members?: { full_name: string }; amount: number; created_at: string }
         return {
-          name: paymentWithStudent.students?.full_name || 'Anonymous',
+          name: paymentWithStudent.organization_members?.full_name || 'Anonymous',
           amount: Number(paymentWithStudent.amount),
           time: new Date(paymentWithStudent.created_at).toLocaleTimeString('en-US', { 
             hour: 'numeric',
@@ -142,14 +153,14 @@ export default function ClassProgressVisualization() {
       <div className="flex items-start justify-between mb-4 sm:mb-6 gap-3">
         <div className="flex-1 min-w-0">
           <h3 className="text-base sm:text-lg font-bold text-white flex items-center gap-2">
-            <Users className="w-4 h-4 sm:w-5 sm:h-5 flex-shrink-0" style={{ color: colors.accentMint }} />
+            <Users className="w-4 h-4 sm:w-5 sm:h-5 shrink-0" style={{ color: colors.accentMint }} />
             <span className="truncate">Class Payment Progress</span>
           </h3>
           <p className="text-xs mt-1" style={{ color: colors.textSecondary }}>
             See how your class is doing
           </p>
         </div>
-        <div className="text-right flex-shrink-0">
+        <div className="text-right shrink-0">
           <div className="text-xl sm:text-2xl font-bold" style={{ 
             background: gradients.primary,
             WebkitBackgroundClip: 'text',
@@ -197,7 +208,7 @@ export default function ClassProgressVisualization() {
       <div className="grid grid-cols-2 gap-2 sm:gap-3 mb-4 sm:mb-6">
         <div className="p-2 sm:p-3 rounded-lg" style={{ background: 'rgba(34, 197, 94, 0.1)', border: '1px solid rgba(34, 197, 94, 0.2)' }}>
           <div className="flex items-center gap-1.5 sm:gap-2 mb-1">
-            <TrendingUp className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-green-500 flex-shrink-0" />
+            <TrendingUp className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-green-500 shrink-0" />
             <span className="text-xs font-medium" style={{ color: colors.textSecondary }}>Collected</span>
           </div>
           <p className="text-sm sm:text-lg font-bold text-white break-all">
@@ -207,7 +218,7 @@ export default function ClassProgressVisualization() {
 
         <div className="p-2 sm:p-3 rounded-lg" style={{ background: `${colors.primary}10`, border: `1px solid ${colors.primary}30` }}>
           <div className="flex items-center gap-1.5 sm:gap-2 mb-1">
-            <Target className="w-3.5 h-3.5 sm:w-4 sm:h-4 flex-shrink-0" style={{ color: colors.primary }} />
+            <Target className="w-3.5 h-3.5 sm:w-4 sm:h-4 shrink-0" style={{ color: colors.primary }} />
             <span className="text-xs font-medium" style={{ color: colors.textSecondary }}>Actual Target</span>
           </div>
           <p className="text-sm sm:text-lg font-bold text-white break-all">
@@ -288,7 +299,7 @@ export default function ClassProgressVisualization() {
                 style={{ background: 'rgba(255,255,255,0.03)' }}
               >
                 <div className="flex items-center gap-2 flex-1 min-w-0">
-                  <div className="w-6 h-6 sm:w-7 sm:h-7 rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0" style={{ 
+                  <div className="w-6 h-6 sm:w-7 sm:h-7 rounded-full flex items-center justify-center text-xs font-bold shrink-0" style={{ 
                     background: gradients.primary,
                     color: 'white'
                   }}>
@@ -296,7 +307,7 @@ export default function ClassProgressVisualization() {
                   </div>
                   <span className="text-xs text-white truncate">{payer.name}</span>
                 </div>
-                <div className="text-right flex-shrink-0">
+                <div className="text-right shrink-0">
                   <p className="text-xs font-bold text-white whitespace-nowrap">₦{payer.amount.toLocaleString()}</p>
                   <p className="text-xs whitespace-nowrap" style={{ color: colors.textSecondary }}>{payer.time}</p>
                 </div>

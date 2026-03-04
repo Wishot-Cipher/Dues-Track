@@ -64,7 +64,7 @@ export default function ResetPasswordPage() {
         return;
       }
 
-      const resp = await fetch('/api/password/reset', {
+      const resp = await fetch('/api/password/reset-password', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ token, newPassword }),
@@ -76,7 +76,7 @@ export default function ResetPasswordPage() {
       }
 
       setSuccess(true);
-      setTimeout(() => navigate('/login'), 2500);
+      setTimeout(() => navigate('/'), 2500);
     } catch (err: unknown) {
       const errorMessage =
         err instanceof Error
@@ -166,13 +166,13 @@ export default function ResetPasswordPage() {
             <CustomButton
               variant="primary"
               fullWidth
-              onClick={() => navigate("/login")}
+              onClick={() => navigate("/")}
             >
               Continue to Login
             </CustomButton>
 
             <p className="text-xs mt-4" style={{ color: colors.textSecondary }}>
-              Redirecting automatically in 3 seconds...
+              Redirecting automatically...
             </p>
           </div>
         </motion.div>

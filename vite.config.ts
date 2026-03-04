@@ -16,9 +16,9 @@ export default defineConfig({
       registerType: 'autoUpdate',
       includeAssets: ['favicon.svg', 'app-icon.png'],
       manifest: {
-        name: 'Class Dues Tracker - By Wishot',
-        short_name: 'DuesTracker',
-        description: 'Modern class payment management system for ECE students. Track dues, manage payments, and stay organized.',
+        name: 'Payvexo - By Wishot',
+        short_name: 'Payvexo',
+        description: 'Modern payment & dues management platform. Track payments, manage dues, and stay organized.',
         theme_color: '#FF6803',
         background_color: '#0F0703',
         display: 'standalone',

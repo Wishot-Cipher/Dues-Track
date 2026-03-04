@@ -3,11 +3,12 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { Bell, X, AlertCircle, DollarSign, CheckCircle, BellOff, Sparkles } from 'lucide-react';
 import { supabase } from '@/config/supabase';
 import notificationService from '@/services/notificationService';
-import { useAuth } from '@/hooks/useAuth';
+import { useAppAuth as useAuth } from '@/hooks/useAppAuth';
 import { formatCurrency } from '@/utils/formatters';
 import { colors, gradients } from '@/config/colors';
-import { useNavigate } from 'react-router-dom';
+import { useAppNav } from '@/hooks/useAppNav';
 import { useSettings } from '@/contexts/SettingsContext';
+import { getOrgScope } from '@/utils/orgScope';
 import { notificationSound } from '@/utils/notificationSound';
 
 interface Notification {
@@ -46,7 +47,7 @@ function NotificationSkeleton() {
 
 export const NotificationCenter = () => {
   const { user } = useAuth();
-  const navigate = useNavigate();
+  const { go: navigate } = useAppNav();
   const { playNotificationSound } = useSettings();
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [unreadCount, setUnreadCount] = useState(0);
@@ -63,12 +64,15 @@ export const NotificationCenter = () => {
       setLoading(true);
       console.log('🔔 Fetching notifications for user:', user.id);
       
-      const { data, error } = await supabase
+      const scope = getOrgScope();
+      let q = supabase
         .from('notifications')
         .select('*')
-        .eq('recipient_id', user.id)
+        .eq('member_id', user.id)
         .order('created_at', { ascending: false })
         .limit(20);
+      if (scope) q = q.eq('organization_id', scope.orgId);
+      const { data, error } = await q;
 
       if (error) {
         console.error('🔔 Error fetching notifications:', error);
@@ -107,7 +111,7 @@ export const NotificationCenter = () => {
             event: 'INSERT',
             schema: 'public',
             table: 'notifications',
-            filter: `recipient_id=eq.${user.id}`,
+            filter: `member_id=eq.${user.id}`,
           },
           (payload) => {
             console.log('🔔 New notification received:', payload.new);
@@ -133,7 +137,7 @@ export const NotificationCenter = () => {
             event: 'UPDATE',
             schema: 'public',
             table: 'notifications',
-            filter: `recipient_id=eq.${user.id}`,
+            filter: `member_id=eq.${user.id}`,
           },
           (payload) => {
             console.log('🔔 Notification updated:', payload.new);

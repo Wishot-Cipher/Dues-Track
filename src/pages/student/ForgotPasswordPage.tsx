@@ -3,102 +3,67 @@ import { Mail, ArrowLeft, CheckCircle, AlertCircle, Send, Info } from "lucide-re
 import { colors, gradients } from "@/config/colors";
 import CustomButton from "@/components/ui/CustomButton";
 import Input from "@/components/ui/Input";
-import { useNavigate, Link } from "react-router-dom";
+import { useNavigate, Link, useParams } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import PageWrapper from "@/components/ui/PageWrapper";
-import { supabase } from "@/config/supabase";
 
 export default function ForgotPasswordPage() {
+  const { orgSlug } = useParams<{ orgSlug: string }>();
   const [email, setEmail] = useState("");
   const [error, setError] = useState("");
   const [success, setSuccess] = useState(false);
   const [loading, setLoading] = useState(false);
-  const [debugInfo, setDebugInfo] = useState("");
   const [showContactAdmin, setShowContactAdmin] = useState(false);
   const navigate = useNavigate();
+
+  const loginPath = orgSlug ? `/${orgSlug}/login` : '/';
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError("");
-    setDebugInfo("");
     setLoading(true);
 
     try {
-      // Validate email format
       if (!email || !email.includes("@")) {
         throw new Error("Please enter a valid email address");
       }
 
       const emailLower = email.trim().toLowerCase();
+
+      // Call server endpoint with orgSlug for scoping
+      const resp = await fetch('/api/password/send-reset-email', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: emailLower, orgSlug }),
+      });
+
+      const body = await resp.json().catch(() => ({}));
       
-      console.log("🔍 Attempting password reset for:", emailLower);
-      setDebugInfo(`Checking email: ${emailLower}...`);
-
-      // Check if email exists in students table
-      const { data: studentData, error: studentError } = await supabase
-        .from("students")
-        .select("id, reg_number, full_name, email")
-        .ilike("email", emailLower)
-        .maybeSingle();
-
-      console.log("📧 Student lookup result:", { studentData, studentError });
-
-      if (studentError) {
-        console.error("❌ Student lookup error:", studentError);
-      }
-
-      if (!studentData) {
-        console.log("⚠️ No student found with email:", emailLower);
-        throw new Error("No account found with this email address. Please contact your class representative to reset your password.");
-      }
-
-      console.log("✅ Found student:", studentData.full_name);
-      setDebugInfo(`Found: ${studentData.full_name}. Sending reset email...`);
-
-      // Try to call server endpoint
-      try {
-        const resp = await fetch('/api/password/send-reset-email', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ email: emailLower }),
-        });
-
-        const body = await resp.json().catch(() => ({}));
-        console.log('📬 Reset email response:', { status: resp.status, body });
-        
-        // Check if email was actually sent
-        if (resp.ok && body.emailSent === true) {
-          setSuccess(true);
-          return;
-        }
-        
-        // Email not sent - show appropriate message
-        if (body.reason === 'RESEND_API_KEY not set') {
-          // Email service not configured
-          setShowContactAdmin(true);
-          setDebugInfo(`Email service is not configured. Please contact your class admin to reset your password.`);
-          setError("Email service is currently unavailable. Please contact your class admin for password reset.");
-        } else if (body.emailSent === false) {
-          // Email sending failed
-          setShowContactAdmin(true);
-          setDebugInfo(`Could not send email. Please contact your class admin.`);
-          setError(body.message || "Failed to send reset email. Please contact your class admin.");
-        } else {
-          // Unknown response, treat as failure
-          setShowContactAdmin(true);
-          setError("Could not send reset email. Please contact your class admin.");
-        }
+      // Check if email was actually sent
+      if (resp.ok && body.emailSent === true) {
+        setSuccess(true);
         return;
-        
-      } catch (fetchErr) {
-        console.warn('Email sending failed:', fetchErr);
+      }
+      
+      // Success but no account found — still show success for security
+      if (resp.ok && body.success === true) {
+        setSuccess(true);
+        return;
+      }
+      
+      // Email not sent
+      if (body.reason === 'RESEND_API_KEY not set') {
         setShowContactAdmin(true);
-        setError("Network error. Please check your connection and try again.");
-        return;
+        setError("Email service is currently unavailable. Please contact your admin for password reset.");
+      } else if (body.emailSent === false) {
+        setShowContactAdmin(true);
+        setError(body.message || "Failed to send reset email. Please contact your admin.");
+      } else {
+        setShowContactAdmin(true);
+        setError("Could not send reset email. Please contact your admin.");
       }
       
     } catch (err: unknown) {
-      console.error("❌ Error in password reset:", err);
       const errorMessage =
         err instanceof Error
           ? err.message
@@ -191,7 +156,7 @@ export default function ForgotPasswordPage() {
             <CustomButton
               variant="primary"
               fullWidth
-              onClick={() => navigate("/login")}
+              onClick={() => navigate(loginPath)}
               className="mb-4"
             >
               Back to Login
@@ -313,7 +278,7 @@ export default function ForgotPasswordPage() {
             <CustomButton
               variant="primary"
               fullWidth
-              onClick={() => navigate("/login")}
+              onClick={() => navigate(loginPath)}
               className="mb-4"
             >
               Back to Login
@@ -324,7 +289,6 @@ export default function ForgotPasswordPage() {
               <button
                 onClick={() => {
                   setShowContactAdmin(false);
-                  setDebugInfo("");
                 }}
                 className="underline hover:no-underline"
                 style={{ color: colors.primary }}
@@ -459,7 +423,7 @@ export default function ForgotPasswordPage() {
           >
             {/* Back Button */}
             <Link
-              to="/login"
+              to={loginPath}
               className="inline-flex items-center gap-2 text-sm mb-6 hover:gap-3 transition-all"
               style={{ color: colors.textSecondary }}
             >
@@ -482,27 +446,9 @@ export default function ForgotPasswordPage() {
             >
               <Info size={18} style={{ color: colors.accentCyan, marginTop: 2 }} />
               <p className="text-xs leading-relaxed" style={{ color: colors.accentCyan }}>
-                Enter the email address you used when registering. Check browser console (F12) for detailed debug info.
+                Enter the email address you used when registering. We'll send you a reset link.
               </p>
             </motion.div>
-
-            {/* Debug Info */}
-            {debugInfo && (
-              <motion.div
-                className="flex items-start gap-3 p-4 rounded-xl mb-6"
-                style={{
-                  background: `${colors.accentMint}10`,
-                  border: `1px solid ${colors.accentMint}30`,
-                }}
-                initial={{ opacity: 0, scale: 0.95 }}
-                animate={{ opacity: 1, scale: 1 }}
-              >
-                <Info size={20} style={{ color: colors.accentMint, marginTop: 2 }} />
-                <p className="text-sm leading-relaxed" style={{ color: colors.accentMint }}>
-                  {debugInfo}
-                </p>
-              </motion.div>
-            )}
 
             {/* Error Message */}
             <AnimatePresence>
@@ -590,7 +536,7 @@ export default function ForgotPasswordPage() {
               <p className="text-xs" style={{ color: colors.textSecondary }}>
                 Remember your password?{" "}
                 <Link
-                  to="/login"
+                  to={loginPath}
                   className="underline hover:no-underline"
                   style={{ color: colors.primary }}
                 >

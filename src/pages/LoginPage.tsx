@@ -89,7 +89,7 @@ export default function LoginPage() {
               animate={{ opacity: 1 }}
               transition={{ delay: 0.5 }}
             >
-              Track your class dues, view payment history, and stay updated with class finances.
+              Track your payments, view history, and stay updated with your organization's finances.
             </motion.p>
           </div>
 
@@ -134,7 +134,7 @@ export default function LoginPage() {
           >
             <Logo size="xl" showText={true} variant="light" className="flex-col items-center text-center" />
             <p className="text-sm mt-2" style={{ color: colors.textSecondary }}>
-              ECE Class Dues Management
+              Payment Management
             </p>
           </motion.div>
 

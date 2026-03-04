@@ -1,4 +1,4 @@
-import { motion } from 'framer-motion'
+﻿import { motion } from 'framer-motion'
 import GlassCard from '@/components/ui/GlassCard'
 import { colors } from '@/config/colors'
 import RecordExpense from '@/components/admin/RecordExpense'
@@ -6,12 +6,12 @@ import ExpenseList from '@/components/admin/ExpenseList'
 import ExpenseApprovalQueue from '@/components/admin/ExpenseApprovalQueue'
 import Footer from '@/components/Footer'
 import { ArrowLeft, Receipt, Sparkles, TrendingDown, Wallet } from 'lucide-react'
-import { useAuth } from '@/hooks/useAuth'
-import { useNavigate } from 'react-router-dom'
+import { useAuth } from '@/hooks/useAppAuth'
+import { useAppNav } from '@/hooks/useAppNav';
 
 export default function ExpensesPage() {
   const { hasPermission } = useAuth()
-  const navigate = useNavigate()
+  const { go: navigate } = useAppNav();
   // no-op here; ExpenseList will handle payment-type filtering
 
   return (
@@ -37,17 +37,7 @@ export default function ExpensesPage() {
           }}
         />
 
-        <div className="hidden lg:block absolute right-0 top-1/2 -translate-y-1/2 w-[600px] h-[600px] opacity-[0.08] pointer-events-none">
-          <img 
-            src="/Ece picture.jpg" 
-            alt="ECE Background"
-            className="w-full h-full object-contain"
-            style={{
-              filter: 'grayscale(0.5) brightness(0.8)',
-              mixBlendMode: 'soft-light',
-            }}
-          />
-        </div>
+
       </div>
       <div className="absolute inset-0 opacity-20 pointer-events-none" style={{
         backgroundImage: `linear-gradient(${colors.primary}40 1px, transparent 1px), linear-gradient(90deg, ${colors.primary}40 1px, transparent 1px)`,
@@ -111,26 +101,15 @@ export default function ExpensesPage() {
                     <Wallet className="w-3 h-3" />
                     EXPENSE TRACKING
                   </motion.div>
-                  <h1 className="text-2xl sm:text-3xl font-bold text-white">Class Expenses</h1>
+                  <h1 className="text-2xl sm:text-3xl font-bold text-white">Expenses</h1>
                   <p className="text-sm" style={{ color: colors.textSecondary }}>
-                    Record, track, and review class expenses
+                    Record, track, and manage your organization&apos;s expenses
                   </p>
                 </div>
               </div>
 
               {/* Quick Info Cards */}
-              <div className="grid grid-cols-2 gap-3 mt-6">
-                <div className="p-3 rounded-xl text-center" 
-                     style={{ background: 'rgba(255, 255, 255, 0.03)', border: '1px solid rgba(255, 255, 255, 0.05)' }}>
-                  <Receipt className="w-5 h-5 mx-auto mb-1" style={{ color: colors.primary }} />
-                  <p className="text-xs" style={{ color: colors.textSecondary }}>Record expenses below</p>
-                </div>
-                <div className="p-3 rounded-xl text-center" 
-                     style={{ background: `${colors.statusPaid}08`, border: `1px solid ${colors.statusPaid}15` }}>
-                  <TrendingDown className="w-5 h-5 mx-auto mb-1" style={{ color: colors.statusPaid }} />
-                  <p className="text-xs" style={{ color: colors.textSecondary }}>Track all spending</p>
-                </div>
-              </div>
+
             </div>
           </GlassCard>
         </motion.div>
