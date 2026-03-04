@@ -35,6 +35,7 @@ import GlassCard from '@/components/ui/GlassCard';
 import Input from '@/components/ui/Input';
 import CustomButton from '@/components/ui/CustomButton';
 import { formatCurrency, formatDate } from '@/utils/formatters';
+import { PrivacyMask } from '@/components/ui/PrivacyMask';
 import paymentService from '@/services/paymentService';
 import PageWrapper from '@/components/ui/PageWrapper';
 import { ProfileSkeleton } from '@/components/ui/Skeleton';
@@ -566,7 +567,7 @@ export default function ProfilePage() {
                       Total Paid
                     </p>
                     <p className="text-lg font-bold text-white">
-                      {formatCurrency(paymentSummary.totalPaid)}
+                      <PrivacyMask>{formatCurrency(paymentSummary.totalPaid)}</PrivacyMask>
                     </p>
                     <p className="text-[10px] mt-1" style={{ color: colors.textSecondary }}>
                       {paymentSummary.completedPayments} payment{paymentSummary.completedPayments !== 1 ? 's' : ''}
@@ -577,7 +578,7 @@ export default function ProfilePage() {
                       Outstanding
                     </p>
                     <p className="text-lg font-bold" style={{ color: colors.warning }}>
-                      {formatCurrency(paymentSummary.totalOutstanding)}
+                      <PrivacyMask>{formatCurrency(paymentSummary.totalOutstanding)}</PrivacyMask>
                     </p>
                     <p className="text-[10px] mt-1" style={{ color: colors.textSecondary }}>
                       {paymentSummary.pendingPayments} pending
@@ -939,7 +940,7 @@ export default function ProfilePage() {
                       </p>
                     </div>
                     <p className="text-xl sm:text-2xl font-bold text-white mb-1">
-                      {formatCurrency(paymentSummary.totalPaid)}
+                      <PrivacyMask>{formatCurrency(paymentSummary.totalPaid)}</PrivacyMask>
                     </p>
                     <p className="text-xs" style={{ color: colors.textSecondary }}>
                       {paymentSummary.completedPayments} completed payment{paymentSummary.completedPayments !== 1 ? 's' : ''}
@@ -956,7 +957,7 @@ export default function ProfilePage() {
                       </p>
                     </div>
                     <p className="text-xl sm:text-2xl font-bold" style={{ color: colors.warning }}>
-                      {formatCurrency(paymentSummary.totalOutstanding)}
+                      <PrivacyMask>{formatCurrency(paymentSummary.totalOutstanding)}</PrivacyMask>
                     </p>
                     <p className="text-xs" style={{ color: colors.textSecondary }}>
                       {paymentSummary.pendingPayments} pending payment{paymentSummary.pendingPayments !== 1 ? 's' : ''}

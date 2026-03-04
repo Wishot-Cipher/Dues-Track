@@ -29,6 +29,7 @@ import { formatCurrency, formatDate } from '@/utils/formatters';
 import paymentService from '@/services/paymentService';
 import type { Payment, PaymentType, PaymentStats } from '@/types';
 import { StatCard } from '@/components/dashboard/StatCard';
+import { PrivacyMask, PrivacyToggle } from '@/components/ui/PrivacyMask';
 import { NotificationCenter } from '@/components/NotificationCenter';
 import PushNotificationPrompt from '@/components/PushNotificationPrompt';
 import Footer from '@/components/Footer';
@@ -616,14 +617,17 @@ background:linear-gradient(135deg,#FF6803,#FFAC5F);color:white;font-size:14px}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.2 }}
         >
-          <h2 className="text-2xl sm:text-3xl lg:text-4xl font-bold text-white mb-2">
-            {(() => {
-              const hour = new Date().getHours();
-              if (hour < 12) return 'Good morning';
-              if (hour < 17) return 'Good afternoon';
-              return 'Good evening';
-            })()}, {user?.full_name?.split(' ')[0]}! 👋
-          </h2>
+          <div className="flex items-center justify-between gap-3">
+            <h2 className="text-2xl sm:text-3xl lg:text-4xl font-bold text-white mb-2">
+              {(() => {
+                const hour = new Date().getHours();
+                if (hour < 12) return 'Good morning';
+                if (hour < 17) return 'Good afternoon';
+                return 'Good evening';
+              })()}, {user?.full_name?.split(' ')[0]}! 👋
+            </h2>
+            <PrivacyToggle />
+          </div>
           <p className="text-sm sm:text-base" style={{ color: colors.textSecondary }}>
             Here's your payment overview and recent activity
           </p>
@@ -648,19 +652,21 @@ background:linear-gradient(135deg,#FF6803,#FFAC5F);color:white;font-size:14px}
             <>
               <StatCard
                 title="Total Paid"
-                value={settings.appearance.showBalance ? formatCurrency(stats.totalPaid) : '••••••'}
+                value={formatCurrency(stats.totalPaid)}
                 icon={DollarSign}
                 iconColor={colors.statusPaid}
                 delay={0.3}
                 isCurrency
+                masked={!settings.appearance.showBalance}
               />
               <StatCard
                 title="Outstanding"
-                value={settings.appearance.showBalance ? formatCurrency(stats.totalDue) : '••••••'}
+                value={formatCurrency(stats.totalDue)}
                 icon={AlertCircle}
                 iconColor={colors.warning}
                 delay={0.4}
                 isCurrency
+                masked={!settings.appearance.showBalance}
               />
               <StatCard
                 title="Pending Review"
@@ -794,11 +800,11 @@ background:linear-gradient(135deg,#FF6803,#FFAC5F);color:white;font-size:14px}
                                 <div className="flex items-center justify-between mb-3">
                                   <div>
                                     <p className="text-[10px] uppercase tracking-wider" style={{ color: colors.textSecondary }}>Amount Due</p>
-                                    <span className="text-xl font-bold text-white">{formatCurrency(item.totalDue ?? paymentType.amount)}</span>
+                                    <PrivacyMask><span className="text-xl font-bold text-white">{formatCurrency(item.totalDue ?? paymentType.amount)}</span></PrivacyMask>
                                     {(item.accumulatedLateFees ?? 0) > 0 && (
-                                      <div className="text-xs mt-1" style={{ color: colors.textSecondary }}>
+                                      <PrivacyMask><div className="text-xs mt-1" style={{ color: colors.textSecondary }}>
                                         Includes {formatCurrency(item.accumulatedLateFees ?? 0)} late fees ({item.daysOverdue} days)
-                                      </div>
+                                      </div></PrivacyMask>
                                     )}
                                   </div>
                                   <div 
@@ -917,7 +923,7 @@ background:linear-gradient(135deg,#FF6803,#FFAC5F);color:white;font-size:14px}
                                 <div className="flex items-center justify-between mb-3">
                                   <div>
                                     <p className="text-[10px] uppercase tracking-wider" style={{ color: colors.textSecondary }}>Amount</p>
-                                    <span className="text-xl font-bold text-white">{formatCurrency(paymentType.amount)}</span>
+                                    <PrivacyMask><span className="text-xl font-bold text-white">{formatCurrency(paymentType.amount)}</span></PrivacyMask>
                                   </div>
                                   <div 
                                     className="px-3 py-1.5 rounded-full text-xs font-bold flex items-center gap-1.5"
@@ -1019,7 +1025,7 @@ background:linear-gradient(135deg,#FF6803,#FFAC5F);color:white;font-size:14px}
                                     <div>
                                       <p className="font-medium text-white text-sm">{paymentType.title}</p>
                                       <p className="text-xs" style={{ color: colors.textSecondary }}>
-                                        {formatCurrency(paymentType.amount)}
+                                        <PrivacyMask>{formatCurrency(paymentType.amount)}</PrivacyMask>
                                       </p>
                                     </div>
                                   </div>
@@ -1247,9 +1253,9 @@ background:linear-gradient(135deg,#FF6803,#FFAC5F);color:white;font-size:14px}
                               <div className="mt-3">
                                 <div className="flex items-center justify-between text-xs mb-1.5">
                                   <span style={{ color: colors.textSecondary }}>Progress</span>
-                                  <span className="font-semibold" style={{ color: colors.warning }}>
+                                  <PrivacyMask><span className="font-semibold" style={{ color: colors.warning }}>
                                     {formatCurrency(amountPaid)} / {formatCurrency(item.totalDue ?? paymentType.amount)}
-                                  </span>
+                                  </span></PrivacyMask>
                                 </div>
                                 <div 
                                   className="h-2.5 rounded-full overflow-hidden"
@@ -1292,13 +1298,13 @@ background:linear-gradient(135deg,#FF6803,#FFAC5F);color:white;font-size:14px}
                                     <p className="text-[10px] uppercase tracking-wider" style={{ color: colors.textSecondary }}>
                                       {status === 'paid' ? 'Amount Paid' : 'Total Amount'}
                                     </p>
-                                    <span className="text-lg font-bold text-white">
+                                    <PrivacyMask><span className="text-lg font-bold text-white">
                                       {formatCurrency(status === 'paid' ? amountPaid || paymentType.amount : (item.totalDue ?? paymentType.amount))}
-                                    </span>
+                                    </span></PrivacyMask>
                                     {status !== 'paid' && (item.accumulatedLateFees ?? 0) > 0 && (
-                                      <p className="text-xs mt-0.5" style={{ color: colors.statusUnpaid }}>
+                                      <PrivacyMask><p className="text-xs mt-0.5" style={{ color: colors.statusUnpaid }}>
                                         +{formatCurrency(item.accumulatedLateFees ?? 0)} late fee
-                                      </p>
+                                      </p></PrivacyMask>
                                     )}
                                   </>
                                 )}
@@ -1413,9 +1419,9 @@ background:linear-gradient(135deg,#FF6803,#FFAC5F);color:white;font-size:14px}
                       </div>
                       <div>
                         <h3 className="text-sm font-semibold text-white">Payment Progress</h3>
-                        <p className="text-xs" style={{ color: colors.textSecondary }}>
+                        <PrivacyMask><p className="text-xs" style={{ color: colors.textSecondary }}>
                           {formatCurrency(stats.totalPaid)} of {formatCurrency(stats.totalDue)}
-                        </p>
+                        </p></PrivacyMask>
                       </div>
                     </div>
                     <span className="text-lg font-bold" style={{ color: colors.primary }}>
@@ -1428,7 +1434,7 @@ background:linear-gradient(135deg,#FF6803,#FFAC5F);color:white;font-size:14px}
                     animated
                   />
                   <div className="flex items-center justify-between mt-2">
-                    <span className="text-[11px]" style={{ color: colors.textSecondary }}>Outstanding: {formatCurrency(Math.max(0, stats.totalDue - stats.totalPaid))}</span>
+                    <PrivacyMask><span className="text-[11px]" style={{ color: colors.textSecondary }}>Outstanding: {formatCurrency(Math.max(0, stats.totalDue - stats.totalPaid))}</span></PrivacyMask>
                     <span className="text-[11px] font-medium" style={{ color: stats.totalPaid >= stats.totalDue ? colors.success : colors.warning }}>
                       {stats.totalPaid >= stats.totalDue ? 'Fully Paid!' : 'In Progress'}
                     </span>

@@ -24,6 +24,7 @@ import { colors, gradients } from "@/config/colors";
 import GlassCard from "@/components/ui/GlassCard";
 import LoadingSpinner from "@/components/ui/LoadingSpinner";
 import { formatCurrency, formatDate } from "@/utils/formatters";
+import { PrivacyMask } from '@/components/ui/PrivacyMask';
 import PaymentMethodSelector from "@/components/student/PaymentMethodSelector";
 import QRCodeGenerator from "@/components/student/QRCodeGenerator";
 import PayForOthersModal from "@/components/student/PayForOthersModal";
@@ -594,7 +595,7 @@ export default function PaymentDetailPage() {
                       >
                         <Banknote className="w-4 h-4" style={{ color: colors.primary }} />
                         <span className="text-lg sm:text-xl font-bold" style={{ color: colors.primary }}>
-                          {formatCurrency(paymentOption === 'full' ? currentUserOutstanding : amount)}
+                          <PrivacyMask>{formatCurrency(paymentOption === 'full' ? currentUserOutstanding : amount)}</PrivacyMask>
                         </span>
                       </div>
                       <div 
@@ -658,7 +659,7 @@ export default function PaymentDetailPage() {
                         {currentUserAccumulatedLate > 0 ? 'BASE DUE' : 'TOTAL DUE'}
                       </p>
                       <p className="text-sm sm:text-xl font-bold text-white truncate">
-                        {formatCurrency(paymentTypeAmount)}
+                        <PrivacyMask>{formatCurrency(paymentTypeAmount)}</PrivacyMask>
                       </p>
                     </motion.div>
                     <motion.div
@@ -674,7 +675,7 @@ export default function PaymentDetailPage() {
                         PAID
                       </p>
                       <p className="text-sm sm:text-xl font-bold truncate" style={{ color: colors.statusPaid }}>
-                        {formatCurrency(totalPaid)}
+                        <PrivacyMask>{formatCurrency(totalPaid)}</PrivacyMask>
                       </p>
                     </motion.div>
                     <motion.div
@@ -690,7 +691,7 @@ export default function PaymentDetailPage() {
                         REMAINING
                       </p>
                       <p className="text-sm sm:text-xl font-bold truncate" style={{ color: currentUserOutstanding <= 0 ? colors.statusPaid : colors.warning }}>
-                        {formatCurrency(Math.max(0, currentUserOutstanding))}
+                        <PrivacyMask>{formatCurrency(Math.max(0, currentUserOutstanding))}</PrivacyMask>
                       </p>
                     </motion.div>
                   </div>
@@ -713,21 +714,21 @@ export default function PaymentDetailPage() {
                       <div className="grid grid-cols-2 gap-3 text-sm">
                         <div>
                           <p className="text-xs" style={{ color: colors.textSecondary }}>Base Amount</p>
-                          <p className="font-semibold text-white">{formatCurrency(paymentTypeAmount)}</p>
+                          <p className="font-semibold text-white"><PrivacyMask>{formatCurrency(paymentTypeAmount)}</PrivacyMask></p>
                         </div>
                         <div>
                           <p className="text-xs" style={{ color: colors.textSecondary }}>Late Fees</p>
-                          <p className="font-semibold" style={{ color: colors.statusUnpaid }}>+{formatCurrency(currentUserAccumulatedLate)}</p>
+                          <p className="font-semibold" style={{ color: colors.statusUnpaid }}>+<PrivacyMask>{formatCurrency(currentUserAccumulatedLate)}</PrivacyMask></p>
                         </div>
                         <div className="col-span-2 pt-2 mt-2" style={{ borderTop: '1px solid rgba(255,255,255,0.1)' }}>
                           <div className="flex justify-between items-center">
                             <p className="text-xs" style={{ color: colors.textSecondary }}>Total Due (incl. late fees)</p>
-                            <p className="font-bold text-white">{formatCurrency(paymentTypeAmount + currentUserAccumulatedLate)}</p>
+                            <p className="font-bold text-white"><PrivacyMask>{formatCurrency(paymentTypeAmount + currentUserAccumulatedLate)}</PrivacyMask></p>
                           </div>
                         </div>
                       </div>
                       <p className="text-xs mt-3" style={{ color: colors.textSecondary }}>
-                        Late fee: {formatCurrency(perDayLate)}/day × {Math.floor((Date.now() - (paymentDeadline?.getTime() || 0)) / (1000 * 60 * 60 * 24))} days overdue
+                        Late fee: <PrivacyMask>{formatCurrency(perDayLate)}</PrivacyMask>/day × {Math.floor((Date.now() - (paymentDeadline?.getTime() || 0)) / (1000 * 60 * 60 * 24))} days overdue
                       </p>
                     </motion.div>
                   )}
@@ -834,7 +835,7 @@ export default function PaymentDetailPage() {
                                 textDecoration: paymentIsWaived ? 'line-through' : 'none'
                               }}
                             >
-                              {formatCurrency(payment.amount)}
+                              <PrivacyMask>{formatCurrency(payment.amount)}</PrivacyMask>
                             </span>
                             <span
                               className="px-2 py-1 rounded-full text-xs font-medium"

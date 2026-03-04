@@ -9,6 +9,7 @@ import { useToast } from "@/hooks/useToast";
 import { colors, gradients } from "@/config/colors";
 import GlassCard from "@/components/ui/GlassCard";
 import { formatCurrency, formatDate } from "@/utils/formatters";
+import { PrivacyMask } from '@/components/ui/PrivacyMask';
 import AnimatedCounter from "@/components/ui/AnimatedCounter";
 // AdminNotificationCenter removed - using push notifications instead
 import {
@@ -634,7 +635,7 @@ export default function AdminReviewPage() {
                         </td>
                         <td className="py-4 px-4">
                           <p className="text-white font-semibold text-lg">
-                            {formatCurrency(payment.amount)}
+                            <PrivacyMask>{formatCurrency(payment.amount)}</PrivacyMask>
                           </p>
                         </td>
                         <td className="py-4 px-4">
@@ -793,7 +794,7 @@ export default function AdminReviewPage() {
                             Amount
                           </p>
                           <p className="text-white font-semibold text-sm">
-                            {formatCurrency(payment.amount)}
+                            <PrivacyMask>{formatCurrency(payment.amount)}</PrivacyMask>
                           </p>
                         </div>
                         <div
@@ -1108,7 +1109,7 @@ export default function AdminReviewPage() {
                            style={{ background: `linear-gradient(135deg, ${colors.primary}20, ${colors.primary}05)`, border: `1px solid ${colors.primary}30` }}>
                         <p className="text-xs font-medium mb-1" style={{ color: colors.textSecondary }}>Amount</p>
                         <p className="text-xl sm:text-2xl font-bold" style={{ color: colors.primary }}>
-                          {formatCurrency(selectedPayment.amount)}
+                          <PrivacyMask>{formatCurrency(selectedPayment.amount)}</PrivacyMask>
                         </p>
                       </div>
                       <div className="p-4 rounded-xl text-center" 
@@ -1301,7 +1302,7 @@ export default function AdminReviewPage() {
                     Amount
                   </p>
                   <p className="text-white font-semibold text-lg mb-3">
-                    {formatCurrency(selectedPayment.amount)}
+                    <PrivacyMask>{formatCurrency(selectedPayment.amount)}</PrivacyMask>
                   </p>
 
                   <p

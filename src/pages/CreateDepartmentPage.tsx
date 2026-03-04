@@ -33,6 +33,7 @@ import { APP_NAME } from '@/config/constants';
 import { organizationService } from '@/services/organizationService';
 import { useMultiTenantAuth } from '@/hooks/useMultiTenantAuth';
 import PageWrapper from '@/components/ui/PageWrapper';
+import ProfessionalDropdown from '@/components/ui/ProfessionalDropdown';
 import type { Organization, OrganizationGroup } from '@/types/multiTenant';
 
 const ORG_TYPE_ICONS: Record<string, React.ReactNode> = {
@@ -428,16 +429,19 @@ export default function CreateDepartmentPage() {
                       <label className="block text-xs font-medium mb-1.5" style={{ color: colors.textSecondary }}>
                         Parent {getGroupLabel()} (optional)
                       </label>
-                      <select
+                      <ProfessionalDropdown
                         value={form.parent_group_id}
-                        onChange={e => updateForm({ parent_group_id: e.target.value })}
-                        className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-2.5 text-white text-sm outline-none focus:border-[#FF6803] transition-colors appearance-none"
-                      >
-                        <option value="">None (top-level {getGroupLabel().toLowerCase()})</option>
-                        {existingGroups.map(g => (
-                          <option key={g.id} value={g.id}>{g.name} ({g.short_name})</option>
-                        ))}
-                      </select>
+                        onChange={(val) => updateForm({ parent_group_id: val as string })}
+                        placeholder={`None (top-level ${getGroupLabel().toLowerCase()})`}
+                        options={[
+                          { value: '', label: `None (top-level ${getGroupLabel().toLowerCase()})` },
+                          ...existingGroups.map(g => ({
+                            value: g.id,
+                            label: `${g.name} (${g.short_name})`,
+                          })),
+                        ]}
+                        clearable
+                      />
                     </div>
                   )}
                 </motion.div>

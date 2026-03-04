@@ -18,6 +18,7 @@ import { supabase } from '@/config/supabase';
 import notificationService from '@/services/notificationService';
 import { useAppAuth as useAuth } from '@/hooks/useAppAuth';
 import { formatCurrency } from '@/utils/formatters';
+import { PrivacyMask } from '@/components/ui/PrivacyMask';
 import { colors, gradients } from '@/config/colors';
 import { useAppNav } from '@/hooks/useAppNav';
 import { useSettings } from '@/contexts/SettingsContext';
@@ -389,7 +390,7 @@ export const AdminNotificationCenter = () => {
                           Today
                         </span>
                       </div>
-                      <p className="text-sm font-bold text-white truncate">{formatCurrency(stats.todayAmount)}</p>
+                      <PrivacyMask><p className="text-sm font-bold text-white truncate">{formatCurrency(stats.todayAmount)}</p></PrivacyMask>
                     </div>
 
                     {/* Week */}
@@ -403,7 +404,7 @@ export const AdminNotificationCenter = () => {
                           Week
                         </span>
                       </div>
-                      <p className="text-sm font-bold text-white truncate">{formatCurrency(stats.weekAmount)}</p>
+                      <PrivacyMask><p className="text-sm font-bold text-white truncate">{formatCurrency(stats.weekAmount)}</p></PrivacyMask>
                     </div>
                   </div>
                 </div>
@@ -494,7 +495,7 @@ export const AdminNotificationCenter = () => {
                                 </div>
                                 <div className="text-right shrink-0">
                                   <p className="text-sm font-bold" style={{ color: colors.accentMint }}>
-                                    {formatCurrency(payment.amount)}
+                                    <PrivacyMask>{formatCurrency(payment.amount)}</PrivacyMask>
                                   </p>
                                   <p className="text-[10px]" style={{ color: colors.textSecondary }}>
                                     {formatTimeAgo(payment.created_at)}

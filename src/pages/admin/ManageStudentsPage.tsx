@@ -37,6 +37,8 @@ import {
   Plus,
   Loader2,
   GraduationCap,
+  Eye,
+  EyeOff,
 } from 'lucide-react';
 import Footer from '@/components/Footer';
 import { useAuth } from '@/hooks/useAppAuth';
@@ -84,6 +86,22 @@ export default function ManageStudentsPage() {
   const [editLoading, setEditLoading] = useState(false);
   const [showExportMenu, setShowExportMenu] = useState(false);
   const [exporting, setExporting] = useState(false);
+  
+  // Export field selection modal
+  const [showExportFieldsModal, setShowExportFieldsModal] = useState(false);
+  const [exportFormat, setExportFormat] = useState<'pdf' | 'csv'>('pdf');
+  const [exportFields, setExportFields] = useState({
+    name: true,
+    regNumber: true,
+    email: false,
+    phone: false,
+    level: true,
+    department: true,
+    section: false,
+    status: true,
+    roles: false,
+    paid: false,
+  });
   
   // Pagination state
   const [currentPage, setCurrentPage] = useState(1);
@@ -845,8 +863,19 @@ export default function ManageStudentsPage() {
       lines.push('');
       lines.push('');
       
-      // Column headers
-      lines.push('S/N,Full Name,Registration Number,Email,Phone,Level,Department,Section,Status,Roles,Created Date');
+      // Build dynamic column headers based on selected fields
+      const headerCols: string[] = ['S/N'];
+      if (exportFields.name) headerCols.push('Full Name');
+      if (exportFields.regNumber) headerCols.push('Registration Number');
+      if (exportFields.email) headerCols.push('Email');
+      if (exportFields.phone) headerCols.push('Phone');
+      if (exportFields.level) headerCols.push('Level');
+      if (exportFields.department) headerCols.push('Department');
+      if (exportFields.section) headerCols.push('Section');
+      if (exportFields.status) headerCols.push('Status');
+      if (exportFields.roles) headerCols.push('Roles');
+      if (exportFields.paid) headerCols.push('Created Date');
+      lines.push(headerCols.join(','));
       
       // Data rows
       dataToExport.forEach((student, index) => {
@@ -856,19 +885,18 @@ export default function ManageStudentsPage() {
           student.is_class_rep ? 'Class Rep' : ''
         ].filter(Boolean).join(' | ') || 'Student';
         
-        lines.push([
-          escapeCSV(index + 1),
-          escapeCSV(student.full_name),
-          escapeCSV(student.reg_number),
-          escapeCSV(student.email || 'N/A'),
-          escapeCSV(student.phone || 'N/A'),
-          escapeCSV(student.level || 'N/A'),
-          escapeCSV(student.department || 'N/A'),
-          escapeCSV(student.section || 'N/A'),
-          escapeCSV(student.is_active ? 'Active' : 'Inactive'),
-          escapeCSV(roles),
-          escapeCSV(new Date(student.created_at).toLocaleDateString()),
-        ].join(','));
+        const rowCols: string[] = [escapeCSV(index + 1)];
+        if (exportFields.name) rowCols.push(escapeCSV(student.full_name));
+        if (exportFields.regNumber) rowCols.push(escapeCSV(student.reg_number));
+        if (exportFields.email) rowCols.push(escapeCSV(student.email || 'N/A'));
+        if (exportFields.phone) rowCols.push(escapeCSV(student.phone || 'N/A'));
+        if (exportFields.level) rowCols.push(escapeCSV(student.level || 'N/A'));
+        if (exportFields.department) rowCols.push(escapeCSV(student.department || 'N/A'));
+        if (exportFields.section) rowCols.push(escapeCSV(student.section || 'N/A'));
+        if (exportFields.status) rowCols.push(escapeCSV(student.is_active ? 'Active' : 'Inactive'));
+        if (exportFields.roles) rowCols.push(escapeCSV(roles));
+        if (exportFields.paid) rowCols.push(escapeCSV(new Date(student.created_at).toLocaleDateString()));
+        lines.push(rowCols.join(','));
       });
 
       // Create and download file
@@ -901,6 +929,7 @@ export default function ManageStudentsPage() {
       exportStudentsToPDF(dataToExport, {
         status: statusFilter !== 'all' ? statusFilter : undefined,
         role: roleFilter !== 'all' ? roleFilter : undefined,
+        fields: exportFields,
       });
       success('PDF exported successfully!');
       setShowExportMenu(false);
@@ -1802,7 +1831,8 @@ export default function ManageStudentsPage() {
                           whileHover={{ x: 4 }}
                           onClick={() => {
                             setShowExportMenu(false);
-                            handleExportPDF();
+                            setExportFormat('pdf');
+                            setShowExportFieldsModal(true);
                           }}
                           className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg transition-all hover:bg-white/5"
                         >
@@ -1823,7 +1853,8 @@ export default function ManageStudentsPage() {
                           whileHover={{ x: 4 }}
                           onClick={() => {
                             setShowExportMenu(false);
-                            handleExportCSV();
+                            setExportFormat('csv');
+                            setShowExportFieldsModal(true);
                           }}
                           className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg transition-all hover:bg-white/5"
                         >
@@ -2888,6 +2919,167 @@ export default function ManageStudentsPage() {
                     </div>
                   </div>
                 </div>
+              </GlassCard>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Export Fields Selection Modal */}
+      <AnimatePresence>
+        {showExportFieldsModal && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50 p-4"
+            onClick={() => setShowExportFieldsModal(false)}
+          >
+            <motion.div
+              initial={{ scale: 0.9, opacity: 0, y: 20 }}
+              animate={{ scale: 1, opacity: 1, y: 0 }}
+              exit={{ scale: 0.9, opacity: 0, y: 20 }}
+              onClick={(e) => e.stopPropagation()}
+              className="max-w-md w-full"
+            >
+              <GlassCard className="relative overflow-hidden">
+                <div className="absolute top-0 left-0 w-full h-1"
+                  style={{ background: `linear-gradient(90deg, ${colors.primary}, ${colors.accentMint})` }} />
+                
+                <div className="flex items-center justify-between mb-5">
+                  <div className="flex items-center gap-3">
+                    <div className="w-11 h-11 rounded-xl flex items-center justify-center"
+                      style={{
+                        background: `linear-gradient(135deg, ${colors.primary}30, ${colors.primary}10)`,
+                        border: `1px solid ${colors.primary}40`,
+                      }}>
+                      <Eye className="w-5 h-5" style={{ color: colors.primary }} />
+                    </div>
+                    <div>
+                      <h3 className="text-lg font-bold text-white">Choose Fields to Export</h3>
+                      <p className="text-xs" style={{ color: colors.textSecondary }}>
+                        Select what data to include for privacy
+                      </p>
+                    </div>
+                  </div>
+                  <motion.button
+                    whileHover={{ scale: 1.1, rotate: 90 }}
+                    whileTap={{ scale: 0.9 }}
+                    onClick={() => setShowExportFieldsModal(false)}
+                    className="w-8 h-8 rounded-full flex items-center justify-center"
+                    style={{ background: 'rgba(255, 255, 255, 0.1)' }}
+                  >
+                    <X className="w-4 h-4" style={{ color: colors.textSecondary }} />
+                  </motion.button>
+                </div>
+
+                {/* Quick Presets */}
+                <div className="flex gap-2 mb-4">
+                  {[
+                    { label: 'Name Only', fields: { name: true, regNumber: false, email: false, phone: false, level: false, department: false, section: false, status: false, roles: false, paid: false } },
+                    { label: 'Basic Info', fields: { name: true, regNumber: true, email: false, phone: false, level: true, department: true, section: false, status: true, roles: false, paid: false } },
+                    { label: 'All Fields', fields: { name: true, regNumber: true, email: true, phone: true, level: true, department: true, section: true, status: true, roles: true, paid: true } },
+                  ].map((preset) => (
+                    <button
+                      key={preset.label}
+                      onClick={() => setExportFields(preset.fields)}
+                      className="flex-1 px-3 py-2 rounded-lg text-xs font-medium transition-all active:scale-[0.97]"
+                      style={{
+                        background: JSON.stringify(exportFields) === JSON.stringify(preset.fields) 
+                          ? `${colors.primary}25` 
+                          : 'rgba(255, 255, 255, 0.05)',
+                        border: JSON.stringify(exportFields) === JSON.stringify(preset.fields)
+                          ? `1px solid ${colors.primary}60`
+                          : '1px solid rgba(255, 255, 255, 0.1)',
+                        color: JSON.stringify(exportFields) === JSON.stringify(preset.fields)
+                          ? colors.primary
+                          : colors.textSecondary,
+                      }}
+                    >
+                      {preset.label}
+                    </button>
+                  ))}
+                </div>
+
+                {/* Field Toggles */}
+                <div className="space-y-1 mb-5">
+                  {([
+                    { key: 'name' as const, label: 'Full Name', icon: '👤', required: true },
+                    { key: 'regNumber' as const, label: 'Registration Number', icon: '🆔' },
+                    { key: 'email' as const, label: 'Email Address', icon: '📧', sensitive: true },
+                    { key: 'phone' as const, label: 'Phone Number', icon: '📱', sensitive: true },
+                    { key: 'level' as const, label: 'Level', icon: '🎓' },
+                    { key: 'department' as const, label: 'Department', icon: '🏛' },
+                    { key: 'section' as const, label: 'Section', icon: '📂' },
+                    { key: 'status' as const, label: 'Active Status', icon: '✅' },
+                    { key: 'roles' as const, label: 'Roles', icon: '👑' },
+                    { key: 'paid' as const, label: 'Date Joined', icon: '📅' },
+                  ]).map((field) => (
+                    <button
+                      key={field.key}
+                      onClick={() => {
+                        if (field.required) return;
+                        setExportFields(prev => ({ ...prev, [field.key]: !prev[field.key] }));
+                      }}
+                      className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg transition-all ${field.required ? 'opacity-70 cursor-default' : 'hover:bg-white/5 active:scale-[0.99]'}`}
+                      style={{
+                        background: exportFields[field.key] ? `${colors.primary}08` : 'transparent',
+                      }}
+                    >
+                      <span className="text-base">{field.icon}</span>
+                      <span className="flex-1 text-left text-sm font-medium" style={{ color: exportFields[field.key] ? 'white' : colors.textSecondary }}>
+                        {field.label}
+                      </span>
+                      {field.sensitive && (
+                        <span className="text-[9px] px-1.5 py-0.5 rounded-full font-medium"
+                          style={{ background: `${colors.warning}20`, color: colors.warning }}>
+                          SENSITIVE
+                        </span>
+                      )}
+                      <div 
+                        className="w-9 h-5 rounded-full relative transition-all"
+                        style={{ 
+                          background: exportFields[field.key] ? colors.primary : 'rgba(255, 255, 255, 0.15)',
+                        }}
+                      >
+                        <div 
+                          className="w-4 h-4 rounded-full absolute top-0.5 transition-all"
+                          style={{ 
+                            background: 'white',
+                            left: exportFields[field.key] ? '18px' : '2px',
+                          }}
+                        />
+                      </div>
+                    </button>
+                  ))}
+                </div>
+
+                {/* Privacy Note */}
+                <div className="px-3 py-2.5 rounded-lg mb-4 flex items-start gap-2"
+                  style={{ background: `${colors.warning}10`, border: `1px solid ${colors.warning}20` }}>
+                  <EyeOff className="w-4 h-4 mt-0.5 shrink-0" style={{ color: colors.warning }} />
+                  <p className="text-xs" style={{ color: colors.warning }}>
+                    Only include fields you need. Sensitive data like emails and phone numbers should be excluded unless absolutely required.
+                  </p>
+                </div>
+
+                {/* Export Button */}
+                <motion.button
+                  whileHover={{ scale: 1.01 }}
+                  whileTap={{ scale: 0.98 }}
+                  onClick={() => {
+                    setShowExportFieldsModal(false);
+                    if (exportFormat === 'pdf') {
+                      handleExportPDF();
+                    } else {
+                      handleExportCSV();
+                    }
+                  }}
+                  className="w-full py-3 rounded-xl text-sm font-semibold text-white transition-all"
+                  style={{ background: gradients.primary, boxShadow: `0 4px 15px ${colors.primary}40` }}
+                >
+                  Export as {exportFormat === 'pdf' ? 'PDF' : 'CSV'} ({Object.values(exportFields).filter(Boolean).length} fields)
+                </motion.button>
               </GlassCard>
             </motion.div>
           </motion.div>

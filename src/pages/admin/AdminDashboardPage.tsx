@@ -11,6 +11,7 @@ import DashboardSwitcher from '@/components/DashboardSwitcher';
 import { formatCurrency, formatDate } from '@/utils/formatters';
 import { AdminDashboardSkeleton, PaymentCardSkeleton } from '@/components/ui/Skeleton';
 import AnimatedCounter from '@/components/ui/AnimatedCounter';
+import { PrivacyMask, PrivacyToggle } from '@/components/ui/PrivacyMask';
 import { AdminNotificationCenter } from '@/components/admin/AdminNotificationCenter';
 import {
   Users,
@@ -409,6 +410,7 @@ export default function AdminDashboardPage() {
                   <h1 className="text-2xl sm:text-3xl font-bold text-white mb-2 flex items-center gap-3">
                     <span>Dashboard</span>
                     <Activity className="w-6 h-6" style={{ color: colors.accentMint }} />
+                    <PrivacyToggle />
                   </h1>
                   <p style={{ color: colors.textSecondary }} className="flex items-center gap-2">
                     <BarChart3 className="w-4 h-4" />
@@ -608,9 +610,9 @@ export default function AdminDashboardPage() {
                       Total Collected
                       <TrendingUp className="w-3 h-3" style={{ color: colors.statusPaid }} />
                     </p>
-                    <p className="text-2xl font-bold text-white">
+                    <PrivacyMask><p className="text-2xl font-bold text-white">
                       {formatCurrency(stats.totalCollected)}
-                    </p>
+                    </p></PrivacyMask>
                     <p className="text-xs mt-1" style={{ color: colors.statusPaid }}>Revenue to date</p>
                   </div>
                   <div className="w-14 h-14 rounded-xl flex items-center justify-center transition-all group-hover:scale-110"
@@ -833,7 +835,7 @@ export default function AdminDashboardPage() {
                           </p>
                           {/* Mobile: Show amount and date inline */}
                           <div className="flex items-center gap-2 mt-1 sm:hidden">
-                            <span className="text-white font-semibold text-sm">{formatCurrency(payment.amount)}</span>
+                            <PrivacyMask><span className="text-white font-semibold text-sm">{formatCurrency(payment.amount)}</span></PrivacyMask>
                             <span className="text-xs" style={{ color: colors.textSecondary }}>•</span>
                             <span className="text-xs" style={{ color: colors.textSecondary }}>{formatDate(payment.created_at, 'short')}</span>
                           </div>
@@ -841,7 +843,7 @@ export default function AdminDashboardPage() {
                       </div>
                       <div className="flex items-center justify-between sm:justify-end gap-2 sm:gap-4 pl-13 sm:pl-0">
                         <div className="text-right hidden sm:block">
-                          <p className="text-white font-semibold">{formatCurrency(payment.amount)}</p>
+                          <PrivacyMask><p className="text-white font-semibold">{formatCurrency(payment.amount)}</p></PrivacyMask>
                           <p className="text-xs" style={{ color: colors.textSecondary }}>
                             {formatDate(payment.created_at, 'short')}
                           </p>
@@ -1211,9 +1213,9 @@ export default function AdminDashboardPage() {
                         </div>
                       </div>
                       <div className="flex items-center gap-3">
-                        <p className="font-semibold text-sm" style={{ color: colors.statusFailed }}>
+                        <PrivacyMask><p className="font-semibold text-sm" style={{ color: colors.statusFailed }}>
                           -{formatCurrency(expense.amount)}
-                        </p>
+                        </p></PrivacyMask>
                         <span className="px-2 py-1 rounded-full text-[10px] font-semibold capitalize"
                               style={{ 
                                 background: expense.status === 'approved' 
@@ -1394,9 +1396,9 @@ export default function AdminDashboardPage() {
                       <div className="p-4 rounded-xl text-center" 
                            style={{ background: `linear-gradient(135deg, ${colors.primary}20, ${colors.primary}05)`, border: `1px solid ${colors.primary}30` }}>
                         <p className="text-xs font-medium mb-1" style={{ color: colors.textSecondary }}>Amount</p>
-                        <p className="text-xl sm:text-2xl font-bold" style={{ color: colors.primary }}>
+                        <PrivacyMask><p className="text-xl sm:text-2xl font-bold" style={{ color: colors.primary }}>
                           {formatCurrency(selectedPayment.amount)}
-                        </p>
+                        </p></PrivacyMask>
                       </div>
                       <div className="p-4 rounded-xl text-center" 
                            style={{ background: 'rgba(255, 255, 255, 0.03)', border: '1px solid rgba(255, 255, 255, 0.08)' }}>
@@ -1660,7 +1662,7 @@ export default function AdminDashboardPage() {
                                 </div>
                                 {/* Mobile: Show amount and date inline */}
                                 <div className="flex items-center gap-2 mt-1 sm:hidden">
-                                  <span className="text-white font-semibold text-sm">{formatCurrency(payment.amount)}</span>
+                                  <PrivacyMask><span className="text-white font-semibold text-sm">{formatCurrency(payment.amount)}</span></PrivacyMask>
                                   <span className="text-xs" style={{ color: colors.textSecondary }}>•</span>
                                   <span className="text-xs" style={{ color: colors.textSecondary }}>{formatDate(payment.created_at, 'short')}</span>
                                 </div>
@@ -1668,7 +1670,7 @@ export default function AdminDashboardPage() {
                             </div>
                             <div className="flex items-center justify-between sm:justify-end gap-2 sm:gap-3 pl-13 sm:pl-0">
                               <div className="text-right hidden sm:block">
-                                <p className="text-white font-semibold">{formatCurrency(payment.amount)}</p>
+                                <PrivacyMask><p className="text-white font-semibold">{formatCurrency(payment.amount)}</p></PrivacyMask>
                                 <p className="text-xs flex items-center gap-1" style={{ color: colors.textSecondary }}>
                                   <Calendar className="w-3 h-3" />
                                   {formatDate(payment.created_at, 'short')}

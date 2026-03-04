@@ -121,15 +121,15 @@ export default function OrgLayout() {
     { path: '/admin/billing', label: 'Billing', icon: <Wallet size={20} />, section: 'admin', hideOnMobile: true },
   ] : [];
 
-  // Bottom tab items (mobile) — limited to 4-5 for thumb reach
+  // Bottom tab items (mobile) — limited to 5 for thumb reach
   const bottomTabItems: NavItem[] = [
     { path: '/dashboard', label: 'Home', icon: <LayoutDashboard size={22} />, section: 'member' },
-    { path: '/payments', label: organization.payment_label || 'Payments', icon: <CreditCard size={22} />, section: 'member' },
+    { path: '/payments', label: organization.payment_label || 'Fee', icon: <CreditCard size={22} />, section: 'member' },
     ...(admin ? [
       { path: '/admin/dashboard', label: 'Admin', icon: <Shield size={22} />, section: 'admin' as const },
+      { path: '/admin/members', label: organization.member_label_plural || 'Students', icon: <Users size={22} />, section: 'admin' as const },
       { path: '/admin/billing', label: 'Billing', icon: <Wallet size={22} />, section: 'admin' as const },
     ] : []),
-    { path: '/profile', label: 'Profile', icon: <Users size={22} />, section: 'member' },
   ];
 
   const handleLogout = async () => {
@@ -442,7 +442,9 @@ export default function OrgLayout() {
 
         <div className="flex items-center justify-around px-2 h-16">
           {bottomTabItems.map(item => {
-            const active = isActive(item.path) || (item.path === '/admin/dashboard' && isActivePrefix('/admin') && !isActive('/admin/members'));
+            const active = item.path === '/admin/dashboard'
+              ? isActivePrefix('/admin') && !isActive('/admin/members') && !isActive('/admin/billing')
+              : isActive(item.path);
             return (
               <Link
                 key={item.path}

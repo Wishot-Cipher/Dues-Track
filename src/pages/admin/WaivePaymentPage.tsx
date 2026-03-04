@@ -8,6 +8,7 @@ import { colors, gradients } from "@/config/colors";
 import GlassCard from "@/components/ui/GlassCard";
 import ProfessionalDropdown from "@/components/ui/ProfessionalDropdown";
 import { formatCurrency } from "@/utils/formatters";
+import { PrivacyMask } from '@/components/ui/PrivacyMask';
 import { useAuth } from '@/hooks/useAppAuth';
 import { useToast } from "@/hooks/useToast";
 import {
@@ -697,7 +698,7 @@ export default function WaivePaymentPage() {
                               className="font-bold text-lg"
                               style={{ color: colors.primary }}
                             >
-                              {formatCurrency(paymentType.amount)}
+                              <PrivacyMask>{formatCurrency(paymentType.amount)}</PrivacyMask>
                             </p>
                             <p
                               className="text-xs mt-1"

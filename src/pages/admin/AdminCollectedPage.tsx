@@ -12,6 +12,7 @@ import { getOrgScope } from '@/utils/orgScope';
 import { colors } from '@/config/colors';
 import Footer from '@/components/Footer';
 import { formatCurrency, formatDate } from '@/utils/formatters';
+import { PrivacyMask } from '@/components/ui/PrivacyMask';
 import { ArrowLeft, Users, Wallet, TrendingUp, Filter, Search, Download, ChevronLeft, ChevronRight, Sparkles, PieChart, CheckCircle, XCircle, BarChart3, FileText, FileSpreadsheet, ChevronDown, LineChart } from 'lucide-react';
 import { exportCollectedPaymentsToPDF } from '@/utils/htmlPrintExports';
 import { useToast } from '@/hooks/useToast';
@@ -774,9 +775,9 @@ export default function AdminCollectedPage() {
                   <p className="text-[10px] sm:text-xs font-medium mb-1" style={{ color: colors.textSecondary }}>
                     {filteredTotals.isDateFiltered ? 'Collected (Filtered)' : 'Total Collected'}
                   </p>
-                  <p className="text-lg sm:text-2xl font-bold text-white">
+                  <PrivacyMask><p className="text-lg sm:text-2xl font-bold text-white">
                     <AnimatedCounter value={filteredTotals.isDateFiltered ? filteredTotals.totalCollected : totalCollected} prefix="₦" />
-                  </p>
+                  </p></PrivacyMask>
                   <p className="text-[10px] sm:text-xs mt-1" style={{ color: colors.statusPaid }}>
                     <AnimatedCounter value={studentsToFilter.reduce((sum, s) => sum + s.payment_count, 0)} /> payments
                   </p>
@@ -796,9 +797,9 @@ export default function AdminCollectedPage() {
                     <TrendingUp className="w-full h-full" style={{ color: colors.statusFailed }} />
                   </div>
                   <p className="text-[10px] sm:text-xs font-medium mb-1" style={{ color: colors.textSecondary }}>Total Expenses</p>
-                  <p className="text-lg sm:text-2xl font-bold" style={{ color: totalExpenses > 0 ? colors.statusFailed : colors.textSecondary }}>
+                  <PrivacyMask><p className="text-lg sm:text-2xl font-bold" style={{ color: totalExpenses > 0 ? colors.statusFailed : colors.textSecondary }}>
                     <AnimatedCounter value={totalExpenses} prefix="₦" />
-                  </p>
+                  </p></PrivacyMask>
                   <p className="text-[10px] sm:text-xs mt-1" style={{ color: colors.textSecondary }}>
                     {totalExpenses > 0 ? 'Approved' : 'None yet'}
                   </p>
@@ -818,9 +819,9 @@ export default function AdminCollectedPage() {
                     <Wallet className="w-full h-full" style={{ color: netBalance >= 0 ? colors.statusPaid : colors.statusFailed }} />
                   </div>
                   <p className="text-[10px] sm:text-xs font-medium mb-1" style={{ color: colors.textSecondary }}>Net Balance</p>
-                  <p className="text-lg sm:text-2xl font-bold" style={{ color: netBalance >= 0 ? colors.statusPaid : colors.statusFailed }}>
+                  <PrivacyMask><p className="text-lg sm:text-2xl font-bold" style={{ color: netBalance >= 0 ? colors.statusPaid : colors.statusFailed }}>
                     <AnimatedCounter value={netBalance} prefix="₦" />
-                  </p>
+                  </p></PrivacyMask>
                   <p className="text-[10px] sm:text-xs mt-1" style={{ color: colors.textSecondary }}>Available</p>
                 </motion.div>
 
@@ -945,7 +946,7 @@ export default function AdminCollectedPage() {
                     {cat.category.replace(/_/g, ' ')}
                   </p>
                   <div className="flex items-center gap-2 mt-1">
-                    <p className="text-lg sm:text-xl font-bold text-white">{formatCurrency(cat.total_collected)}</p>
+                    <PrivacyMask><p className="text-lg sm:text-xl font-bold text-white">{formatCurrency(cat.total_collected)}</p></PrivacyMask>
                     {totalCollected > 0 && (
                       <span className="text-[10px] sm:text-xs px-1.5 py-0.5 rounded-full" 
                             style={{ background: 'rgba(255,255,255,0.08)', color: colors.textSecondary }}>
@@ -974,7 +975,7 @@ export default function AdminCollectedPage() {
                       {cat.total_expenses > 0 && (
                         <p className="flex items-center gap-1" style={{ color: colors.statusFailed }}>
                           <span className="w-1.5 h-1.5 rounded-full" style={{ background: colors.statusFailed }} />
-                          -{formatCurrency(cat.total_expenses)} spent
+                          -<PrivacyMask>{formatCurrency(cat.total_expenses)}</PrivacyMask> spent
                           {cat.total_collected > 0 && (
                             <span className="opacity-70">({Math.round((cat.total_expenses / cat.total_collected) * 100)}%)</span>
                           )}
@@ -982,7 +983,7 @@ export default function AdminCollectedPage() {
                       )}
                       <p className="font-semibold flex items-center gap-1" style={{ color: cat.net_balance >= 0 ? colors.statusPaid : colors.statusFailed }}>
                         <span className="w-1.5 h-1.5 rounded-full" style={{ background: cat.net_balance >= 0 ? colors.statusPaid : colors.statusFailed }} />
-                        {formatCurrency(cat.net_balance)} available
+                        <PrivacyMask>{formatCurrency(cat.net_balance)}</PrivacyMask> available
                       </p>
                     </div>
                   ) : (
@@ -1184,7 +1185,7 @@ export default function AdminCollectedPage() {
                     <div className="grid grid-cols-3 gap-3 sm:gap-6 mt-2 sm:mt-0">
                       <div className="text-center">
                         <p className="text-[10px] sm:text-sm" style={{ color: colors.textSecondary }}>Total Paid</p>
-                        <p className="text-sm sm:text-xl font-bold text-white">{formatCurrency(student.total_paid)}</p>
+                        <PrivacyMask><p className="text-sm sm:text-xl font-bold text-white">{formatCurrency(student.total_paid)}</p></PrivacyMask>
                       </div>
                       <div className="text-center">
                         <p className="text-[10px] sm:text-sm" style={{ color: colors.textSecondary }}>Payments</p>
@@ -1251,7 +1252,7 @@ export default function AdminCollectedPage() {
                               </p>
                             </div>
                             <div className="text-right">
-                              <p className="text-sm font-semibold text-white">{formatCurrency(payment.amount)}</p>
+                              <PrivacyMask><p className="text-sm font-semibold text-white">{formatCurrency(payment.amount)}</p></PrivacyMask>
                               <div className="flex items-center justify-end gap-2">
                                 <span
                                   className="text-xs px-2 py-0.5 rounded-full"

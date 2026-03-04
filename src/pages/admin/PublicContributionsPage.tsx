@@ -9,6 +9,7 @@ import { useToast } from '@/hooks/useToast'
 import { useAuth } from '@/hooks/useAppAuth'
 import { formatNaira } from '@/utils/printStyles'
 import ConfirmDialog from '@/components/ui/ConfirmDialog'
+import { PrivacyMask } from '@/components/ui/PrivacyMask'
 import { getOrgScope } from '@/utils/orgScope'
 
 interface PublicContribution {
@@ -357,7 +358,7 @@ export default function PublicContributionsPage() {
               </div>
               <div>
                 <p className="text-xs" style={{ color: colors.textSecondary }}>Verified Amount</p>
-                <p className="text-lg font-bold" style={{ color: colors.accentMint }}>{formatCurrency(stats.verifiedAmount)}</p>
+                <p className="text-lg font-bold" style={{ color: colors.accentMint }}><PrivacyMask>{formatCurrency(stats.verifiedAmount)}</PrivacyMask></p>
               </div>
             </div>
           </div>
@@ -447,7 +448,7 @@ export default function PublicContributionsPage() {
                       </div>
                       
                       <div className="text-right shrink-0">
-                        <p className="font-bold text-lg" style={{ color: colors.primary }}>{formatCurrency(contribution.amount)}</p>
+                        <p className="font-bold text-lg" style={{ color: colors.primary }}><PrivacyMask>{formatCurrency(contribution.amount)}</PrivacyMask></p>
                         <div className="flex items-center gap-2 mt-2">
                           <motion.button whileHover={{ scale: 1.1 }} whileTap={{ scale: 0.9 }} onClick={() => setSelectedContribution(contribution)} className="p-2 rounded-lg hover:bg-white/10" style={{ background: 'rgba(255, 255, 255, 0.05)' }}>
                             <Eye className="w-4 h-4 text-white" />
@@ -500,7 +501,7 @@ export default function PublicContributionsPage() {
                     </div>
                     <div>
                       <h3 className="font-semibold text-white">{selectedContribution.contributor_name}</h3>
-                      <p className="text-2xl font-bold" style={{ color: colors.primary }}>{formatCurrency(selectedContribution.amount)}</p>
+                      <p className="text-2xl font-bold" style={{ color: colors.primary }}><PrivacyMask>{formatCurrency(selectedContribution.amount)}</PrivacyMask></p>
                     </div>
                   </div>
                 </div>

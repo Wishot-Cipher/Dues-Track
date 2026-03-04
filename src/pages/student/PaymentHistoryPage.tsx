@@ -10,6 +10,7 @@ import { colors, gradients } from '@/config/colors';
 import PageWrapper from '@/components/ui/PageWrapper';
 import { PaymentCardSkeleton } from '@/components/ui/Skeleton';
 import { formatCurrency, formatDate } from '@/utils/formatters';
+import { PrivacyMask } from '@/components/ui/PrivacyMask';
 import { 
   Clock, 
   CheckCircle, 
@@ -398,7 +399,7 @@ export default function PaymentHistoryPage() {
                 <TrendingUp className="w-5 h-5" style={{ color: colors.statusPaid }} />
                 <div>
                   <p className="text-xs" style={{ color: colors.textSecondary }}>Total Paid</p>
-                  <p className="text-lg font-bold text-white">{formatCurrency(stats.totalAmount)}</p>
+                  <PrivacyMask><p className="text-lg font-bold text-white">{formatCurrency(stats.totalAmount)}</p></PrivacyMask>
                 </div>
               </div>
             </div>
@@ -691,7 +692,7 @@ export default function PaymentHistoryPage() {
                                   color: isWaived ? colors.accentMint : 'white',
                                   textDecoration: isWaived ? 'line-through' : 'none'
                                 }}>
-                                  {formatCurrency(payment.amount)}
+                                  <PrivacyMask>{formatCurrency(payment.amount)}</PrivacyMask>
                                 </p>
                               </div>
                               

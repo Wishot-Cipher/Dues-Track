@@ -11,6 +11,7 @@ import GlassCard from '@/components/ui/GlassCard'
 import Modal from '@/components/ui/Modal'
 import ProfessionalDropdown from '@/components/ui/ProfessionalDropdown'
 import LoadingSpinner from '@/components/ui/LoadingSpinner'
+import { PrivacyMask } from '@/components/ui/PrivacyMask'
 
 interface BankDetails {
   bank_name: string
@@ -328,7 +329,7 @@ export default function DonationSettingsPage() {
               </div>
               <div>
                 <p className="text-[10px] sm:text-xs" style={{ color: colors.textSecondary }}>Verified</p>
-                <p className="text-lg sm:text-xl font-bold" style={{ color: colors.accentMint }}>{formatCurrency(stats.verifiedAmount)}</p>
+                <p className="text-lg sm:text-xl font-bold" style={{ color: colors.accentMint }}><PrivacyMask>{formatCurrency(stats.verifiedAmount)}</PrivacyMask></p>
               </div>
             </div>
           </div>
@@ -340,7 +341,7 @@ export default function DonationSettingsPage() {
               </div>
               <div>
                 <p className="text-[10px] sm:text-xs" style={{ color: colors.textSecondary }}>Total Amount</p>
-                <p className="text-lg sm:text-xl font-bold" style={{ color: colors.accentCyan }}>{formatCurrency(stats.totalAmount)}</p>
+                <p className="text-lg sm:text-xl font-bold" style={{ color: colors.accentCyan }}><PrivacyMask>{formatCurrency(stats.totalAmount)}</PrivacyMask></p>
               </div>
             </div>
           </div>

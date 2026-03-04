@@ -138,11 +138,16 @@ function formatCategory(category: string): string {
  */
 export function exportStudentsToPrint(
   students: StudentExport[],
-  filters?: { status?: string; role?: string }
+  filters?: { status?: string; role?: string; fields?: {
+    name?: boolean; regNumber?: boolean; email?: boolean; phone?: boolean;
+    level?: boolean; department?: boolean; section?: boolean; status?: boolean;
+    roles?: boolean; paid?: boolean;
+  } }
 ): void {
   const activeStudents = students.filter(s => s.is_active);
   const inactiveStudents = students.filter(s => !s.is_active);
   const totalPaid = students.reduce((sum, s) => sum + (s.total_paid || 0), 0);
+  const f = filters?.fields || { name: true, regNumber: true, level: true, department: true, status: true, phone: true, paid: true };
   
   // Build summary content for first page
   let summaryContent = '';
@@ -165,19 +170,34 @@ export function exportStudentsToPrint(
   ];
   summaryContent += generateSection('👥', 'Student Summary', generateStatsGrid(stats, 4));
   
-  // Prepare table rows
-  const tableHeaders = ['Name', 'Reg Number', 'Level', 'Department', 'Status', 'Phone', 'Paid'];
+  // Build dynamic headers and rows based on selected fields
+  const tableHeaders: string[] = [];
+  if (f.name) tableHeaders.push('Name');
+  if (f.regNumber) tableHeaders.push('Reg Number');
+  if (f.level) tableHeaders.push('Level');
+  if (f.department) tableHeaders.push('Department');
+  if (f.status) tableHeaders.push('Status');
+  if (f.phone) tableHeaders.push('Phone');
+  if (f.email) tableHeaders.push('Email');
+  if (f.paid) tableHeaders.push('Paid');
+  // Fallback if nothing selected
+  if (tableHeaders.length === 0) tableHeaders.push('Name');
+
   const tableRows = students.map(s => {
-    const statusClass = s.is_active ? 'active' : 'inactive';
-    return [
-      s.full_name,
-      s.reg_number,
-      s.level || '-',
-      s.department || '-',
-      `<span class="status ${statusClass}">${s.is_active ? '✓ Active' : '✗ Inactive'}</span>`,
-      s.phone || '-',
-      `<span class="amount positive">${formatNaira(s.total_paid || 0)}</span>`,
-    ];
+    const row: string[] = [];
+    if (f.name) row.push(s.full_name);
+    if (f.regNumber) row.push(s.reg_number);
+    if (f.level) row.push(s.level || '-');
+    if (f.department) row.push(s.department || '-');
+    if (f.status) {
+      const statusClass = s.is_active ? 'active' : 'inactive';
+      row.push(`<span class="status ${statusClass}">${s.is_active ? '✓ Active' : '✗ Inactive'}</span>`);
+    }
+    if (f.phone) row.push(s.phone || '-');
+    if (f.email) row.push(s.email || '-');
+    if (f.paid) row.push(`<span class="amount positive">${formatNaira(s.total_paid || 0)}</span>`);
+    if (row.length === 0) row.push(s.full_name);
+    return row;
   });
   
   // Important Notes
