@@ -972,14 +972,14 @@ function PlatformDashboard({ admin, onLogout }: { admin: PlatformAdmin; onLogout
         <div>
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
             <h2 className="text-base font-bold text-white">Organizations</h2>
-            <div className="flex items-center gap-2">
+            <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
               {/* Plan Filter */}
-              <div className="flex items-center gap-1 p-1 rounded-xl" style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.08)' }}>
+              <div className="flex items-center gap-1 p-1 rounded-xl overflow-x-auto" style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.08)' }}>
                 {['all', 'free', 'starter', 'professional', 'enterprise'].map(p => (
                   <button
                     key={p}
                     onClick={() => setFilterPlan(p)}
-                    className="px-2 py-1 rounded-lg text-[10px] font-medium transition-all capitalize"
+                    className="px-2 py-1 rounded-lg text-[10px] font-medium transition-all capitalize whitespace-nowrap"
                     style={{
                       background: filterPlan === p ? `${p === 'all' ? colors.primary : planColors[p] || colors.primary}20` : 'transparent',
                       color: filterPlan === p ? (p === 'all' ? colors.primary : planColors[p] || colors.primary) : colors.textSecondary,
@@ -996,7 +996,7 @@ function PlatformDashboard({ admin, onLogout }: { admin: PlatformAdmin; onLogout
                   placeholder="Search..."
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
-                  className="pl-9 pr-4 py-2 rounded-xl text-xs text-white placeholder-white/30 focus:outline-none w-40 sm:w-56"
+                  className="w-full pl-9 pr-4 py-2 rounded-xl text-xs text-white placeholder-white/30 focus:outline-none sm:w-56"
                   style={{ background: 'rgba(255, 255, 255, 0.05)', border: '1px solid rgba(255, 255, 255, 0.1)' }}
                 />
               </div>

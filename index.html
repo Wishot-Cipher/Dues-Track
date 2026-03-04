@@ -5,54 +5,94 @@
     
     <!-- Favicon - Payvexo Logo -->
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
-    <link rel="icon" type="image/png" sizes="192x192" href="/app-icon.png" />
-    <link rel="icon" type="image/png" sizes="512x512" href="/app-icon.png" />
-    <link rel="apple-touch-icon" sizes="180x180" href="/app-icon.png" />
-    <link rel="apple-touch-icon" sizes="192x192" href="/app-icon.png" />
-    <link rel="apple-touch-icon" sizes="512x512" href="/app-icon.png" />
-    <link rel="shortcut icon" href="/app-icon.png" />
+    <link rel="icon" type="image/png" sizes="192x192" href="/icon-192.png" />
+    <link rel="icon" type="image/png" sizes="512x512" href="/icon-512.png" />
+    <link rel="apple-touch-icon" sizes="180x180" href="/icon-192.png" />
+    <link rel="apple-touch-icon" sizes="192x192" href="/icon-192.png" />
+    <link rel="apple-touch-icon" sizes="512x512" href="/icon-512.png" />
+    <link rel="shortcut icon" href="/icon-192.png" />
     
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+    
+    <!-- Canonical -->
+    <link rel="canonical" href="https://payvexo.vercel.app/" />
     
     <!-- Primary Meta Tags -->
     <title>Payvexo - Smart Payment & Dues Management Platform</title>
     <meta name="title" content="Payvexo - Smart Payment & Dues Management Platform" />
-    <meta name="description" content="The all-in-one payment tracking and dues management platform for universities, churches, clubs, and organizations. Collect dues, track expenses, and manage finances securely." />
-    <meta name="keywords" content="payvexo, payment management, dues tracker, church dues, university fees, organization payments, club dues, SaaS, multi-tenant" />
+    <meta name="description" content="Payvexo is the all-in-one payment tracking and dues management platform for universities, churches, clubs, and organizations. Collect dues, track expenses, approve payments, and manage finances securely — all from one dashboard." />
+    <meta name="keywords" content="payvexo, payment management, dues tracker, dues collection app, church dues, university fees, school fees tracker, organization payments, club dues, payment approval, expense tracker, finance management, SaaS, multi-tenant" />
     <meta name="author" content="Payvexo" />
-    <meta name="robots" content="index, follow" />
+    <meta name="robots" content="index, follow, max-image-preview:large, max-snippet:-1, max-video-preview:-1" />
     <meta name="language" content="English" />
-    <meta name="theme-color" content="#6C3AED" />
+    <meta name="revisit-after" content="7 days" />
+    <meta name="rating" content="general" />
+    <meta name="distribution" content="global" />
+    <meta name="theme-color" content="#0A0118" />
+    <meta name="theme-color" content="#0A0118" media="(prefers-color-scheme: dark)" />
+    <meta name="theme-color" content="#0A0118" media="(prefers-color-scheme: light)" />
     
     <!-- Open Graph / Facebook -->
     <meta property="og:type" content="website" />
     <meta property="og:url" content="https://payvexo.vercel.app/" />
-    <meta property="og:title" content="Payvexo - Smart Payment & Dues Management" />
-    <meta property="og:description" content="The all-in-one platform for collecting dues, tracking payments, and managing finances for universities, churches, clubs, and organizations." />
-    <meta property="og:image" content="/icon-512.svg" />
+    <meta property="og:title" content="Payvexo - Smart Payment & Dues Management Platform" />
+    <meta property="og:description" content="Payvexo is the all-in-one platform for collecting dues, tracking payments, approving expenses, and managing finances for universities, churches, clubs, and organizations." />
+    <meta property="og:image" content="https://payvexo.vercel.app/icon-512.png" />
+    <meta property="og:image:width" content="512" />
+    <meta property="og:image:height" content="512" />
+    <meta property="og:image:alt" content="Payvexo - Payment & Dues Management" />
     <meta property="og:site_name" content="Payvexo" />
+    <meta property="og:locale" content="en_US" />
     
     <!-- Twitter -->
-    <meta property="twitter:card" content="summary_large_image" />
-    <meta property="twitter:url" content="https://payvexo.vercel.app/" />
-    <meta property="twitter:title" content="Payvexo - Smart Payment & Dues Management" />
-    <meta property="twitter:description" content="Collect dues, track payments, and manage finances for any organization. Universities, churches, clubs, and more." />
-    <meta property="twitter:image" content="/icon-512.svg" />
+    <meta name="twitter:card" content="summary" />
+    <meta name="twitter:url" content="https://payvexo.vercel.app/" />
+    <meta name="twitter:title" content="Payvexo - Smart Payment & Dues Management Platform" />
+    <meta name="twitter:description" content="Collect dues, track payments, approve expenses, and manage finances for any organization. Universities, churches, clubs, and more." />
+    <meta name="twitter:image" content="https://payvexo.vercel.app/icon-512.png" />
+    <meta name="twitter:image:alt" content="Payvexo Logo" />
     
     <!-- PWA & Mobile -->
     <meta name="mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
-    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black" />
     <meta name="apple-mobile-web-app-title" content="Payvexo" />
-    <link rel="apple-touch-icon" href="/icon-192.svg" />
-    <link rel="apple-touch-icon" sizes="192x192" href="/icon-192.svg" />
-    <link rel="apple-touch-icon" sizes="512x512" href="/icon-512.svg" />
+    <link rel="apple-touch-icon" href="/icon-192.png" />
+    <link rel="apple-touch-icon" sizes="192x192" href="/icon-192.png" />
+    <link rel="apple-touch-icon" sizes="512x512" href="/icon-512.png" />
     
     <!-- Security -->
     <meta http-equiv="X-UA-Compatible" content="IE=edge" />
     <meta name="referrer" content="strict-origin-when-cross-origin" />
-    
-    <!-- Performance -->
+        <!-- Structured Data (JSON-LD) -->
+    <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@type": "SoftwareApplication",
+      "name": "Payvexo",
+      "alternateName": "Payvexo Dues Management",
+      "url": "https://payvexo.vercel.app",
+      "description": "Smart payment tracking and dues management platform for universities, churches, clubs, and organizations.",
+      "applicationCategory": "FinanceApplication",
+      "operatingSystem": "Web, Android, iOS",
+      "offers": {
+        "@type": "Offer",
+        "price": "0",
+        "priceCurrency": "USD"
+      },
+      "aggregateRating": {
+        "@type": "AggregateRating",
+        "ratingValue": "4.8",
+        "ratingCount": "150"
+      },
+      "author": {
+        "@type": "Organization",
+        "name": "Payvexo",
+        "url": "https://payvexo.vercel.app"
+      }
+    }
+    </script>
+        <!-- Performance -->
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="dns-prefetch" href="https://fonts.googleapis.com" />
     

@@ -5,30 +5,30 @@
   "start_url": "/",
   "display": "standalone",
   "background_color": "#0A0118",
-  "theme_color": "#6C3AED",
+  "theme_color": "#0A0118",
   "orientation": "portrait-primary",
   "categories": ["finance", "education", "utilities"],
   "icons": [
     {
-      "src": "/app-icon.png",
+      "src": "/icon-512.png",
       "sizes": "512x512",
       "type": "image/png",
       "purpose": "any"
     },
     {
-      "src": "/app-icon.png",
+      "src": "/icon-192.png",
       "sizes": "192x192",
       "type": "image/png",
       "purpose": "any"
     },
     {
-      "src": "/app-icon.png",
+      "src": "/icon-512.png",
       "sizes": "512x512",
       "type": "image/png",
       "purpose": "maskable"
     },
     {
-      "src": "/app-icon.png",
+      "src": "/icon-192.png",
       "sizes": "192x192",
       "type": "image/png",
       "purpose": "maskable"
@@ -42,7 +42,7 @@
   ],
   "screenshots": [
     {
-      "src": "/app-icon.png",
+      "src": "/icon-512.png",
       "sizes": "512x512",
       "type": "image/png",
       "form_factor": "narrow",
@@ -55,14 +55,14 @@
       "short_name": "Dashboard",
       "description": "View your payment dashboard",
       "url": "/dashboard",
-      "icons": [{ "src": "/app-icon.png", "sizes": "192x192" }]
+      "icons": [{ "src": "/icon-192.png", "sizes": "192x192" }]
     },
     {
       "name": "Make Payment",
       "short_name": "Pay",
       "description": "Make a new payment",
       "url": "/payments",
-      "icons": [{ "src": "/icon-192.svg", "sizes": "192x192" }]
+      "icons": [{ "src": "/icon-192.png", "sizes": "192x192" }]
     }
   ]
 }
