@@ -8,8 +8,23 @@ const serviceRole = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABAS
 const appUrl = process.env.VITE_APP_URL || process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:5173'
 
 function generateSecureToken(): string {
-  const crypto = require('crypto')
-  return crypto.randomBytes(32).toString('hex')
+  // ✅ Use Web Crypto API (works everywhere)
+  if (typeof crypto !== 'undefined' && crypto.randomUUID) {
+    // Modern browsers/Node 19+
+    return crypto.randomUUID().replace(/-/g, '') + crypto.randomUUID().replace(/-/g, '')
+  }
+  
+  // ✅ Fallback for older Node.js
+  try {
+    const nodeCrypto = require('crypto')
+    return nodeCrypto.randomBytes(32).toString('hex')
+  } catch (err) {
+    console.error('Crypto not available:', err)
+    // Emergency fallback (not cryptographically secure - use only as last resort)
+    return Array.from({ length: 64 }, () => 
+      Math.floor(Math.random() * 16).toString(16)
+    ).join('')
+  }
 }
 
 export default async function handler(req: any, res: any) {
