@@ -12,8 +12,8 @@
 
 import { createClient } from '@supabase/supabase-js'
 import webpush from 'web-push'
-import { sendEmail, paymentSubmittedEmail } from './_lib/email'
-import { verifyMember, escapeHtml } from './_lib/auth'
+import { sendEmail, paymentSubmittedEmail } from './_lib/email.js'
+import { verifyMember, escapeHtml } from './_lib/auth.js'
 
 const supabaseUrl = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL
 const serviceRole = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SERVICE_ROLE

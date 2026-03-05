@@ -78,11 +78,25 @@ export default async function handler(
       throw error;
     }
 
+    // ── Auto-cleanup old notifications ──
+    // Read > 30 days old, Unread > 90 days old
+    let cleanupResult = null;
+    try {
+      const { data } = await supabase.rpc('cleanup_old_notifications', {
+        p_read_days: 30,
+        p_unread_days: 90,
+      });
+      cleanupResult = data;
+    } catch {
+      // Non-critical — function may not exist yet
+    }
+
     return res.status(200).json({
       success: true,
       message: 'Database is active',
       timestamp: new Date().toISOString(),
-      table: 'organizations'
+      table: 'organizations',
+      notifications_cleanup: cleanupResult,
     });
 
   } catch (error) {

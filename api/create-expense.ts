@@ -11,7 +11,7 @@
  */
 
 import { createClient } from '@supabase/supabase-js'
-import { verifyAdmin } from './_lib/auth'
+import { verifyAdmin } from './_lib/auth.js'
 
 const BUCKET = 'expense-receipts'
 

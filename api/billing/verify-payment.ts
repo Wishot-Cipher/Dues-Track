@@ -1,6 +1,6 @@
 import { createClient } from '@supabase/supabase-js';
-import { sendEmail, billingReceiptEmail } from '../_lib/email';
-import { verifyMember, setCorsHeaders } from '../_lib/auth';
+import { sendEmail, billingReceiptEmail } from '../_lib/email.js';
+import { verifyMember, setCorsHeaders } from '../_lib/auth.js';
 
 // Vercel Serverless types
 interface VercelRequest {

@@ -5,6 +5,9 @@
  * Sends push notifications to users via the Web Push API.
  * Called from backend or frontend after payment status changes.
  *
+ * Supports a "test" mode: when `test: true` is passed in the body,
+ * sends a fixed test notification to the caller's own subscription.
+ *
  * SECURITY: Verifies the caller is a real, active member.
  *           Verifies the target user is in the SAME organization.
  *           Prevents cross-org push notification injection.
@@ -12,7 +15,7 @@
 
 import { createClient } from '@supabase/supabase-js';
 import webpush from 'web-push';
-import { verifyMember } from '../_lib/auth';
+import { verifyMember } from '../_lib/auth.js';
 
 const supabaseUrl = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL;
 const serviceRole = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SERVICE_ROLE;
@@ -43,16 +46,65 @@ export default async function handler(req: any, res: any) {
   try {
     // Support both "callerId" and legacy fallback (userId = callerId)
     const callerId = req.body?.callerId || req.body?.userId;
-    const { userId: targetUserId, title, body, url, tag, data } = req.body;
+    const { userId: targetUserId, title, body, url, tag, data, test } = req.body;
 
-    if (!callerId || !title || !body) {
-      return res.status(400).json({ error: 'Missing required fields: callerId, title, body' });
+    if (!callerId) {
+      return res.status(400).json({ error: 'Missing callerId' });
     }
 
     // ── Verify the caller is a real, active member ──
     const auth = await verifyMember(supabase, callerId);
     if (!auth.valid || !auth.data) {
       return res.status(auth.status || 401).json({ error: auth.error || 'Unauthorized' });
+    }
+
+    // ── TEST MODE: send a fixed test push to the caller's own subscription ──
+    if (test) {
+      const { data: subscription, error: subError } = await supabase
+        .from('push_subscriptions')
+        .select('*')
+        .eq('user_id', callerId)
+        .single();
+
+      if (subError || !subscription) {
+        return res.status(200).json({
+          ok: false,
+          message: 'No subscription found — enable push notifications first',
+        });
+      }
+
+      const testPayload = JSON.stringify({
+        title: '🔔 Test Notification',
+        body: 'Push notifications are working! You will receive alerts here.',
+        icon: '/icons/icon-192.png',
+        badge: '/icons/icon-72.png',
+        url: '/',
+        tag: 'test',
+        timestamp: Date.now(),
+      });
+
+      try {
+        const result = await webpush.sendNotification(
+          {
+            endpoint: subscription.endpoint,
+            keys: { p256dh: subscription.p256dh, auth: subscription.auth },
+          } as never,
+          testPayload,
+          { TTL: 60, urgency: 'high' }
+        );
+        return res.status(200).json({ ok: true, message: 'Test notification sent!', statusCode: result.statusCode });
+      } catch (pushError: any) {
+        if (pushError.statusCode === 410 || pushError.statusCode === 404) {
+          await supabase.from('push_subscriptions').delete().eq('user_id', callerId);
+          return res.status(200).json({ ok: false, message: 'Subscription expired — removed' });
+        }
+        return res.status(200).json({ ok: false, message: 'Failed to send push' });
+      }
+    }
+
+    // ── NORMAL MODE ──
+    if (!title || !body) {
+      return res.status(400).json({ error: 'Missing required fields: title, body' });
     }
 
     const callerOrgId = auth.data.organization_id;

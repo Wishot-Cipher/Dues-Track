@@ -10,7 +10,7 @@
  *           scoped to their organization.
  */
 import { createClient } from '@supabase/supabase-js'
-import { verifyMember } from '../_lib/auth'
+import { verifyMember } from '../_lib/auth.js'
 
 const supabaseUrl = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL
 const serviceRole = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SERVICE_ROLE
@@ -45,16 +45,17 @@ export default async function handler(req: any, res: any) {
       .update({ is_read: true, read_at: new Date().toISOString() })
 
     if (notificationId) {
-      // Mark single notification — must belong to this member AND org
+      // Mark single notification — must belong to this member
+      // Use .or() to match org-scoped OR legacy (NULL org) notifications
       query = query
         .eq('id', notificationId)
         .eq('member_id', memberId)
-        .eq('organization_id', orgId)
+        .or(`organization_id.eq.${orgId},organization_id.is.null`)
     } else {
-      // Mark all unread — scoped to this member AND org
+      // Mark all unread — scoped to this member
       query = query
         .eq('member_id', memberId)
-        .eq('organization_id', orgId)
+        .or(`organization_id.eq.${orgId},organization_id.is.null`)
         .eq('is_read', false)
     }
 

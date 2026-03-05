@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Bell, X, AlertCircle, DollarSign, CheckCircle, BellOff, Sparkles } from 'lucide-react';
+import { Bell, X, AlertCircle, DollarSign, CheckCircle, BellOff, Sparkles, Trash2 } from 'lucide-react';
 import { supabase } from '@/config/supabase';
 import notificationService from '@/services/notificationService';
 import { useAppAuth as useAuth } from '@/hooks/useAppAuth';
@@ -197,6 +197,22 @@ export const NotificationCenter = () => {
     }
   };
 
+  const clearReadNotifications = async () => {
+    try {
+      const userId = user?.id;
+      if (!userId) throw new Error('Not authenticated');
+
+      const ok = await notificationService.deleteAllRead(userId);
+      if (!ok) throw new Error('Failed to clear read notifications');
+
+      setNotifications(prev => prev.filter(n => !n.is_read));
+      return true;
+    } catch (error) {
+      console.error('Error clearing read notifications:', error);
+      return false;
+    }
+  };
+
   const getNotificationIcon = (type: string) => {
     const iconClass = "w-5 h-5";
     switch (type) {
@@ -345,6 +361,22 @@ export const NotificationCenter = () => {
                     </div>
                   </div>
                   <div className="flex items-center gap-2">
+                    {notifications.some(n => n.is_read) && (
+                      <motion.button
+                        onClick={clearReadNotifications}
+                        className="text-xs px-3 py-1.5 rounded-lg font-medium transition-all flex items-center gap-1"
+                        style={{
+                          color: colors.statusUnpaid,
+                          background: `${colors.statusUnpaid}15`,
+                        }}
+                        whileHover={{ background: `${colors.statusUnpaid}25` }}
+                        whileTap={{ scale: 0.95 }}
+                        title="Delete all read notifications"
+                      >
+                        <Trash2 className="w-3 h-3" />
+                        Clear read
+                      </motion.button>
+                    )}
                     {unreadCount > 0 && (
                       <motion.button
                         onClick={markAllAsRead}

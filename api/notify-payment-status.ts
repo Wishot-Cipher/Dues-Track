@@ -9,13 +9,13 @@
  *           adminName or orgSlug — derives them server-side.
  */
 import { createClient } from '@supabase/supabase-js'
-import { verifyAdmin, escapeHtml } from './_lib/auth'
+import { verifyAdmin, escapeHtml } from './_lib/auth.js'
 import {
   sendEmail,
   isEmailConfigured,
   paymentApprovedEmail,
   paymentRejectedEmail,
-} from './_lib/email'
+} from './_lib/email.js'
 
 const supabaseUrl = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL
 const serviceRole = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SERVICE_ROLE

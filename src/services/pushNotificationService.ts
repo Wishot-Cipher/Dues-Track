@@ -314,12 +314,12 @@ class PushNotificationService {
    */
   async testPush(userId: string): Promise<{ ok: boolean; message: string; details?: unknown }> {
     try {
-      const res = await fetch('/api/notifications/test-push', {
+      const res = await fetch('/api/notifications/send-push', {
         method: 'POST',
         headers: { 
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ callerId: userId }),
+        body: JSON.stringify({ callerId: userId, test: true }),
       });
 
       // In local dev (Vite), serverless endpoints don't exist — handle gracefully

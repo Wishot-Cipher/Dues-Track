@@ -8,12 +8,12 @@
  *           Verifies the target member actually exists in that org.
  */
 import { createClient } from '@supabase/supabase-js'
-import { verifyMember, escapeHtml } from './_lib/auth'
+import { verifyMember, escapeHtml } from './_lib/auth.js'
 import {
   sendEmail,
   isEmailConfigured,
   welcomeEmail,
-} from './_lib/email'
+} from './_lib/email.js'
 
 const supabaseUrl = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL
 const serviceRole = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SERVICE_ROLE

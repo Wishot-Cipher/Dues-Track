@@ -271,12 +271,12 @@ class NotificationService {
 
       if (!res.ok) {
         // If serverless API isn't available in dev (Vite), fall back to direct Supabase update
-        if (res.status === 404) {
-          console.warn('mark-read endpoint not found (404). Falling back to direct Supabase update for local dev.');
+        if (res.status === 404 || res.status === 500) {
+          console.warn(`mark-read endpoint error (${res.status}). Falling back to direct Supabase update.`);
           const nScope = getOrgScope();
           let mrQ = supabase
             .from('notifications')
-            .update({ is_read: true })
+            .update({ is_read: true, read_at: new Date().toISOString() })
             .eq('id', notificationId)
             .eq('member_id', userId);
           if (nScope) mrQ = mrQ.eq('organization_id', nScope.orgId);
@@ -317,13 +317,13 @@ class NotificationService {
       });
 
       if (!res.ok) {
-        // Fallback for local dev when serverless API routes are not present
-        if (res.status === 404) {
-          console.warn('mark-read endpoint not found (404). Falling back to direct Supabase update for local dev.');
+        // Fallback for local dev when serverless API routes are not available
+        if (res.status === 404 || res.status === 500) {
+          console.warn(`mark-read endpoint error (${res.status}). Falling back to direct Supabase update.`);
           const naScope = getOrgScope();
           let marQ = supabase
             .from('notifications')
-            .update({ is_read: true })
+            .update({ is_read: true, read_at: new Date().toISOString() })
             .eq('member_id', userId)
             .eq('is_read', false);
           if (naScope) marQ = marQ.eq('organization_id', naScope.orgId);
@@ -368,6 +368,33 @@ class NotificationService {
       return true;
     } catch (error) {
       console.error('Error deleting notification:', error);
+      return false;
+    }
+  }
+
+  /**
+   * Delete all read notifications for a user
+   * Safe to call — payment proof lives in the payments table, not notifications.
+   */
+  async deleteAllRead(userId: string): Promise<boolean> {
+    try {
+      const dScope = getOrgScope();
+      let delQ = supabase
+        .from('notifications')
+        .delete()
+        .eq('member_id', userId)
+        .eq('is_read', true);
+      if (dScope) delQ = delQ.eq('organization_id', dScope.orgId);
+      const { error } = await delQ;
+
+      if (error) {
+        console.error('Error deleting read notifications:', error);
+        return false;
+      }
+
+      return true;
+    } catch (error) {
+      console.error('Error deleting read notifications:', error);
       return false;
     }
   }
