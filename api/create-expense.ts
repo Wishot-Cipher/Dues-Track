@@ -1,45 +1,19 @@
-/* eslint-disable @typescript-eslint/no-unused-vars */
 /* eslint-disable @typescript-eslint/no-explicit-any */
+/**
+ * Create Expense API
+ *
+ * Allows admins with can_create_payments permission to create expenses.
+ *
+ * SECURITY: Verifies caller is an admin with can_create_payments permission.
+ *           Forces recorded_by from verified admin ID (never from client).
+ *           Adds organization_id to expense insert for org isolation.
+ *           Uses member_admins table (not legacy admins).
+ */
+
 import { createClient } from '@supabase/supabase-js'
+import { verifyAdmin } from './_lib/auth'
 
 const BUCKET = 'expense-receipts'
-
-// Verify admin token and get admin ID
-async function verifyAdminToken(supabase: any, authHeader: string): Promise<{ valid: boolean; adminId?: string; error?: string }> {
-  if (!authHeader || !authHeader.startsWith('Bearer ')) {
-    return { valid: false, error: 'Missing or invalid authorization header' }
-  }
-
-  const token = authHeader.replace('Bearer ', '')
-  
-  try {
-    // Verify the JWT token with Supabase
-    const { data: { user }, error } = await supabase.auth.getUser(token)
-    
-    if (error || !user) {
-      return { valid: false, error: 'Invalid or expired token' }
-    }
-
-    // Check if user is an admin
-    const { data: admin } = await supabase
-      .from('admins')
-      .select('id, can_create_payments')
-      .eq('student_id', user.id)
-      .single()
-
-    if (!admin) {
-      return { valid: false, error: 'User is not an admin' }
-    }
-
-    if (!admin.can_create_payments) {
-      return { valid: false, error: 'Admin does not have permission to create expenses' }
-    }
-
-    return { valid: true, adminId: user.id }
-  } catch (err) {
-    return { valid: false, error: 'Token verification failed' }
-  }
-}
 
 export default async function handler(req: any, res: any) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' })
@@ -53,16 +27,21 @@ export default async function handler(req: any, res: any) {
 
   const supabaseAdmin = createClient(supabaseUrl, serviceRole)
 
-  // Verify the caller is an authenticated admin
-  const authHeader = req.headers.authorization || req.headers['Authorization']
-  const authResult = await verifyAdminToken(supabaseAdmin, authHeader)
-  
-  if (!authResult.valid) {
-    return res.status(401).json({ error: authResult.error || 'Unauthorized' })
-  }
-
   try {
     const body = req.body
+    const callerId = body?.callerId
+
+    if (!callerId) {
+      return res.status(400).json({ error: 'Missing callerId' })
+    }
+
+    // ── Verify caller is an admin with expense creation permission ──
+    const auth = await verifyAdmin(supabaseAdmin, callerId, 'can_create_payments')
+    if (!auth.valid || !auth.data) {
+      return res.status(auth.status || 401).json({ error: auth.error || 'Unauthorized' })
+    }
+
+    const callerOrgId = auth.data.organization_id
 
     const {
       payment_type_id = null,
@@ -71,7 +50,6 @@ export default async function handler(req: any, res: any) {
       category = null,
       amount,
       expense_date = new Date().toISOString(),
-      recorded_by = null,
       receipt = null,
     } = body
 
@@ -86,8 +64,19 @@ export default async function handler(req: any, res: any) {
       return res.status(400).json({ error: 'Amount must be a positive number' })
     }
 
-    // Use the verified admin ID if recorded_by is not provided
-    const finalRecordedBy = recorded_by || authResult.adminId
+    // If payment_type_id is provided, verify it belongs to the caller's org
+    if (payment_type_id) {
+      const { data: pt } = await supabaseAdmin
+        .from('payment_types')
+        .select('id')
+        .eq('id', payment_type_id)
+        .eq('organization_id', callerOrgId)
+        .single()
+
+      if (!pt) {
+        return res.status(400).json({ error: 'Payment type not found in your organization' })
+      }
+    }
 
     let receipt_url: string | null = null
 
@@ -118,6 +107,7 @@ export default async function handler(req: any, res: any) {
       receipt_url = data?.publicUrl ?? null
     }
 
+    // Force recorded_by from verified admin — NEVER from client
     const insertPayload = {
       payment_type_id,
       title,
@@ -125,8 +115,9 @@ export default async function handler(req: any, res: any) {
       category,
       amount: numAmount,
       expense_date,
-      recorded_by: finalRecordedBy,
+      recorded_by: callerId,
       receipt_url,
+      organization_id: callerOrgId,
     }
 
     const { data: inserted, error: insertError } = await supabaseAdmin

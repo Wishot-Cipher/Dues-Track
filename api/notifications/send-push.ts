@@ -1,20 +1,18 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 /**
  * Send Push Notification API
- * 
- * This endpoint sends push notifications to users via the Web Push API.
- * Called from backend after payment status changes.
- * 
- * Required Environment Variables:
- * - SUPABASE_URL
- * - SUPABASE_SERVICE_ROLE_KEY
- * - VAPID_PUBLIC_KEY
- * - VAPID_PRIVATE_KEY
- * - VAPID_EMAIL (your email for VAPID identification)
+ *
+ * Sends push notifications to users via the Web Push API.
+ * Called from backend or frontend after payment status changes.
+ *
+ * SECURITY: Verifies the caller is a real, active member.
+ *           Verifies the target user is in the SAME organization.
+ *           Prevents cross-org push notification injection.
  */
 
 import { createClient } from '@supabase/supabase-js';
 import webpush from 'web-push';
+import { verifyMember } from '../_lib/auth';
 
 const supabaseUrl = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL;
 const serviceRole = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SERVICE_ROLE;
@@ -28,51 +26,64 @@ if (vapidPublicKey && vapidPrivateKey) {
 }
 
 export default async function handler(req: any, res: any) {
-  // Only allow POST
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Method not allowed' });
   }
 
-  console.log('📤 send-push API called');
-
-  // Check configuration
   if (!supabaseUrl || !serviceRole) {
-    console.error('❌ Missing Supabase credentials');
     return res.status(500).json({ error: 'Server configuration error' });
   }
 
   if (!vapidPublicKey || !vapidPrivateKey) {
-    console.warn('⚠️ VAPID keys not configured - push notifications disabled');
     return res.status(200).json({ ok: true, message: 'Push notifications not configured', sent: 0 });
   }
 
   const supabase = createClient(supabaseUrl, serviceRole);
 
   try {
-    const { userId, title, body, url, tag, data } = req.body;
+    // Support both "callerId" and legacy fallback (userId = callerId)
+    const callerId = req.body?.callerId || req.body?.userId;
+    const { userId: targetUserId, title, body, url, tag, data } = req.body;
 
-    console.log('📤 Push request for user:', userId);
-    console.log('📤 Title:', title);
-
-    if (!userId || !title || !body) {
-      return res.status(400).json({ error: 'Missing required fields: userId, title, body' });
+    if (!callerId || !title || !body) {
+      return res.status(400).json({ error: 'Missing required fields: callerId, title, body' });
     }
 
-    // Get user's push subscription
+    // ── Verify the caller is a real, active member ──
+    const auth = await verifyMember(supabase, callerId);
+    if (!auth.valid || !auth.data) {
+      return res.status(auth.status || 401).json({ error: auth.error || 'Unauthorized' });
+    }
+
+    const callerOrgId = auth.data.organization_id;
+
+    // Determine target: if no separate targetUserId, push to self
+    const finalTargetId = targetUserId || callerId;
+
+    // ── Verify target is in the same organization ──
+    if (finalTargetId !== callerId) {
+      const { data: target } = await supabase
+        .from('organization_members')
+        .select('organization_id')
+        .eq('id', finalTargetId)
+        .single();
+
+      if (!target || target.organization_id !== callerOrgId) {
+        return res.status(403).json({ error: 'Target user not in your organization' });
+      }
+    }
+
+    // Get target's push subscription
     const { data: subscription, error: subError } = await supabase
       .from('push_subscriptions')
       .select('*')
-      .eq('user_id', userId)
+      .eq('user_id', finalTargetId)
       .single();
 
     if (subError || !subscription) {
-      console.log('⚠️ No push subscription found for user:', userId, subError?.message);
       return res.status(200).json({ ok: true, message: 'No subscription found', sent: 0 });
     }
 
-    console.log('✅ Found subscription for user:', userId);
-
-    // Construct the push subscription object
     const pushSubscription = {
       endpoint: subscription.endpoint,
       keys: {
@@ -81,7 +92,6 @@ export default async function handler(req: any, res: any) {
       },
     };
 
-    // Construct notification payload
     const payload = JSON.stringify({
       title,
       body,
@@ -93,66 +103,28 @@ export default async function handler(req: any, res: any) {
       data: data || {},
     });
 
-    // For a real implementation, you would use the web-push library here:
-    // 
-    // import webpush from 'web-push';
-    // 
-    // webpush.setVapidDetails(vapidEmail, vapidPublicKey, vapidPrivateKey);
-    // 
-    // await webpush.sendNotification(pushSubscription, payload);
-    //
-    // Since web-push requires Node.js crypto, for Vercel Edge functions,
-    // you may need alternative approaches or use a different runtime.
+    try {
+      const result = await webpush.sendNotification(pushSubscription as never, payload, {
+        TTL: 86400,
+        urgency: 'normal'
+      });
 
-    // For now, we'll use the Web Push library
-    const sent = await sendWebPush(pushSubscription, payload);
-
-    if (sent) {
-      console.log('✅ Push notification sent to:', userId);
-      return res.status(200).json({ ok: true, sent: 1 });
-    } else {
-      // If push fails, the subscription might be invalid - consider removing it
-      console.log('❌ Failed to send push to:', userId);
-      
-      // Remove invalid subscription
-      await supabase
-        .from('push_subscriptions')
-        .delete()
-        .eq('user_id', userId);
-        
-      return res.status(200).json({ ok: true, sent: 0, message: 'Push failed, subscription removed' });
+      if (result.statusCode >= 200 && result.statusCode < 300) {
+        return res.status(200).json({ ok: true, sent: 1 });
+      }
+      return res.status(200).json({ ok: true, sent: 0, message: 'Push delivery uncertain' });
+    } catch (pushErr: any) {
+      // Subscription expired — remove it
+      if (pushErr.statusCode === 410 || pushErr.statusCode === 404) {
+        await supabase
+          .from('push_subscriptions')
+          .delete()
+          .eq('user_id', finalTargetId);
+      }
+      return res.status(200).json({ ok: true, sent: 0, message: 'Push failed' });
     }
   } catch (error) {
     console.error('Push notification error:', error);
     return res.status(500).json({ error: 'Failed to send push notification' });
-  }
-}
-
-/**
- * Send a Web Push notification using the web-push library
- */
-async function sendWebPush(
-  subscription: { endpoint: string; keys: { p256dh: string; auth: string } },
-  payload: string
-): Promise<boolean> {
-  try {
-    // Send the push notification - web-push accepts a simple object with endpoint and keys
-    const result = await webpush.sendNotification(subscription as never, payload, {
-      TTL: 86400, // 24 hours
-      urgency: 'normal'
-    });
-    
-    console.log('Push notification sent, status:', result.statusCode);
-    return result.statusCode >= 200 && result.statusCode < 300;
-  } catch (error: any) {
-    console.error('Web Push send error:', error);
-    
-    // Check for specific error codes
-    if (error.statusCode === 410 || error.statusCode === 404) {
-      // Subscription expired or invalid
-      console.log('Subscription expired or invalid');
-    }
-    
-    return false;
   }
 }

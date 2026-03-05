@@ -1,6 +1,6 @@
-﻿import { useState, useEffect } from 'react';
+﻿import { useState, useEffect, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import {  } from 'react-router-dom';
+
 import { useAppNav } from '@/hooks/useAppNav';
 import { supabase } from '@/config/supabase';
 import { getOrgScope } from '@/utils/orgScope';
@@ -37,7 +37,6 @@ import {
   Plus,
   Loader2,
   GraduationCap,
-  Eye,
   EyeOff,
 } from 'lucide-react';
 import Footer from '@/components/Footer';
@@ -45,6 +44,7 @@ import { useAuth } from '@/hooks/useAppAuth';
 import authService from '@/services/authService';
 import { exportStudentsToPDF } from '@/utils/htmlPrintExports';
 import BulkStudentImport from '@/components/admin/BulkStudentImport';
+import { useSubscriptionLimits } from '@/hooks/useSubscriptionLimits';
 
 interface Student {
   id: string;
@@ -77,6 +77,9 @@ export default function ManageStudentsPage() {
   const { go: navigate } = useAppNav();
   const { success, error: showError } = useToast();
   const { hasPermission, user } = useAuth();
+  const { canCreate, planName, refresh: refreshLimits } = useSubscriptionLimits();
+  const [showLimitModal, setShowLimitModal] = useState(false);
+  const [limitMessage, setLimitMessage] = useState('');
   const [loading, setLoading] = useState(true);
   const [students, setStudents] = useState<Student[]>([]);
   const [filteredStudents, setFilteredStudents] = useState<Student[]>([]);
@@ -86,6 +89,9 @@ export default function ManageStudentsPage() {
   const [editLoading, setEditLoading] = useState(false);
   const [showExportMenu, setShowExportMenu] = useState(false);
   const [exporting, setExporting] = useState(false);
+  
+  // Student selection for bulk operations
+  const [selectedStudentIds] = useState<Set<string>>(new Set());
   
   // Export field selection modal
   const [showExportFieldsModal, setShowExportFieldsModal] = useState(false);
@@ -114,9 +120,9 @@ export default function ManageStudentsPage() {
   // Confirmation modal state
   const [confirmModal, setConfirmModal] = useState<{
     isOpen: boolean;
-    type: 'delete' | 'admin' | 'finsec' | 'class_rep' | 'password_reset' | null;
+    type: 'delete' | 'admin' | 'finsec' | 'class_rep' | 'password_reset' | 'suspend' | null;
     student: Student | null;
-    action: 'grant' | 'remove' | 'delete' | 'reset';
+    action: 'grant' | 'remove' | 'delete' | 'reset' | 'suspend' | 'activate';
   }>({ isOpen: false, type: null, student: null, action: 'grant' });
   
   // Password reset result modal
@@ -181,6 +187,11 @@ export default function ManageStudentsPage() {
     (currentPage - 1) * itemsPerPage,
     currentPage * itemsPerPage
   );
+
+  // Selection helpers
+  const getSelectedStudents = useCallback(() => {
+    return finalFilteredStudents.filter(s => selectedStudentIds.has(s.id));
+  }, [finalFilteredStudents, selectedStudentIds]);
 
   // Scroll to top helper function
   const scrollToTop = () => {
@@ -362,13 +373,22 @@ export default function ManageStudentsPage() {
     }
   };
 
-  const toggleStudentStatus = async (student: Student) => {
+  const toggleStudentStatus = (student: Student) => {
     // Check permission before proceeding
     if (!hasPermission('can_manage_students')) {
       showError('You do not have permission to change student status');
       return;
     }
+    // Show confirmation modal
+    setConfirmModal({
+      isOpen: true,
+      type: 'suspend',
+      student,
+      action: student.is_active ? 'suspend' : 'activate',
+    });
+  };
 
+  const executeToggleStudentStatus = async (student: Student) => {
     try {
       // Direct update on organization_members
       const scope = getOrgScope();
@@ -468,6 +488,14 @@ export default function ManageStudentsPage() {
           link: '/profile',
         });
       } else {
+        // Check billing limit before granting role
+        const adminCheck = canCreate('admins');
+        if (!adminCheck.allowed) {
+          setLimitMessage(adminCheck.message || `You've reached the admin limit on the ${planName} plan. Upgrade to add more.`);
+          setShowLimitModal(true);
+          return;
+        }
+
         // Add finsec role directly
         const { error } = await supabase.from('member_admins').insert({
           member_id: student.id,
@@ -493,6 +521,7 @@ export default function ManageStudentsPage() {
       
       // Refresh the students list
       await fetchStudents();
+      await refreshLimits();
       
       // If current user was updated, refresh their session
       if (user?.id === student.id) {
@@ -574,6 +603,14 @@ export default function ManageStudentsPage() {
           link: '/profile',
         });
       } else {
+        // Check billing limit before granting role
+        const adminCheck = canCreate('admins');
+        if (!adminCheck.allowed) {
+          setLimitMessage(adminCheck.message || `You've reached the admin limit on the ${planName} plan. Upgrade to add more.`);
+          setShowLimitModal(true);
+          return;
+        }
+
         // Add admin role directly
         const { error } = await supabase.from('member_admins').insert({
           member_id: student.id,
@@ -599,6 +636,7 @@ export default function ManageStudentsPage() {
       
       // Refresh the students list
       await fetchStudents();
+      await refreshLimits();
       
       // If current user was updated, refresh their session
       if (user?.id === student.id) {
@@ -679,6 +717,14 @@ export default function ManageStudentsPage() {
           link: '/profile',
         });
       } else {
+        // Check billing limit before granting role
+        const adminCheck = canCreate('admins');
+        if (!adminCheck.allowed) {
+          setLimitMessage(adminCheck.message || `You've reached the admin limit on the ${planName} plan. Upgrade to add more.`);
+          setShowLimitModal(true);
+          return;
+        }
+
         // Add classrep role directly
         const { error } = await supabase.from('member_admins').insert({
           member_id: student.id,
@@ -704,6 +750,7 @@ export default function ManageStudentsPage() {
       
       // Refresh the students list
       await fetchStudents();
+      await refreshLimits();
       
       // If current user was updated, refresh their session
       if (user?.id === student.id) {
@@ -836,7 +883,11 @@ export default function ManageStudentsPage() {
   const handleExportCSV = () => {
     setExporting(true);
     try {
-      const dataToExport = getFilteredStudents();
+      const raw = selectedStudentIds.size > 0 ? getSelectedStudents() : getFilteredStudents();
+      // Sort alphabetically by name for clean output
+      const dataToExport = [...raw].sort((a, b) =>
+        (a.full_name || '').localeCompare(b.full_name || '', undefined, { sensitivity: 'base' })
+      );
       
       // Helper function to escape CSV fields
       const escapeCSV = (field: string | number | boolean | null | undefined): string => {
@@ -925,7 +976,7 @@ export default function ManageStudentsPage() {
   const handleExportPDF = () => {
     setExporting(true);
     try {
-      const dataToExport = getFilteredStudents();
+      const dataToExport = selectedStudentIds.size > 0 ? getSelectedStudents() : getFilteredStudents();
       exportStudentsToPDF(dataToExport, {
         status: statusFilter !== 'all' ? statusFilter : undefined,
         role: roleFilter !== 'all' ? roleFilter : undefined,
@@ -960,6 +1011,15 @@ export default function ManageStudentsPage() {
 
     try {
       setAddLoading(true);
+
+      // ── Check plan limit before adding ──
+      const limitCheck = canCreate('members');
+      if (!limitCheck.allowed) {
+        setLimitMessage(limitCheck.message || `You've reached the member limit on the ${planName} plan.`);
+        setShowLimitModal(true);
+        setAddLoading(false);
+        return;
+      }
       
       // Direct insert into organization_members with hashed password
       const scope = getOrgScope();
@@ -1024,6 +1084,19 @@ export default function ManageStudentsPage() {
         tempPassword: tempPassword,
       });
 
+      // Send welcome email (non-blocking)
+      if (newStudent.email.trim()) {
+        fetch('/api/send-welcome-email', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            callerId: user?.id,
+            memberEmail: newStudent.email.trim(),
+            memberName: newStudent.full_name.trim(),
+          }),
+        }).catch(() => {}); // Non-critical
+      }
+
       // Reset form
       setNewStudent({
         full_name: '',
@@ -1069,6 +1142,9 @@ export default function ManageStudentsPage() {
         break;
       case 'password_reset':
         await executePasswordReset(confirmModal.student);
+        break;
+      case 'suspend':
+        await executeToggleStudentStatus(confirmModal.student);
         break;
     }
   };
@@ -1126,6 +1202,16 @@ export default function ManageStudentsPage() {
           color: colors.warning,
           buttonText: 'Reset Password'
         };
+      case 'suspend':
+        return {
+          title: student.is_active ? 'Deactivate Student' : 'Activate Student',
+          message: student.is_active
+            ? `Are you sure you want to deactivate "${student.full_name}"? They will be suspended and will no longer be able to log in or access the system.`
+            : `Are you sure you want to reactivate "${student.full_name}"? They will regain access to the system.`,
+          icon: student.is_active ? <XCircle className="w-8 h-8" /> : <CheckCircle className="w-8 h-8" />,
+          color: student.is_active ? colors.warning : colors.statusPaid,
+          buttonText: student.is_active ? 'Deactivate' : 'Activate'
+        };
       default:
         return { title: '', message: '', icon: null, color: '', buttonText: '' };
     }
@@ -1134,7 +1220,7 @@ export default function ManageStudentsPage() {
   const modalContent = getConfirmModalContent();
 
   return (
-    <div className="min-h-screen py-4 sm:py-6 relative overflow-x-hidden"  style={{
+    <div className="min-h-screen py-4 sm:py-6 pb-24 lg:pb-6 relative overflow-x-hidden"  style={{
         background: 'radial-gradient(ellipse at top, #1A0E09 0%, #0F0703 100%)',
       }}
     >
@@ -2421,7 +2507,7 @@ export default function ManageStudentsPage() {
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50 p-4 overflow-y-auto overscroll-contain"
+            className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50 p-4 overflow-y-auto modal-scrollbar overscroll-contain"
             onClick={() => setShowEditModal(false)}
           >
             <motion.div
@@ -2429,7 +2515,7 @@ export default function ManageStudentsPage() {
               animate={{ scale: 1, opacity: 1, y: 0 }}
               exit={{ scale: 0.9, opacity: 0, y: 20 }}
               onClick={(e) => e.stopPropagation()}
-              className="max-w-md w-full max-h-[90vh] overflow-y-auto"
+              className="max-w-md w-full max-h-[90vh] overflow-y-auto modal-scrollbar"
             >
               <GlassCard className="relative overflow-hidden">
                 {/* Modal Header */}
@@ -2675,7 +2761,7 @@ export default function ManageStudentsPage() {
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50 p-4 overflow-y-auto overscroll-contain"
+            className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50 p-4 overflow-y-auto modal-scrollbar overscroll-contain"
             onClick={() => setShowAddModal(false)}
           >
             <motion.div
@@ -2683,7 +2769,7 @@ export default function ManageStudentsPage() {
               animate={{ scale: 1, opacity: 1, y: 0 }}
               exit={{ scale: 0.9, opacity: 0, y: 20 }}
               onClick={(e) => e.stopPropagation()}
-              className="max-w-md w-full max-h-[90vh] overflow-y-auto"
+              className="max-w-md w-full max-h-[90vh] overflow-y-auto modal-scrollbar"
             >
               <GlassCard className="relative overflow-hidden">
                 {/* Modal Header Gradient */}
@@ -2925,162 +3011,425 @@ export default function ManageStudentsPage() {
         )}
       </AnimatePresence>
 
-      {/* Export Fields Selection Modal */}
+      {/* Export Fields Selection Modal — Premium Design */}
       <AnimatePresence>
         {showExportFieldsModal && (
           <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50 p-4"
+            className="fixed inset-0 bg-black/80 backdrop-blur-md flex items-center justify-center z-50 p-4"
             onClick={() => setShowExportFieldsModal(false)}
           >
             <motion.div
-              initial={{ scale: 0.9, opacity: 0, y: 20 }}
+              initial={{ scale: 0.92, opacity: 0, y: 30 }}
               animate={{ scale: 1, opacity: 1, y: 0 }}
-              exit={{ scale: 0.9, opacity: 0, y: 20 }}
+              exit={{ scale: 0.92, opacity: 0, y: 30 }}
+              transition={{ type: 'spring', damping: 25, stiffness: 300 }}
               onClick={(e) => e.stopPropagation()}
-              className="max-w-md w-full"
+              className="max-w-lg w-full max-h-[90vh] overflow-y-auto modal-scrollbar"
+              style={{ scrollbarWidth: 'thin' }}
             >
-              <GlassCard className="relative overflow-hidden">
-                <div className="absolute top-0 left-0 w-full h-1"
-                  style={{ background: `linear-gradient(90deg, ${colors.primary}, ${colors.accentMint})` }} />
-                
-                <div className="flex items-center justify-between mb-5">
-                  <div className="flex items-center gap-3">
-                    <div className="w-11 h-11 rounded-xl flex items-center justify-center"
-                      style={{
-                        background: `linear-gradient(135deg, ${colors.primary}30, ${colors.primary}10)`,
-                        border: `1px solid ${colors.primary}40`,
-                      }}>
-                      <Eye className="w-5 h-5" style={{ color: colors.primary }} />
+              <div className="rounded-2xl overflow-hidden" style={{
+                background: 'linear-gradient(165deg, rgba(28, 20, 14, 0.98), rgba(18, 12, 8, 0.99))',
+                border: '1px solid rgba(255, 255, 255, 0.08)',
+                boxShadow: `0 25px 60px rgba(0, 0, 0, 0.5), 0 0 40px ${colors.primary}08`,
+              }}>
+                {/* Gradient Header */}
+                <div className="relative px-6 pt-6 pb-4">
+                  <div className="absolute top-0 left-0 w-full h-1"
+                    style={{ background: `linear-gradient(90deg, ${colors.primary}, ${colors.accentMint}, ${colors.primary})` }} />
+                  <div className="absolute top-0 left-0 w-full h-32 opacity-20"
+                    style={{ background: `radial-gradient(ellipse at top, ${colors.primary}30, transparent 70%)` }} />
+                  
+                  <div className="relative flex items-center justify-between">
+                    <div className="flex items-center gap-4">
+                      <div className="w-12 h-12 rounded-2xl flex items-center justify-center"
+                        style={{
+                          background: `linear-gradient(135deg, ${colors.primary}30, ${colors.accentMint}20)`,
+                          border: `1px solid ${colors.primary}40`,
+                          boxShadow: `0 4px 15px ${colors.primary}25`,
+                        }}>
+                        <Download className="w-5 h-5" style={{ color: colors.primary }} />
+                      </div>
+                      <div>
+                        <h3 className="text-lg font-bold text-white tracking-tight">Export Student Data</h3>
+                        <p className="text-xs mt-0.5" style={{ color: colors.textSecondary }}>
+                          {finalFilteredStudents.length} student{finalFilteredStudents.length !== 1 ? 's' : ''} • {exportFormat.toUpperCase()} format
+                        </p>
+                      </div>
                     </div>
-                    <div>
-                      <h3 className="text-lg font-bold text-white">Choose Fields to Export</h3>
-                      <p className="text-xs" style={{ color: colors.textSecondary }}>
-                        Select what data to include for privacy
-                      </p>
-                    </div>
+                    <motion.button
+                      whileHover={{ scale: 1.1, rotate: 90 }}
+                      whileTap={{ scale: 0.9 }}
+                      onClick={() => setShowExportFieldsModal(false)}
+                      className="w-9 h-9 rounded-xl flex items-center justify-center"
+                      style={{ background: 'rgba(255, 255, 255, 0.06)', border: '1px solid rgba(255, 255, 255, 0.08)' }}
+                    >
+                      <X className="w-4 h-4" style={{ color: colors.textSecondary }} />
+                    </motion.button>
                   </div>
-                  <motion.button
-                    whileHover={{ scale: 1.1, rotate: 90 }}
-                    whileTap={{ scale: 0.9 }}
-                    onClick={() => setShowExportFieldsModal(false)}
-                    className="w-8 h-8 rounded-full flex items-center justify-center"
-                    style={{ background: 'rgba(255, 255, 255, 0.1)' }}
-                  >
-                    <X className="w-4 h-4" style={{ color: colors.textSecondary }} />
-                  </motion.button>
                 </div>
 
                 {/* Quick Presets */}
-                <div className="flex gap-2 mb-4">
-                  {[
-                    { label: 'Name Only', fields: { name: true, regNumber: false, email: false, phone: false, level: false, department: false, section: false, status: false, roles: false, paid: false } },
-                    { label: 'Basic Info', fields: { name: true, regNumber: true, email: false, phone: false, level: true, department: true, section: false, status: true, roles: false, paid: false } },
-                    { label: 'All Fields', fields: { name: true, regNumber: true, email: true, phone: true, level: true, department: true, section: true, status: true, roles: true, paid: true } },
-                  ].map((preset) => (
-                    <button
-                      key={preset.label}
-                      onClick={() => setExportFields(preset.fields)}
-                      className="flex-1 px-3 py-2 rounded-lg text-xs font-medium transition-all active:scale-[0.97]"
-                      style={{
-                        background: JSON.stringify(exportFields) === JSON.stringify(preset.fields) 
-                          ? `${colors.primary}25` 
-                          : 'rgba(255, 255, 255, 0.05)',
-                        border: JSON.stringify(exportFields) === JSON.stringify(preset.fields)
-                          ? `1px solid ${colors.primary}60`
-                          : '1px solid rgba(255, 255, 255, 0.1)',
-                        color: JSON.stringify(exportFields) === JSON.stringify(preset.fields)
-                          ? colors.primary
-                          : colors.textSecondary,
-                      }}
-                    >
-                      {preset.label}
-                    </button>
-                  ))}
-                </div>
-
-                {/* Field Toggles */}
-                <div className="space-y-1 mb-5">
-                  {([
-                    { key: 'name' as const, label: 'Full Name', icon: '👤', required: true },
-                    { key: 'regNumber' as const, label: 'Registration Number', icon: '🆔' },
-                    { key: 'email' as const, label: 'Email Address', icon: '📧', sensitive: true },
-                    { key: 'phone' as const, label: 'Phone Number', icon: '📱', sensitive: true },
-                    { key: 'level' as const, label: 'Level', icon: '🎓' },
-                    { key: 'department' as const, label: 'Department', icon: '🏛' },
-                    { key: 'section' as const, label: 'Section', icon: '📂' },
-                    { key: 'status' as const, label: 'Active Status', icon: '✅' },
-                    { key: 'roles' as const, label: 'Roles', icon: '👑' },
-                    { key: 'paid' as const, label: 'Date Joined', icon: '📅' },
-                  ]).map((field) => (
-                    <button
-                      key={field.key}
-                      onClick={() => {
-                        if (field.required) return;
-                        setExportFields(prev => ({ ...prev, [field.key]: !prev[field.key] }));
-                      }}
-                      className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg transition-all ${field.required ? 'opacity-70 cursor-default' : 'hover:bg-white/5 active:scale-[0.99]'}`}
-                      style={{
-                        background: exportFields[field.key] ? `${colors.primary}08` : 'transparent',
-                      }}
-                    >
-                      <span className="text-base">{field.icon}</span>
-                      <span className="flex-1 text-left text-sm font-medium" style={{ color: exportFields[field.key] ? 'white' : colors.textSecondary }}>
-                        {field.label}
-                      </span>
-                      {field.sensitive && (
-                        <span className="text-[9px] px-1.5 py-0.5 rounded-full font-medium"
-                          style={{ background: `${colors.warning}20`, color: colors.warning }}>
-                          SENSITIVE
-                        </span>
-                      )}
-                      <div 
-                        className="w-9 h-5 rounded-full relative transition-all"
-                        style={{ 
-                          background: exportFields[field.key] ? colors.primary : 'rgba(255, 255, 255, 0.15)',
-                        }}
-                      >
-                        <div 
-                          className="w-4 h-4 rounded-full absolute top-0.5 transition-all"
-                          style={{ 
-                            background: 'white',
-                            left: exportFields[field.key] ? '18px' : '2px',
+                <div className="px-6 pb-4">
+                  <p className="text-[10px] uppercase tracking-widest font-semibold mb-2.5" style={{ color: colors.textSecondary }}>
+                    Quick Presets
+                  </p>
+                  <div className="grid grid-cols-3 gap-2">
+                    {[
+                      { 
+                        label: 'Names Only', 
+                        desc: 'Just names',
+                        icon: <User className="w-4 h-4" />,
+                        fields: { name: true, regNumber: false, email: false, phone: false, level: false, department: false, section: false, status: false, roles: false, paid: false } 
+                      },
+                      { 
+                        label: 'Basic Info', 
+                        desc: 'Core details',
+                        icon: <FileText className="w-4 h-4" />,
+                        fields: { name: true, regNumber: true, email: false, phone: false, level: true, department: true, section: false, status: true, roles: false, paid: false } 
+                      },
+                      { 
+                        label: 'Full Report', 
+                        desc: 'Everything',
+                        icon: <FileSpreadsheet className="w-4 h-4" />,
+                        fields: { name: true, regNumber: true, email: true, phone: true, level: true, department: true, section: true, status: true, roles: true, paid: true } 
+                      },
+                    ].map((preset) => {
+                      const isSelected = JSON.stringify(exportFields) === JSON.stringify(preset.fields);
+                      return (
+                        <motion.button
+                          key={preset.label}
+                          whileHover={{ scale: 1.02 }}
+                          whileTap={{ scale: 0.97 }}
+                          onClick={() => setExportFields(preset.fields)}
+                          className="relative p-3 rounded-xl text-center transition-all overflow-hidden"
+                          style={{
+                            background: isSelected
+                              ? `linear-gradient(135deg, ${colors.primary}20, ${colors.accentMint}15)`
+                              : 'rgba(255, 255, 255, 0.03)',
+                            border: isSelected
+                              ? `1.5px solid ${colors.primary}60`
+                              : '1px solid rgba(255, 255, 255, 0.06)',
+                            boxShadow: isSelected ? `0 4px 20px ${colors.primary}15` : 'none',
                           }}
-                        />
-                      </div>
-                    </button>
-                  ))}
+                        >
+                          {isSelected && (
+                            <div className="absolute top-1.5 right-1.5">
+                              <CheckCircle className="w-3.5 h-3.5" style={{ color: colors.primary }} />
+                            </div>
+                          )}
+                          <div className="flex justify-center mb-1.5" style={{ color: isSelected ? colors.primary : colors.textSecondary }}>
+                            {preset.icon}
+                          </div>
+                          <p className="text-xs font-semibold" style={{ color: isSelected ? 'white' : colors.textSecondary }}>
+                            {preset.label}
+                          </p>
+                          <p className="text-[9px] mt-0.5" style={{ color: colors.textSecondary }}>
+                            {preset.desc}
+                          </p>
+                        </motion.button>
+                      );
+                    })}
+                  </div>
                 </div>
 
-                {/* Privacy Note */}
-                <div className="px-3 py-2.5 rounded-lg mb-4 flex items-start gap-2"
-                  style={{ background: `${colors.warning}10`, border: `1px solid ${colors.warning}20` }}>
-                  <EyeOff className="w-4 h-4 mt-0.5 shrink-0" style={{ color: colors.warning }} />
-                  <p className="text-xs" style={{ color: colors.warning }}>
-                    Only include fields you need. Sensitive data like emails and phone numbers should be excluded unless absolutely required.
+                {/* Divider */}
+                <div className="mx-6 h-px" style={{ background: 'rgba(255, 255, 255, 0.06)' }} />
+
+                {/* Field Toggles — Grouped */}
+                <div className="px-6 py-4">
+                  <div className="flex items-center justify-between mb-3">
+                    <p className="text-[10px] uppercase tracking-widest font-semibold" style={{ color: colors.textSecondary }}>
+                      Select Fields
+                    </p>
+                    <span className="text-[10px] px-2.5 py-1 rounded-full font-bold"
+                      style={{ background: `${colors.primary}20`, color: colors.primary, border: `1px solid ${colors.primary}30` }}>
+                      {Object.values(exportFields).filter(Boolean).length} / {Object.keys(exportFields).length} selected
+                    </span>
+                  </div>
+                  
+                  {/* Identity Fields */}
+                  <div className="mb-3">
+                    <p className="text-[9px] uppercase tracking-wider font-medium mb-1.5 pl-1" style={{ color: `${colors.textSecondary}90` }}>Identity</p>
+                    <div className="rounded-xl overflow-hidden" style={{ border: '1px solid rgba(255, 255, 255, 0.06)' }}>
+                      {([
+                        { key: 'name' as const, label: 'Full Name', sublabel: 'Student name', icon: <User className="w-4 h-4" />, required: true },
+                        { key: 'regNumber' as const, label: 'Reg Number', sublabel: 'ID / Matric no.', icon: <GraduationCap className="w-4 h-4" /> },
+                      ]).map((field, i) => (
+                        <button
+                          key={field.key}
+                          onClick={() => { if (!field.required) setExportFields(prev => ({ ...prev, [field.key]: !prev[field.key] })); }}
+                          className="w-full flex items-center gap-3 px-4 py-3 transition-all"
+                          style={{
+                            background: exportFields[field.key] ? `${colors.primary}06` : 'rgba(255, 255, 255, 0.01)',
+                            borderBottom: i === 0 ? '1px solid rgba(255, 255, 255, 0.04)' : 'none',
+                            cursor: field.required ? 'default' : 'pointer',
+                          }}
+                        >
+                          <div className="w-8 h-8 rounded-lg flex items-center justify-center shrink-0"
+                            style={{ 
+                              background: exportFields[field.key] ? `${colors.primary}15` : 'rgba(255, 255, 255, 0.04)',
+                              color: exportFields[field.key] ? colors.primary : colors.textSecondary,
+                            }}>
+                            {field.icon}
+                          </div>
+                          <div className="flex-1 text-left min-w-0">
+                            <p className="text-sm font-medium" style={{ color: exportFields[field.key] ? 'white' : colors.textSecondary }}>
+                              {field.label}
+                            </p>
+                            <p className="text-[10px]" style={{ color: `${colors.textSecondary}80` }}>{field.sublabel}</p>
+                          </div>
+                          {field.required && (
+                            <span className="text-[8px] px-1.5 py-0.5 rounded font-bold uppercase tracking-wider shrink-0"
+                              style={{ background: `${colors.primary}15`, color: colors.primary }}>
+                              Required
+                            </span>
+                          )}
+                          <div className="shrink-0">
+                            <motion.div 
+                              className="w-10 h-[22px] rounded-full relative cursor-pointer"
+                              animate={{
+                                background: exportFields[field.key] ? colors.primary : 'rgba(255, 255, 255, 0.12)',
+                              }}
+                              transition={{ duration: 0.2 }}
+                            >
+                              <motion.div 
+                                className="w-[18px] h-[18px] rounded-full absolute top-0.5"
+                                animate={{
+                                  left: exportFields[field.key] ? '20px' : '2px',
+                                  background: exportFields[field.key] ? 'white' : 'rgba(255, 255, 255, 0.5)',
+                                  boxShadow: exportFields[field.key] ? '0 2px 4px rgba(0,0,0,0.3)' : 'none',
+                                }}
+                                transition={{ type: 'spring', stiffness: 500, damping: 30 }}
+                              />
+                            </motion.div>
+                          </div>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Contact Fields */}
+                  <div className="mb-3">
+                    <div className="flex items-center gap-2 mb-1.5 pl-1">
+                      <p className="text-[9px] uppercase tracking-wider font-medium" style={{ color: `${colors.textSecondary}90` }}>Contact</p>
+                      <span className="text-[7px] px-1.5 py-0.5 rounded font-bold uppercase"
+                        style={{ background: `${colors.warning}18`, color: colors.warning }}>
+                        Sensitive
+                      </span>
+                    </div>
+                    <div className="rounded-xl overflow-hidden" style={{ border: `1px solid ${colors.warning}12` }}>
+                      {([
+                        { key: 'email' as const, label: 'Email Address', sublabel: 'Personal email', icon: <FileText className="w-4 h-4" /> },
+                        { key: 'phone' as const, label: 'Phone Number', sublabel: 'Mobile / WhatsApp', icon: <Shield className="w-4 h-4" /> },
+                      ]).map((field, i) => (
+                        <button
+                          key={field.key}
+                          onClick={() => setExportFields(prev => ({ ...prev, [field.key]: !prev[field.key] }))}
+                          className="w-full flex items-center gap-3 px-4 py-3 transition-all"
+                          style={{
+                            background: exportFields[field.key] ? `${colors.warning}06` : 'rgba(255, 255, 255, 0.01)',
+                            borderBottom: i === 0 ? `1px solid ${colors.warning}08` : 'none',
+                          }}
+                        >
+                          <div className="w-8 h-8 rounded-lg flex items-center justify-center shrink-0"
+                            style={{ 
+                              background: exportFields[field.key] ? `${colors.warning}15` : 'rgba(255, 255, 255, 0.04)',
+                              color: exportFields[field.key] ? colors.warning : colors.textSecondary,
+                            }}>
+                            {field.icon}
+                          </div>
+                          <div className="flex-1 text-left min-w-0">
+                            <p className="text-sm font-medium" style={{ color: exportFields[field.key] ? 'white' : colors.textSecondary }}>
+                              {field.label}
+                            </p>
+                            <p className="text-[10px]" style={{ color: `${colors.textSecondary}80` }}>{field.sublabel}</p>
+                          </div>
+                          <EyeOff className="w-3 h-3 shrink-0" style={{ color: `${colors.warning}60` }} />
+                          <div className="shrink-0">
+                            <motion.div 
+                              className="w-10 h-[22px] rounded-full relative cursor-pointer"
+                              animate={{
+                                background: exportFields[field.key] ? colors.warning : 'rgba(255, 255, 255, 0.12)',
+                              }}
+                              transition={{ duration: 0.2 }}
+                            >
+                              <motion.div 
+                                className="w-[18px] h-[18px] rounded-full absolute top-0.5"
+                                animate={{
+                                  left: exportFields[field.key] ? '20px' : '2px',
+                                  background: exportFields[field.key] ? 'white' : 'rgba(255, 255, 255, 0.5)',
+                                  boxShadow: exportFields[field.key] ? '0 2px 4px rgba(0,0,0,0.3)' : 'none',
+                                }}
+                                transition={{ type: 'spring', stiffness: 500, damping: 30 }}
+                              />
+                            </motion.div>
+                          </div>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Academic Fields */}
+                  <div className="mb-3">
+                    <p className="text-[9px] uppercase tracking-wider font-medium mb-1.5 pl-1" style={{ color: `${colors.textSecondary}90` }}>Academic</p>
+                    <div className="rounded-xl overflow-hidden" style={{ border: '1px solid rgba(255, 255, 255, 0.06)' }}>
+                      {([
+                        { key: 'level' as const, label: 'Level', sublabel: '100L, 200L, etc.', icon: <GraduationCap className="w-4 h-4" /> },
+                        { key: 'department' as const, label: 'Department', sublabel: 'Academic department', icon: <Crown className="w-4 h-4" /> },
+                        { key: 'section' as const, label: 'Section / Group', sublabel: 'Class section', icon: <Users className="w-4 h-4" /> },
+                      ]).map((field, i, arr) => (
+                        <button
+                          key={field.key}
+                          onClick={() => setExportFields(prev => ({ ...prev, [field.key]: !prev[field.key] }))}
+                          className="w-full flex items-center gap-3 px-4 py-3 transition-all"
+                          style={{
+                            background: exportFields[field.key] ? `${colors.accentMint}06` : 'rgba(255, 255, 255, 0.01)',
+                            borderBottom: i < arr.length - 1 ? '1px solid rgba(255, 255, 255, 0.04)' : 'none',
+                          }}
+                        >
+                          <div className="w-8 h-8 rounded-lg flex items-center justify-center shrink-0"
+                            style={{ 
+                              background: exportFields[field.key] ? `${colors.accentMint}15` : 'rgba(255, 255, 255, 0.04)',
+                              color: exportFields[field.key] ? colors.accentMint : colors.textSecondary,
+                            }}>
+                            {field.icon}
+                          </div>
+                          <div className="flex-1 text-left min-w-0">
+                            <p className="text-sm font-medium" style={{ color: exportFields[field.key] ? 'white' : colors.textSecondary }}>
+                              {field.label}
+                            </p>
+                            <p className="text-[10px]" style={{ color: `${colors.textSecondary}80` }}>{field.sublabel}</p>
+                          </div>
+                          <div className="shrink-0">
+                            <motion.div 
+                              className="w-10 h-[22px] rounded-full relative cursor-pointer"
+                              animate={{
+                                background: exportFields[field.key] ? colors.accentMint : 'rgba(255, 255, 255, 0.12)',
+                              }}
+                              transition={{ duration: 0.2 }}
+                            >
+                              <motion.div 
+                                className="w-[18px] h-[18px] rounded-full absolute top-0.5"
+                                animate={{
+                                  left: exportFields[field.key] ? '20px' : '2px',
+                                  background: exportFields[field.key] ? 'white' : 'rgba(255, 255, 255, 0.5)',
+                                  boxShadow: exportFields[field.key] ? '0 2px 4px rgba(0,0,0,0.3)' : 'none',
+                                }}
+                                transition={{ type: 'spring', stiffness: 500, damping: 30 }}
+                              />
+                            </motion.div>
+                          </div>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Status Fields */}
+                  <div>
+                    <p className="text-[9px] uppercase tracking-wider font-medium mb-1.5 pl-1" style={{ color: `${colors.textSecondary}90` }}>Status & Meta</p>
+                    <div className="rounded-xl overflow-hidden" style={{ border: '1px solid rgba(255, 255, 255, 0.06)' }}>
+                      {([
+                        { key: 'status' as const, label: 'Active Status', sublabel: 'Active or inactive', icon: <CheckCircle className="w-4 h-4" /> },
+                        { key: 'roles' as const, label: 'Assigned Roles', sublabel: 'Admin, Finsec, Rep', icon: <Crown className="w-4 h-4" /> },
+                        { key: 'paid' as const, label: 'Date Joined', sublabel: 'Registration date', icon: <Sparkles className="w-4 h-4" /> },
+                      ]).map((field, i, arr) => (
+                        <button
+                          key={field.key}
+                          onClick={() => setExportFields(prev => ({ ...prev, [field.key]: !prev[field.key] }))}
+                          className="w-full flex items-center gap-3 px-4 py-3 transition-all"
+                          style={{
+                            background: exportFields[field.key] ? `${colors.primary}06` : 'rgba(255, 255, 255, 0.01)',
+                            borderBottom: i < arr.length - 1 ? '1px solid rgba(255, 255, 255, 0.04)' : 'none',
+                          }}
+                        >
+                          <div className="w-8 h-8 rounded-lg flex items-center justify-center shrink-0"
+                            style={{ 
+                              background: exportFields[field.key] ? `${colors.primary}15` : 'rgba(255, 255, 255, 0.04)',
+                              color: exportFields[field.key] ? colors.primary : colors.textSecondary,
+                            }}>
+                            {field.icon}
+                          </div>
+                          <div className="flex-1 text-left min-w-0">
+                            <p className="text-sm font-medium" style={{ color: exportFields[field.key] ? 'white' : colors.textSecondary }}>
+                              {field.label}
+                            </p>
+                            <p className="text-[10px]" style={{ color: `${colors.textSecondary}80` }}>{field.sublabel}</p>
+                          </div>
+                          <div className="shrink-0">
+                            <motion.div 
+                              className="w-10 h-[22px] rounded-full relative cursor-pointer"
+                              animate={{
+                                background: exportFields[field.key] ? colors.primary : 'rgba(255, 255, 255, 0.12)',
+                              }}
+                              transition={{ duration: 0.2 }}
+                            >
+                              <motion.div 
+                                className="w-[18px] h-[18px] rounded-full absolute top-0.5"
+                                animate={{
+                                  left: exportFields[field.key] ? '20px' : '2px',
+                                  background: exportFields[field.key] ? 'white' : 'rgba(255, 255, 255, 0.5)',
+                                  boxShadow: exportFields[field.key] ? '0 2px 4px rgba(0,0,0,0.3)' : 'none',
+                                }}
+                                transition={{ type: 'spring', stiffness: 500, damping: 30 }}
+                              />
+                            </motion.div>
+                          </div>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Privacy Notice */}
+                <div className="mx-6 mb-4 p-3 rounded-xl flex items-start gap-3"
+                  style={{ 
+                    background: `linear-gradient(135deg, ${colors.warning}08, ${colors.warning}04)`,
+                    border: `1px solid ${colors.warning}15` 
+                  }}>
+                  <div className="w-8 h-8 rounded-lg flex items-center justify-center shrink-0"
+                    style={{ background: `${colors.warning}15` }}>
+                    <EyeOff className="w-4 h-4" style={{ color: colors.warning }} />
+                  </div>
+                  <div>
+                    <p className="text-xs font-semibold" style={{ color: colors.warning }}>Privacy Notice</p>
+                    <p className="text-[10px] mt-0.5 leading-relaxed" style={{ color: `${colors.warning}cc` }}>
+                      Only include fields you need. Emails and phone numbers are sensitive personal data — exclude unless absolutely required.
+                    </p>
+                  </div>
+                </div>
+
+                {/* Export Action */}
+                <div className="px-6 pb-6">
+                  <motion.button
+                    whileHover={{ scale: 1.01, y: -1 }}
+                    whileTap={{ scale: 0.98 }}
+                    onClick={() => {
+                      setShowExportFieldsModal(false);
+                      if (exportFormat === 'pdf') {
+                        handleExportPDF();
+                      } else {
+                        handleExportCSV();
+                      }
+                    }}
+                    className="w-full py-3.5 rounded-xl text-sm font-bold text-white transition-all flex items-center justify-center gap-3"
+                    style={{ 
+                      background: gradients.primary, 
+                      boxShadow: `0 8px 25px ${colors.primary}35, 0 2px 8px ${colors.primary}20`,
+                    }}
+                  >
+                    <Download className="w-4.5 h-4.5" />
+                    <span>
+                      Export {exportFormat === 'pdf' ? 'PDF' : 'CSV'} • {Object.values(exportFields).filter(Boolean).length} field{Object.values(exportFields).filter(Boolean).length !== 1 ? 's' : ''}
+                    </span>
+                  </motion.button>
+                  <p className="text-center text-[10px] mt-2" style={{ color: colors.textSecondary }}>
+                    {finalFilteredStudents.length} student{finalFilteredStudents.length !== 1 ? 's' : ''} will be exported
                   </p>
                 </div>
-
-                {/* Export Button */}
-                <motion.button
-                  whileHover={{ scale: 1.01 }}
-                  whileTap={{ scale: 0.98 }}
-                  onClick={() => {
-                    setShowExportFieldsModal(false);
-                    if (exportFormat === 'pdf') {
-                      handleExportPDF();
-                    } else {
-                      handleExportCSV();
-                    }
-                  }}
-                  className="w-full py-3 rounded-xl text-sm font-semibold text-white transition-all"
-                  style={{ background: gradients.primary, boxShadow: `0 4px 15px ${colors.primary}40` }}
-                >
-                  Export as {exportFormat === 'pdf' ? 'PDF' : 'CSV'} ({Object.values(exportFields).filter(Boolean).length} fields)
-                </motion.button>
-              </GlassCard>
+              </div>
             </motion.div>
           </motion.div>
         )}
@@ -3093,7 +3442,7 @@ export default function ManageStudentsPage() {
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50 p-4 overflow-y-auto overscroll-contain"
+            className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50 p-4 overflow-y-auto modal-scrollbar overscroll-contain"
             onClick={() => setShowBulkModal(false)}
           >
             <motion.div
@@ -3101,7 +3450,7 @@ export default function ManageStudentsPage() {
               animate={{ scale: 1, opacity: 1, y: 0 }}
               exit={{ scale: 0.9, opacity: 0, y: 20 }}
               onClick={(e) => e.stopPropagation()}
-              className="max-w-lg w-full max-h-[90vh] overflow-y-auto"
+              className="max-w-lg w-full max-h-[90vh] overflow-y-auto modal-scrollbar"
             >
               <GlassCard className="relative overflow-hidden">
                 {/* Header Gradient */}
@@ -3150,6 +3499,71 @@ export default function ManageStudentsPage() {
       </AnimatePresence>
 
       <Footer />
+
+      {/* ── Subscription Limit Reached Modal ── */}
+      <AnimatePresence>
+        {showLimitModal && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-100 flex items-center justify-center p-4"
+            style={{ background: 'rgba(0,0,0,0.7)', backdropFilter: 'blur(8px)' }}
+            onClick={() => setShowLimitModal(false)}
+          >
+            <motion.div
+              initial={{ scale: 0.9, opacity: 0, y: 20 }}
+              animate={{ scale: 1, opacity: 1, y: 0 }}
+              exit={{ scale: 0.9, opacity: 0, y: 20 }}
+              transition={{ type: 'spring', damping: 25 }}
+              onClick={(e) => e.stopPropagation()}
+              className="w-full max-w-md rounded-2xl overflow-hidden shadow-2xl"
+              style={{
+                background: 'linear-gradient(135deg, rgba(30, 20, 15, 0.98), rgba(15, 8, 4, 0.98))',
+                border: '1px solid rgba(255, 255, 255, 0.1)',
+              }}
+            >
+              <div className="h-1" style={{ background: `linear-gradient(90deg, ${colors.warning}, ${colors.primary})` }} />
+              <div className="p-6 text-center">
+                <motion.div
+                  initial={{ scale: 0 }}
+                  animate={{ scale: 1 }}
+                  transition={{ type: 'spring', delay: 0.1, damping: 15 }}
+                  className="w-16 h-16 rounded-full mx-auto mb-4 flex items-center justify-center"
+                  style={{ background: `${colors.warning}20`, border: `2px solid ${colors.warning}40` }}
+                >
+                  <AlertTriangle className="w-8 h-8" style={{ color: colors.warning }} />
+                </motion.div>
+                <h3 className="text-xl font-bold text-white mb-2">Plan Limit Reached</h3>
+                <p className="text-sm mb-6" style={{ color: colors.textSecondary }}>{limitMessage}</p>
+                <div className="flex gap-3">
+                  <motion.button
+                    whileHover={{ scale: 1.02 }}
+                    whileTap={{ scale: 0.98 }}
+                    onClick={() => setShowLimitModal(false)}
+                    className="flex-1 py-3 rounded-xl font-medium text-sm transition-colors"
+                    style={{ background: 'rgba(255,255,255,0.05)', color: colors.textSecondary, border: '1px solid rgba(255,255,255,0.1)' }}
+                  >
+                    Close
+                  </motion.button>
+                  <motion.button
+                    whileHover={{ scale: 1.02, y: -1 }}
+                    whileTap={{ scale: 0.98 }}
+                    onClick={() => { setShowLimitModal(false); navigate('/admin/billing'); }}
+                    className="flex-1 py-3 rounded-xl font-semibold text-sm text-white transition-all"
+                    style={{
+                      background: `linear-gradient(135deg, ${colors.warning}, ${colors.primary})`,
+                      boxShadow: `0 4px 15px ${colors.warning}30`,
+                    }}
+                  >
+                    Upgrade Plan ✨
+                  </motion.button>
+                </div>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }

@@ -243,6 +243,7 @@ class PushNotificationService {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
+          callerId: userId,
           userId,
           endpoint: subscription.endpoint,
           p256dh: subscriptionJSON.keys?.p256dh || '',
@@ -313,16 +314,12 @@ class PushNotificationService {
    */
   async testPush(userId: string): Promise<{ ok: boolean; message: string; details?: unknown }> {
     try {
-      const { data: sessionData } = await supabase.auth.getSession();
-      const token = sessionData?.session?.access_token;
-
       const res = await fetch('/api/notifications/test-push', {
         method: 'POST',
         headers: { 
           'Content-Type': 'application/json',
-          ...(token ? { 'Authorization': `Bearer ${token}` } : {})
         },
-        body: JSON.stringify({ userId }),
+        body: JSON.stringify({ callerId: userId }),
       });
 
       // In local dev (Vite), serverless endpoints don't exist — handle gracefully

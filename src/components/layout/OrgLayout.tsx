@@ -183,12 +183,20 @@ export default function OrgLayout() {
                 {organization.short_name?.charAt(0) || 'P'}
               </motion.div>
             )}
-            <div className="hidden sm:block">
-              <p className="text-sm font-semibold text-white leading-tight group-hover:text-orange-200 transition-colors">
+            <div className="min-w-0">
+              <p className="text-sm font-semibold text-white leading-tight group-hover:text-orange-200 transition-colors truncate">
                 {organization.short_name || organization.name}
               </p>
-              <p className="text-[10px] font-medium tracking-wider uppercase" style={{ color: colors.primary }}>
-                {APP_NAME}
+              <p className="text-[10px] font-medium tracking-wider uppercase truncate" style={{ color: colors.primary }}>
+                {organization.organization_type === 'university' ? '🎓 University'
+                  : organization.organization_type === 'school' ? '🏫 School'
+                  : organization.organization_type === 'church' ? '⛪ Church'
+                  : organization.organization_type === 'club' ? '🏢 Club'
+                  : organization.organization_type === 'association' ? '🤝 Association'
+                  : organization.organization_type === 'cooperative' ? '🏦 Cooperative'
+                  : organization.organization_type === 'ngo' ? '🌍 NGO'
+                  : APP_NAME
+                }{user.level ? ` · ${user.level}` : ''}
               </p>
             </div>
           </Link>
@@ -360,6 +368,9 @@ export default function OrgLayout() {
                         <div className="min-w-0">
                           <p className="text-sm font-semibold text-white truncate">{user.full_name}</p>
                           <p className="text-xs truncate" style={{ color: colors.textTertiary }}>{user.member_id}</p>
+                          {user.level && (
+                            <p className="text-[10px] font-medium truncate" style={{ color: colors.primary }}>{user.level}</p>
+                          )}
                           {admin && (
                             <span
                               className="inline-flex items-center gap-1 mt-1 px-2 py-0.5 rounded-full text-[10px] font-bold tracking-wide uppercase"

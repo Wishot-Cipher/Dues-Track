@@ -215,14 +215,14 @@ export const billingService = {
     payerName: string;
     currency: string;
     memberId?: string;
-  }): Promise<{ reference: string; publicKey: string; amount: number } | null> {
+  }): Promise<{ reference: string; publicKey: string; amount: number; error?: undefined } | { error: string }> {
     try {
       const plan = SUBSCRIPTION_PLANS[params.planId];
-      if (!plan) throw new Error('Invalid plan');
+      if (!plan) return { error: 'Invalid plan selected' };
 
       const price = this.getPrice(plan, params.billingCycle, params.currency);
       if (price.amount === 0 && params.planId !== 'free') {
-        throw new Error('Enterprise plans require custom pricing. Contact sales.');
+        return { error: 'Enterprise plans require custom pricing. Contact sales.' };
       }
 
       const reference = this.generateReference(params.orgId);
@@ -244,7 +244,17 @@ export const billingService = {
           initiated_by: params.memberId || null,
         });
 
-      if (error) throw error;
+      if (error) {
+        console.error('Billing insert error:', error);
+        // Surface specific messages for common errors
+        if (error.message?.includes('relation') && error.message?.includes('does not exist')) {
+          return { error: 'Billing table not set up. Run the database/14_billing_transactions.sql migration in Supabase SQL Editor.' };
+        }
+        if (error.code === '42501' || error.message?.includes('policy')) {
+          return { error: 'Permission denied. Check RLS policies on billing_transactions table.' };
+        }
+        return { error: `Database error: ${error.message}` };
+      }
 
       return {
         reference,
@@ -253,7 +263,7 @@ export const billingService = {
       };
     } catch (error) {
       console.error('Error initiating payment:', error);
-      return null;
+      return { error: error instanceof Error ? error.message : 'Failed to initiate payment' };
     }
   },
 
@@ -276,10 +286,11 @@ export const billingService = {
 
       // Call the server-side verify endpoint
       const verifyUrl = `/api/billing/verify-payment`;
+      const callerId = localStorage.getItem('pvx_member_id') || localStorage.getItem('current_user_id');
       const resp = await fetch(verifyUrl, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ reference }),
+        body: JSON.stringify({ reference, callerId }),
       });
 
       if (!resp.ok) {

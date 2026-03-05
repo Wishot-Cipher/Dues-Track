@@ -187,6 +187,17 @@ export default function AdminReviewPage() {
         selectedPayment.id
       );
 
+      // Send email notification (non-blocking)
+      fetch('/api/notify-payment-status', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          paymentId: selectedPayment.id,
+          status: 'approved',
+          callerId: user?.id,
+        }),
+      }).catch(() => {}); // Non-critical
+
       showSuccess("Payment approved successfully!");
       setShowApproveModal(false);
       setSelectedPayment(null);
@@ -260,6 +271,18 @@ export default function AdminReviewPage() {
         rejectionReason.trim(),
         selectedPayment.id
       );
+
+      // Send email notification (non-blocking)
+      fetch('/api/notify-payment-status', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          paymentId: selectedPayment.id,
+          status: 'rejected',
+          rejectionReason: rejectionReason.trim(),
+          callerId: user?.id,
+        }),
+      }).catch(() => {}); // Non-critical
 
       showSuccess("Payment rejected");
       setShowRejectModal(false);

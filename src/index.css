@@ -122,6 +122,71 @@ h1 {
   background: rgba(255, 107, 53, 0.5);
 }
 
+/* ── Sleek scrollbar for ALL scrollable containers ── */
+/* Applied globally: modals, pages, panels, dropdowns */
+
+/* Firefox */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 107, 53, 0.18) transparent;
+}
+
+/* Webkit (Chrome, Safari, Edge) */
+::-webkit-scrollbar {
+  width: 5px;
+  height: 5px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+  margin: 4px 0;
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgba(255, 107, 53, 0.15);
+  border-radius: 999px;
+  transition: background 0.2s ease;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 107, 53, 0.35);
+}
+
+::-webkit-scrollbar-thumb:active {
+  background: rgba(255, 107, 53, 0.5);
+}
+
+/* Hide scrollbar when not scrolling (shows on hover/scroll) */
+::-webkit-scrollbar-corner {
+  background: transparent;
+}
+
+/* Sleek modal-specific scrollbar (slightly more visible) */
+.modal-scrollbar {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 107, 53, 0.25) rgba(255, 255, 255, 0.03);
+}
+
+.modal-scrollbar::-webkit-scrollbar {
+  width: 4px;
+}
+
+.modal-scrollbar::-webkit-scrollbar-track {
+  background: rgba(255, 255, 255, 0.02);
+  border-radius: 999px;
+  margin: 8px 0;
+}
+
+.modal-scrollbar::-webkit-scrollbar-thumb {
+  background: linear-gradient(180deg, rgba(255, 107, 53, 0.3), rgba(255, 107, 53, 0.15));
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.04);
+}
+
+.modal-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: linear-gradient(180deg, rgba(255, 107, 53, 0.5), rgba(255, 107, 53, 0.3));
+}
+
 /* Shimmer animation for progress bars */
 @keyframes shimmer {
   0% {

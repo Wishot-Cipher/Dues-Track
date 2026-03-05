@@ -158,13 +158,13 @@ export async function createExpense(payload: CreateExpensePayload) {
       }
 
       const body = {
+        callerId: payload.recorded_by || localStorage.getItem('pvx_member_id') || localStorage.getItem('current_user_id'),
         payment_type_id: payload.payment_type_id ?? null,
         title: payload.title,
         description: payload.description ?? null,
         category: payload.category ?? null,
         amount: payload.amount,
         expense_date: payload.expense_date ?? new Date().toISOString(),
-        recorded_by: payload.recorded_by ?? null,
         receipt,
       }
 

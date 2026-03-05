@@ -58,6 +58,8 @@ export default function DashboardPage() {
   const [showProfileMenu, setShowProfileMenu] = useState(false);
   const [showMobileMenu, setShowMobileMenu] = useState(false);
   const [showLogoutModal, setShowLogoutModal] = useState(false);
+  const [showWelcomeModal, setShowWelcomeModal] = useState(false);
+  const [welcomeOrgName, setWelcomeOrgName] = useState('');
   const [loading, setLoading] = useState(true);
   const [refreshKey, setRefreshKey] = useState(0);
   
@@ -139,6 +141,14 @@ export default function DashboardPage() {
     if (location.state && (location.state as { refresh?: boolean }).refresh) {
       setRefreshKey(prev => prev + 1);
       // Clear the state so it doesn't refresh again on next navigation
+      window.history.replaceState({}, document.title);
+    }
+    // Show welcome modal for new members who just joined via invite link
+    if (location.state && (location.state as { justJoined?: boolean }).justJoined) {
+      const orgName = (location.state as { orgName?: string }).orgName || '';
+      setWelcomeOrgName(orgName);
+      setShowWelcomeModal(true);
+      // Clear the state so modal doesn't re-appear on navigation
       window.history.replaceState({}, document.title);
     }
   }, [location]);
@@ -415,7 +425,9 @@ background:linear-gradient(135deg,#FF6803,#FFAC5F);color:white;font-size:14px}
               <LogoCompact />
                <div className="hidden sm:block leading-tight pr-2">
                 <h1 className="text-base font-extrabold text-white tracking-tight">Pay<span style={{ color: colors.primary }}>vexo</span></h1>
-                <p className="text-[10px] font-medium tracking-wider uppercase" style={{ color: colors.textTertiary }}>{user?.level || 'N/A'}</p>
+                {user?.level && (
+                  <p className="text-[10px] font-semibold tracking-wider uppercase" style={{ color: colors.primary }}>{user.level}</p>
+                )}
                 </div> 
             </div>
 
@@ -1467,9 +1479,10 @@ background:linear-gradient(135deg,#FF6803,#FFAC5F);color:white;font-size:14px}
   {/* Floating Action Button - Admin/Finsec/Class Rep */}
   {hasPermission('can_create_payments') && (
         <motion.button
-          className="fixed bottom-8 right-8 w-16 h-16 rounded-full flex items-center justify-center shadow-2xl z-50"
+          className="fixed bottom-24 lg:bottom-8 right-6 sm:right-8 w-14 h-14 sm:w-16 sm:h-16 rounded-full flex items-center justify-center shadow-2xl z-40"
           style={{
             background: `linear-gradient(135deg, ${colors.primary}, ${colors.accentMint})`,
+            boxShadow: `0 8px 32px ${colors.primary}40`,
           }}
           whileHover={{ scale: 1.1 }}
           whileTap={{ scale: 0.9 }}
@@ -1479,7 +1492,7 @@ background:linear-gradient(135deg,#FF6803,#FFAC5F);color:white;font-size:14px}
           transition={{ delay: 1 }}
           title="Create New Payment"
         >
-          <Plus size={28} className="text-white" />
+          <Plus size={26} className="text-white" />
         </motion.button>
       )}
 
@@ -1570,6 +1583,115 @@ background:linear-gradient(135deg,#FF6803,#FFAC5F);color:white;font-size:14px}
                 >
                   <LogOut className="w-4 h-4" />
                   Yes, Logout
+                </motion.button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* ═══════════ WELCOME MODAL (new invite-link members) ═══════════ */}
+      <AnimatePresence>
+        {showWelcomeModal && (
+          <motion.div
+            className="fixed inset-0 z-[100] flex items-center justify-center p-4"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+          >
+            <motion.div
+              className="absolute inset-0 bg-black/70 backdrop-blur-sm"
+              onClick={() => setShowWelcomeModal(false)}
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+            />
+            <motion.div
+              className="relative w-full max-w-sm rounded-2xl overflow-hidden"
+              style={{
+                background: 'linear-gradient(145deg, #1A1A1A 0%, #0D0D0D 100%)',
+                border: `1px solid ${colors.primary}30`,
+                boxShadow: `0 25px 60px rgba(255, 107, 53, 0.15)`,
+              }}
+              initial={{ opacity: 0, scale: 0.85, y: 30 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.85, y: 30 }}
+              transition={{ type: 'spring', stiffness: 300, damping: 25 }}
+            >
+              {/* Top accent gradient */}
+              <div className="h-1.5" style={{ background: `linear-gradient(90deg, ${colors.primary}, ${colors.accentMint}, ${colors.primary})` }} />
+
+              <div className="p-6 pt-7 text-center">
+                {/* Celebration icon */}
+                <motion.div
+                  className="mx-auto w-20 h-20 rounded-2xl flex items-center justify-center mb-5"
+                  style={{
+                    background: `linear-gradient(135deg, ${colors.primary}20, ${colors.accentMint}15)`,
+                    border: `1px solid ${colors.primary}25`,
+                  }}
+                  initial={{ rotate: -10, scale: 0.8 }}
+                  animate={{ rotate: 0, scale: 1 }}
+                  transition={{ type: 'spring', stiffness: 300, damping: 15, delay: 0.2 }}
+                >
+                  <span className="text-4xl">🎉</span>
+                </motion.div>
+
+                <motion.h3
+                  className="text-xl font-bold text-white mb-2"
+                  initial={{ opacity: 0, y: 10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: 0.3 }}
+                >
+                  Welcome to {welcomeOrgName || 'the team'}!
+                </motion.h3>
+                <motion.p
+                  className="text-sm leading-relaxed mb-2"
+                  style={{ color: colors.textSecondary }}
+                  initial={{ opacity: 0, y: 10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: 0.4 }}
+                >
+                  Hi <span className="font-semibold text-white">{user?.full_name?.split(' ')[0]}</span>! Your account has been created successfully. You're now part of the organization.
+                </motion.p>
+
+                {/* Quick tips */}
+                <motion.div
+                  className="text-left space-y-2 mb-6 p-3 rounded-xl"
+                  style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.06)' }}
+                  initial={{ opacity: 0, y: 10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: 0.5 }}
+                >
+                  <p className="text-[10px] font-bold uppercase tracking-wider mb-2" style={{ color: colors.primary }}>Quick Tips</p>
+                  <div className="flex items-start gap-2">
+                    <CheckCircle className="w-3.5 h-3.5 shrink-0 mt-0.5" style={{ color: colors.accentMint }} />
+                    <p className="text-xs" style={{ color: colors.textSecondary }}>Check your <span className="text-white font-medium">unpaid dues</span> on the right panel</p>
+                  </div>
+                  <div className="flex items-start gap-2">
+                    <CheckCircle className="w-3.5 h-3.5 shrink-0 mt-0.5" style={{ color: colors.accentMint }} />
+                    <p className="text-xs" style={{ color: colors.textSecondary }}>Upload payment proof to get <span className="text-white font-medium">quick approval</span></p>
+                  </div>
+                  <div className="flex items-start gap-2">
+                    <CheckCircle className="w-3.5 h-3.5 shrink-0 mt-0.5" style={{ color: colors.accentMint }} />
+                    <p className="text-xs" style={{ color: colors.textSecondary }}>Track your <span className="text-white font-medium">payment history</span> anytime</p>
+                  </div>
+                </motion.div>
+
+                <motion.button
+                  className="w-full py-3 px-4 rounded-xl font-semibold text-sm text-white flex items-center justify-center gap-2"
+                  style={{
+                    background: `linear-gradient(135deg, ${colors.primary}, ${colors.accentMint})`,
+                    boxShadow: `0 4px 15px ${colors.primary}30`,
+                  }}
+                  whileHover={{ scale: 1.02 }}
+                  whileTap={{ scale: 0.98 }}
+                  onClick={() => setShowWelcomeModal(false)}
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  transition={{ delay: 0.6 }}
+                >
+                  <Star className="w-4 h-4" />
+                  Let's Get Started!
                 </motion.button>
               </div>
             </motion.div>

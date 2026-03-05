@@ -2,20 +2,20 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 /**
  * Admin Password Reset Endpoint
- * Allows admins to directly reset a student's password
- * No email required - generates a temporary password
- * 
- * SECURITY: Verifies admin through JWT token, not client-provided ID
- * 
- * IMPORTANT: Uses PostgreSQL crypt() for password hashing to match
- * the verify_student_login function. Do NOT use bcryptjs here.
+ * Allows admins to directly reset a member's password.
+ * No email required — generates a temporary password.
+ *
+ * SECURITY: Verifies caller is an admin with can_manage_members permission.
+ *           Verifies target member is in the SAME organization.
+ *           Uses organization_members table (not legacy students).
+ *           Uses PostgreSQL crypt() for password hashing.
  */
 import { createClient } from '@supabase/supabase-js'
-
+import { sendEmail, adminResetPasswordEmail } from '../_lib/email'
+import { verifyAdmin, escapeHtml } from '../_lib/auth'
 
 const supabaseUrl = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL
 const serviceRole = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SERVICE_ROLE
-
 
 // Generate a cryptographically random temporary password
 function generateTempPassword(): string {
@@ -29,46 +29,9 @@ function generateTempPassword(): string {
   return password;
 }
 
-
-// Verify admin token and extract admin info
-async function verifyAdminToken(supabase: any, authHeader: string): Promise<{ valid: boolean; adminId?: string; adminName?: string; error?: string }> {
-  if (!authHeader || !authHeader.startsWith('Bearer ')) {
-    return { valid: false, error: 'Missing or invalid authorization header' }
-  }
-
-  const token = authHeader.replace('Bearer ', '')
-  
-  try {
-    const { data: { user }, error } = await supabase.auth.getUser(token)
-    
-    if (error || !user) {
-      return { valid: false, error: 'Invalid or expired token' }
-    }
-
-    // Check if user is an admin with password reset permissions
-    const { data: student } = await supabase
-      .from('students')
-      .select('id, full_name, role')
-      .eq('id', user.id)
-      .single()
-
-    if (!student) {
-      return { valid: false, error: 'User not found' }
-    }
-
-    if (student.role !== 'admin' && student.role !== 'super_admin' && student.role !== 'class_rep') {
-      return { valid: false, error: 'Only admins can reset passwords' }
-    }
-
-    return { valid: true, adminId: user.id, adminName: student.full_name }
-  } catch (err) {
-    return { valid: false, error: 'Token verification failed' }
-  }
-}
-
 export default async function handler(req: any, res: any) {
   res.setHeader('Content-Type', 'application/json')
-  
+
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Method not allowed' })
   }
@@ -79,17 +42,12 @@ export default async function handler(req: any, res: any) {
 
   const supabaseAdmin = createClient(supabaseUrl, serviceRole)
 
-  // Verify the caller is an authenticated admin via JWT token
-  const authHeader = req.headers.authorization || req.headers['Authorization']
-  const authResult = await verifyAdminToken(supabaseAdmin, authHeader)
-  
-  if (!authResult.valid) {
-    return res.status(401).json({ error: authResult.error || 'Unauthorized' })
-  }
-
   try {
-    const { studentId } = req.body || {}
-    
+    const { callerId, studentId } = req.body || {}
+
+    if (!callerId) {
+      return res.status(400).json({ error: 'Missing callerId' })
+    }
     if (!studentId) {
       return res.status(400).json({ error: 'Student ID is required' })
     }
@@ -100,69 +58,109 @@ export default async function handler(req: any, res: any) {
       return res.status(400).json({ error: 'Invalid student ID format' })
     }
 
-    // Verify student exists
-    const { data: student, error: studentError } = await supabaseAdmin
-      .from('students')
-      .select('id, full_name, reg_number')
+    // ── Verify caller is an admin with permission to manage members ──
+    const auth = await verifyAdmin(supabaseAdmin, callerId, 'can_manage_members')
+    if (!auth.valid || !auth.data) {
+      return res.status(auth.status || 401).json({ error: auth.error || 'Unauthorized' })
+    }
+
+    const callerOrgId = auth.data.organization_id
+    const adminName = auth.data.full_name
+
+    // ── Verify target member exists and is in the SAME organization ──
+    const { data: targetMember, error: memberError } = await supabaseAdmin
+      .from('organization_members')
+      .select('id, full_name, member_id, email, organization_id')
       .eq('id', studentId)
+      .eq('organization_id', callerOrgId)
       .single()
 
-    if (studentError || !student) {
-      return res.status(404).json({ error: 'Student not found' })
+    if (memberError || !targetMember) {
+      return res.status(404).json({ error: 'Member not found in your organization' })
     }
 
     // Generate temporary password
     const tempPassword = generateTempPassword()
 
     // Use PostgreSQL crypt() function to hash the password
-    // This matches how verify_student_login verifies passwords
     const { data: hashResult, error: hashError } = await supabaseAdmin
       .rpc('hash_password', { p_password: tempPassword })
 
     if (hashError) {
-      // Fallback: If RPC doesn't exist, try raw SQL (requires the function to be created)
-      // The hash_password function should be: crypt(p_password, gen_salt('bf'))
-      return res.status(500).json({ 
+      return res.status(500).json({
         error: 'Password hashing failed. Please ensure hash_password function exists in database.',
-        details: 'Run: CREATE OR REPLACE FUNCTION hash_password(p_password TEXT) RETURNS TEXT AS $$ SELECT crypt(p_password, gen_salt(\'bf\')); $$ LANGUAGE SQL;'
       })
     }
 
     const hashedPassword = hashResult
 
-    // Update student's password and set force_password_change flag
+    // Update member's password and set force_password_change flag
     const { error: updateError } = await supabaseAdmin
-      .from('students')
+      .from('organization_members')
       .update({
         password_hash: hashedPassword,
         force_password_change: true,
         updated_at: new Date().toISOString()
       })
       .eq('id', studentId)
+      .eq('organization_id', callerOrgId)
 
     if (updateError) {
       return res.status(500).json({ error: 'Failed to reset password' })
     }
 
-    // Create notification for the student
+    // Create notification for the target member
     try {
       await supabaseAdmin.from('notifications').insert({
-        recipient_id: studentId,
+        member_id: studentId,
+        organization_id: callerOrgId,
         type: 'force_password',
         title: 'Password Reset by Admin',
-        message: `Your password was reset by ${authResult.adminName}. Please use the temporary password provided to you and change it immediately upon login.`,
+        message: `Your password was reset by ${escapeHtml(adminName)}. Please use the temporary password provided to you and change it immediately upon login.`,
         link: '/login',
+        is_read: false,
       })
     } catch {
-      // Non-critical, continue
+      // Non-critical
+    }
+
+    // Send email notification with temporary password (non-critical)
+    try {
+      const memberEmail = targetMember.email
+      if (memberEmail) {
+        const { data: org } = await supabaseAdmin
+          .from('organizations')
+          .select('name, slug')
+          .eq('id', callerOrgId)
+          .single()
+
+        const orgName = org?.name || 'Payvexo'
+        const orgSlug = org?.slug || ''
+        const appUrlEnv = process.env.NEXT_PUBLIC_APP_URL || process.env.VITE_APP_URL || 'https://payvexo.com'
+        const loginUrl = orgSlug ? `${appUrlEnv}/${orgSlug}/login` : `${appUrlEnv}/login`
+
+        await sendEmail(
+          memberEmail,
+          `Your Password Has Been Reset — ${orgName}`,
+          adminResetPasswordEmail({
+            memberName: targetMember.full_name,
+            orgName,
+            tempPassword,
+            loginUrl,
+            adminName: adminName || 'Admin',
+          })
+        )
+      }
+    } catch {
+      // Non-critical — temp password is shown in UI anyway
     }
 
     return res.status(200).json({
       success: true,
       tempPassword: tempPassword,
-      message: `Password reset successful`,
-      studentName: student.full_name,
-      regNumber: student.reg_number
+      message: 'Password reset successful',
+      studentName: targetMember.full_name,
+      regNumber: targetMember.member_id
     })
 
   } catch (err: any) {

@@ -9,17 +9,23 @@ import { useParams } from 'react-router-dom';
 import {
   UserPlus, Search, Users, Shield, Edit2, Trash2,
   Download, Upload, X, Check, Copy, Loader2,
-  ChevronLeft, ChevronRight, MoreVertical,
+  ChevronLeft, ChevronRight, ChevronDown,
   Key, AlertTriangle, CheckCircle, UserCheck,
   FileSpreadsheet, FileText, FileUp, Eye, RotateCcw,
-  Link2, Share2,
+  Link2, Share2, Crown, CheckSquare, Square, MinusSquare,
+  UserCog, Sparkles, Filter, Plus, User, XCircle,
 } from 'lucide-react';
-import { colors } from '@/config/colors';
+import { colors, gradients } from '@/config/colors';
+import AnimatedCounter from '@/components/ui/AnimatedCounter';
 import { APP_NAME } from '@/config/constants';
 import { useMultiTenantAuth } from '@/hooks/useMultiTenantAuth';
 import { supabase } from '@/config/supabase';
 import { getOrgScope } from '@/utils/orgScope';
 import GlassCard from '@/components/ui/GlassCard';
+import { exportStudentsToPDF } from '@/utils/htmlPrintExports';
+import { useSubscriptionLimits } from '@/hooks/useSubscriptionLimits';
+import { useAppNav } from '@/hooks/useAppNav';
+import { useOrganization } from '@/hooks/useOrganization';
 
 const DEFAULT_PASSWORD = 'Change@123';
 
@@ -36,6 +42,8 @@ interface Member {
   full_name: string;
   email: string | null;
   phone: string | null;
+  level: string | null;
+  section: string | null;
   is_active: boolean;
   is_suspended: boolean;
   force_password_change: boolean;
@@ -52,6 +60,7 @@ interface NewMember {
   email: string;
   phone: string;
   password: string;
+  level: string;
 }
 
 // Default password = member's own ID (registration number)
@@ -60,20 +69,62 @@ interface NewMember {
 export default function OrgMembersPage() {
   useParams<{ orgSlug: string }>();
   const { user, organization, group, hasPermission, adminRecord } = useMultiTenantAuth();
+  const { canCreate, planName, refresh: refreshLimits } = useSubscriptionLimits();
+  const { go: navigateTo } = useAppNav();
+  const { settings } = useOrganization();
+
+  // Org/group-level fallback values for exports (used when per-student fields are empty)
+  const academicInfo = (settings?.custom_settings as Record<string, unknown>)?.academic as { academic_level?: string; faculty?: string } | undefined;
+  const orgLevel = academicInfo?.academic_level || '';
+  const orgDepartment = group?.name || '';
+
+  // Limit check state
+  const [showLimitModal, setShowLimitModal] = useState(false);
+  const [limitMessage, setLimitMessage] = useState('');
+
+  // Confirmation modal state
+  const [confirmAction, setConfirmAction] = useState<{
+    isOpen: boolean;
+    type: 'delete' | 'deactivate' | null;
+    member: Member | null;
+  }>({ isOpen: false, type: null, member: null });
 
   const [members, setMembers] = useState<Member[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'inactive'>('all');
+  const [roleFilter, setRoleFilter] = useState<'all' | 'admin' | 'finsec' | 'class_rep' | 'member'>('all');
   const [currentPage, setCurrentPage] = useState(1);
   const perPage = 20;
+  const [showAddMenu, setShowAddMenu] = useState(false);
 
   // Modal states
   const [showAddModal, setShowAddModal] = useState(false);
   const [showBulkModal, setShowBulkModal] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
   const [editingMember, setEditingMember] = useState<Member | null>(null);
-  const [activeDropdown, setActiveDropdown] = useState<string | null>(null);
+
+  // Selection & export state
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [showExportModal, setShowExportModal] = useState(false);
+  const [exportFormat, setExportFormat] = useState<'pdf' | 'csv'>('pdf');
+  const [exporting, setExporting] = useState(false);
+  const [exportFields, setExportFields] = useState({
+    name: true,
+    regNumber: true,
+    level: true,
+    department: true,
+    email: false,
+    phone: false,
+    status: true,
+    roles: false,
+    joinDate: false,
+  });
+
+  // Role management
+  const [showRoleModal, setShowRoleModal] = useState(false);
+  const [roleTarget, setRoleTarget] = useState<Member | null>(null);
+  const [roleLoading, setRoleLoading] = useState(false);
 
   // Invite link
   const [showInviteModal, setShowInviteModal] = useState(false);
@@ -85,7 +136,7 @@ export default function OrgMembersPage() {
   const [inviteExpiry, setInviteExpiry] = useState<'1d' | '7d' | '30d' | 'never'>('7d');
 
   // Add form
-  const [newMember, setNewMember] = useState<NewMember>({ member_id: '', full_name: '', email: '', phone: '', password: '' });
+  const [newMember, setNewMember] = useState<NewMember>({ member_id: '', full_name: '', email: '', phone: '', password: '', level: '' });
   const [addLoading, setAddLoading] = useState(false);
   const [addError, setAddError] = useState('');
   const [addSuccess, setAddSuccess] = useState<{ name: string; id: string; password: string } | null>(null);
@@ -135,10 +186,55 @@ export default function OrgMembersPage() {
     fetchMembers();
   }, [fetchMembers]);
 
+  // Lock body scroll when any modal is open
+  useEffect(() => {
+    const isAnyModalOpen = showAddModal || showBulkModal || showEditModal || showExportModal || showRoleModal || showInviteModal || (!!addSuccess && !showAddModal);
+
+    if (isAnyModalOpen) {
+      const scrollY = window.scrollY;
+      document.body.style.position = 'fixed';
+      document.body.style.top = `-${scrollY}px`;
+      document.body.style.left = '0';
+      document.body.style.right = '0';
+      document.body.style.overflow = 'hidden';
+    } else {
+      const scrollY = document.body.style.top;
+      document.body.style.position = '';
+      document.body.style.top = '';
+      document.body.style.left = '';
+      document.body.style.right = '';
+      document.body.style.overflow = '';
+      if (scrollY) {
+        window.scrollTo(0, parseInt(scrollY || '0', 10) * -1);
+      }
+    }
+
+    return () => {
+      document.body.style.position = '';
+      document.body.style.top = '';
+      document.body.style.left = '';
+      document.body.style.right = '';
+      document.body.style.overflow = '';
+    };
+  }, [showAddModal, showBulkModal, showEditModal, showExportModal, showRoleModal, showInviteModal, addSuccess]);
+
   // ── Filter & search ──
   const filtered = members.filter(m => {
     if (statusFilter === 'active' && !m.is_active) return false;
     if (statusFilter === 'inactive' && m.is_active) return false;
+
+    // Role filter
+    if (roleFilter !== 'all') {
+      const roles = m.admin_records || [];
+      const isAdmin = roles.some(r => ['admin', 'org_admin', 'org_owner', 'super_admin'].includes(r.role));
+      const isFinsec = roles.some(r => r.role === 'treasurer');
+      const isClassRep = roles.some(r => r.role === 'group_admin');
+      if (roleFilter === 'admin' && !isAdmin) return false;
+      if (roleFilter === 'finsec' && !isFinsec) return false;
+      if (roleFilter === 'class_rep' && !isClassRep) return false;
+      if (roleFilter === 'member' && (isAdmin || isFinsec || isClassRep)) return false;
+    }
+
     if (searchQuery) {
       const q = searchQuery.toLowerCase();
       return (
@@ -150,10 +246,32 @@ export default function OrgMembersPage() {
     return true;
   });
 
-  const totalPages = Math.ceil(filtered.length / perPage);
-  const paginated = filtered.slice((currentPage - 1) * perPage, currentPage * perPage);
+  // Sort alphabetically
+  const sortedFiltered = [...filtered].sort((a, b) => (a.full_name || '').localeCompare(b.full_name || ''));
+
+  const totalPages = Math.ceil(sortedFiltered.length / perPage);
+  const paginated = sortedFiltered.slice((currentPage - 1) * perPage, currentPage * perPage);
   const activeCount = members.filter(m => m.is_active).length;
-  const adminCount = members.filter(m => m.admin_records && m.admin_records.length > 0).length;
+  const inactiveCount = members.filter(m => !m.is_active).length;
+  const adminCount = members.filter(m => {
+    const roles = m.admin_records || [];
+    return roles.some(r => ['admin', 'org_admin', 'org_owner', 'super_admin'].includes(r.role));
+  }).length;
+  const finsecCount = members.filter(m => {
+    const roles = m.admin_records || [];
+    return roles.some(r => r.role === 'treasurer');
+  }).length;
+  const classRepCount = members.filter(m => {
+    const roles = m.admin_records || [];
+    return roles.some(r => r.role === 'group_admin');
+  }).length;
+  const memberOnlyCount = members.filter(m => {
+    const roles = m.admin_records || [];
+    const isAdmin = roles.some(r => ['admin', 'org_admin', 'org_owner', 'super_admin'].includes(r.role));
+    const isFinsec = roles.some(r => r.role === 'treasurer');
+    const isClassRep = roles.some(r => r.role === 'group_admin');
+    return !isAdmin && !isFinsec && !isClassRep;
+  }).length;
 
   // ── Add single member ──
   const handleAddMember = async () => {
@@ -164,6 +282,14 @@ export default function OrgMembersPage() {
     const password = newMember.password.trim() || newMember.member_id.trim();
     if (password.length < 3) { setAddError('Password / ID must be at least 3 characters'); return; }
     if (!organization || !user) return;
+
+    // ── Check plan limit before adding ──
+    const limitCheck = canCreate('members');
+    if (!limitCheck.allowed) {
+      setLimitMessage(limitCheck.message || `You've reached the member limit on the ${planName} plan.`);
+      setShowLimitModal(true);
+      return;
+    }
 
     setAddLoading(true);
     try {
@@ -185,6 +311,7 @@ export default function OrgMembersPage() {
           full_name: newMember.full_name.trim(),
           email: newMember.email.trim() || null,
           phone: newMember.phone.trim() || null,
+          level: newMember.level.trim() || null,
           password_hash: hashedPw,
           force_password_change: true,
           is_active: true,
@@ -204,7 +331,7 @@ export default function OrgMembersPage() {
         id: data.member_id,
         password: password,
       });
-      setNewMember({ member_id: '', full_name: '', email: '', phone: '', password: '' });
+      setNewMember({ member_id: '', full_name: '', email: '', phone: '', password: '', level: '' });
       fetchMembers();
     } catch (err) {
       setAddError(err instanceof Error ? err.message : 'Failed to add member');
@@ -260,6 +387,24 @@ export default function OrgMembersPage() {
   const handleBulkImport = async () => {
     const membersToImport = parsedPreview?.members;
     if (!membersToImport?.length || !organization || !group) return;
+
+    // ── Check plan limit before bulk import ──
+    const limitCheck = canCreate('members');
+    if (!limitCheck.allowed) {
+      setLimitMessage(limitCheck.message || `You've reached the member limit on the ${planName} plan.`);
+      setShowLimitModal(true);
+      return;
+    }
+    // Check if bulk import would exceed limits
+    if (limitCheck.limit !== -1 && (limitCheck.current + membersToImport.length) > limitCheck.limit) {
+      const remaining = limitCheck.limit - limitCheck.current;
+      setLimitMessage(
+        `You can only add ${remaining} more member${remaining !== 1 ? 's' : ''} on the ${planName} plan (${limitCheck.current}/${limitCheck.limit} used). You're trying to import ${membersToImport.length}. Please upgrade your plan or reduce the import size.`
+      );
+      setShowLimitModal(true);
+      return;
+    }
+
     setBulkLoading(true);
     setBulkResult(null);
 
@@ -318,6 +463,15 @@ export default function OrgMembersPage() {
   // ── Generate invite link ──
   const generateInviteLink = async () => {
     if (!organization || !user || !adminRecord) return;
+
+    // ── Check plan limit before generating invite ──
+    const limitCheck = canCreate('members');
+    if (!limitCheck.allowed) {
+      setLimitMessage(limitCheck.message || `You've reached the member limit on the ${planName} plan.`);
+      setShowLimitModal(true);
+      return;
+    }
+
     setInviteLoading(true);
     try {
       const expiryMap: Record<string, number | null> = {
@@ -386,8 +540,12 @@ export default function OrgMembersPage() {
     }
   };
 
-  // ── Toggle active ──
-  const toggleActive = async (member: Member) => {
+  // ── Toggle active (confirm first) ──
+  const toggleActive = (member: Member) => {
+    setConfirmAction({ isOpen: true, type: 'deactivate', member });
+  };
+
+  const executeToggleActive = async (member: Member) => {
     try {
       const scope = getOrgScope();
       let q = supabase
@@ -400,7 +558,6 @@ export default function OrgMembersPage() {
     } catch (err) {
       console.error('Toggle error:', err);
     }
-    setActiveDropdown(null);
   };
 
   // ── Reset password ──
@@ -420,7 +577,6 @@ export default function OrgMembersPage() {
     } catch (err) {
       console.error('Reset password error:', err);
     }
-    setActiveDropdown(null);
   };
 
   // ── Edit member ──
@@ -434,6 +590,7 @@ export default function OrgMembersPage() {
           full_name: editingMember.full_name,
           email: editingMember.email,
           phone: editingMember.phone,
+          level: editingMember.level,
           updated_at: new Date().toISOString(),
         })
         .eq('id', editingMember.id);
@@ -447,9 +604,12 @@ export default function OrgMembersPage() {
     }
   };
 
-  // ── Delete member ──
-  const deleteMember = async (member: Member) => {
-    if (!confirm(`Remove ${member.full_name}? This cannot be undone.`)) return;
+  // ── Delete member (confirm first) ──
+  const deleteMember = (member: Member) => {
+    setConfirmAction({ isOpen: true, type: 'delete', member });
+  };
+
+  const executeDeleteMember = async (member: Member) => {
     try {
       const scope = getOrgScope();
       let q = supabase.from('organization_members').delete().eq('id', member.id);
@@ -459,7 +619,18 @@ export default function OrgMembersPage() {
     } catch (err) {
       console.error('Delete error:', err);
     }
-    setActiveDropdown(null);
+  };
+
+  // ── Handle confirm action ──
+  const handleConfirmAction = async () => {
+    if (!confirmAction.member) return;
+    const { type, member } = confirmAction;
+    setConfirmAction({ isOpen: false, type: null, member: null });
+    if (type === 'delete') {
+      await executeDeleteMember(member);
+    } else if (type === 'deactivate') {
+      await executeToggleActive(member);
+    }
   };
 
   // ── Copy credentials ──
@@ -467,277 +638,1119 @@ export default function OrgMembersPage() {
     navigator.clipboard.writeText(`ID: ${id}\nPassword: ${password}`);
   };
 
+  // ── Selection helpers ──
+  const toggleSelectMember = (id: string) => {
+    setSelectedIds(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
+  const toggleSelectAll = () => {
+    if (selectedIds.size === filtered.length) {
+      setSelectedIds(new Set());
+    } else {
+      setSelectedIds(new Set(filtered.map(m => m.id)));
+    }
+  };
+
+  const clearSelection = () => {
+    setSelectedIds(new Set());
+  };
+
+  const isAllSelected = filtered.length > 0 && selectedIds.size === filtered.length;
+  const isPartialSelected = selectedIds.size > 0 && selectedIds.size < filtered.length;
+
+  // Helper to check role
+  const getMemberRoles = (member: Member) => {
+    const roles = member.admin_records || [];
+    return {
+      isAdmin: roles.some(r => ['admin', 'org_admin', 'org_owner', 'super_admin'].includes(r.role)),
+      isFinsec: roles.some(r => r.role === 'treasurer'),
+      isClassRep: roles.some(r => r.role === 'group_admin'),
+    };
+  };
+
+  // ── Role management ──
+  const toggleRole = async (member: Member, role: 'admin' | 'finsec' | 'class_rep') => {
+    if (!organization) return;
+    setRoleLoading(true);
+    try {
+      const roleMap = { admin: 'org_admin', finsec: 'treasurer', class_rep: 'group_admin' };
+      const checkRoles = role === 'admin' ? ['admin', 'org_admin'] : [roleMap[role]];
+      const dbRole = roleMap[role];
+      const orgId = organization.id;
+
+      const { data: existing } = await supabase
+        .from('member_admins')
+        .select('id')
+        .eq('member_id', member.id)
+        .in('role', checkRoles)
+        .eq('organization_id', orgId);
+
+      if (existing && existing.length > 0) {
+        // Remove role
+        await supabase.from('member_admins').delete().eq('id', existing[0].id);
+        
+        await supabase.from('notifications').insert({
+          member_id: member.id,
+          organization_id: orgId,
+          type: 'role_removed',
+          title: `${role === 'admin' ? 'Admin' : role === 'finsec' ? 'FinSec' : 'Class Rep'} Role Removed`,
+          message: `Your ${role === 'admin' ? 'Admin' : role === 'finsec' ? 'Financial Secretary' : 'Class Rep'} role has been removed.`,
+          link: '/profile',
+        });
+      } else {
+        // Check billing limit before granting role
+        const adminCheck = canCreate('admins');
+        if (!adminCheck.allowed) {
+          setLimitMessage(adminCheck.message || `You've reached the admin limit on the ${planName} plan. Upgrade to add more.`);
+          setShowLimitModal(true);
+          setRoleLoading(false);
+          return;
+        }
+
+        // Grant role
+        const permissions = {
+          admin: { can_create_payments: true, can_approve_payments: true, can_manage_members: true, can_view_analytics: true },
+          finsec: { can_create_payments: true, can_approve_payments: true, can_manage_members: false, can_view_analytics: true },
+          class_rep: { can_create_payments: true, can_approve_payments: true, can_manage_members: true, can_view_analytics: true },
+        };
+
+        await supabase.from('member_admins').insert({
+          member_id: member.id,
+          organization_id: orgId,
+          role: dbRole,
+          ...permissions[role],
+        });
+
+        await supabase.from('notifications').insert({
+          member_id: member.id,
+          organization_id: orgId,
+          type: 'role_assigned',
+          title: `${role === 'admin' ? 'Admin' : role === 'finsec' ? 'FinSec' : 'Class Rep'} Role Granted`,
+          message: `You have been granted ${role === 'admin' ? 'Admin' : role === 'finsec' ? 'Financial Secretary' : 'Class Rep'} privileges.`,
+          link: '/admin/dashboard',
+        });
+      }
+
+      // ── Optimistic local state update ──
+      // Update members state immediately so filter counts refresh instantly,
+      // avoiding race conditions with Supabase join read-after-write timing.
+      setMembers(prev => prev.map(m => {
+        if (m.id !== member.id) return m;
+        const currentRoles = m.admin_records || [];
+        if (existing && existing.length > 0) {
+          // Role was removed — filter out matching roles
+          return { ...m, admin_records: currentRoles.filter(r => !checkRoles.includes(r.role)) };
+        } else {
+          // Role was added
+          return { ...m, admin_records: [...currentRoles, { role: dbRole }] };
+        }
+      }));
+
+      // Also refetch from DB for full consistency (runs in background)
+      fetchMembers();
+      await refreshLimits();
+    } catch (err) {
+      console.error('Role toggle error:', err);
+    } finally {
+      setRoleLoading(false);
+    }
+  };
+
+  // ── Export CSV ──
+  const handleExportCSV = () => {
+    setExporting(true);
+    try {
+      const raw = selectedIds.size > 0 ? filtered.filter(m => selectedIds.has(m.id)) : filtered;
+      // Sort alphabetically by name for clean output
+      const dataToExport = [...raw].sort((a, b) =>
+        (a.full_name || '').localeCompare(b.full_name || '', undefined, { sensitivity: 'base' })
+      );
+      
+      const escapeCSV = (field: string | number | boolean | null | undefined): string => {
+        if (field === null || field === undefined) return '';
+        const str = String(field);
+        if (str.includes(',') || str.includes('"') || str.includes('\n')) return `"${str.replace(/"/g, '""')}"`;
+        return str;
+      };
+
+      const lines: string[] = [];
+      lines.push(`${APP_NAME.toUpperCase()} - ${memberLabelPlural.toUpperCase()} DIRECTORY`);
+      lines.push(`Organization,${organization?.name || ''}`);
+      lines.push(`Generated,${new Date().toLocaleDateString('en-US', { dateStyle: 'full' })}`);
+      lines.push(`Total ${memberLabelPlural},${dataToExport.length}`);
+      lines.push('');
+      
+      const headerCols: string[] = ['S/N'];
+      if (exportFields.name) headerCols.push('Full Name');
+      if (exportFields.regNumber) headerCols.push(`${memberLabel} ID`);
+      if (exportFields.level) headerCols.push('Level');
+      if (exportFields.department) headerCols.push('Department');
+      if (exportFields.email) headerCols.push('Email');
+      if (exportFields.phone) headerCols.push('Phone');
+      if (exportFields.status) headerCols.push('Status');
+      if (exportFields.roles) headerCols.push('Roles');
+      if (exportFields.joinDate) headerCols.push('Joined');
+      lines.push(headerCols.join(','));
+      
+      dataToExport.forEach((m, index) => {
+        const { isAdmin, isFinsec, isClassRep } = getMemberRoles(m);
+        const roles = [isAdmin ? 'Admin' : '', isFinsec ? 'FinSec' : '', isClassRep ? 'Class Rep' : ''].filter(Boolean).join(' | ') || memberLabel;
+        
+        const rowCols: string[] = [escapeCSV(index + 1)];
+        if (exportFields.name) rowCols.push(escapeCSV(m.full_name));
+        if (exportFields.regNumber) rowCols.push(escapeCSV(m.member_id));
+        if (exportFields.level) rowCols.push(escapeCSV(m.level || orgLevel || 'N/A'));
+        if (exportFields.department) rowCols.push(escapeCSV(m.section || orgDepartment || 'N/A'));
+        if (exportFields.email) rowCols.push(escapeCSV(m.email || 'N/A'));
+        if (exportFields.phone) rowCols.push(escapeCSV(m.phone || 'N/A'));
+        if (exportFields.status) rowCols.push(escapeCSV(m.is_active ? 'Active' : 'Inactive'));
+        if (exportFields.roles) rowCols.push(escapeCSV(roles));
+        if (exportFields.joinDate) rowCols.push(escapeCSV(new Date(m.created_at).toLocaleDateString()));
+        lines.push(rowCols.join(','));
+      });
+
+      const blob = new Blob([lines.join('\n')], { type: 'text/csv;charset=utf-8;' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `${organization?.slug || 'members'}_directory_${new Date().toISOString().split('T')[0]}.csv`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      console.error('CSV export error:', err);
+    } finally {
+      setExporting(false);
+      setShowExportModal(false);
+    }
+  };
+
+  // ── Export PDF ──
+  const handleExportPDF = () => {
+    setExporting(true);
+    try {
+      const dataToExport = selectedIds.size > 0 ? filtered.filter(m => selectedIds.has(m.id)) : filtered;
+      // Map to the format expected by exportStudentsToPDF
+      const mapped = dataToExport.map(m => {
+        const { isAdmin, isFinsec, isClassRep } = getMemberRoles(m);
+        return {
+          id: m.id,
+          full_name: m.full_name,
+          reg_number: m.member_id,
+          email: m.email || undefined,
+          phone: m.phone || undefined,
+          level: m.level || orgLevel || undefined,
+          department: m.section || orgDepartment || undefined,
+          is_active: m.is_active,
+          is_admin: isAdmin,
+          is_finsec: isFinsec,
+          is_class_rep: isClassRep,
+          created_at: m.created_at,
+        };
+      });
+      exportStudentsToPDF(mapped, {
+        status: statusFilter !== 'all' ? statusFilter : undefined,
+        fields: exportFields,
+      });
+    } catch (err) {
+      console.error('PDF export error:', err);
+    } finally {
+      setExporting(false);
+      setShowExportModal(false);
+    }
+  };
+
   return (
-    <div className="max-w-7xl mx-auto px-4 py-6 space-y-6">
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-bold text-white">Manage {memberLabelPlural}</h1>
-          <p className="text-sm mt-1" style={{ color: colors.textTertiary }}>
-            {organization?.name} &bull; {group?.name || 'All Groups'}
-          </p>
-        </div>
-        <div className="flex items-center gap-2">
-          <button
-            onClick={() => { setShowInviteModal(true); setInviteLink(''); setInviteCode(''); setInviteCopied(false); }}
-            className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-medium transition-all hover:scale-105"
-            style={{ border: `1px solid ${colors.borderPrimary}`, color: colors.success }}
-          >
-            <Link2 size={16} />
-            <span className="hidden sm:inline">Invite Link</span>
-          </button>
-          <button
-            onClick={() => setShowBulkModal(true)}
-            className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-medium transition-all hover:scale-105"
-            style={{ border: `1px solid ${colors.borderPrimary}`, color: colors.primary }}
-          >
-            <Upload size={16} />
-            <span className="hidden sm:inline">Import CSV</span>
-          </button>
-          <button
-            onClick={() => { setShowAddModal(true); setAddError(''); setAddSuccess(null); }}
-            className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-medium text-white transition-all hover:scale-105"
-            style={{ background: colors.primary }}
-          >
-            <UserPlus size={16} />
-            Add {memberLabel}
-          </button>
-        </div>
+    <div className="min-h-screen py-4 sm:py-6 pb-24 lg:pb-6 relative overflow-x-hidden" style={{
+      background: 'radial-gradient(ellipse at top, #1A0E09 0%, #0F0703 100%)',
+    }}>
+      {/* Background Grid Pattern */}
+      <div
+        className="absolute inset-0 opacity-20 pointer-events-none"
+        style={{
+          backgroundImage: `
+            linear-gradient(${colors.primary}40 1px, transparent 1px),
+            linear-gradient(90deg, ${colors.primary}40 1px, transparent 1px)
+          `,
+          backgroundSize: '50px 50px',
+        }}
+      />
+
+      {/* Animated Gradient Orbs */}
+      <div className="fixed inset-0 overflow-hidden pointer-events-none">
+        <div
+          className="absolute w-[500px] h-[500px] rounded-full blur-[120px] opacity-30 animate-pulse"
+          style={{
+            background: `radial-gradient(circle, ${colors.primary} 0%, transparent 70%)`,
+            top: '-10%',
+            right: '-5%',
+            animationDuration: '4s',
+          }}
+        />
+        <div
+          className="absolute w-[400px] h-[400px] rounded-full blur-[100px] opacity-20"
+          style={{
+            background: `radial-gradient(circle, ${colors.accentMint} 0%, transparent 70%)`,
+            bottom: '-5%',
+            left: '-5%',
+            animation: 'pulse 6s ease-in-out infinite',
+          }}
+        />
       </div>
 
-      {/* Stats */}
-      <div className="grid grid-cols-3 gap-3">
-        {[
-          { label: `Total ${memberLabelPlural}`, value: members.length, icon: <Users size={18} />, color: colors.primary },
-          { label: 'Active', value: activeCount, icon: <CheckCircle size={18} />, color: colors.success },
-          { label: 'Admins', value: adminCount, icon: <Shield size={18} />, color: colors.accentPurple },
-        ].map(stat => (
-          <GlassCard key={stat.label} className="p-4">
-            <div className="flex items-center justify-between mb-1">
-              <span className="text-xs" style={{ color: colors.textTertiary }}>{stat.label}</span>
-              <div style={{ color: stat.color }}>{stat.icon}</div>
+      <div className="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        {/* Header */}
+        <motion.div
+          initial={{ opacity: 0, y: -20 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="mb-4 sm:mb-6"
+        >
+          <GlassCard className="relative overflow-hidden">
+            {/* Decorative Elements */}
+            <div className="absolute top-0 right-0 w-64 h-64 opacity-5 pointer-events-none">
+              <Users className="w-full h-full" style={{ color: colors.accentMint }} />
             </div>
-            <p className="text-2xl font-bold text-white">{stat.value}</p>
-          </GlassCard>
-        ))}
-      </div>
+            <div
+              className="absolute top-0 left-0 w-full h-1"
+              style={{ background: `linear-gradient(90deg, ${colors.accentMint}, ${colors.primary}, transparent)` }}
+            />
 
-      {/* Filters */}
-      <div className="flex flex-col sm:flex-row gap-3">
-        <div className="flex-1 relative">
-          <Search size={18} className="absolute left-3 top-1/2 -translate-y-1/2" style={{ color: colors.textTertiary }} />
-          <input
-            type="text"
-            placeholder={`Search ${memberLabelPlural.toLowerCase()}...`}
-            value={searchQuery}
-            onChange={e => { setSearchQuery(e.target.value); setCurrentPage(1); }}
-            className="w-full pl-10 pr-4 py-2.5 rounded-xl bg-white/5 border border-white/10 text-white placeholder-gray-500 outline-none focus:border-[#FF6803] transition-colors text-sm"
-          />
-        </div>
-        <div className="flex gap-2">
-          {(['all', 'active', 'inactive'] as const).map(s => (
-            <button
-              key={s}
-              onClick={() => { setStatusFilter(s); setCurrentPage(1); }}
-              className="px-4 py-2.5 rounded-xl text-sm font-medium transition-all capitalize"
-              style={{
-                background: statusFilter === s ? `${colors.primary}15` : 'rgba(255,255,255,0.03)',
-                color: statusFilter === s ? colors.primary : colors.textSecondary,
-                border: `1px solid ${statusFilter === s ? colors.primary : 'rgba(255,255,255,0.08)'}`,
-              }}
-            >
-              {s}
-            </button>
-          ))}
-        </div>
-      </div>
-
-      {/* Members Table */}
-      <GlassCard className="overflow-hidden">
-        {loading ? (
-          <div className="p-12 text-center">
-            <Loader2 size={24} className="animate-spin mx-auto mb-2" style={{ color: colors.primary }} />
-            <p className="text-sm" style={{ color: colors.textTertiary }}>Loading {memberLabelPlural.toLowerCase()}...</p>
-          </div>
-        ) : paginated.length === 0 ? (
-          <div className="p-12 text-center space-y-3">
-            <Users size={40} className="mx-auto" style={{ color: colors.textDisabled }} />
-            <p className="font-medium text-white">No {memberLabelPlural.toLowerCase()} found</p>
-            <p className="text-sm" style={{ color: colors.textTertiary }}>
-              {searchQuery ? 'Try a different search' : `Add your first ${memberLabel.toLowerCase()} to get started`}
-            </p>
-            {!searchQuery && (
-              <button
-                onClick={() => setShowAddModal(true)}
-                className="inline-flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-medium mt-2"
-                style={{ color: colors.primary, border: `1px solid ${colors.borderPrimary}` }}
-              >
-                <UserPlus size={16} />
-                Add {memberLabel}
-              </button>
-            )}
-          </div>
-        ) : (
-          <>
-            {/* Desktop header */}
-            <div className="hidden md:grid grid-cols-12 gap-4 px-5 py-3 text-xs font-medium uppercase tracking-wider" style={{ color: colors.textTertiary, borderBottom: `1px solid ${colors.borderLight}` }}>
-              <div className="col-span-4">{memberLabel}</div>
-              <div className="col-span-2">ID</div>
-              <div className="col-span-2">Contact</div>
-              <div className="col-span-2">Status</div>
-              <div className="col-span-2 text-right">Actions</div>
-            </div>
-
-            {/* Rows */}
-            <div className="divide-y" style={{ borderColor: 'rgba(255,255,255,0.05)' }}>
-              {paginated.map((member, idx) => {
-                const isAdmin = member.admin_records && member.admin_records.length > 0;
-                return (
+            <div className="relative z-10">
+              <div className="flex flex-col sm:flex-row items-center sm:items-start gap-3 mb-2">
+                <motion.div
+                  initial={{ scale: 0.9 }}
+                  animate={{ scale: 1 }}
+                  className="w-14 h-14 rounded-xl flex items-center justify-center shrink-0 shadow-lg"
+                  style={{
+                    background: `linear-gradient(135deg, ${colors.accentMint}30, ${colors.accentMint}10)`,
+                    border: `1px solid ${colors.accentMint}40`,
+                    boxShadow: `0 4px 15px ${colors.accentMint}20`
+                  }}
+                >
+                  <Users className="w-7 h-7" style={{ color: colors.accentMint }} />
+                </motion.div>
+                <div className="text-center sm:text-left">
+                  {/* Badge */}
                   <motion.div
-                    key={member.id}
-                    initial={{ opacity: 0, y: 10 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ delay: idx * 0.02 }}
-                    className="grid grid-cols-1 md:grid-cols-12 gap-2 md:gap-4 px-5 py-4 hover:bg-white/2 transition-colors items-center"
+                    initial={{ opacity: 0, scale: 0.9 }}
+                    animate={{ opacity: 1, scale: 1 }}
+                    transition={{ delay: 0.1 }}
+                    className="inline-flex items-center gap-2 px-3 py-1 rounded-full text-xs font-semibold mb-2"
+                    style={{
+                      background: `linear-gradient(135deg, ${colors.accentMint}30, ${colors.accentMint}10)`,
+                      border: `1px solid ${colors.accentMint}40`,
+                      color: colors.accentMint,
+                    }}
                   >
-                    {/* Name + Avatar */}
-                    <div className="md:col-span-4 flex items-center gap-3">
-                      <div
-                        className="w-9 h-9 rounded-full flex items-center justify-center text-xs font-bold text-white shrink-0"
-                        style={{ background: isAdmin ? `${colors.accentPurple}40` : `${colors.primary}30` }}
-                      >
-                        {member.full_name?.charAt(0)?.toUpperCase() || '?'}
-                      </div>
-                      <div className="min-w-0">
-                        <p className="text-sm font-medium text-white truncate flex items-center gap-1.5">
-                          {member.full_name}
-                          {isAdmin && <Shield size={12} style={{ color: colors.accentPurple }} />}
-                        </p>
-                        <p className="text-xs md:hidden" style={{ color: colors.textTertiary }}>{member.member_id}</p>
-                      </div>
-                    </div>
+                    <Sparkles className="w-3 h-3" />
+                    {memberLabelPlural.toUpperCase()} MANAGEMENT
+                  </motion.div>
+                  <h1 className="text-2xl sm:text-3xl font-bold text-white">Manage {memberLabelPlural}</h1>
+                  <p className="flex items-center justify-center sm:justify-start gap-2" style={{ color: colors.textSecondary }}>
+                    <Filter className="w-4 h-4" />
+                    {organization?.name} &bull; {group?.name || 'All Groups'}
+                  </p>
+                </div>
 
-                    {/* ID */}
-                    <div className="hidden md:block md:col-span-2">
-                      <p className="text-sm text-white">{member.member_id}</p>
-                    </div>
+                {/* Add Member Button - Right Side */}
+                <div className="relative sm:ml-auto mt-3 sm:mt-0">
+                  <motion.button
+                    whileHover={{ scale: 1.02, y: -2 }}
+                    whileTap={{ scale: 0.98 }}
+                    onClick={() => setShowAddMenu(!showAddMenu)}
+                    className="flex items-center gap-2 px-5 py-3 rounded-xl font-semibold text-white transition-all"
+                    style={{
+                      background: `linear-gradient(135deg, ${colors.accentMint}, ${colors.primary})`,
+                      boxShadow: `0 4px 20px ${colors.accentMint}40`
+                    }}
+                  >
+                    <Plus className="w-5 h-5" />
+                    <span>Add {memberLabelPlural}</span>
+                    <ChevronDown className={`w-4 h-4 transition-transform ${showAddMenu ? 'rotate-180' : ''}`} />
+                  </motion.button>
 
-                    {/* Contact */}
-                    <div className="hidden md:block md:col-span-2">
-                      {member.email ? (
-                        <p className="text-xs truncate" style={{ color: colors.textSecondary }}>{member.email}</p>
-                      ) : (
-                        <p className="text-xs italic" style={{ color: colors.textDisabled }}>No email</p>
-                      )}
-                    </div>
-
-                    {/* Status */}
-                    <div className="md:col-span-2 flex items-center gap-2">
-                      <span
-                        className="text-xs font-medium px-2.5 py-1 rounded-full"
+                  <AnimatePresence>
+                    {showAddMenu && (
+                      <motion.div
+                        initial={{ opacity: 0, y: -8, scale: 0.95 }}
+                        animate={{ opacity: 1, y: 0, scale: 1 }}
+                        exit={{ opacity: 0, y: -8, scale: 0.95 }}
+                        transition={{ duration: 0.15 }}
+                        className="absolute right-0 top-full mt-2 w-64 rounded-xl overflow-hidden shadow-2xl z-50"
                         style={{
-                          color: member.is_active ? colors.success : colors.error,
-                          background: member.is_active ? `${colors.success}15` : `${colors.error}15`,
+                          background: 'linear-gradient(135deg, rgba(30, 20, 15, 0.98), rgba(20, 12, 8, 0.98))',
+                          border: '1px solid rgba(255, 255, 255, 0.1)',
+                          backdropFilter: 'blur(20px)',
                         }}
                       >
-                        {member.is_active ? 'Active' : 'Inactive'}
-                      </span>
-                      {member.force_password_change && (
-                        <span className="text-xs px-2 py-0.5 rounded-full" style={{ color: colors.warning, background: `${colors.warning}15` }}>
-                          New
+                        <div className="p-2">
+                          <motion.button
+                            whileHover={{ x: 4 }}
+                            onClick={() => { setShowAddMenu(false); setShowAddModal(true); setAddError(''); setAddSuccess(null); }}
+                            className="w-full flex items-center gap-3 px-3 py-3 rounded-lg transition-all hover:bg-white/5"
+                          >
+                            <div className="w-9 h-9 rounded-lg flex items-center justify-center" style={{ background: `${colors.primary}20` }}>
+                              <UserPlus className="w-4 h-4" style={{ color: colors.primary }} />
+                            </div>
+                            <div className="text-left">
+                              <p className="text-sm font-medium text-white">Single {memberLabel}</p>
+                              <p className="text-[10px]" style={{ color: colors.textSecondary }}>Add one {memberLabel.toLowerCase()} manually</p>
+                            </div>
+                          </motion.button>
+                          <motion.button
+                            whileHover={{ x: 4 }}
+                            onClick={() => { setShowAddMenu(false); setShowBulkModal(true); }}
+                            className="w-full flex items-center gap-3 px-3 py-3 rounded-lg transition-all hover:bg-white/5"
+                          >
+                            <div className="w-9 h-9 rounded-lg flex items-center justify-center" style={{ background: `${colors.accentMint}20` }}>
+                              <Upload className="w-4 h-4" style={{ color: colors.accentMint }} />
+                            </div>
+                            <div className="text-left">
+                              <p className="text-sm font-medium text-white">Bulk Import</p>
+                              <p className="text-[10px]" style={{ color: colors.textSecondary }}>Upload CSV / Excel file</p>
+                            </div>
+                          </motion.button>
+                          <motion.button
+                            whileHover={{ x: 4 }}
+                            onClick={() => { setShowAddMenu(false); setShowInviteModal(true); setInviteLink(''); setInviteCode(''); setInviteCopied(false); }}
+                            className="w-full flex items-center gap-3 px-3 py-3 rounded-lg transition-all hover:bg-white/5"
+                          >
+                            <div className="w-9 h-9 rounded-lg flex items-center justify-center" style={{ background: `${colors.success}20` }}>
+                              <Link2 className="w-4 h-4" style={{ color: colors.success }} />
+                            </div>
+                            <div className="text-left">
+                              <p className="text-sm font-medium text-white">Invite Link</p>
+                              <p className="text-[10px]" style={{ color: colors.textSecondary }}>Share a join link</p>
+                            </div>
+                          </motion.button>
+                        </div>
+                      </motion.div>
+                    )}
+                  </AnimatePresence>
+                  {showAddMenu && <div className="fixed inset-0 z-40" onClick={() => setShowAddMenu(false)} />}
+                </div>
+              </div>
+
+              {/* Quick Stats */}
+              <div className="grid grid-cols-2 sm:grid-cols-5 gap-3 mt-4">
+                <div className="p-3 rounded-xl text-center" style={{ background: 'rgba(255, 255, 255, 0.03)', border: '1px solid rgba(255, 255, 255, 0.05)' }}>
+                  <p className="text-2xl font-bold text-white"><AnimatedCounter value={members.length} /></p>
+                  <p className="text-xs" style={{ color: colors.textSecondary }}>Total</p>
+                </div>
+                <div className="p-3 rounded-xl text-center" style={{ background: `${colors.statusPaid}10`, border: `1px solid ${colors.statusPaid}20` }}>
+                  <p className="text-2xl font-bold" style={{ color: colors.statusPaid }}><AnimatedCounter value={activeCount} /></p>
+                  <p className="text-xs" style={{ color: colors.textSecondary }}>Active</p>
+                </div>
+                <div className="p-3 rounded-xl text-center" style={{ background: `${colors.primary}10`, border: `1px solid ${colors.primary}20` }}>
+                  <p className="text-2xl font-bold" style={{ color: colors.primary }}><AnimatedCounter value={adminCount} /></p>
+                  <p className="text-xs" style={{ color: colors.textSecondary }}>Admins</p>
+                </div>
+                <div className="p-3 rounded-xl text-center" style={{ background: `${colors.accentMint}10`, border: `1px solid ${colors.accentMint}20` }}>
+                  <p className="text-2xl font-bold" style={{ color: colors.accentMint }}><AnimatedCounter value={finsecCount} /></p>
+                  <p className="text-xs" style={{ color: colors.textSecondary }}>FinSecs</p>
+                </div>
+                <div className="p-3 rounded-xl text-center" style={{ background: `${colors.warning}10`, border: `1px solid ${colors.warning}20` }}>
+                  <p className="text-2xl font-bold" style={{ color: colors.warning }}><AnimatedCounter value={classRepCount} /></p>
+                  <p className="text-xs" style={{ color: colors.textSecondary }}>Class Reps</p>
+                </div>
+              </div>
+
+              {/* ── Plan Usage / Limit Banner ── */}
+              {(() => {
+                const memberLimit = canCreate('members');
+                if (memberLimit.limit === -1) return null; // unlimited
+                const usagePercent = memberLimit.limit > 0 ? Math.round((memberLimit.current / memberLimit.limit) * 100) : 0;
+                const isNearLimit = usagePercent >= 80;
+                const isAtLimit = !memberLimit.allowed;
+                const barColor = isAtLimit ? colors.error : isNearLimit ? colors.warning : colors.accentMint;
+
+                return (
+                  <motion.div
+                    initial={{ opacity: 0, y: 8 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    className="mt-4 p-3 rounded-xl"
+                    style={{
+                      background: isAtLimit
+                        ? `${colors.error}10`
+                        : isNearLimit
+                        ? `${colors.warning}08`
+                        : 'rgba(255,255,255,0.02)',
+                      border: `1px solid ${isAtLimit ? colors.error : isNearLimit ? colors.warning : 'rgba(255,255,255,0.06)'}30`,
+                    }}
+                  >
+                    <div className="flex items-center justify-between mb-2">
+                      <div className="flex items-center gap-2">
+                        <Users className="w-4 h-4" style={{ color: barColor }} />
+                        <span className="text-xs font-medium" style={{ color: barColor }}>
+                          {isAtLimit ? '⚠ Member Limit Reached' : isNearLimit ? '⚡ Approaching Limit' : 'Plan Usage'}
                         </span>
-                      )}
+                        <span className="text-[10px] px-2 py-0.5 rounded-full" style={{ background: `${barColor}20`, color: barColor }}>
+                          {planName}
+                        </span>
+                      </div>
+                      <span className="text-xs font-semibold" style={{ color: barColor }}>
+                        {memberLimit.current} / {memberLimit.limit}
+                      </span>
                     </div>
-
-                    {/* Actions */}
-                    <div className="md:col-span-2 flex items-center justify-end gap-1 relative">
-                      <button
-                        onClick={() => { setEditingMember({ ...member }); setShowEditModal(true); }}
-                        className="p-2 rounded-lg hover:bg-white/5 transition-colors"
-                        title="Edit"
-                      >
-                        <Edit2 size={15} style={{ color: colors.textSecondary }} />
-                      </button>
-                      <div className="relative">
-                        <button
-                          onClick={() => setActiveDropdown(activeDropdown === member.id ? null : member.id)}
-                          className="p-2 rounded-lg hover:bg-white/5 transition-colors"
+                    {/* Progress bar */}
+                    <div className="w-full h-1.5 rounded-full overflow-hidden" style={{ background: 'rgba(255,255,255,0.05)' }}>
+                      <motion.div
+                        initial={{ width: 0 }}
+                        animate={{ width: `${Math.min(usagePercent, 100)}%` }}
+                        transition={{ duration: 1, ease: 'easeOut' }}
+                        className="h-full rounded-full"
+                        style={{ background: `linear-gradient(90deg, ${barColor}80, ${barColor})` }}
+                      />
+                    </div>
+                    {(isAtLimit || isNearLimit) && (
+                      <div className="flex items-center justify-between mt-2">
+                        <p className="text-[10px]" style={{ color: colors.textTertiary }}>
+                          {isAtLimit
+                            ? 'Upgrade your plan to add more members.'
+                            : `${memberLimit.limit - memberLimit.current} slot${memberLimit.limit - memberLimit.current !== 1 ? 's' : ''} remaining.`}
+                        </p>
+                        <motion.button
+                          whileHover={{ scale: 1.05 }}
+                          whileTap={{ scale: 0.95 }}
+                          onClick={() => navigateTo('/admin/billing')}
+                          className="text-[10px] font-semibold px-3 py-1 rounded-full transition-colors"
+                          style={{
+                            background: `${barColor}20`,
+                            color: barColor,
+                            border: `1px solid ${barColor}30`,
+                          }}
                         >
-                          <MoreVertical size={15} style={{ color: colors.textSecondary }} />
-                        </button>
+                          Upgrade Plan →
+                        </motion.button>
+                      </div>
+                    )}
+                  </motion.div>
+                );
+              })()}
+            </div>
+          </GlassCard>
+        </motion.div>
 
-                        <AnimatePresence>
-                          {activeDropdown === member.id && (
-                            <>
-                              <div className="fixed inset-0 z-40" onClick={() => setActiveDropdown(null)} />
-                              <motion.div
-                                initial={{ opacity: 0, scale: 0.9 }}
-                                animate={{ opacity: 1, scale: 1 }}
-                                exit={{ opacity: 0, scale: 0.9 }}
-                                className="absolute right-0 top-full mt-1 w-48 rounded-xl overflow-hidden z-50 py-1"
-                                style={{ background: colors.secondaryLighter, border: `1px solid ${colors.borderLight}`, boxShadow: '0 10px 30px rgba(0,0,0,0.5)' }}
+        {/* Search & Filters */}
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.1 }}
+        >
+          <GlassCard className="mb-4 sm:mb-6">
+            <div className="relative mb-4">
+              <Search className="absolute left-3 sm:left-4 top-1/2 -translate-y-1/2 w-4 h-4 sm:w-5 sm:h-5" style={{ color: colors.textSecondary }} />
+              <input
+                type="text"
+                placeholder={`Search by name, ID, email...`}
+                value={searchQuery}
+                onChange={(e) => { setSearchQuery(e.target.value); setCurrentPage(1); }}
+                className="w-full pl-10 sm:pl-12 pr-4 py-2.5 sm:py-3 rounded-lg text-sm sm:text-base text-white focus:outline-none focus:ring-2 focus:ring-orange-500"
+                style={{
+                  background: 'rgba(255, 255, 255, 0.05)',
+                  border: '1px solid rgba(255, 255, 255, 0.1)'
+                }}
+              />
+            </div>
+
+            {/* Quick Filters */}
+            <div className="space-y-3">
+              {/* Status Filter */}
+              <div>
+                <p className="text-xs font-medium mb-2" style={{ color: colors.textSecondary }}>Status</p>
+                <div className="flex flex-wrap gap-2">
+                  {[
+                    { value: 'all' as const, label: 'All', count: members.length },
+                    { value: 'active' as const, label: 'Active', count: activeCount },
+                    { value: 'inactive' as const, label: 'Inactive', count: inactiveCount },
+                  ].map(({ value, label, count }) => (
+                    <button
+                      key={value}
+                      onClick={() => {
+                        setStatusFilter(value);
+                        setCurrentPage(1);
+                      }}
+                      className="px-3 py-1.5 rounded-lg text-xs sm:text-sm font-medium transition-all"
+                      style={{
+                        background: statusFilter === value ? `${colors.primary}30` : 'rgba(255, 255, 255, 0.05)',
+                        border: `1px solid ${statusFilter === value ? colors.primary + '60' : 'transparent'}`,
+                        color: statusFilter === value ? colors.primary : colors.textSecondary,
+                      }}
+                    >
+                      {label} ({count})
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Role Filter */}
+              <div>
+                <p className="text-xs font-medium mb-2" style={{ color: colors.textSecondary }}>Role</p>
+                <div className="flex flex-wrap gap-2">
+                  {[
+                    { value: 'all' as const, label: 'All Roles', count: members.length },
+                    { value: 'admin' as const, label: 'Admins', count: adminCount },
+                    { value: 'finsec' as const, label: 'FinSecs', count: finsecCount },
+                    { value: 'class_rep' as const, label: 'Class Reps', count: classRepCount },
+                    { value: 'member' as const, label: `${memberLabelPlural} Only`, count: memberOnlyCount },
+                  ].map(({ value, label, count }) => (
+                    <button
+                      key={value}
+                      onClick={() => {
+                        setRoleFilter(value);
+                        setCurrentPage(1);
+                      }}
+                      className="px-3 py-1.5 rounded-lg text-xs sm:text-sm font-medium transition-all"
+                      style={{
+                        background: roleFilter === value ? `${colors.accentMint}30` : 'rgba(255, 255, 255, 0.05)',
+                        border: `1px solid ${roleFilter === value ? colors.accentMint + '60' : 'transparent'}`,
+                        color: roleFilter === value ? colors.accentMint : colors.textSecondary,
+                      }}
+                    >
+                      {label} ({count})
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Clear Filters */}
+              {(statusFilter !== 'all' || roleFilter !== 'all' || searchQuery !== '') && (
+                <button
+                  onClick={() => {
+                    setStatusFilter('all');
+                    setRoleFilter('all');
+                    setSearchQuery('');
+                    setCurrentPage(1);
+                  }}
+                  className="w-full sm:w-auto px-4 py-2 rounded-lg text-sm font-medium transition-all flex items-center gap-2"
+                  style={{
+                    background: `${colors.statusUnpaid}20`,
+                    border: `1px solid ${colors.statusUnpaid}40`,
+                    color: colors.statusUnpaid,
+                  }}
+                >
+                  <X className="w-4 h-4" />
+                  Clear All Filters
+                </button>
+              )}
+            </div>
+          </GlassCard>
+        </motion.div>
+
+        {/* Selection Toolbar */}
+        <AnimatePresence>
+          {selectedIds.size > 0 && (
+            <motion.div
+              initial={{ opacity: 0, y: -10, height: 0 }}
+              animate={{ opacity: 1, y: 0, height: 'auto' }}
+              exit={{ opacity: 0, y: -10, height: 0 }}
+              className="flex items-center justify-between gap-3 px-4 py-3 rounded-xl mb-4"
+              style={{ background: `${colors.primary}08`, border: `1px solid ${colors.borderPrimary}` }}
+            >
+              <div className="flex items-center gap-3">
+                <div className="flex items-center gap-2">
+                  <CheckSquare size={16} style={{ color: colors.primary }} />
+                  <span className="text-sm font-semibold" style={{ color: colors.primary }}>
+                    {selectedIds.size} selected
+                  </span>
+                </div>
+                <button
+                  onClick={clearSelection}
+                  className="text-xs px-2.5 py-1 rounded-lg hover:bg-white/5 transition-colors"
+                  style={{ color: colors.textTertiary }}
+                >
+                  Clear
+                </button>
+              </div>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => setShowExportModal(true)}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all hover:scale-105"
+                  style={{ background: `${colors.primary}15`, color: colors.primary }}
+                >
+                  <Download size={13} /> Export Selected
+                </button>
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        {/* Members List */}
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.2 }}
+        >
+          <GlassCard>
+            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 mb-4">
+              <h2 className="text-xl font-bold text-white">
+                {sortedFiltered.length} {sortedFiltered.length !== 1 ? memberLabelPlural : memberLabel}
+              </h2>
+
+              {/* Export Button */}
+              <motion.button
+                whileHover={{ scale: 1.02 }}
+                whileTap={{ scale: 0.98 }}
+                onClick={() => setShowExportModal(true)}
+                disabled={exporting || sortedFiltered.length === 0}
+                className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-medium transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                style={{
+                  background: `linear-gradient(135deg, ${colors.primary}20, ${colors.primary}10)`,
+                  border: `1px solid ${colors.primary}40`,
+                  color: colors.primary,
+                }}
+              >
+                {exporting ? (
+                  <>
+                    <div className="w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin" />
+                    <span>Exporting...</span>
+                  </>
+                ) : (
+                  <>
+                    <Download className="w-4 h-4" />
+                    <span>Export</span>
+                  </>
+                )}
+              </motion.button>
+            </div>
+
+            {loading ? (
+              <div className="text-center py-12">
+                <div className="flex flex-col items-center gap-3">
+                  <div className="animate-spin rounded-full h-10 w-10 border-3 border-t-transparent"
+                    style={{ borderColor: colors.primary, borderTopColor: 'transparent' }}
+                  />
+                  <p className="text-sm" style={{ color: colors.textSecondary }}>Loading {memberLabelPlural.toLowerCase()}...</p>
+                </div>
+              </div>
+            ) : sortedFiltered.length === 0 ? (
+              <div className="text-center py-12">
+                <Users className="w-16 h-16 mx-auto mb-4" style={{ color: colors.textSecondary }} />
+                <p className="text-lg font-medium text-white mb-2">No {memberLabelPlural.toLowerCase()} found</p>
+                <p style={{ color: colors.textSecondary }}>
+                  {searchQuery ? 'Try a different search term' : `Add your first ${memberLabel.toLowerCase()} to get started`}
+                </p>
+                {!searchQuery && (
+                  <button
+                    onClick={() => { setShowAddModal(true); setAddError(''); setAddSuccess(null); }}
+                    className="inline-flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-medium mt-4"
+                    style={{ color: colors.primary, border: `1px solid ${colors.borderPrimary}` }}
+                  >
+                    <UserPlus size={16} />
+                    Add {memberLabel}
+                  </button>
+                )}
+              </div>
+            ) : (
+              <>
+                {/* Desktop Table View */}
+                <div className="hidden lg:block overflow-x-auto">
+                  <table className="min-w-full divide-y" style={{ borderColor: 'rgba(255, 255, 255, 0.1)' }}>
+                    <thead>
+                      <tr className="border-b" style={{ borderColor: 'rgba(255, 255, 255, 0.1)' }}>
+                        <th className="text-left py-3 px-4 text-sm font-semibold whitespace-nowrap w-8" style={{ color: colors.textSecondary }}>
+                          <button onClick={toggleSelectAll} className="p-0.5 rounded hover:bg-white/5 transition-colors" title={isAllSelected ? 'Deselect all' : 'Select all'}>
+                            {isAllSelected ? <CheckSquare size={16} style={{ color: colors.primary }} /> : isPartialSelected ? <MinusSquare size={16} style={{ color: colors.primary }} /> : <Square size={16} />}
+                          </button>
+                        </th>
+                        <th className="text-left py-3 px-4 text-sm font-semibold whitespace-nowrap" style={{ color: colors.textSecondary }}>{memberLabel}</th>
+                        <th className="text-left py-3 px-4 text-sm font-semibold whitespace-nowrap" style={{ color: colors.textSecondary }}>Level</th>
+                        <th className="text-left py-3 px-4 text-sm font-semibold whitespace-nowrap" style={{ color: colors.textSecondary }}>Contact</th>
+                        <th className="text-left py-3 px-4 text-sm font-semibold whitespace-nowrap" style={{ color: colors.textSecondary }}>Roles</th>
+                        <th className="text-left py-3 px-4 text-sm font-semibold whitespace-nowrap" style={{ color: colors.textSecondary }}>Status</th>
+                        <th className="text-right py-3 px-4 text-sm font-semibold whitespace-nowrap" style={{ color: colors.textSecondary }}>Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y" style={{ borderColor: 'rgba(255, 255, 255, 0.05)' }}>
+                      {paginated.map((member, index) => {
+                        const { isAdmin, isFinsec, isClassRep } = getMemberRoles(member);
+                        return (
+                          <motion.tr
+                            key={member.id}
+                            initial={{ opacity: 0, y: 20 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            transition={{ delay: Math.min(index * 0.02, 0.3) }}
+                            className={`border-b hover:bg-white/5 transition-colors ${selectedIds.has(member.id) ? 'bg-white/4' : ''}`}
+                            style={{ borderColor: 'rgba(255, 255, 255, 0.05)' }}
+                          >
+                            <td className="py-4 px-4">
+                              <button
+                                onClick={() => toggleSelectMember(member.id)}
+                                className="p-0.5 rounded hover:bg-white/5 transition-colors"
                               >
-                                <button
-                                  onClick={() => resetPassword(member)}
-                                  className="w-full flex items-center gap-3 px-4 py-2.5 text-sm hover:bg-white/5 transition-colors text-left"
-                                  style={{ color: colors.textSecondary }}
+                                {selectedIds.has(member.id)
+                                  ? <CheckSquare size={16} style={{ color: colors.primary }} />
+                                  : <Square size={16} style={{ color: colors.textDisabled }} />}
+                              </button>
+                            </td>
+                            <td className="py-4 px-4">
+                              <div className="flex items-center gap-3">
+                                <div
+                                  className="w-10 h-10 rounded-full flex items-center justify-center text-sm font-bold shrink-0"
+                                  style={{ background: gradients.primary }}
                                 >
-                                  <Key size={14} /> Reset Password
+                                  {member.full_name?.charAt(0)?.toUpperCase() || '?'}
+                                </div>
+                                <div className="min-w-0">
+                                  <p className="font-medium text-white truncate">{member.full_name}</p>
+                                  <p className="text-sm truncate" style={{ color: colors.textSecondary }}>{member.member_id}</p>
+                                </div>
+                              </div>
+                            </td>
+                            <td className="py-4 px-4">
+                              {member.level ? (
+                                <span className="inline-flex items-center gap-1 px-2 py-1 rounded-lg text-xs font-semibold" style={{ background: `${colors.accentMint}15`, color: colors.accentMint, border: `1px solid ${colors.accentMint}25` }}>
+                                  {member.level}
+                                </span>
+                              ) : (
+                                <span className="text-xs italic" style={{ color: colors.textDisabled }}>—</span>
+                              )}
+                            </td>
+                            <td className="py-4 px-4">
+                              {member.email ? (
+                                <p className="text-sm text-white truncate">{member.email}</p>
+                              ) : (
+                                <p className="text-sm italic" style={{ color: colors.textDisabled }}>No email</p>
+                              )}
+                              {member.phone && <p className="text-sm" style={{ color: colors.textSecondary }}>{member.phone}</p>}
+                            </td>
+                            <td className="py-4 px-4">
+                              <div className="flex flex-wrap gap-1">
+                                {isAdmin && (
+                                  <span className="px-2 py-1 rounded text-xs font-medium whitespace-nowrap" style={{ background: `${colors.primary}20`, color: colors.primary }}>
+                                    <Crown className="w-3 h-3 inline mr-1" />
+                                    Admin
+                                  </span>
+                                )}
+                                {isFinsec && (
+                                  <span className="px-2 py-1 rounded text-xs font-medium whitespace-nowrap" style={{ background: `${colors.accentMint}20`, color: colors.accentMint }}>
+                                    <Shield className="w-3 h-3 inline mr-1" />
+                                    FinSec
+                                  </span>
+                                )}
+                                {isClassRep && (
+                                  <span className="px-2 py-1 rounded text-xs font-medium whitespace-nowrap" style={{ background: `${colors.warning}20`, color: colors.warning }}>
+                                    <Users className="w-3 h-3 inline mr-1" />
+                                    Class Rep
+                                  </span>
+                                )}
+                              </div>
+                            </td>
+                            <td className="py-4 px-4">
+                              <button
+                                onClick={() => toggleActive(member)}
+                                className="flex items-center gap-1 px-2 py-1 rounded text-xs font-medium transition-colors whitespace-nowrap"
+                                style={{
+                                  background: member.is_active ? `${colors.statusPaid}20` : `${colors.statusUnpaid}20`,
+                                  color: member.is_active ? colors.statusPaid : colors.statusUnpaid
+                                }}
+                              >
+                                {member.is_active ? <CheckCircle className="w-3 h-3" /> : <XCircle className="w-3 h-3" />}
+                                <span className="hidden sm:inline">{member.is_active ? 'Active' : 'Inactive'}</span>
+                              </button>
+                            </td>
+                            <td className="py-4 px-4">
+                              <div className="flex items-center justify-end gap-1 sm:gap-2">
+                                <button
+                                  onClick={() => { setRoleTarget(member); setShowRoleModal(true); }}
+                                  className="p-2 rounded-lg transition-colors"
+                                  style={{ background: 'rgba(255, 255, 255, 0.05)' }}
+                                  title="Manage Roles"
+                                >
+                                  <UserCog className="w-4 h-4" style={{ color: colors.accentPurple }} />
                                 </button>
                                 <button
-                                  onClick={() => toggleActive(member)}
-                                  className="w-full flex items-center gap-3 px-4 py-2.5 text-sm hover:bg-white/5 transition-colors text-left"
-                                  style={{ color: member.is_active ? colors.warning : colors.success }}
+                                  onClick={() => { setEditingMember({ ...member }); setShowEditModal(true); }}
+                                  className="p-2 rounded-lg transition-colors hover:bg-white/10"
+                                  style={{ background: 'rgba(255, 255, 255, 0.05)' }}
+                                  title="Edit"
                                 >
-                                  {member.is_active ? <AlertTriangle size={14} /> : <CheckCircle size={14} />}
-                                  {member.is_active ? 'Deactivate' : 'Activate'}
+                                  <Edit2 className="w-4 h-4" style={{ color: colors.textSecondary }} />
+                                </button>
+                                <button
+                                  onClick={() => resetPassword(member)}
+                                  className="p-2 rounded-lg transition-colors hover:bg-amber-500/20"
+                                  style={{ background: 'rgba(255, 255, 255, 0.05)' }}
+                                  title="Reset Password"
+                                >
+                                  <Key className="w-4 h-4" style={{ color: colors.warning }} />
                                 </button>
                                 <button
                                   onClick={() => deleteMember(member)}
-                                  className="w-full flex items-center gap-3 px-4 py-2.5 text-sm hover:bg-white/5 transition-colors text-left"
-                                  style={{ color: colors.error }}
+                                  className="p-2 rounded-lg transition-colors hover:bg-red-500/20"
+                                  style={{ background: 'rgba(255, 255, 255, 0.05)' }}
+                                  title="Remove"
                                 >
-                                  <Trash2 size={14} /> Remove
+                                  <Trash2 className="w-4 h-4 text-red-400" />
                                 </button>
-                              </motion.div>
-                            </>
-                          )}
-                        </AnimatePresence>
-                      </div>
-                    </div>
-                  </motion.div>
-                );
-              })}
-            </div>
+                              </div>
+                            </td>
+                          </motion.tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+
+                {/* Mobile Card View */}
+                <div className="lg:hidden space-y-4">
+                  {paginated.map((member, index) => {
+                    const { isAdmin, isFinsec, isClassRep } = getMemberRoles(member);
+                    const hasRoles = isAdmin || isFinsec || isClassRep;
+                    return (
+                      <motion.div
+                        key={member.id}
+                        initial={{ opacity: 0, y: 20 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        transition={{ delay: Math.min(index * 0.02, 0.3) }}
+                        className="rounded-xl overflow-hidden"
+                        style={{
+                          background: 'rgba(255, 255, 255, 0.05)',
+                          border: '1px solid rgba(255, 255, 255, 0.1)'
+                        }}
+                      >
+                        {/* Header with Avatar and Name */}
+                        <div
+                          className="p-4 flex items-center gap-4"
+                          style={{
+                            background: isAdmin
+                              ? `linear-gradient(135deg, ${colors.primary}15, transparent)`
+                              : isFinsec
+                                ? `linear-gradient(135deg, ${colors.accentMint}15, transparent)`
+                                : isClassRep
+                                  ? `linear-gradient(135deg, ${colors.warning}15, transparent)`
+                                  : 'transparent'
+                          }}
+                        >
+                          <div
+                            className="w-14 h-14 rounded-full flex items-center justify-center text-lg font-bold shrink-0"
+                            style={{
+                              background: isAdmin
+                                ? gradients.primary
+                                : isFinsec
+                                  ? `linear-gradient(135deg, ${colors.accentMint}, ${colors.accentMint}80)`
+                                  : isClassRep
+                                    ? `linear-gradient(135deg, ${colors.warning}, ${colors.warning}80)`
+                                    : gradients.primary
+                            }}
+                          >
+                            {member.full_name?.charAt(0)?.toUpperCase() || '?'}
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <p className="font-semibold text-white text-base truncate">{member.full_name}</p>
+                            <div className="flex items-center gap-2 mt-0.5">
+                              <p className="text-sm truncate" style={{ color: colors.textSecondary }}>{member.member_id}</p>
+                              {member.level && (
+                                <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-semibold shrink-0" style={{ background: `${colors.accentMint}15`, color: colors.accentMint }}>
+                                  {member.level}
+                                </span>
+                              )}
+                            </div>
+                            {member.email && <p className="text-xs truncate" style={{ color: colors.textSecondary }}>{member.email}</p>}
+                          </div>
+                          {/* Status Badge */}
+                          <div
+                            className="px-2 py-1 rounded-full text-[10px] font-medium shrink-0"
+                            style={{
+                              background: member.is_active ? `${colors.statusPaid}20` : `${colors.statusUnpaid}20`,
+                              color: member.is_active ? colors.statusPaid : colors.statusUnpaid,
+                              border: `1px solid ${member.is_active ? `${colors.statusPaid}40` : `${colors.statusUnpaid}40`}`
+                            }}
+                          >
+                            {member.is_active ? '● Active' : '○ Inactive'}
+                          </div>
+                        </div>
+
+                        {/* Role Badges */}
+                        <div className="px-4 pb-3">
+                          <div className="flex flex-wrap gap-2">
+                            {isAdmin && (
+                              <span
+                                className="px-3 py-1.5 rounded-full text-xs font-semibold flex items-center gap-1.5"
+                                style={{
+                                  background: `${colors.primary}25`,
+                                  color: colors.primary,
+                                  border: `1px solid ${colors.primary}40`
+                                }}
+                              >
+                                <Crown className="w-3.5 h-3.5" />
+                                Admin
+                              </span>
+                            )}
+                            {isFinsec && (
+                              <span
+                                className="px-3 py-1.5 rounded-full text-xs font-semibold flex items-center gap-1.5"
+                                style={{
+                                  background: `${colors.accentMint}25`,
+                                  color: colors.accentMint,
+                                  border: `1px solid ${colors.accentMint}40`
+                                }}
+                              >
+                                <Shield className="w-3.5 h-3.5" />
+                                Financial Sec
+                              </span>
+                            )}
+                            {isClassRep && (
+                              <span
+                                className="px-3 py-1.5 rounded-full text-xs font-semibold flex items-center gap-1.5"
+                                style={{
+                                  background: `${colors.warning}25`,
+                                  color: colors.warning,
+                                  border: `1px solid ${colors.warning}40`
+                                }}
+                              >
+                                <Users className="w-3.5 h-3.5" />
+                                Class Rep
+                              </span>
+                            )}
+                            {!hasRoles && (
+                              <span
+                                className="px-3 py-1.5 rounded-full text-xs font-medium flex items-center gap-1.5"
+                                style={{
+                                  background: 'rgba(255, 255, 255, 0.05)',
+                                  color: colors.textSecondary,
+                                  border: '1px solid rgba(255, 255, 255, 0.1)'
+                                }}
+                              >
+                                <User className="w-3.5 h-3.5" />
+                                {memberLabel}
+                              </span>
+                            )}
+                          </div>
+                        </div>
+
+                        {/* Actions */}
+                        <div className="p-4 pt-2 space-y-3" style={{ borderTop: '1px solid rgba(255, 255, 255, 0.05)' }}>
+                          {/* Activate/Deactivate Button */}
+                          <button
+                            onClick={() => toggleActive(member)}
+                            className="w-full px-4 py-2.5 rounded-lg text-sm font-medium transition-all active:scale-[0.98]"
+                            style={{
+                              background: member.is_active ? `${colors.statusUnpaid}15` : `${colors.statusPaid}15`,
+                              color: member.is_active ? colors.statusUnpaid : colors.statusPaid,
+                              border: `1px solid ${member.is_active ? `${colors.statusUnpaid}30` : `${colors.statusPaid}30`}`
+                            }}
+                          >
+                            {member.is_active ? '⏸ Deactivate' : '▶ Activate'}
+                          </button>
+
+                          {/* Role Management Button */}
+                          <button
+                            onClick={() => { setRoleTarget(member); setShowRoleModal(true); }}
+                            className="w-full px-4 py-2.5 rounded-lg text-sm font-medium transition-all active:scale-[0.98] flex items-center justify-center gap-2"
+                            style={{
+                              background: `${colors.accentPurple}15`,
+                              color: colors.accentPurple,
+                              border: `1px solid ${colors.accentPurple}30`
+                            }}
+                          >
+                            <UserCog className="w-4 h-4" />
+                            Manage Roles
+                          </button>
+
+                          {/* Edit/Password Reset/Delete Buttons */}
+                          <div className="grid grid-cols-3 gap-2">
+                            <button
+                              onClick={() => { setEditingMember({ ...member }); setShowEditModal(true); }}
+                              className="p-3 rounded-xl transition-all active:scale-[0.95] flex items-center justify-center gap-2"
+                              style={{
+                                background: 'rgba(255, 255, 255, 0.05)',
+                                border: '1px solid rgba(255, 255, 255, 0.1)'
+                              }}
+                            >
+                              <Edit2 className="w-4 h-4" style={{ color: colors.textSecondary }} />
+                              <span className="text-xs font-medium" style={{ color: colors.textSecondary }}>Edit</span>
+                            </button>
+                            <button
+                              onClick={() => resetPassword(member)}
+                              className="p-3 rounded-xl transition-all active:scale-[0.95] flex items-center justify-center gap-2"
+                              style={{
+                                background: 'rgba(245, 158, 11, 0.1)',
+                                border: '1px solid rgba(245, 158, 11, 0.2)'
+                              }}
+                            >
+                              <Key className="w-4 h-4" style={{ color: colors.warning }} />
+                              <span className="text-xs font-medium" style={{ color: colors.warning }}>Reset</span>
+                            </button>
+                            <button
+                              onClick={() => deleteMember(member)}
+                              className="p-3 rounded-xl transition-all active:scale-[0.95] flex items-center justify-center gap-2"
+                              style={{
+                                background: 'rgba(239, 68, 68, 0.1)',
+                                border: '1px solid rgba(239, 68, 68, 0.2)'
+                              }}
+                            >
+                              <Trash2 className="w-4 h-4 text-red-400" />
+                              <span className="text-xs font-medium text-red-400">Delete</span>
+                            </button>
+                          </div>
+                        </div>
+                      </motion.div>
+                    );
+                  })}
+                </div>
+              </>
+            )}
 
             {/* Pagination */}
             {totalPages > 1 && (
-              <div className="flex items-center justify-between px-5 py-3" style={{ borderTop: `1px solid ${colors.borderLight}` }}>
-                <p className="text-xs" style={{ color: colors.textTertiary }}>
-                  Showing {(currentPage - 1) * perPage + 1}–{Math.min(currentPage * perPage, filtered.length)} of {filtered.length}
+              <div className="flex flex-col sm:flex-row items-center justify-between gap-3 mt-6 pt-4" style={{ borderTop: '1px solid rgba(255, 255, 255, 0.1)' }}>
+                <p className="text-sm" style={{ color: colors.textSecondary }}>
+                  Showing {(currentPage - 1) * perPage + 1} - {Math.min(currentPage * perPage, sortedFiltered.length)} of {sortedFiltered.length}
                 </p>
-                <div className="flex items-center gap-1">
+                <div className="flex items-center gap-2">
                   <button
                     onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
                     disabled={currentPage === 1}
-                    className="p-2 rounded-lg hover:bg-white/5 disabled:opacity-30"
+                    className="p-2 rounded-lg transition-colors disabled:opacity-30"
+                    style={{ background: 'rgba(255, 255, 255, 0.05)' }}
                   >
-                    <ChevronLeft size={16} className="text-white" />
+                    <ChevronLeft className="w-5 h-5 text-white" />
                   </button>
-                  <span className="text-sm text-white px-3">{currentPage} / {totalPages}</span>
+                  {Array.from({ length: Math.min(totalPages, 5) }, (_, i) => {
+                    let pageNum: number;
+                    if (totalPages <= 5) {
+                      pageNum = i + 1;
+                    } else if (currentPage <= 3) {
+                      pageNum = i + 1;
+                    } else if (currentPage >= totalPages - 2) {
+                      pageNum = totalPages - 4 + i;
+                    } else {
+                      pageNum = currentPage - 2 + i;
+                    }
+                    return (
+                      <button
+                        key={pageNum}
+                        onClick={() => setCurrentPage(pageNum)}
+                        className="w-10 h-10 rounded-lg text-sm font-medium transition-all"
+                        style={{
+                          background: currentPage === pageNum ? colors.primary : 'rgba(255, 255, 255, 0.05)',
+                          color: currentPage === pageNum ? 'white' : colors.textSecondary,
+                        }}
+                      >
+                        {pageNum}
+                      </button>
+                    );
+                  })}
                   <button
                     onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
                     disabled={currentPage === totalPages}
-                    className="p-2 rounded-lg hover:bg-white/5 disabled:opacity-30"
+                    className="p-2 rounded-lg transition-colors disabled:opacity-30"
+                    style={{ background: 'rgba(255, 255, 255, 0.05)' }}
                   >
-                    <ChevronRight size={16} className="text-white" />
+                    <ChevronRight className="w-5 h-5 text-white" />
                   </button>
                 </div>
               </div>
             )}
-          </>
-        )}
-      </GlassCard>
+          </GlassCard>
+        </motion.div>
 
       {/* ═══════════════════════════════════════════════════════ */}
       {/* INVITE LINK MODAL                                      */}
@@ -1010,6 +2023,17 @@ export default function OrgMembersPage() {
                   </div>
 
                   <div>
+                    <label className="block text-sm font-medium text-white mb-1.5">Level / Year</label>
+                    <input
+                      type="text"
+                      placeholder="e.g. 200L, Year 2, Grade 10"
+                      value={newMember.level}
+                      onChange={e => setNewMember(prev => ({ ...prev, level: e.target.value }))}
+                      className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white placeholder-gray-500 outline-none focus:border-[#FF6803] transition-colors text-sm"
+                    />
+                  </div>
+
+                  <div>
                     <label className="block text-sm font-medium text-white mb-1.5">Default Password</label>
                     <input
                       type="text"
@@ -1097,7 +2121,7 @@ export default function OrgMembersPage() {
               </div>
 
               {/* Content (scrollable) */}
-              <div className="flex-1 overflow-y-auto px-6 py-4 space-y-4">
+              <div className="flex-1 overflow-y-auto modal-scrollbar px-6 py-4 space-y-4">
                 {/* ── Step 1: Upload ── */}
                 {importStep === 'upload' && (
                   <>
@@ -1249,7 +2273,7 @@ export default function OrgMembersPage() {
                           <AlertTriangle size={12} style={{ color: colors.warning }} />
                           <p className="text-xs font-semibold" style={{ color: colors.warning }}>{parsedPreview.warnings.length} warning{parsedPreview.warnings.length !== 1 ? 's' : ''}</p>
                         </div>
-                        <div className="max-h-20 overflow-y-auto space-y-0.5">
+                        <div className="max-h-20 overflow-y-auto modal-scrollbar space-y-0.5">
                           {parsedPreview.warnings.map((w, i) => (
                             <p key={i} className="text-xs" style={{ color: colors.textTertiary }}>{w}</p>
                           ))}
@@ -1332,7 +2356,7 @@ export default function OrgMembersPage() {
                     {bulkResult.errors.length > 0 && (
                       <div className="p-3 rounded-xl" style={{ background: `${colors.error}06`, border: `1px solid ${colors.error}15` }}>
                         <p className="text-xs font-semibold mb-2" style={{ color: colors.error }}>Errors:</p>
-                        <div className="max-h-32 overflow-y-auto space-y-1">
+                        <div className="max-h-32 overflow-y-auto modal-scrollbar space-y-1">
                           {bulkResult.errors.map((err, i) => (
                             <p key={i} className="text-xs" style={{ color: colors.textTertiary }}>{err}</p>
                           ))}
@@ -1475,6 +2499,17 @@ export default function OrgMembersPage() {
                   </div>
                 </div>
 
+                <div>
+                  <label className="block text-sm font-medium text-white mb-1.5">Level / Year</label>
+                  <input
+                    type="text"
+                    placeholder="e.g. 200L, Year 2"
+                    value={editingMember.level || ''}
+                    onChange={e => setEditingMember(prev => prev ? { ...prev, level: e.target.value || null } : null)}
+                    className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white outline-none focus:border-[#FF6803] transition-colors text-sm"
+                  />
+                </div>
+
                 <div className="flex gap-2 pt-2">
                   <button
                     onClick={() => { setShowEditModal(false); setEditingMember(null); }}
@@ -1498,29 +2533,512 @@ export default function OrgMembersPage() {
       </AnimatePresence>
 
       {/* ═══════════════════════════════════════════════════════ */}
-      {/* PASSWORD RESET SUCCESS TOAST (reused)                  */}
+      {/* PASSWORD RESET SUCCESS CARD                             */}
       {/* ═══════════════════════════════════════════════════════ */}
       <AnimatePresence>
         {addSuccess && !showAddModal && (
           <motion.div
-            className="fixed bottom-6 right-6 z-50 max-w-sm rounded-2xl p-4 border"
-            style={{ background: colors.secondaryLight, borderColor: colors.borderLight, boxShadow: '0 10px 40px rgba(0,0,0,0.5)' }}
-            initial={{ opacity: 0, y: 30, scale: 0.9 }}
-            animate={{ opacity: 1, y: 0, scale: 1 }}
-            exit={{ opacity: 0, y: 30, scale: 0.9 }}
+            className="fixed inset-0 z-50 flex items-center justify-center p-4"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
           >
-            <div className="flex items-start gap-3">
-              <CheckCircle size={20} style={{ color: colors.success }} />
-              <div className="flex-1">
-                <p className="text-sm font-medium text-white">Password Reset</p>
-                <p className="text-xs mt-0.5" style={{ color: colors.textTertiary }}>
-                  {addSuccess.name}'s password has been reset to <span className="font-mono">{addSuccess.password}</span>
+            <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={() => setAddSuccess(null)} />
+            <motion.div
+              className="relative w-full max-w-sm rounded-2xl p-6 border"
+              style={{ background: colors.secondaryLight, borderColor: colors.borderLight, boxShadow: '0 25px 60px rgba(0,0,0,0.6)' }}
+              initial={{ scale: 0.9, y: 20 }}
+              animate={{ scale: 1, y: 0 }}
+              exit={{ scale: 0.9, y: 20 }}
+            >
+              {/* Success icon */}
+              <div className="flex flex-col items-center text-center mb-5">
+                <div className="w-14 h-14 rounded-full flex items-center justify-center mb-3" style={{ background: `${colors.success}15` }}>
+                  <CheckCircle size={28} style={{ color: colors.success }} />
+                </div>
+                <h3 className="text-lg font-bold text-white">Password Reset Successful</h3>
+                <p className="text-xs mt-1" style={{ color: colors.textTertiary }}>
+                  {addSuccess.name}'s password has been reset
                 </p>
               </div>
-              <button onClick={() => setAddSuccess(null)} className="p-1 rounded hover:bg-white/5">
-                <X size={14} className="text-white" />
+
+              {/* Credentials card */}
+              <div className="rounded-xl p-4 mb-4 space-y-3" style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)' }}>
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-[10px] uppercase tracking-wider font-medium" style={{ color: colors.textTertiary }}>Login ID</p>
+                    <p className="text-sm font-mono font-semibold text-white mt-0.5">{addSuccess.id}</p>
+                  </div>
+                </div>
+                <div className="h-px" style={{ background: 'rgba(255,255,255,0.06)' }} />
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-[10px] uppercase tracking-wider font-medium" style={{ color: colors.textTertiary }}>New Password</p>
+                    <p className="text-sm font-mono font-semibold text-white mt-0.5">{addSuccess.password}</p>
+                  </div>
+                  <button
+                    onClick={() => copyCredentials(addSuccess.id, addSuccess.password)}
+                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all hover:scale-105"
+                    style={{ background: `${colors.primary}15`, color: colors.primary }}
+                  >
+                    <Copy size={12} /> Copy
+                  </button>
+                </div>
+              </div>
+
+              <p className="text-xs text-center mb-4" style={{ color: colors.textTertiary }}>
+                {memberLabel} will be prompted to change this on next login.
+              </p>
+
+              <button
+                onClick={() => setAddSuccess(null)}
+                className="w-full flex items-center justify-center gap-2 px-4 py-3 rounded-xl text-white font-semibold text-sm transition-all hover:scale-[1.02] active:scale-[0.98]"
+                style={{ background: colors.primary }}
+              >
+                <Check size={16} /> Done
               </button>
-            </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* ═══════════════════════════════════════════════════════ */}
+      {/* EXPORT FIELD SELECTION MODAL                           */}
+      {/* ═══════════════════════════════════════════════════════ */}
+      <AnimatePresence>
+        {showExportModal && (
+          <motion.div
+            className="fixed inset-0 z-50 flex items-center justify-center p-4"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+          >
+            <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={() => setShowExportModal(false)} />
+            <motion.div
+              className="relative w-full max-w-lg rounded-2xl border max-h-[90vh] flex flex-col"
+              style={{ background: colors.secondaryLight, borderColor: colors.borderLight, boxShadow: '0 25px 60px rgba(0,0,0,0.6)' }}
+              initial={{ scale: 0.9, y: 20 }}
+              animate={{ scale: 1, y: 0 }}
+              exit={{ scale: 0.9, y: 20 }}
+            >
+              {/* Header */}
+              <div className="flex items-center justify-between px-6 pt-6 pb-4" style={{ borderBottom: `1px solid rgba(255,255,255,0.06)` }}>
+                <div className="flex items-center gap-3">
+                  <div className="w-12 h-12 rounded-xl flex items-center justify-center" style={{ background: `linear-gradient(135deg, ${colors.primary}30, ${colors.primary}10)`, border: `1px solid ${colors.primary}40` }}>
+                    <Download size={22} style={{ color: colors.primary }} />
+                  </div>
+                  <div>
+                    <h3 className="text-lg font-bold text-white">Export {memberLabelPlural}</h3>
+                    <p className="text-xs" style={{ color: colors.textTertiary }}>
+                      {selectedIds.size > 0 ? `${selectedIds.size} selected` : `All ${filtered.length} ${memberLabelPlural.toLowerCase()}`}
+                    </p>
+                  </div>
+                </div>
+                <button onClick={() => setShowExportModal(false)} className="p-2 rounded-lg hover:bg-white/5 transition-colors">
+                  <X size={18} className="text-white" />
+                </button>
+              </div>
+
+              {/* Scrollable Content */}
+              <div className="flex-1 overflow-y-auto modal-scrollbar px-6 py-5 space-y-6">
+                {/* Format Selection */}
+                <div>
+                  <p className="text-xs font-semibold mb-3 uppercase tracking-wider" style={{ color: colors.textTertiary }}>Export Format</p>
+                  <div className="grid grid-cols-2 gap-3">
+                    {([
+                      { value: 'pdf' as const, label: 'PDF Document', desc: 'Professional formatted report', icon: <FileText size={20} />, color: colors.statusUnpaid },
+                      { value: 'csv' as const, label: 'CSV Spreadsheet', desc: 'Excel compatible format', icon: <FileSpreadsheet size={20} />, color: colors.accentMint },
+                    ]).map(fmt => (
+                      <button
+                        key={fmt.value}
+                        onClick={() => setExportFormat(fmt.value)}
+                        className="flex flex-col items-center gap-2.5 px-4 py-4 rounded-xl text-sm font-medium transition-all hover:scale-[1.02]"
+                        style={{
+                          background: exportFormat === fmt.value ? `${fmt.color}15` : 'rgba(255,255,255,0.03)',
+                          color: exportFormat === fmt.value ? fmt.color : colors.textSecondary,
+                          border: `1px solid ${exportFormat === fmt.value ? fmt.color + '50' : 'rgba(255,255,255,0.08)'}`,
+                          boxShadow: exportFormat === fmt.value ? `0 4px 15px ${fmt.color}20` : 'none',
+                        }}
+                      >
+                        <div className="w-10 h-10 rounded-lg flex items-center justify-center" style={{ background: `${fmt.color}20` }}>
+                          {fmt.icon}
+                        </div>
+                        <span className="font-semibold">{fmt.label}</span>
+                        <span className="text-[10px]" style={{ color: colors.textTertiary }}>{fmt.desc}</span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Field Selection */}
+                <div>
+                  <p className="text-xs font-semibold mb-3 uppercase tracking-wider" style={{ color: colors.textTertiary }}>Include Fields</p>
+                  <div className="space-y-1.5 rounded-xl p-1" style={{ background: 'rgba(255,255,255,0.02)' }}>
+                    {([
+                      { key: 'name' as const, label: 'Full Name', always: true },
+                      { key: 'regNumber' as const, label: `${memberLabel} ID` },
+                      { key: 'level' as const, label: 'Level' },
+                      { key: 'department' as const, label: 'Department' },
+                      { key: 'email' as const, label: 'Email Address' },
+                      { key: 'phone' as const, label: 'Phone Number' },
+                      { key: 'status' as const, label: 'Active Status' },
+                      { key: 'roles' as const, label: 'Roles (Admin / FinSec / Rep)' },
+                      { key: 'joinDate' as const, label: 'Date Joined' },
+                    ]).map(field => (
+                      <button
+                        key={field.key}
+                        onClick={() => {
+                          if ('always' in field && field.always) return;
+                          setExportFields(prev => ({ ...prev, [field.key]: !prev[field.key] }));
+                        }}
+                        className="w-full flex items-center justify-between px-4 py-3 rounded-xl text-sm transition-all hover:bg-white/5"
+                        style={{
+                          color: exportFields[field.key] ? 'white' : colors.textTertiary,
+                          background: exportFields[field.key] ? 'rgba(255,255,255,0.04)' : 'transparent',
+                          border: exportFields[field.key] ? `1px solid rgba(255,255,255,0.08)` : '1px solid transparent',
+                        }}
+                      >
+                        <span className="flex items-center gap-2.5">
+                          {field.label}
+                          {'always' in field && field.always && (
+                            <span className="text-[10px] px-2 py-0.5 rounded-full font-semibold" style={{ background: `${colors.primary}20`, color: colors.primary, border: `1px solid ${colors.primary}30` }}>Required</span>
+                          )}
+                        </span>
+                        {exportFields[field.key]
+                          ? <CheckSquare size={18} style={{ color: colors.primary }} />
+                          : <Square size={18} style={{ color: colors.textDisabled }} />}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Export Info */}
+                <div className="p-3 rounded-xl flex items-center gap-3" style={{ background: `${colors.primary}08`, border: `1px solid ${colors.primary}20` }}>
+                  <Download size={14} style={{ color: colors.primary }} />
+                  <p className="text-xs" style={{ color: colors.textSecondary }}>
+                    Exporting {selectedIds.size > 0 ? selectedIds.size : filtered.length} {memberLabelPlural.toLowerCase()} as {exportFormat.toUpperCase()}
+                  </p>
+                </div>
+              </div>
+
+              {/* Footer Actions */}
+              <div className="flex gap-3 px-6 py-4" style={{ borderTop: '1px solid rgba(255,255,255,0.06)' }}>
+                <motion.button
+                  whileHover={{ scale: 1.02 }}
+                  whileTap={{ scale: 0.98 }}
+                  onClick={() => setShowExportModal(false)}
+                  className="flex-1 px-4 py-3 rounded-xl text-sm font-medium transition-all"
+                  style={{ color: colors.textSecondary, background: 'rgba(255,255,255,0.05)', border: `1px solid rgba(255,255,255,0.1)` }}
+                >
+                  Cancel
+                </motion.button>
+                <motion.button
+                  whileHover={{ scale: 1.02 }}
+                  whileTap={{ scale: 0.98 }}
+                  onClick={() => exportFormat === 'csv' ? handleExportCSV() : handleExportPDF()}
+                  disabled={exporting}
+                  className="flex-1 flex items-center justify-center gap-2 px-4 py-3 rounded-xl text-white font-semibold text-sm transition-all disabled:opacity-60"
+                  style={{ background: `linear-gradient(135deg, ${colors.accentMint}, ${colors.primary})`, boxShadow: `0 4px 15px ${colors.accentMint}40` }}
+                >
+                  {exporting ? <><Loader2 size={16} className="animate-spin" /> Exporting...</> : <><Download size={16} /> Export {exportFormat.toUpperCase()}</>}
+                </motion.button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* ═══════════════════════════════════════════════════════ */}
+      {/* ROLE MANAGEMENT MODAL                                  */}
+      {/* ═══════════════════════════════════════════════════════ */}
+      <AnimatePresence>
+        {showRoleModal && roleTarget && (() => {
+          const currentMember = members.find(m => m.id === roleTarget.id) || roleTarget;
+          const currentRoles = getMemberRoles(currentMember);
+          return (
+            <motion.div
+              className="fixed inset-0 z-50 flex items-center justify-center p-4"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+            >
+              <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={() => { setShowRoleModal(false); setRoleTarget(null); }} />
+              <motion.div
+                className="relative w-full max-w-sm rounded-2xl p-6 border"
+                style={{ background: colors.secondaryLight, borderColor: colors.borderLight, boxShadow: '0 25px 60px rgba(0,0,0,0.6)' }}
+                initial={{ scale: 0.9, y: 20 }}
+                animate={{ scale: 1, y: 0 }}
+                exit={{ scale: 0.9, y: 20 }}
+              >
+                {/* Header */}
+                <div className="flex items-center justify-between mb-5">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-xl flex items-center justify-center" style={{ background: `${colors.accentPurple}15`, color: colors.accentPurple }}>
+                      <UserCog size={20} />
+                    </div>
+                    <div>
+                      <h3 className="text-lg font-bold text-white">Manage Roles</h3>
+                      <p className="text-xs" style={{ color: colors.textTertiary }}>{roleTarget.full_name}</p>
+                    </div>
+                  </div>
+                  <button onClick={() => { setShowRoleModal(false); setRoleTarget(null); }} className="p-2 rounded-lg hover:bg-white/5 transition-colors">
+                    <X size={18} className="text-white" />
+                  </button>
+                </div>
+
+                {/* Role toggles */}
+                <div className="space-y-2">
+                  {([
+                    { role: 'admin' as const, label: 'Admin', desc: 'Full access to manage organization', color: colors.accentPurple, icon: <Shield size={16} /> },
+                    { role: 'finsec' as const, label: 'Financial Secretary', desc: 'Manage payments & finances', color: colors.success, icon: <Crown size={16} /> },
+                    { role: 'class_rep' as const, label: 'Class Representative', desc: 'Manage group members', color: colors.primary, icon: <Users size={16} /> },
+                  ]).map(r => {
+                    const isActive = r.role === 'admin' ? currentRoles.isAdmin : r.role === 'finsec' ? currentRoles.isFinsec : currentRoles.isClassRep;
+                    return (
+                      <button
+                        key={r.role}
+                        onClick={() => toggleRole(currentMember, r.role)}
+                        disabled={roleLoading}
+                        className="w-full flex items-center gap-3 px-4 py-3.5 rounded-xl text-left transition-all hover:scale-[1.01] active:scale-[0.99] disabled:opacity-50"
+                        style={{
+                          background: isActive ? `${r.color}10` : 'rgba(255,255,255,0.03)',
+                          border: `1px solid ${isActive ? r.color : 'rgba(255,255,255,0.08)'}`,
+                        }}
+                      >
+                        <div className="w-8 h-8 rounded-lg flex items-center justify-center shrink-0" style={{ background: `${r.color}15`, color: r.color }}>
+                          {r.icon}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-medium" style={{ color: isActive ? 'white' : colors.textSecondary }}>{r.label}</p>
+                          <p className="text-xs" style={{ color: colors.textTertiary }}>{r.desc}</p>
+                        </div>
+                        <div className="shrink-0">
+                          {roleLoading ? (
+                            <Loader2 size={16} className="animate-spin" style={{ color: r.color }} />
+                          ) : isActive ? (
+                            <CheckSquare size={18} style={{ color: r.color }} />
+                          ) : (
+                            <Square size={18} style={{ color: colors.textDisabled }} />
+                          )}
+                        </div>
+                      </button>
+                    );
+                  })}
+                </div>
+
+                <p className="text-xs mt-4 text-center" style={{ color: colors.textTertiary }}>
+                  Click to toggle roles. Changes take effect immediately.
+                </p>
+              </motion.div>
+            </motion.div>
+          );
+        })()}
+      </AnimatePresence>
+      </div>
+
+      {/* ── Confirm Action Modal ── */}
+      <AnimatePresence>
+        {confirmAction.isOpen && confirmAction.member && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-100 flex items-center justify-center p-4"
+            style={{ background: 'rgba(0,0,0,0.7)', backdropFilter: 'blur(8px)' }}
+            onClick={() => setConfirmAction({ isOpen: false, type: null, member: null })}
+          >
+            <motion.div
+              initial={{ scale: 0.9, opacity: 0, y: 20 }}
+              animate={{ scale: 1, opacity: 1, y: 0 }}
+              exit={{ scale: 0.9, opacity: 0, y: 20 }}
+              transition={{ type: 'spring', damping: 25 }}
+              onClick={(e) => e.stopPropagation()}
+              className="w-full max-w-md rounded-2xl overflow-hidden shadow-2xl"
+              style={{
+                background: 'linear-gradient(135deg, rgba(30, 20, 15, 0.98), rgba(15, 8, 4, 0.98))',
+                border: '1px solid rgba(255, 255, 255, 0.1)',
+              }}
+            >
+              {/* Gradient accent bar */}
+              <div className="h-1" style={{ background: confirmAction.type === 'delete'
+                ? 'linear-gradient(90deg, #ef4444, #dc2626)'
+                : `linear-gradient(90deg, ${colors.warning}, ${colors.primary})`
+              }} />
+
+              <div className="p-6">
+                {/* Icon */}
+                <motion.div
+                  initial={{ scale: 0 }}
+                  animate={{ scale: 1 }}
+                  transition={{ type: 'spring', delay: 0.1, damping: 15 }}
+                  className="w-16 h-16 rounded-full mx-auto mb-4 flex items-center justify-center"
+                  style={{
+                    background: confirmAction.type === 'delete' ? 'rgba(239, 68, 68, 0.15)' : `${colors.warning}20`,
+                    border: `2px solid ${confirmAction.type === 'delete' ? 'rgba(239, 68, 68, 0.3)' : colors.warning + '40'}`,
+                  }}
+                >
+                  {confirmAction.type === 'delete'
+                    ? <Trash2 className="w-8 h-8 text-red-400" />
+                    : <AlertTriangle className="w-8 h-8" style={{ color: colors.warning }} />
+                  }
+                </motion.div>
+
+                {/* Title */}
+                <h3 className="text-xl font-bold text-white text-center mb-2">
+                  {confirmAction.type === 'delete'
+                    ? 'Delete Member'
+                    : confirmAction.member.is_active ? 'Deactivate Member' : 'Activate Member'
+                  }
+                </h3>
+
+                {/* Member info card */}
+                <div
+                  className="p-4 rounded-xl flex items-center gap-4 mb-4"
+                  style={{ background: 'rgba(255, 255, 255, 0.03)', border: '1px solid rgba(255, 255, 255, 0.08)' }}
+                >
+                  <div
+                    className="w-12 h-12 rounded-full flex items-center justify-center text-lg font-bold shrink-0"
+                    style={{ background: `${colors.primary}20`, color: colors.primary }}
+                  >
+                    {confirmAction.member.full_name.charAt(0)}
+                  </div>
+                  <div>
+                    <p className="font-semibold text-white">{confirmAction.member.full_name}</p>
+                    <p className="text-xs" style={{ color: colors.textSecondary }}>{confirmAction.member.member_id}</p>
+                  </div>
+                </div>
+
+                {/* Warning message */}
+                <div
+                  className="p-4 rounded-xl flex items-start gap-3 mb-6"
+                  style={{
+                    background: confirmAction.type === 'delete' ? 'rgba(239, 68, 68, 0.1)' : `${colors.warning}10`,
+                    border: `1px solid ${confirmAction.type === 'delete' ? 'rgba(239, 68, 68, 0.2)' : colors.warning + '20'}`,
+                  }}
+                >
+                  <AlertTriangle
+                    className="w-5 h-5 mt-0.5 shrink-0"
+                    style={{ color: confirmAction.type === 'delete' ? '#ef4444' : colors.warning }}
+                  />
+                  <p className="text-sm" style={{ color: colors.textSecondary }}>
+                    {confirmAction.type === 'delete'
+                      ? `Are you sure you want to permanently remove "${confirmAction.member.full_name}"? This action cannot be undone and will delete all associated data.`
+                      : confirmAction.member.is_active
+                        ? `Are you sure you want to deactivate "${confirmAction.member.full_name}"? They will no longer be able to log in or access the system.`
+                        : `Are you sure you want to reactivate "${confirmAction.member.full_name}"? They will regain access to the system.`
+                    }
+                  </p>
+                </div>
+
+                {/* Buttons */}
+                <div className="flex gap-3">
+                  <motion.button
+                    whileHover={{ scale: 1.02 }}
+                    whileTap={{ scale: 0.98 }}
+                    onClick={() => setConfirmAction({ isOpen: false, type: null, member: null })}
+                    className="flex-1 py-3 rounded-xl font-medium text-sm transition-colors"
+                    style={{ background: 'rgba(255,255,255,0.05)', color: colors.textSecondary, border: '1px solid rgba(255,255,255,0.1)' }}
+                  >
+                    Cancel
+                  </motion.button>
+                  <motion.button
+                    whileHover={{ scale: 1.02 }}
+                    whileTap={{ scale: 0.98 }}
+                    onClick={handleConfirmAction}
+                    className="flex-1 py-3 rounded-xl font-semibold text-sm text-white transition-all"
+                    style={{
+                      background: confirmAction.type === 'delete'
+                        ? 'linear-gradient(135deg, #ef4444, #dc2626)'
+                        : confirmAction.member.is_active
+                          ? `linear-gradient(135deg, ${colors.warning}, #d97706)`
+                          : `linear-gradient(135deg, ${colors.statusPaid}, #16a34a)`,
+                      boxShadow: confirmAction.type === 'delete'
+                        ? '0 4px 15px rgba(239, 68, 68, 0.3)'
+                        : confirmAction.member.is_active
+                          ? `0 4px 15px ${colors.warning}30`
+                          : `0 4px 15px ${colors.statusPaid}30`,
+                    }}
+                  >
+                    {confirmAction.type === 'delete'
+                      ? 'Delete Member'
+                      : confirmAction.member.is_active ? 'Deactivate' : 'Activate'
+                    }
+                  </motion.button>
+                </div>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* ── Subscription Limit Reached Modal ── */}
+      <AnimatePresence>
+        {showLimitModal && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-100 flex items-center justify-center p-4"
+            style={{ background: 'rgba(0,0,0,0.7)', backdropFilter: 'blur(8px)' }}
+            onClick={() => setShowLimitModal(false)}
+          >
+            <motion.div
+              initial={{ scale: 0.9, opacity: 0, y: 20 }}
+              animate={{ scale: 1, opacity: 1, y: 0 }}
+              exit={{ scale: 0.9, opacity: 0, y: 20 }}
+              transition={{ type: 'spring', damping: 25 }}
+              onClick={(e) => e.stopPropagation()}
+              className="w-full max-w-md rounded-2xl overflow-hidden shadow-2xl"
+              style={{
+                background: 'linear-gradient(135deg, rgba(30, 20, 15, 0.98), rgba(15, 8, 4, 0.98))',
+                border: '1px solid rgba(255, 255, 255, 0.1)',
+              }}
+            >
+              {/* Gradient accent bar */}
+              <div className="h-1" style={{ background: `linear-gradient(90deg, ${colors.warning}, ${colors.primary})` }} />
+
+              <div className="p-6 text-center">
+                {/* Icon */}
+                <motion.div
+                  initial={{ scale: 0 }}
+                  animate={{ scale: 1 }}
+                  transition={{ type: 'spring', delay: 0.1, damping: 15 }}
+                  className="w-16 h-16 rounded-full mx-auto mb-4 flex items-center justify-center"
+                  style={{ background: `${colors.warning}20`, border: `2px solid ${colors.warning}40` }}
+                >
+                  <AlertTriangle className="w-8 h-8" style={{ color: colors.warning }} />
+                </motion.div>
+
+                <h3 className="text-xl font-bold text-white mb-2">Plan Limit Reached</h3>
+                <p className="text-sm mb-6" style={{ color: colors.textSecondary }}>
+                  {limitMessage}
+                </p>
+
+                <div className="flex gap-3">
+                  <motion.button
+                    whileHover={{ scale: 1.02 }}
+                    whileTap={{ scale: 0.98 }}
+                    onClick={() => setShowLimitModal(false)}
+                    className="flex-1 py-3 rounded-xl font-medium text-sm transition-colors"
+                    style={{ background: 'rgba(255,255,255,0.05)', color: colors.textSecondary, border: '1px solid rgba(255,255,255,0.1)' }}
+                  >
+                    Close
+                  </motion.button>
+                  <motion.button
+                    whileHover={{ scale: 1.02, y: -1 }}
+                    whileTap={{ scale: 0.98 }}
+                    onClick={() => { setShowLimitModal(false); navigateTo('/admin/billing'); }}
+                    className="flex-1 py-3 rounded-xl font-semibold text-sm text-white transition-all"
+                    style={{
+                      background: `linear-gradient(135deg, ${colors.warning}, ${colors.primary})`,
+                      boxShadow: `0 4px 15px ${colors.warning}30`,
+                    }}
+                  >
+                    Upgrade Plan ✨
+                  </motion.button>
+                </div>
+              </div>
+            </motion.div>
           </motion.div>
         )}
       </AnimatePresence>

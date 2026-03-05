@@ -31,13 +31,12 @@ export default async function handler(
     return res.status(405).json({ error: 'Method not allowed' });
   }
 
-  // Optional: Add a secret key check for security
+  // Security: require secret if configured
   const authHeader = req.headers.authorization;
   const expectedKey = process.env.KEEP_ALIVE_SECRET;
-  
+
   if (expectedKey && authHeader !== `Bearer ${expectedKey}`) {
-    // If secret is configured but not provided, still allow ping but log warning
-    console.warn('Keep-alive called without valid authorization');
+    return res.status(401).json({ error: 'Unauthorized' });
   }
 
   try {

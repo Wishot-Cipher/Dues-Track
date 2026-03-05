@@ -87,6 +87,8 @@ interface CollectedPaymentsData {
     id: string;
     student_name: string;
     reg_number: string;
+    level?: string;
+    department?: string;
     is_active: boolean;
     total_paid: number;
     payment_count: number;
@@ -144,9 +146,13 @@ export function exportStudentsToPrint(
     roles?: boolean; paid?: boolean;
   } }
 ): void {
-  const activeStudents = students.filter(s => s.is_active);
-  const inactiveStudents = students.filter(s => !s.is_active);
-  const totalPaid = students.reduce((sum, s) => sum + (s.total_paid || 0), 0);
+  // Sort students alphabetically by name for clean PDF output
+  const sorted = [...students].sort((a, b) =>
+    (a.full_name || '').localeCompare(b.full_name || '', undefined, { sensitivity: 'base' })
+  );
+  const activeStudents = sorted.filter(s => s.is_active);
+  const inactiveStudents = sorted.filter(s => !s.is_active);
+  const totalPaid = sorted.reduce((sum, s) => sum + (s.total_paid || 0), 0);
   const f = filters?.fields || { name: true, regNumber: true, level: true, department: true, status: true, phone: true, paid: true };
   
   // Build summary content for first page
@@ -183,7 +189,7 @@ export function exportStudentsToPrint(
   // Fallback if nothing selected
   if (tableHeaders.length === 0) tableHeaders.push('Name');
 
-  const tableRows = students.map(s => {
+  const tableRows = sorted.map(s => {
     const row: string[] = [];
     if (f.name) row.push(s.full_name);
     if (f.regNumber) row.push(s.reg_number);
@@ -479,7 +485,7 @@ export function exportCollectedPaymentsToPrint(data: CollectedPaymentsData): voi
   }
   
   // Prepare student table rows (show waived summary below Total Paid)
-  const tableHeaders = ['Student Name', 'Reg Number', 'Status', 'Payments', 'Total Paid', 'Categories'];
+  const tableHeaders = ['Student Name', 'Reg Number', 'Level', 'Dept', 'Status', 'Payments', 'Total Paid', 'Categories'];
   const tableRows = students.map(s => {
     const statusClass = s.is_active ? 'active' : 'inactive';
     const waivedPayments = (s.payments || []).filter((p: Record<string, unknown>) => Boolean(p.waived));
@@ -494,6 +500,8 @@ export function exportCollectedPaymentsToPrint(data: CollectedPaymentsData): voi
     return [
       s.student_name,
       s.reg_number,
+      s.level || '-',
+      s.department || '-',
       `<span class="status ${statusClass}">${s.is_active ? '✓ Active' : '✗ Inactive'}</span>`,
       s.payment_count.toString(),
       totalPaidCell,

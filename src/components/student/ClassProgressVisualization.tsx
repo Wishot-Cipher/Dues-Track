@@ -4,6 +4,7 @@ import { Users, TrendingUp, Target, Sparkles, Gift } from 'lucide-react'
 import { colors, gradients } from '@/config/colors'
 import { supabase } from '@/config/supabase'
 import { getOrgScope } from '@/utils/orgScope'
+import { PrivacyMask } from '@/components/ui/PrivacyMask'
 
 interface ClassProgress {
   totalStudents: number
@@ -212,7 +213,7 @@ export default function ClassProgressVisualization() {
             <span className="text-xs font-medium" style={{ color: colors.textSecondary }}>Collected</span>
           </div>
           <p className="text-sm sm:text-lg font-bold text-white break-all">
-            ₦{progress.totalCollected.toLocaleString()}
+            <PrivacyMask>₦{progress.totalCollected.toLocaleString()}</PrivacyMask>
           </p>
         </div>
 
@@ -222,11 +223,11 @@ export default function ClassProgressVisualization() {
             <span className="text-xs font-medium" style={{ color: colors.textSecondary }}>Actual Target</span>
           </div>
           <p className="text-sm sm:text-lg font-bold text-white break-all">
-            ₦{progress.effectiveTarget.toLocaleString()}
+            <PrivacyMask>₦{progress.effectiveTarget.toLocaleString()}</PrivacyMask>
           </p>
           {progress.totalWaived > 0 && (
             <p className="text-xs mt-0.5" style={{ color: colors.textSecondary }}>
-              <span className="line-through">₦{progress.totalExpected.toLocaleString()}</span>
+              <span className="line-through"><PrivacyMask>₦{progress.totalExpected.toLocaleString()}</PrivacyMask></span>
             </p>
           )}
         </div>
@@ -241,7 +242,7 @@ export default function ClassProgressVisualization() {
               <span className="text-xs sm:text-sm font-medium text-purple-400">Waivers Applied</span>
             </div>
             <span className="text-xs sm:text-sm font-bold text-purple-300">
-              ₦{progress.totalWaived.toLocaleString()} waived
+              <PrivacyMask>₦{progress.totalWaived.toLocaleString()}</PrivacyMask> waived
             </span>
           </div>
           <p className="text-xs mt-1" style={{ color: colors.textSecondary }}>
@@ -308,7 +309,7 @@ export default function ClassProgressVisualization() {
                   <span className="text-xs text-white truncate">{payer.name}</span>
                 </div>
                 <div className="text-right shrink-0">
-                  <p className="text-xs font-bold text-white whitespace-nowrap">₦{payer.amount.toLocaleString()}</p>
+                  <p className="text-xs font-bold text-white whitespace-nowrap"><PrivacyMask>₦{payer.amount.toLocaleString()}</PrivacyMask></p>
                   <p className="text-xs whitespace-nowrap" style={{ color: colors.textSecondary }}>{payer.time}</p>
                 </div>
               </motion.div>

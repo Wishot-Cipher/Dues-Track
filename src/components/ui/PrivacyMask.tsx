@@ -34,23 +34,29 @@ export function PrivacyToggle({ size = 'md' }: { size?: 'sm' | 'md' }) {
   const { settings, updateSetting } = useSettings();
   const visible = settings.appearance.showBalance;
   const Icon = visible ? Eye : EyeOff;
-  const px = size === 'sm' ? 'p-1.5' : 'p-2';
   const iconSize = size === 'sm' ? 14 : 16;
 
   return (
     <motion.button
       type="button"
       onClick={() => updateSetting('appearance', 'showBalance', !visible)}
-      className={`${px} rounded-xl transition-all duration-200`}
+      className="flex items-center gap-1.5 px-3 py-1.5 rounded-full transition-all duration-200"
       style={{
-        background: visible ? 'rgba(255,255,255,0.05)' : `${colors.primary}18`,
-        border: `1px solid ${visible ? 'rgba(255,255,255,0.1)' : colors.primary + '40'}`,
+        background: visible ? 'rgba(255,255,255,0.06)' : `${colors.primary}15`,
+        border: `1px solid ${visible ? 'rgba(255,255,255,0.08)' : colors.primary + '30'}`,
       }}
-      whileTap={{ scale: 0.9 }}
+      whileHover={{ scale: 1.03 }}
+      whileTap={{ scale: 0.95 }}
       title={visible ? 'Hide balances' : 'Show balances'}
       aria-label={visible ? 'Hide balances' : 'Show balances'}
     >
       <Icon size={iconSize} style={{ color: visible ? colors.textSecondary : colors.primary }} />
+      <span 
+        className="text-[10px] sm:text-xs font-medium hidden min-[360px]:inline"
+        style={{ color: visible ? colors.textSecondary : colors.primary }}
+      >
+        {visible ? 'Hide' : 'Show'}
+      </span>
     </motion.button>
   );
 }

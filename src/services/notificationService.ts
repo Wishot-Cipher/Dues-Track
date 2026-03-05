@@ -22,13 +22,14 @@ async function sendPushNotification(
   tag?: string
 ): Promise<boolean> {
   try {
-    console.log('📤 Sending push notification to user:', userId);
-    console.log('📤 Title:', title);
+    // Current logged-in user is the caller
+    const callerId = localStorage.getItem('pvx_member_id') || localStorage.getItem('current_user_id');
     
     const res = await fetch('/api/notifications/send-push', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
+        callerId: callerId || userId,
         userId,
         title,
         body,
@@ -38,22 +39,13 @@ async function sendPushNotification(
     });
 
     const result = await res.json();
-    console.log('📤 Push API response:', result);
 
     if (!res.ok) {
-      console.log('❌ Push notification API failed:', result);
       return false;
     }
 
-    if (result.sent > 0) {
-      console.log('✅ Push notification sent successfully!');
-      return true;
-    } else {
-      console.log('⚠️ Push not sent:', result.message || 'User may not be subscribed');
-      return false;
-    }
-  } catch (error) {
-    console.log('❌ Push notification failed:', error);
+    return result.sent > 0;
+  } catch {
     return false;
   }
 }
@@ -268,13 +260,13 @@ class NotificationService {
    */
   async markAsRead(notificationId: string): Promise<boolean> {
     try {
-      const userId = localStorage.getItem('current_user_id');
+      const userId = localStorage.getItem('pvx_member_id') || localStorage.getItem('current_user_id');
       if (!userId) throw new Error('Not authenticated');
 
       const res = await fetch('/api/notifications/mark-read', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ notificationId, userId }),
+        body: JSON.stringify({ notificationId, callerId: userId }),
       });
 
       if (!res.ok) {
@@ -313,7 +305,7 @@ class NotificationService {
    */
   async markAllAsRead(userId: string): Promise<boolean> {
     try {
-      const currentUserId = localStorage.getItem('current_user_id');
+      const currentUserId = localStorage.getItem('pvx_member_id') || localStorage.getItem('current_user_id');
       if (!currentUserId || currentUserId !== userId) {
         throw new Error('Not authenticated or mismatched user');
       }
@@ -321,7 +313,7 @@ class NotificationService {
       const res = await fetch('/api/notifications/mark-read', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ userId }),
+        body: JSON.stringify({ callerId: userId }),
       });
 
       if (!res.ok) {

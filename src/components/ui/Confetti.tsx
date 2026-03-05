@@ -71,7 +71,7 @@ export default function Confetti({
   if (!isActive && particles.length === 0) return null
 
   return (
-    <div className="fixed inset-0 pointer-events-none z-[1000] overflow-hidden">
+    <div className="fixed inset-0 pointer-events-none z-1000 overflow-hidden">
       <AnimatePresence>
         {particles.map((particle) => (
           <motion.div
@@ -168,7 +168,7 @@ export function SuccessCelebration({
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            className="fixed inset-0 z-[999] flex items-center justify-center bg-black/50 backdrop-blur-sm"
+            className="fixed inset-0 z-999 flex items-center justify-center bg-black/50 backdrop-blur-sm"
             onClick={onClose}
           >
             <motion.div

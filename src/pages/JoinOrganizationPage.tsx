@@ -15,6 +15,7 @@ import { colors } from '@/config/colors';
 import { APP_NAME } from '@/config/constants';
 import { supabase } from '@/config/supabase';
 import { organizationService } from '@/services/organizationService';
+import { billingService } from '@/services/billingService';
 import notificationService from '@/services/notificationService';
 import { useMultiTenantAuth } from '@/hooks/useMultiTenantAuth';
 import PageWrapper from '@/components/ui/PageWrapper';
@@ -56,6 +57,7 @@ export default function JoinOrganizationPage() {
     member_id: '',
     email: '',
     phone: '',
+    level: '',
     password: '',
     password_confirm: '',
     use_id_as_password: true,
@@ -141,6 +143,21 @@ export default function JoinOrganizationPage() {
         return;
       }
 
+      // ── Check org member limit before creating ──
+      try {
+        const limitResult = await billingService.checkLimit(orgId, 'members');
+        if (limitResult && !limitResult.allowed) {
+          setError(
+            `This organization has reached its member limit (${limitResult.current}/${limitResult.limit} on the ${limitResult.planName} plan). Please contact the administrator to upgrade.`
+          );
+          setLoading(false);
+          return;
+        }
+      } catch {
+        // If limit check fails, allow join (fail-open)
+        console.warn('Could not verify member limit, proceeding...');
+      }
+
       // Determine group_id: use invite's group, or the org's first group
       let finalGroupId = groupId;
       if (!finalGroupId) {
@@ -163,6 +180,7 @@ export default function JoinOrganizationPage() {
           full_name: form.full_name.trim(),
           email: form.email.trim() || null,
           phone: form.phone.trim() || null,
+          level: form.level.trim() || null,
           password_hash: hashedPw,
           force_password_change: form.use_id_as_password, // Force change if using ID as password
           is_active: true,
@@ -197,14 +215,27 @@ export default function JoinOrganizationPage() {
         ).catch(() => {});
       }
 
+      // Send welcome email (non-blocking)
+      if (form.email.trim()) {
+        fetch('/api/send-welcome-email', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            callerId: newMember?.id,
+            memberEmail: form.email.trim(),
+            memberName: form.full_name.trim(),
+          }),
+        }).catch(() => {}); // Non-critical
+      }
+
       // Auto-login
       try {
         const slug = invite.organization.slug;
         const loginResult = await login(form.member_id.trim(), password, slug);
         if (loginResult.mustChangePassword) {
-          navigate(`/${slug}/change-password`, { replace: true });
+          navigate(`/${slug}/change-password`, { replace: true, state: { justJoined: true, orgName: invite.organization.name } });
         } else {
-          navigate(`/${slug}/dashboard`, { replace: true });
+          navigate(`/${slug}/dashboard`, { replace: true, state: { justJoined: true, orgName: invite.organization.name } });
         }
       } catch {
         // If auto-login fails, send to login page
@@ -395,6 +426,17 @@ export default function JoinOrganizationPage() {
                       className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white placeholder-gray-500 outline-none focus:border-[#FF6803] transition-colors"
                     />
                   </div>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-white mb-1.5">Level / Year</label>
+                  <input
+                    type="text"
+                    placeholder="e.g. 200L, Year 2, Grade 10"
+                    value={form.level}
+                    onChange={e => setForm(f => ({ ...f, level: e.target.value }))}
+                    className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white placeholder-gray-500 outline-none focus:border-[#FF6803] transition-colors"
+                  />
                 </div>
 
                 {/* Password Toggle */}

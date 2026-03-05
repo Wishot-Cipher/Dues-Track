@@ -16,12 +16,15 @@ import { PrivacyMask } from '@/components/ui/PrivacyMask';
 import { ArrowLeft, Users, Wallet, TrendingUp, Filter, Search, Download, ChevronLeft, ChevronRight, Sparkles, PieChart, CheckCircle, XCircle, BarChart3, FileText, FileSpreadsheet, ChevronDown, LineChart } from 'lucide-react';
 import { exportCollectedPaymentsToPDF } from '@/utils/htmlPrintExports';
 import { useToast } from '@/hooks/useToast';
+import { useOrganization } from '@/hooks/useOrganization';
 
 interface StudentPayment {
   id: string;
   member_id: string;
   student_name: string;
   reg_number: string;
+  level: string;
+  department: string;
   is_active: boolean;
   payments: {
     id: string;
@@ -50,6 +53,13 @@ interface CategoryExpenses {
 export default function AdminCollectedPage() {
   const { go: navigate } = useAppNav();
   const { success: showSuccess, error: showError } = useToast();
+  const { group, settings } = useOrganization();
+
+  // Org/group-level fallback values for exports (used when per-student fields are empty)
+  const academicInfo = (settings?.custom_settings as Record<string, unknown>)?.academic as { academic_level?: string } | undefined;
+  const orgLevel = academicInfo?.academic_level || '';
+  const orgDepartment = group?.name || '';
+
   const [loading, setLoading] = useState(true);
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const [_studentPayments, setStudentPayments] = useState<StudentPayment[]>([]);
@@ -81,7 +91,7 @@ export default function AdminCollectedPage() {
       const scope = getOrgScope();
       let membersQ = supabase
         .from('organization_members')
-        .select('id, full_name, member_id, is_active')
+        .select('id, full_name, member_id, is_active, level, section')
         .order('full_name', { ascending: true });
       if (scope) membersQ = membersQ.eq('organization_id', scope.orgId);
       const { data: studentsData, error: studentsError } = await membersQ;
@@ -160,6 +170,8 @@ export default function AdminCollectedPage() {
           member_id: student.id,
           student_name: student.full_name || 'Unknown',
           reg_number: student.member_id || '',
+          level: student.level || orgLevel || '',
+          department: student.section || orgDepartment || '',
           is_active: student.is_active || false,
           payments: [],
           total_paid: 0,
@@ -460,9 +472,14 @@ export default function AdminCollectedPage() {
     return true;
   });
 
+  // Sort alphabetically by student name
+  const sortedStudents = [...filteredStudents].sort((a, b) => 
+    (a.student_name || '').localeCompare(b.student_name || '')
+  );
+
   // Pagination
-  const totalPages = Math.ceil(filteredStudents.length / itemsPerPage);
-  const paginatedStudents = filteredStudents.slice(
+  const totalPages = Math.ceil(sortedStudents.length / itemsPerPage);
+  const paginatedStudents = sortedStudents.slice(
     (currentPage - 1) * itemsPerPage,
     currentPage * itemsPerPage
   );
@@ -471,10 +488,12 @@ export default function AdminCollectedPage() {
   const exportToCSV = () => {
     setExporting(true);
     try {
-      const headers = ['Student Name', 'Reg Number', 'Status', 'Total Paid', 'Payments', 'Categories'];
-      const rows = filteredStudents.map(s => [
+      const headers = ['Student Name', 'Reg Number', 'Level', 'Department', 'Status', 'Total Paid', 'Payments', 'Categories'];
+      const rows = sortedStudents.map(s => [
         s.student_name,
         s.reg_number,
+        s.level || orgLevel || 'N/A',
+        s.department || orgDepartment || 'N/A',
         s.is_active ? 'Active' : 'Inactive',
         s.total_paid.toString(),
         s.payment_count.toString(),
@@ -503,10 +522,12 @@ export default function AdminCollectedPage() {
     setExporting(true);
     try {
       exportCollectedPaymentsToPDF({
-        students: filteredStudents.map(s => ({
+        students: sortedStudents.map(s => ({
           id: s.id,
           student_name: s.student_name,
           reg_number: s.reg_number,
+          level: s.level,
+          department: s.department,
           is_active: s.is_active,
           total_paid: s.total_paid,
           payment_count: s.payment_count,

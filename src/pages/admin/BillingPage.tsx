@@ -25,6 +25,7 @@ import {
   Star,
   Receipt,
   ExternalLink,
+  Mail,
 } from 'lucide-react';
 import { colors } from '@/config/colors';
 import { getOrgScope } from '@/utils/orgScope';
@@ -101,6 +102,12 @@ export default function BillingPage() {
   const [paystackLoaded, setPaystackLoaded] = useState(false);
   const [currency] = useState('NGN');
 
+  // Email modal state (replaces browser prompt)
+  const [showEmailModal, setShowEmailModal] = useState(false);
+  const [emailInput, setEmailInput] = useState('');
+  const [emailError, setEmailError] = useState('');
+  const [pendingPlanId, setPendingPlanId] = useState<SubscriptionTier | null>(null);
+
   // Load Paystack inline script
   useEffect(() => {
     if (document.getElementById('paystack-script')) {
@@ -156,21 +163,34 @@ export default function BillingPage() {
       return;
     }
 
-    setProcessingPlan(planId);
+    // Show email modal instead of browser prompt
+    setPendingPlanId(planId);
+    setEmailInput('');
+    setEmailError('');
+    setShowEmailModal(true);
+  };
+
+  const proceedWithPayment = async () => {
+    const email = emailInput.trim();
+    if (!email) {
+      setEmailError('Email is required');
+      return;
+    }
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      setEmailError('Please enter a valid email address');
+      return;
+    }
+    if (!orgId || !pendingPlanId) return;
+
+    setShowEmailModal(false);
+    setProcessingPlan(pendingPlanId);
 
     try {
-      // Get email from org scope or prompt
-      const email = prompt('Enter your email for payment receipt:');
-      if (!email) {
-        setProcessingPlan(null);
-        return;
-      }
-
       const payerName = 'Organization Admin';
 
       const result = await billingService.initiatePayment({
         orgId,
-        planId,
+        planId: pendingPlanId,
         billingCycle,
         email,
         payerName,
@@ -178,13 +198,14 @@ export default function BillingPage() {
         memberId: scope?.memberId,
       });
 
-      if (!result) {
-        toast.error('Failed to initiate payment. Please try again.');
+      if ('error' in result) {
+        toast.error(result.error);
         setProcessingPlan(null);
         return;
       }
 
       // Open Paystack popup
+      // Note: callback must be a plain function (not async) for Paystack inline.js
       const handler = window.PaystackPop!.setup({
         key: result.publicKey,
         email,
@@ -193,22 +214,26 @@ export default function BillingPage() {
         ref: result.reference,
         metadata: {
           organization_id: orgId,
-          plan_id: planId,
+          plan_id: pendingPlanId,
           billing_cycle: billingCycle,
         },
-        callback: async (response) => {
-          // Payment completed — verify
+        callback: function (response: { reference: string }) {
+          // Payment completed — verify (fire-and-forget async inside sync callback)
           toast.info('Verifying payment...');
-          const verifyResult = await billingService.verifyAndUpgrade(response.reference);
-          if (verifyResult.success) {
-            toast.success(verifyResult.message);
-            loadData(); // Refresh
-          } else {
-            toast.error(verifyResult.message);
-          }
-          setProcessingPlan(null);
+          billingService.verifyAndUpgrade(response.reference).then((verifyResult) => {
+            if (verifyResult.success) {
+              toast.success(verifyResult.message);
+              loadData();
+            } else {
+              toast.error(verifyResult.message);
+            }
+            setProcessingPlan(null);
+          }).catch(() => {
+            toast.error('Verification failed. Please contact support.');
+            setProcessingPlan(null);
+          });
         },
-        onClose: () => {
+        onClose: function () {
           toast.info('Payment cancelled');
           setProcessingPlan(null);
         },
@@ -719,6 +744,81 @@ export default function BillingPage() {
           </div>
         )}
       </div>
+
+      {/* ═══════════════════════════════════════════════════════ */}
+      {/* EMAIL INPUT MODAL                                     */}
+      {/* ═══════════════════════════════════════════════════════ */}
+      <AnimatePresence>
+        {showEmailModal && (
+          <motion.div
+            className="fixed inset-0 z-50 flex items-center justify-center p-4"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+          >
+            <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={() => { setShowEmailModal(false); setPendingPlanId(null); }} />
+            <motion.div
+              className="relative w-full max-w-sm rounded-2xl p-6 border"
+              style={{ background: colors.secondaryLight || '#1A0E09', borderColor: 'rgba(255,255,255,0.08)', boxShadow: '0 25px 60px rgba(0,0,0,0.6)' }}
+              initial={{ scale: 0.9, y: 20 }}
+              animate={{ scale: 1, y: 0 }}
+              exit={{ scale: 0.9, y: 20 }}
+            >
+              {/* Header */}
+              <div className="flex items-center gap-3 mb-5">
+                <div className="w-10 h-10 rounded-xl flex items-center justify-center" style={{ background: 'rgba(255,104,3,0.15)', color: '#FF6803' }}>
+                  <Mail size={20} />
+                </div>
+                <div>
+                  <h3 className="text-lg font-bold text-white">Payment Email</h3>
+                  <p className="text-xs" style={{ color: colors.textTertiary }}>For your payment receipt</p>
+                </div>
+              </div>
+
+              {/* Email Input */}
+              <div className="space-y-3">
+                <div>
+                  <label className="block text-sm font-medium text-white mb-1.5">Email Address *</label>
+                  <input
+                    type="email"
+                    value={emailInput}
+                    onChange={(e) => { setEmailInput(e.target.value); setEmailError(''); }}
+                    onKeyDown={(e) => { if (e.key === 'Enter') proceedWithPayment(); }}
+                    placeholder="you@example.com"
+                    autoFocus
+                    className="w-full bg-white/5 border rounded-xl px-4 py-3 text-white placeholder-gray-500 outline-none focus:border-[#FF6803] transition-colors"
+                    style={{ borderColor: emailError ? '#EF4444' : 'rgba(255,255,255,0.1)' }}
+                  />
+                  {emailError && (
+                    <p className="text-xs text-red-400 mt-1">{emailError}</p>
+                  )}
+                  <p className="text-xs mt-2" style={{ color: colors.textTertiary }}>
+                    Your payment receipt will be sent to this email.
+                  </p>
+                </div>
+              </div>
+
+              {/* Actions */}
+              <div className="flex gap-3 mt-6">
+                <button
+                  onClick={() => { setShowEmailModal(false); setPendingPlanId(null); }}
+                  className="flex-1 px-4 py-2.5 rounded-xl text-sm font-medium text-white/60 hover:text-white transition-colors"
+                  style={{ background: 'rgba(255,255,255,0.05)' }}
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={proceedWithPayment}
+                  className="flex-1 px-4 py-2.5 rounded-xl text-sm font-semibold text-white transition-all hover:brightness-110"
+                  style={{ background: 'linear-gradient(135deg, #FF6803, #F59E0B)' }}
+                >
+                  Continue to Payment
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </PageWrapper>
   );
 }

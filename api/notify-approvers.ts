@@ -1,10 +1,22 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
+/**
+ * Notify Approvers API
+ *
+ * When a member submits a payment, this endpoint notifies all admins
+ * who can approve payments via in-app notification, email, and push.
+ *
+ * SECURITY: Verifies the caller (studentId) is a real, active member.
+ *           All data is scoped to the payment's organization_id.
+ *           payment_types query is org-scoped to prevent cross-org leakage.
+ */
+
 import { createClient } from '@supabase/supabase-js'
 import webpush from 'web-push'
+import { sendEmail, paymentSubmittedEmail } from './_lib/email'
+import { verifyMember, escapeHtml } from './_lib/auth'
 
 const supabaseUrl = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL
 const serviceRole = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SERVICE_ROLE
-const RESEND_API_KEY = process.env.RESEND_API_KEY || process.env.VITE_RESEND_API_KEY
 const appUrl = process.env.VITE_APP_URL || process.env.NEXT_PUBLIC_APP_URL || 'https://your-app.vercel.app'
 
 // VAPID keys for push notifications
@@ -17,52 +29,6 @@ if (vapidPublicKey && vapidPrivateKey) {
   webpush.setVapidDetails(vapidEmail, vapidPublicKey, vapidPrivateKey)
 }
 
-// Helper to send email via Resend
-async function sendEmailNotification(to: string, subject: string, html: string): Promise<boolean> {
-  if (!RESEND_API_KEY) {
-    return false;
-  }
-
-  try {
-    const res = await fetch('https://api.resend.com/emails', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${RESEND_API_KEY}`,
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({
-        from: 'Payvexo <notifications@resend.dev>',
-        to,
-        subject,
-        html
-      })
-    });
-
-    return res.ok;
-  } catch {
-    return false;
-  }
-}
-
-// Verify authenticated user
-async function verifyAuth(supabase: any, authHeader: string): Promise<{ valid: boolean; userId?: string; error?: string }> {
-  if (!authHeader || !authHeader.startsWith('Bearer ')) {
-    return { valid: false, error: 'Missing authorization' }
-  }
-
-  const token = authHeader.replace('Bearer ', '')
-  
-  try {
-    const { data: { user }, error } = await supabase.auth.getUser(token)
-    if (error || !user) {
-      return { valid: false, error: 'Invalid token' }
-    }
-    return { valid: true, userId: user.id }
-  } catch {
-    return { valid: false, error: 'Auth failed' }
-  }
-}
-
 export default async function handler(req: any, res: any) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' })
 
@@ -72,28 +38,32 @@ export default async function handler(req: any, res: any) {
 
   const supabaseAdmin = createClient(supabaseUrl, serviceRole)
 
-  // Note: We validate by checking the payment exists in the database
-  // rather than requiring Supabase Auth (since app uses custom auth)
+  // Note: The caller is the member who submitted the payment (studentId)
+  // We verify they are a real, active member before proceeding.
 
   try {
     const { paymentId, studentId, amount, paymentTypeId } = req.body
-
-    console.log('📩 notify-approvers called:', { paymentId, studentId, amount, paymentTypeId });
 
     if (!paymentId || !studentId || !paymentTypeId) {
       return res.status(400).json({ error: 'Missing required fields' })
     }
 
-    // Validate the payment exists and belongs to this member (security check)
+    // ── Verify the caller (studentId) is a real, active member ──
+    const auth = await verifyMember(supabaseAdmin, studentId)
+    if (!auth.valid || !auth.data) {
+      return res.status(auth.status || 401).json({ error: auth.error || 'Unauthorized' })
+    }
+
+    // Validate the payment exists, belongs to this member, and same org
     const { data: payment, error: paymentError } = await supabaseAdmin
       .from('payments')
       .select('id, member_id, amount, status, organization_id')
       .eq('id', paymentId)
       .eq('member_id', studentId)
+      .eq('organization_id', auth.data.organization_id)
       .single();
 
     if (paymentError || !payment) {
-      console.log('❌ Payment validation failed:', paymentError);
       return res.status(403).json({ error: 'Payment not found or does not belong to member' });
     }
 
@@ -106,23 +76,25 @@ export default async function handler(req: any, res: any) {
     const organizationId = payment.organization_id;
 
     // Fetch names for message (multi-tenant: organization_members table)
-    const { data: pt } = await supabaseAdmin.from('payment_types').select('title').eq('id', paymentTypeId).single()
+    const { data: pt } = await supabaseAdmin.from('payment_types').select('title').eq('id', paymentTypeId).eq('organization_id', organizationId).single()
     const { data: member } = await supabaseAdmin
       .from('organization_members')
       .select('full_name, member_id')
       .eq('id', studentId)
+      .eq('organization_id', organizationId)
       .single()
 
-    // Get org slug for notification links
+    // Get org slug and name for notification links and emails
     const { data: org } = await supabaseAdmin
       .from('organizations')
-      .select('slug')
+      .select('slug, name')
       .eq('id', organizationId)
       .single()
     const orgSlug = org?.slug || ''
+    const orgName = org?.name || 'Payvexo'
 
-    const paymentTypeName = pt?.title || 'Payment'
-    const memberName = member?.full_name || 'A member'
+    const paymentTypeName = escapeHtml(pt?.title || 'Payment')
+    const memberName = escapeHtml(member?.full_name || 'A member')
     const memberId = member?.member_id || ''
     const formattedAmount = `₦${Number(amount || 0).toLocaleString()}`
 
@@ -172,51 +144,19 @@ export default async function handler(req: any, res: any) {
       const adminName = (approver.organization_members as any)?.full_name || 'Admin'
       
       if (adminEmail && adminEmail.includes('@')) {
-        const emailSent = await sendEmailNotification(
+        const html = paymentSubmittedEmail({
+          adminName,
+          memberName,
+          memberId,
+          paymentType: paymentTypeName,
+          amount: formattedAmount,
+          orgName,
+          reviewUrl,
+        })
+        const emailSent = await sendEmail(
           adminEmail,
-          `💰 New Payment: ${memberName} - ${formattedAmount}`,
-          `
-            <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
-              <div style="background: linear-gradient(135deg, #FF6803, #FF8534); padding: 20px; border-radius: 12px 12px 0 0; text-align: center;">
-                <h1 style="color: white; margin: 0; font-size: 24px;">💰 New Payment Submitted</h1>
-              </div>
-              
-              <div style="background: #1A1A1A; padding: 24px; border-radius: 0 0 12px 12px; color: #E5E5E5;">
-                <p style="margin: 0 0 16px; font-size: 16px;">Hi <strong>${adminName}</strong>,</p>
-                
-                <p style="margin: 0 0 20px; font-size: 15px;">A new payment has been submitted and requires your review:</p>
-                
-                <div style="background: #2A2A2A; padding: 16px; border-radius: 8px; margin-bottom: 20px;">
-                  <table style="width: 100%; color: #E5E5E5; font-size: 14px;">
-                    <tr>
-                      <td style="padding: 8px 0; color: #888;">Member:</td>
-                      <td style="padding: 8px 0; font-weight: bold;">${memberName}</td>
-                    </tr>
-                    <tr>
-                      <td style="padding: 8px 0; color: #888;">Member ID:</td>
-                      <td style="padding: 8px 0;">${memberId}</td>
-                    </tr>
-                    <tr>
-                      <td style="padding: 8px 0; color: #888;">Payment Type:</td>
-                      <td style="padding: 8px 0;">${paymentTypeName}</td>
-                    </tr>
-                    <tr>
-                      <td style="padding: 8px 0; color: #888;">Amount:</td>
-                      <td style="padding: 8px 0; font-weight: bold; color: #4ADE80;">${formattedAmount}</td>
-                    </tr>
-                  </table>
-                </div>
-                
-                <a href="${reviewUrl}" style="display: inline-block; background: linear-gradient(135deg, #FF6803, #FF8534); color: white; padding: 12px 24px; border-radius: 8px; text-decoration: none; font-weight: bold; font-size: 14px;">
-                  Review Payment →
-                </a>
-                
-                <p style="margin: 24px 0 0; font-size: 12px; color: #666;">
-                  This is an automated notification from Payvexo.
-                </p>
-              </div>
-            </div>
-          `
+          `New Payment: ${memberName} — ${formattedAmount}`,
+          html
         );
         if (emailSent) emailsSent++;
       }
