@@ -4,6 +4,7 @@ import { supabase } from '@/config/supabase';
 import type { Payment, PaymentType, PaymentStats } from '@/types';
 import notificationService from '@/services/notificationService';
 import { getOrgScope } from '@/utils/orgScope';
+import { organizationService } from '@/services/organizationService';
 
 /**
  * Payment Service
@@ -18,24 +19,24 @@ class PaymentService {
    * Get the current member's level info.
    * In multi-tenant mode queries organization_members; in legacy mode queries students.
    */
-  private async getMemberLevel(memberId: string): Promise<{ level: string; department: string } | null> {
+  private async getMemberLevel(memberId: string): Promise<{ level: string; department: string; group_id?: string } | null> {
     const scope = getOrgScope();
     if (scope) {
       const { data } = await supabase
         .from('organization_members')
-        .select('level, section')
+        .select('level, section, group_id')
         .eq('id', memberId)
         .eq('organization_id', scope.orgId)
         .single();
       if (!data) return null;
-      return { level: data.level || '', department: data.section || '' };
+      return { level: data.level || '', department: data.section || '', group_id: data.group_id };
     }
     const { data } = await supabase
       .from('organization_members')
-      .select('level, section')
+      .select('level, section, group_id')
       .eq('id', memberId)
       .single();
-    return data ? { level: data.level || '', department: data.section || '' } : null;
+    return data ? { level: data.level || '', department: data.section || '', group_id: data.group_id } : null;
   }
   /**
    * Get payment statistics for a student/member
@@ -53,18 +54,39 @@ class PaymentService {
         };
       }
 
-      // Get all active payment types for this member's level (include deadline and late fee)
+      // Canonicalize member level for consistent matching
+      const memberLevel = organizationService.canonicalizeLevel(member.level || '');
       const scope = getOrgScope();
+      let orgType: string | null = null;
+      if (scope) {
+        const org = await organizationService.getById(scope.orgId);
+        orgType = org?.organization_type || null;
+      }
+      
+      // Fetch all active payment types for scope and filter client-side to allow
+      // payment types with no `target_levels` to apply to all members in the org.
       let ptQuery = supabase
         .from('payment_types')
-        .select('id, amount, deadline, late_fee_per_day')
-        .eq('is_active', true)
-        .contains('target_levels', [member.level]);
+        .select('id, amount, deadline, late_fee_per_day, target_levels, group_id')
+        .eq('is_active', true);
       if (scope) ptQuery = ptQuery.eq('organization_id', scope.orgId);
 
-      const { data: activePaymentTypes, error: typesError } = await ptQuery;
-
+      const { data: allPaymentTypes, error: typesError } = await ptQuery;
       if (typesError) throw typesError;
+
+      const activePaymentTypes = (allPaymentTypes || []).filter((pt: any) => {
+        const targets: string[] = pt.target_levels || [];
+        // If org is a university, require group match when payment type is tied to a group.
+        if (orgType === 'university') {
+          if (pt.group_id) {
+            // only include if member is in same group
+            if (!member.group_id || member.group_id !== pt.group_id) return false;
+          }
+        }
+        if (!targets || targets.length === 0) return true; // applies to all members
+        const canonicalTargets = targets.map((l: string) => organizationService.canonicalizeLevel(l));
+        return canonicalTargets.includes(memberLevel);
+      });
 
       // Get all payments for this member
       let pmtQuery = supabase
@@ -241,6 +263,11 @@ class PaymentService {
       if (!member) return [];
 
       const scope = getOrgScope();
+      let orgType: string | null = null;
+      if (scope) {
+        const org = await organizationService.getById(scope.orgId);
+        orgType = org?.organization_type || null;
+      }
 
       // Get ALL active payment types (scoped to org if applicable)
       let ptQuery = supabase
@@ -257,10 +284,18 @@ class PaymentService {
         throw error;
       }
 
-      // Filter payment types for this member's level
-      const paymentTypes = allPaymentTypes?.filter(pt => 
-        pt.target_levels?.includes(member.level)
-      ) || [];
+      // Filter payment types for this member's level (allow null/empty target_levels as wildcard)
+      const memberLevelCanonical = organizationService.canonicalizeLevel(member.level || '');
+      const paymentTypes = (allPaymentTypes || []).filter((pt: any) => {
+        // For university orgs, if a payment type is tied to a group, require group match
+        if (orgType === 'university' && pt.group_id) {
+          if (!member.group_id || member.group_id !== pt.group_id) return false;
+        }
+        const targets: string[] = pt.target_levels || [];
+        if (!targets || targets.length === 0) return true;
+        const t = targets.map((l: string) => organizationService.canonicalizeLevel(l));
+        return t.includes(memberLevelCanonical);
+      });
 
       // Filter out payment types already fully paid
       const filteredTypes: PaymentType[] = [];
@@ -407,11 +442,16 @@ class PaymentService {
       const scope2 = getOrgScope();
       let ptQuery2 = supabase
         .from('payment_types')
-        .select('id, amount, deadline, late_fee_per_day')
-        .eq('is_active', true)
-        .contains('target_levels', [student.level]);
+        .select('id, amount, deadline, late_fee_per_day, target_levels')
+        .eq('is_active', true);
       if (scope2) ptQuery2 = ptQuery2.eq('organization_id', scope2.orgId);
-      const { data: activePaymentTypes } = await ptQuery2;
+      const { data: allActivePaymentTypes } = await ptQuery2;
+      const activePaymentTypes = (allActivePaymentTypes || []).filter((pt: any) => {
+        const targets: string[] = pt.target_levels || [];
+        if (!targets || targets.length === 0) return true;
+        const t = targets.map((l: string) => organizationService.canonicalizeLevel(l));
+        return t.includes(organizationService.canonicalizeLevel(student.level || ''));
+      });
 
       // Get all payments for this member
       let pmtQuery2 = supabase
@@ -532,12 +572,47 @@ class PaymentService {
         .from('payment_types')
         .select('*')
         .eq('is_active', true)
-        .contains('target_levels', [student.level])
         .order('deadline', { ascending: true });
       if (scope) ptQuery = ptQuery.eq('organization_id', scope.orgId);
-      const { data: paymentTypes, error } = await ptQuery;
-
+      const { data: allPaymentTypesRes, error } = await ptQuery;
       if (error) throw error;
+      const memberLevelCanon = organizationService.canonicalizeLevel(student.level || '');
+      let orgType: string | null = null;
+      if (scope) {
+        const org = await organizationService.getById(scope.orgId);
+        orgType = org?.organization_type || null;
+      }
+
+      const paymentTypes = (allPaymentTypesRes || []).filter((pt: any) => {
+        const targets: string[] = pt.target_levels || [];
+
+        // If payment type is tied to a group, prefer group matching.
+        if (pt.group_id) {
+          // Universities require strict group match.
+          if (orgType === 'university') {
+            if (!student.group_id || student.group_id !== pt.group_id) return false;
+            return true;
+          }
+
+          // For other org types: if we have a member.group_id, require it to match.
+          if (student.group_id) {
+            if (student.group_id !== pt.group_id) return false;
+            return true;
+          }
+
+          // Member has no group info; fall back to level matching if targets exist,
+          // otherwise treat as org-wide.
+          if (!targets || targets.length === 0) return true;
+          const tFallback = targets.map((l: string) => organizationService.canonicalizeLevel(l));
+          return tFallback.includes(memberLevelCanon);
+        }
+
+        // No group constraint: if no explicit targets, applies to all members
+        if (!targets || targets.length === 0) return true;
+
+        const t = targets.map((l: string) => organizationService.canonicalizeLevel(l));
+        return t.includes(memberLevelCanon);
+      });
 
       return paymentTypes || [];
     } catch (error) {
@@ -635,8 +710,13 @@ class PaymentService {
       let memberQuery = supabase
         .from('organization_members')
         .select('*', { count: 'exact', head: true })
-        .eq('is_active', true)
-        .in('level', paymentType.target_levels || []);
+        .eq('is_active', true);
+
+      // If paymentType has explicit target_levels, filter by them; otherwise count all members in org
+      if (paymentType.target_levels && (paymentType.target_levels as any[]).length > 0) {
+        memberQuery = memberQuery.in('level', paymentType.target_levels || []);
+      }
+
       if (scope) memberQuery = memberQuery.eq('organization_id', scope.orgId);
       else if (paymentType.organization_id) memberQuery = memberQuery.eq('organization_id', paymentType.organization_id);
       const { count: totalStudents } = await memberQuery;

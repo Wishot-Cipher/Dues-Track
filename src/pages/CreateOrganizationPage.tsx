@@ -238,6 +238,14 @@ export default function CreateOrganizationPage() {
     setError('');
 
     try {
+      // Determine owner/group levels to pass to service (academic level when applicable)
+      let ownerLevels: string[] | undefined = undefined;
+      if (isAcademic && form.academic_scope === 'level') {
+        const academicLevelRaw = form.academic_level === '__custom__' ? form.custom_level : (form.academic_level || '');
+        const canon = organizationService.canonicalizeLevel(academicLevelRaw);
+        if (canon) ownerLevels = [canon];
+      }
+
       const result = await organizationService.create({
         name: form.name.trim(),
         short_name: form.short_name.trim().toUpperCase(),
@@ -254,14 +262,16 @@ export default function CreateOrganizationPage() {
         owner_name: form.owner_name.trim(),
         owner_member_id: form.owner_member_id.trim(),
         owner_password: form.owner_password,
+        levels: ownerLevels,
       });
 
       if (result?.slug) {
         // Save academic info to organization_settings.custom_settings if applicable
         if (isAcademic && form.academic_scope && result.organization_id) {
+          const academicLevelRaw = form.academic_level === '__custom__' ? form.custom_level : (form.academic_level || '');
           const academicData = {
             academic_scope: form.academic_scope,
-            academic_level: form.academic_level === '__custom__' ? form.custom_level : (form.academic_level || null),
+            academic_level: organizationService.canonicalizeLevel(academicLevelRaw) || null,
             academic_year: form.academic_year || null,
             faculty: form.faculty === '__custom__' ? form.custom_faculty : (form.faculty || null),
           };

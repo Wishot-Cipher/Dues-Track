@@ -167,11 +167,25 @@ export default function AdminReviewPage() {
 
     try {
       setProcessingId(selectedPayment.id);
+      const scope = getOrgScope();
+      const { data: adminRec } = await supabase
+        .from('member_admins')
+        .select('id')
+        .eq('member_id', user?.id || '')
+        .eq('organization_id', scope?.orgId || '')
+        .single();
+
+      if (!adminRec) {
+        showError('You are not registered as an admin for this organization');
+        setProcessingId(null);
+        return;
+      }
+
       const { error } = await supabase
         .from("payments")
         .update({
           status: "approved",
-          approved_by: user?.id,
+          approved_by: adminRec.id,
           approved_at: new Date().toISOString(),
         })
         .eq("id", selectedPayment.id);
@@ -250,11 +264,25 @@ export default function AdminReviewPage() {
 
     try {
       setProcessingId(selectedPayment.id);
+      const scope = getOrgScope();
+      const { data: adminRec } = await supabase
+        .from('member_admins')
+        .select('id')
+        .eq('member_id', user?.id || '')
+        .eq('organization_id', scope?.orgId || '')
+        .single();
+
+      if (!adminRec) {
+        showError('You are not registered as an admin for this organization');
+        setProcessingId(null);
+        return;
+      }
+
       const { error } = await supabase
         .from("payments")
         .update({
           status: "rejected",
-          approved_by: user?.id,
+          approved_by: adminRec.id,
           approved_at: new Date().toISOString(),
           rejection_reason: rejectionReason.trim(),
         })

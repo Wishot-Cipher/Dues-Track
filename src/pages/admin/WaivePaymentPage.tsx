@@ -1,9 +1,11 @@
-﻿import { useState, useEffect } from "react";
+﻿/* eslint-disable @typescript-eslint/no-explicit-any */
+import { useState, useEffect, useCallback } from "react";
 import { motion } from "framer-motion";
 import {  } from "react-router-dom";
 import { useAppNav } from '@/hooks/useAppNav';
 import { supabase } from "@/config/supabase";
 import { getOrgScope } from '@/utils/orgScope';
+import { organizationService } from '@/services/organizationService';
 import { colors, gradients } from "@/config/colors";
 import GlassCard from "@/components/ui/GlassCard";
 import ProfessionalDropdown from "@/components/ui/ProfessionalDropdown";
@@ -12,8 +14,9 @@ import { PrivacyMask } from '@/components/ui/PrivacyMask';
 import { useAuth } from '@/hooks/useAppAuth';
 import { useToast } from "@/hooks/useToast";
 import {
-  Search,
+  
   X,
+  Search,
   FileText,
   AlertCircle,
   CheckCircle,
@@ -27,6 +30,7 @@ import {
   RefreshCw,
   HelpCircle,
 } from "lucide-react";
+import LoadingSpinner from '@/components/ui/LoadingSpinner';
 import Footer from "@/components/Footer";
 import notificationService from "@/services/notificationService";
 
@@ -37,6 +41,7 @@ interface Student {
   level: string;
   department: string;
   email?: string;
+  group_id?: string;
 }
 
 interface PaymentType {
@@ -46,6 +51,7 @@ interface PaymentType {
   description: string;
   deadline: string;
   late_fee_per_day?: number;
+  group_id?: string;
 }
 
 export default function WaivePaymentPage() {
@@ -81,17 +87,33 @@ export default function WaivePaymentPage() {
     }
 
     try {
-      // Fetch all active payment types for student's level
+      // Fetch all active payment types for scope and filter client-side so that
+      // payment types without `target_levels` apply to all members in the org.
       const scope = getOrgScope();
       let ptQ = supabase
         .from("payment_types")
-        .select("id, title, amount, description, deadline")
-        .eq("is_active", true)
-        .contains("target_levels", [selectedStudent.level]);
+        .select("id, title, amount, description, deadline, target_levels, group_id")
+        .eq("is_active", true);
       if (scope) ptQ = ptQ.eq('organization_id', scope.orgId);
       const { data: allPaymentTypes, error: ptError } = await ptQ;
 
       if (ptError) throw ptError;
+      const memberLevelCanon = organizationService.canonicalizeLevel(selectedStudent.level || '');
+      let orgType: string | null = null;
+      if (scope) {
+        const org = await organizationService.getById(scope.orgId);
+        orgType = org?.organization_type || null;
+      }
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const filteredPaymentTypes = (allPaymentTypes || []).filter((pt: any) => {
+        if (orgType === 'university' && pt.group_id) {
+          if (!selectedStudent.group_id || selectedStudent.group_id !== pt.group_id) return false;
+        }
+        const targets: string[] = pt.target_levels || [];
+        if (!targets || targets.length === 0) return true;
+        const t = targets.map((l: string) => organizationService.canonicalizeLevel(l));
+        return t.includes(memberLevelCanon);
+      });
 
       // Fetch student's existing payments
       let payQ = supabase
@@ -110,7 +132,7 @@ export default function WaivePaymentPage() {
           .map((p) => p.payment_type_id)
       );
 
-      const unpaidTypes = (allPaymentTypes || []).filter(
+      const unpaidTypes = (filteredPaymentTypes || []).filter(
         (pt) => !paidOrPendingTypeIds.has(pt.id)
       );
 
@@ -124,32 +146,60 @@ export default function WaivePaymentPage() {
     }
   };
 
-  // Search students
-  const handleSearch = async () => {
-    if (!searchQuery.trim()) return;
+  // Search students (accept optional query param for programmatic/debounced calls)
+  const handleSearch = useCallback(async (q?: string) => {
+    const query = (q || "").trim();
+    if (!query) {
+      setSearchResults([]);
+      return;
+    }
 
     try {
       setSearching(true);
       const scope = getOrgScope();
       let searchQ = supabase
         .from("organization_members")
-        .select("id, full_name, reg_number, level, department, email")
-        .or(
-          `full_name.ilike.%${searchQuery}%,reg_number.ilike.%${searchQuery}%`
-        )
+        .select("id, full_name, member_id, level, email, group_id")
+        .or(`full_name.ilike.%${query}%,member_id.ilike.%${query}%`)
         .eq("is_active", true)
         .limit(10);
       if (scope) searchQ = searchQ.eq('organization_id', scope.orgId);
       const { data, error } = await searchQ;
 
       if (error) throw error;
-      setSearchResults(data || []);
+      // Map fields explicitly to avoid use of `any` and to normalize member_id -> reg_number
+      const normalized = (data || []).map((r: unknown) => {
+        const rec = r as Record<string, unknown>;
+        return {
+          id: String(rec['id'] ?? ''),
+          full_name: String(rec['full_name'] ?? ''),
+          reg_number: String(rec['member_id'] ?? rec['reg_number'] ?? ''),
+          level: String(rec['level'] ?? ''),
+          department: String(rec['department'] ?? ''),
+          email: (rec['email'] as string) || undefined,
+          group_id: (rec['group_id'] as string) || undefined,
+        } as Student;
+      });
+      setSearchResults(normalized);
     } catch (error) {
       console.error("Error searching students:", error);
     } finally {
       setSearching(false);
     }
-  };
+  }, []);
+
+  // Live search as the user types (debounced)
+  useEffect(() => {
+    if (selectedStudent) return; // don't run live search when a student is already selected
+    if (!searchQuery.trim()) {
+      setSearchResults([]);
+      return;
+    }
+    const timer = setTimeout(() => {
+      void handleSearch(searchQuery);
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [searchQuery, selectedStudent, handleSearch]);
 
   const handleWaivePayment = async () => {
     if (!hasPermission('can_approve_payments')) {
@@ -198,9 +248,33 @@ export default function WaivePaymentPage() {
           transaction_ref: `WAIVED-${Date.now()}`,
           receipt_url: "",
       };
+      // Determine group_id: prefer student's group, fall back to payment type's group
+      const groupId = selectedStudent.group_id || (paymentType as any).group_id;
+      if (!groupId) {
+        showError('Cannot waive payment: student has no group assigned. Please assign a group before waiving.');
+        setLoading(false);
+        return;
+      }
+      waiveInsert.group_id = groupId;
       if (scope) {
         waiveInsert.organization_id = scope.orgId;
       }
+      // Ensure the current user is an admin and get the admin record id
+      const { data: adminRec, error: adminErr } = await supabase
+        .from('member_admins')
+        .select('id')
+        .eq('member_id', user?.id || '')
+        .eq('organization_id', scope?.orgId || '')
+        .single();
+
+      if (adminErr || !adminRec) {
+        showError('You are not registered as an admin for this organization');
+        setLoading(false);
+        return;
+      }
+
+      waiveInsert.approved_by = adminRec.id;
+
       const { error: paymentError } = await supabase
         .from("payments")
         .insert(waiveInsert)
@@ -462,38 +536,33 @@ export default function WaivePaymentPage() {
 
             {!selectedStudent ? (
               <>
-                {/* Search Bar */}
-                <div className="flex gap-2 mb-4">
-                  <div className="flex-1 relative">
-                    <Search
-                      size={20}
-                      className="absolute left-3 top-1/2 -translate-y-1/2"
-                      style={{ color: colors.textSecondary }}
-                    />
+                <div className="mb-3">
+                  <div className="flex gap-2">
                     <input
-                      type="text"
                       value={searchQuery}
-                      onChange={(e) => setSearchQuery(e.target.value)}
-                      onKeyPress={(e) => e.key === "Enter" && handleSearch()}
-                      placeholder="Search by name or registration number..."
-                      className="w-full pl-10 pr-4 py-3 rounded-xl border text-white placeholder-gray-400"
-                      style={{
-                        background: "rgba(255, 255, 255, 0.05)",
-                        borderColor: "rgba(255, 104, 3, 0.2)",
+                      onChange={(e) => {
+                        const v = e.target.value;
+                        setSearchQuery(v);
+                        if (!v.trim()) {
+                          setSearchResults([]);
+                        }
                       }}
+                      placeholder="Search by name or reg. number"
+                      className="flex-1 px-4 py-2 rounded-lg bg-white/5 text-white placeholder-gray-400 outline-none focus:ring-2"
                     />
+                    <button
+                      onClick={() => void handleSearch(searchQuery)}
+                      disabled={searching}
+                      className="px-3 py-2 rounded-lg bg-primary-600/10 flex items-center justify-center"
+                      title="Search"
+                    >
+                      {searching ? (
+                        <LoadingSpinner size="sm" color={colors.primary} />
+                      ) : (
+                        <Search size={16} />
+                      )}
+                    </button>
                   </div>
-                  <button
-                    onClick={handleSearch}
-                    disabled={searching || !searchQuery.trim()}
-                    className="px-6 py-3 rounded-xl font-medium text-white transition-opacity disabled:opacity-50"
-                    style={{ background: gradients.primary }}
-                  >
-                    {searching ? "Searching..." : "Search"}
-                  </button>
-                </div>
-
-                {/* Search Results */}
                 {searchResults.length > 0 && (
                   <div className="space-y-2">
                     {searchResults.map((student) => (
@@ -535,6 +604,7 @@ export default function WaivePaymentPage() {
                     ))}
                   </div>
                 )}
+                </div>
               </>
             ) : (
               <div
@@ -546,14 +616,14 @@ export default function WaivePaymentPage() {
               >
                 <div>
                   <p className="font-medium text-white">
-                    {selectedStudent.full_name}
+                    {selectedStudent?.full_name}
                   </p>
                   <p
                     className="text-sm"
                     style={{ color: colors.textSecondary }}
                   >
-                    {selectedStudent.reg_number} • {selectedStudent.level} •{" "}
-                    {selectedStudent.department}
+                    {selectedStudent?.reg_number} • {selectedStudent?.level} •{" "}
+                    {selectedStudent?.department}
                   </p>
                 </div>
                 <button

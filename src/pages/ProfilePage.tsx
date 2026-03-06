@@ -1,4 +1,5 @@
-﻿/* eslint-disable @typescript-eslint/no-unused-vars */
+﻿/* eslint-disable @typescript-eslint/no-explicit-any */
+/* eslint-disable @typescript-eslint/no-unused-vars */
 import { useState, useEffect, useRef } from 'react';
 import { motion} from 'framer-motion';
 import { 
@@ -37,14 +38,16 @@ import CustomButton from '@/components/ui/CustomButton';
 import { formatCurrency, formatDate } from '@/utils/formatters';
 import { PrivacyMask } from '@/components/ui/PrivacyMask';
 import paymentService from '@/services/paymentService';
+import type { PaymentType, Payment } from '@/types';
 import PageWrapper from '@/components/ui/PageWrapper';
 import { ProfileSkeleton } from '@/components/ui/Skeleton';
 import { useMultiTenantAuth } from '@/hooks/useMultiTenantAuth';
+import { organizationService } from '@/services/organizationService';
 import { supabase } from '@/config/supabase';
 
 export default function ProfilePage() {
   const { user, updateProfile, loading: authLoading } = useAuth();
-  const { organization, isAnyAdmin, refreshSession } = useMultiTenantAuth();
+  const { organization, group, isAnyAdmin, refreshSession } = useMultiTenantAuth();
   const { go: navigate } = useAppNav();
   const [isEditing, setIsEditing] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -57,6 +60,34 @@ export default function ProfilePage() {
     completedPayments: 0,
     pendingPayments: 0,
   });
+  // Dismissed optional dues (localStorage key matches Dashboard) - read-only here
+  const dismissedDues: string[] = (() => {
+    try {
+      const stored = localStorage.getItem(`dismissedDues_${user?.id}`);
+      return stored ? JSON.parse(stored) : [];
+    } catch {
+      return [];
+    }
+  })();
+
+  // If the user's `level` is not populated in the mapped auth user, try fetching it
+  // directly from the members table so the Profile page can show it.
+  const [fetchedLevel, setFetchedLevel] = useState<string | null>(null);
+  const academicInfo = ((organization as any)?.custom_settings as Record<string, unknown>)?.academic as { academic_level?: string } | undefined;
+  const groupPrimary = group?.levels && group.levels.length > 0 ? organizationService.canonicalizeLevel(group.levels[0]) : null;
+  useEffect(() => {
+    const fetchLevel = async () => {
+      if (!user?.id) return;
+      if (user.level) return; // already present
+      try {
+        const { data } = await supabase.from('organization_members').select('level').eq('id', user.id).single();
+        if (data && (data as any).level) setFetchedLevel((data as any).level as string);
+      } catch {
+        // best-effort
+      }
+    };
+    fetchLevel();
+  }, [user?.id, user?.level]);
   const [formData, setFormData] = useState({
     full_name: user?.full_name || '',
     email: user?.email || '',
@@ -164,7 +195,30 @@ export default function ProfilePage() {
       try {
         setPageLoading(true);
         const summary = await paymentService.getPaymentSummary(user.id);
-        setPaymentSummary(summary);
+
+        // Also fetch active payment types + payments to determine dismissed optional unpaid dues
+        const [activeTypes, payments] = await Promise.all([
+          paymentService.getActivePaymentTypesForStudent(user.id),
+          paymentService.getStudentPayments(user.id),
+        ]);
+
+        // Compute unpaid optional dues that are dismissed
+        const unpaid = (activeTypes || []).map((pt: PaymentType) => {
+          const paymentsForType = (payments || []).filter((p: Payment) => p.payment_type_id === pt.id);
+          const paid = paymentsForType.filter((p) => p.status === 'approved' && !p.transaction_ref?.startsWith('WAIVED-')).reduce((s, p) => s + Number(p.amount || 0), 0) || 0;
+          const isWaived = paymentsForType.some((p) => p.status === 'approved' && p.transaction_ref?.startsWith('WAIVED-'));
+          const outstanding = isWaived ? 0 : Math.max(0, Number(pt.amount || 0) - paid);
+          return { id: pt.id, totalDue: outstanding, is_mandatory: pt.is_mandatory };
+        });
+
+        const dismissedUnpaidSum = unpaid
+          .filter(u => !u.is_mandatory && dismissedDues.includes(u.id))
+          .reduce((s, u) => s + (Number(u.totalDue || 0)), 0);
+
+        setPaymentSummary({
+          ...summary,
+          totalOutstanding: Math.max(0, Number(summary.totalOutstanding || 0) - dismissedUnpaidSum),
+        });
       } catch (error) {
         // Error handling without console log
       } finally {
@@ -173,7 +227,7 @@ export default function ProfilePage() {
     };
 
     fetchPaymentSummary();
-  }, [user?.id]);
+  }, [user?.id, dismissedDues]);
 
   const handleSave = async () => {
     try {
@@ -364,7 +418,7 @@ export default function ProfilePage() {
                 </div>
                 <div className="flex items-center justify-between">
                   <span className="text-sm" style={{ color: colors.textSecondary }}>Level</span>
-                  <span className="text-sm font-medium text-white">{user?.level || 'N/A'}</span>
+                  <span className="text-sm font-medium text-white">{user?.level || groupPrimary || fetchedLevel || academicInfo?.academic_level || 'N/A'}</span>
                 </div>
                 <div className="flex items-center justify-between">
                   <span className="text-sm" style={{ color: colors.textSecondary }}>Department</span>
@@ -852,7 +906,7 @@ export default function ProfilePage() {
                           Read-only
                         </span>
                       </div>
-                      <p className="text-sm font-semibold text-white">{user?.level || 'N/A'}</p>
+                      <p className="text-sm font-semibold text-white">{user?.level || groupPrimary || fetchedLevel || academicInfo?.academic_level || 'N/A'}</p>
                     </div>
                   </div>
                 </motion.div>

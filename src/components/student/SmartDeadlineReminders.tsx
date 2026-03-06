@@ -22,6 +22,16 @@ export default function SmartDeadlineReminders() {
   const { user } = useAuth()
   const [reminders, setReminders] = useState<DeadlineReminder[]>([])
   const [dismissed, setDismissed] = useState<Set<string>>(new Set())
+  // Respect globally-dismissed optional dues (localStorage)
+  const [globalDismissed, setGlobalDismissed] = useState<string[]>(() => {
+    try {
+      const key = `dismissedDues_${user?.id}`;
+      const v = localStorage.getItem(key);
+      return v ? JSON.parse(v) : [];
+    } catch {
+      return [];
+    }
+  })
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
@@ -93,9 +103,16 @@ export default function SmartDeadlineReminders() {
             urgency = 'medium'
           }
 
-          // Only add if not fully paid or if deadline is very close
-          if (status !== 'paid' || daysLeft <= 3) {
-            remindersList.push({
+          // Respect global dismissed (user skipped optional dues)
+          const isGloballyDismissed = globalDismissed.includes(pt.id);
+
+          // Only add if not fully paid and not globally dismissed. Previously we allowed
+          // showing reminders for recently-due paid items; user requested removing reminders
+          // when payment is paid — so skip when status === 'paid'. Also skip when globally dismissed.
+          if (status !== 'paid' && !isGloballyDismissed) {
+            // Only add near-deadline ones as before (daysLeft >= -7)
+            if (daysLeft >= -7) {
+              remindersList.push({
               id: pt.id,
               paymentType: pt.title,
               amount: Number(pt.amount),
@@ -106,6 +123,7 @@ export default function SmartDeadlineReminders() {
               urgency,
               late_fee_per_day: pt.late_fee_per_day ? Number(pt.late_fee_per_day) : undefined
             })
+            }
           }
         }
       })
@@ -129,9 +147,21 @@ export default function SmartDeadlineReminders() {
 
   const handleDismiss = (id: string) => {
     setDismissed(prev => new Set([...prev, id]))
+    try {
+      const key = `dismissedDues_${user?.id}`;
+      const existing = localStorage.getItem(key);
+      const arr = existing ? JSON.parse(existing) : [];
+      if (!arr.includes(id)) {
+        arr.push(id);
+        localStorage.setItem(key, JSON.stringify(arr));
+        setGlobalDismissed(arr);
+      }
+    } catch {
+      // best-effort
+    }
   }
 
-  const activeReminders = reminders.filter(r => !dismissed.has(r.id))
+  const activeReminders = reminders.filter(r => !dismissed.has(r.id) && !globalDismissed.includes(r.id))
 
   if (loading || activeReminders.length === 0) return null
 

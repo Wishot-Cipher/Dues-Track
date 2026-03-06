@@ -17,6 +17,8 @@ import {
 } from 'lucide-react';
 import { colors } from '@/config/colors';
 import { supabase } from '@/config/supabase';
+import { useAuth } from '@/hooks/useAppAuth';
+import organizationService from '@/services/organizationService';
 import { getOrgScope } from '@/utils/orgScope';
 import { parseFile, parseText, getFileAcceptAttribute, getAcceptedFormats } from '@/utils/memberFileParser';
 
@@ -54,6 +56,7 @@ export default function BulkStudentImport({ onComplete, onClose }: BulkStudentIm
   const [errors, setErrors] = useState<string[]>([]);
   const [dragActive, setDragActive] = useState(false);
   const [progress, setProgress] = useState(0);
+  const { user } = useAuth();
   const [fileName, setFileName] = useState('');
   const fileInputRef = useRef<HTMLInputElement>(null);
   const pasteRef = useRef<HTMLTextAreaElement>(null);
@@ -171,6 +174,23 @@ export default function BulkStudentImport({ onComplete, onClose }: BulkStudentIm
       // Import one-by-one with hash_password
       const allResults: ImportResult[] = [];
 
+      // Try to determine the current user's group to enforce single-level per department
+      let currentGroupPrimary: string | null = null;
+      try {
+        if (user?.id) {
+          const { data: memberRec } = await supabase.from('organization_members').select('group_id').eq('id', user.id).single();
+          const groupId = memberRec?.group_id;
+          if (groupId) {
+            const { data: grp } = await supabase.from('organization_groups').select('levels').eq('id', groupId).single();
+            if (grp?.levels && Array.isArray(grp.levels) && grp.levels.length > 0) {
+              currentGroupPrimary = organizationService.canonicalizeLevel(grp.levels[0]);
+            }
+          }
+        }
+      } catch {
+        // ignore
+      }
+
       for (let i = 0; i < students.length; i++) {
         const s = students[i];
         try {
@@ -196,6 +216,24 @@ export default function BulkStudentImport({ onComplete, onClose }: BulkStudentIm
             continue;
           }
 
+          // Enforce department single-level rule when possible
+          if (s.level && currentGroupPrimary) {
+            const provided = organizationService.canonicalizeLevel(s.level);
+            if (provided && provided !== currentGroupPrimary) {
+              allResults.push({
+                row_index: i + 1,
+                success: false,
+                message: `Level "${s.level}" does not match department level ${currentGroupPrimary}`,
+                member_id: null,
+                full_name: s.full_name,
+                reg_number: s.reg_number,
+                temp_password: null,
+              });
+              setProgress(Math.round(((i + 1) / students.length) * 100));
+              continue;
+            }
+          }
+
           // Insert into organization_members
           const { data: insertData, error: insertError } = await supabase
             .from('organization_members')
@@ -205,7 +243,7 @@ export default function BulkStudentImport({ onComplete, onClose }: BulkStudentIm
               full_name: s.full_name,
               email: s.email || null,
               phone: s.phone || null,
-              level: s.level || null,
+              level: currentGroupPrimary || s.level || null,
               section: s.section || s.department || null,
               password_hash: hashData,
               force_password_change: true,

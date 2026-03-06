@@ -148,6 +148,7 @@ export const organizationService = {
     owner_name: string;
     owner_member_id: string;
     owner_password: string;
+    levels?: string[];
   }): Promise<{ slug: string; organization_id: string; group_id: string; member_id: string } | null> {
     try {
       // If owner data provided, use the RPC to create everything in one call
@@ -189,6 +190,19 @@ export const organizationService = {
             admin_label: defaults.admin_label,
           })
           .eq('id', resultData.organization_id);
+
+        // If caller provided a primary level for the initial group, persist it
+        try {
+          if (ownerData?.levels && ownerData.levels.length > 0 && resultData?.group_id) {
+            const sanitized = this.deduplicateLevels(ownerData.levels);
+            if (sanitized.length > 0) {
+              const canonical = [this.canonicalizeLevel(sanitized[0])];
+              await supabase.from('organization_groups').update({ levels: canonical }).eq('id', resultData.group_id);
+            }
+          }
+        } catch (err) {
+          console.warn('Failed to persist initial group levels after RPC:', err);
+        }
 
         return resultData;
       }
@@ -288,16 +302,53 @@ export const organizationService = {
    * and keeps only the first occurrence (case-insensitive match,
    * preserving the original casing of the first occurrence).
    */
+  /**
+   * Convert a raw level string into a canonical representation.
+   * Examples: "200 Level" -> "200L", "200L" -> "200L",
+   * "Primary 1" -> "Primary 1" (normalized spacing/casing).
+   */
+  canonicalizeLevel(raw: string | null | undefined): string {
+    if (!raw) return '';
+    const s = raw.trim();
+    if (!s) return '';
+
+    // Numeric university-style levels: "100 Level", "200L", "200 L" -> "200L"
+    const numMatch = s.match(/^(?:level\s*)?(\d{1,3})(?:\s*level)?$/i) || s.match(/^(\d{1,3})\s*L$/i);
+    if (numMatch) {
+      const n = Number(numMatch[1]);
+      return `${n}L`;
+    }
+
+    // If string contains a numeric prefix like "100 Level" in other forms
+    const containsNum = s.match(/(\d{1,3})/);
+    if (containsNum && /level/i.test(s)) {
+      return `${Number(containsNum[1])}L`;
+    }
+
+    // Common school forms: Primary/JSS/SS - normalize spacing and title-case
+    const lowered = s.toLowerCase();
+    if (lowered.startsWith('primary') || lowered.startsWith('jss') || lowered.startsWith('ss')) {
+      return s
+        .replace(/\s+/g, ' ')
+        .split(' ')
+        .map(w => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase())
+        .join(' ');
+    }
+
+    // Fallback: normalize whitespace
+    return s.replace(/\s+/g, ' ');
+  },
+
   deduplicateLevels(levels: string[]): string[] {
     const seen = new Set<string>();
     const result: string[] = [];
     for (const raw of levels) {
-      const trimmed = raw.trim();
-      if (!trimmed) continue;
-      const key = trimmed.toLowerCase();
+      const canonical = this.canonicalizeLevel(raw);
+      if (!canonical) continue;
+      const key = canonical.toLowerCase();
       if (!seen.has(key)) {
         seen.add(key);
-        result.push(trimmed);
+        result.push(canonical);
       }
     }
     return result;
@@ -314,10 +365,11 @@ export const organizationService = {
     for (const g of groups) {
       if (g.levels) {
         for (const l of g.levels) {
-          const key = l.trim().toLowerCase();
+          const canonical = this.canonicalizeLevel(l);
+          const key = canonical.toLowerCase();
           if (key && !seen.has(key)) {
             seen.add(key);
-            result.push(l.trim());
+            result.push(canonical);
           }
         }
       }
@@ -371,10 +423,17 @@ export const organizationService = {
     parent_group_id?: string;
   }): Promise<OrganizationGroup | null> {
     try {
-      // Deduplicate levels before inserting
+      // Deduplicate levels before inserting and enforce single primary level
+      const deduped = groupData.levels ? this.deduplicateLevels(groupData.levels) : [];
+      if (deduped.length === 0) {
+        throw new Error('A group must include exactly one primary level.');
+      }
+      if (deduped.length > 1) {
+        throw new Error('Only one primary level is allowed per group. Provide a single level.');
+      }
       const sanitized = {
         ...groupData,
-        levels: groupData.levels ? this.deduplicateLevels(groupData.levels) : undefined,
+        levels: [this.canonicalizeLevel(deduped[0])],
         display_order: 0,
         is_active: true,
       };
@@ -402,11 +461,15 @@ export const organizationService = {
    */
   async updateGroup(groupId: string, updates: Partial<OrganizationGroup>): Promise<OrganizationGroup | null> {
     try {
-      // Deduplicate levels if they're being updated
-      const sanitized = {
-        ...updates,
-        ...(updates.levels ? { levels: this.deduplicateLevels(updates.levels) } : {}),
-      };
+      // Deduplicate levels if they're being updated and enforce single primary level
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      let sanitized = { ...updates } as any;
+      if (updates.levels) {
+        const deduped = this.deduplicateLevels(updates.levels as string[]);
+        if (deduped.length === 0) throw new Error('A group must include exactly one primary level.');
+        if (deduped.length > 1) throw new Error('Only one primary level is allowed per group.');
+        sanitized = { ...sanitized, levels: [this.canonicalizeLevel(deduped[0])] };
+      }
 
       const { data, error } = await supabase
         .from('organization_groups')
@@ -653,6 +716,7 @@ export const organizationService = {
     owner_password: string;
     description?: string;
     parent_group_id?: string;
+    levels?: string[];
   }): Promise<{ group_id: string; member_id: string; slug: string } | null> {
     try {
       // 1. Check if group short_name already exists in this org
@@ -668,6 +732,15 @@ export const organizationService = {
       }
 
       // 2. Create the group
+      // Prepare levels: require exactly one primary level for a department
+      const sanitizedLevels = deptData.levels ? this.deduplicateLevels(deptData.levels) : [];
+      if (sanitizedLevels.length === 0) {
+        throw new Error('A department must include exactly one primary level (e.g. "200L").');
+      }
+      if (sanitizedLevels.length > 1) {
+        throw new Error('A department can only have one primary level. Provide a single level.');
+      }
+
       const { data: group, error: groupError } = await supabase
         .from('organization_groups')
         .insert({
@@ -676,6 +749,7 @@ export const organizationService = {
           short_name: deptData.group_short_name.toUpperCase(),
           description: deptData.description || null,
           parent_group_id: deptData.parent_group_id || null,
+          levels: [this.canonicalizeLevel(sanitizedLevels[0])],
           is_active: true,
         })
         .select()
@@ -698,6 +772,7 @@ export const organizationService = {
           full_name: deptData.owner_name,
           member_id: deptData.owner_member_id,
           password_hash: hashedPw,
+          level: (group?.levels && group.levels.length > 0) ? this.canonicalizeLevel(group.levels[0]) : null,
           is_active: true,
           force_password_change: false,
         })

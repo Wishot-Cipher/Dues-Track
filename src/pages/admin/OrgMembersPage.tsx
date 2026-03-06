@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 /**
  * OrgMembersPage - Admin member management
  * Add, edit, import, activate/deactivate members seamlessly
@@ -20,6 +21,7 @@ import AnimatedCounter from '@/components/ui/AnimatedCounter';
 import { APP_NAME } from '@/config/constants';
 import { useMultiTenantAuth } from '@/hooks/useMultiTenantAuth';
 import { supabase } from '@/config/supabase';
+import organizationService from '@/services/organizationService';
 import { getOrgScope } from '@/utils/orgScope';
 import GlassCard from '@/components/ui/GlassCard';
 import { exportStudentsToPDF } from '@/utils/htmlPrintExports';
@@ -75,7 +77,8 @@ export default function OrgMembersPage() {
 
   // Org/group-level fallback values for exports (used when per-student fields are empty)
   const academicInfo = (settings?.custom_settings as Record<string, unknown>)?.academic as { academic_level?: string; faculty?: string } | undefined;
-  const orgLevel = academicInfo?.academic_level || '';
+  // Prefer the group's primary level when available; fall back to org-level setting.
+  const orgLevel = (group?.levels && group.levels.length > 0 ? organizationService.canonicalizeLevel(group.levels[0]) : academicInfo?.academic_level) || '';
   const orgDepartment = group?.name || '';
 
   // Limit check state
@@ -302,6 +305,15 @@ export default function OrgMembersPage() {
       const groupId = group?.id;
       if (!groupId) throw new Error('No group selected');
 
+      // Enforce group's single primary level
+      const groupPrimary = group?.levels && group.levels.length > 0 ? organizationService.canonicalizeLevel(group.levels[0]) : null;
+      if (newMember.level.trim() && groupPrimary) {
+        const provided = organizationService.canonicalizeLevel(newMember.level.trim());
+        if (provided && provided !== groupPrimary) {
+          throw new Error(`This department's level is ${groupPrimary}. Members must use that level.`);
+        }
+      }
+
       const { data, error } = await supabase
         .from('organization_members')
         .insert({
@@ -311,7 +323,7 @@ export default function OrgMembersPage() {
           full_name: newMember.full_name.trim(),
           email: newMember.email.trim() || null,
           phone: newMember.phone.trim() || null,
-          level: newMember.level.trim() || null,
+          level: groupPrimary,
           password_hash: hashedPw,
           force_password_change: true,
           is_active: true,
@@ -332,6 +344,20 @@ export default function OrgMembersPage() {
         password: password,
       });
       setNewMember({ member_id: '', full_name: '', email: '', phone: '', password: '', level: '' });
+      // If org-level (academic_level) is not set, persist this group's primary level so
+      // other places that fall back to org level (exports, profile) show a value.
+      try {
+        const currentCustom = (settings?.custom_settings as Record<string, any>) || {};
+        const currentAcademic = (currentCustom.academic as Record<string, any>) || {};
+        const groupPrimary = group?.levels && group.levels.length > 0 ? organizationService.canonicalizeLevel(group.levels[0]) : null;
+        if (groupPrimary && !currentAcademic.academic_level) {
+          const updatedCustom = { ...currentCustom, academic: { ...currentAcademic, academic_level: groupPrimary } };
+          await supabase.from('organization_settings').update({ custom_settings: updatedCustom }).eq('organization_id', organization.id);
+        }
+      } catch (err) {
+        console.error('Failed to persist org academic level:', err);
+      }
+
       fetchMembers();
     } catch (err) {
       setAddError(err instanceof Error ? err.message : 'Failed to add member');
@@ -418,6 +444,14 @@ export default function OrgMembersPage() {
       try {
         const { data: hashedPw } = await supabase.rpc('hash_password', { p_password: pwd });
 
+        // Enforce group's single primary level for bulk-import rows
+        const groupPrimary = group?.levels && group.levels.length > 0 ? organizationService.canonicalizeLevel(group.levels[0]) : null;
+        const providedLevel = (m as any).level ? organizationService.canonicalizeLevel((m as any).level) : null;
+        if (providedLevel && groupPrimary && providedLevel !== groupPrimary) {
+          errors.push(`Row ${i + 1} (${m.member_id}): level "${(m as any).level}" does not match department level ${groupPrimary}`);
+          continue;
+        }
+
         const { error } = await supabase
           .from('organization_members')
           .insert({
@@ -427,6 +461,7 @@ export default function OrgMembersPage() {
             full_name: m.full_name,
             email: m.email || null,
             phone: m.phone || null,
+            level: groupPrimary,
             password_hash: hashedPw,
             force_password_change: true,
             is_active: true,
@@ -448,7 +483,22 @@ export default function OrgMembersPage() {
 
     setBulkResult({ added, failed: errors.length, errors });
     setImportStep('result');
-    if (added > 0) fetchMembers();
+    if (added > 0) {
+      // Ensure org-level is populated from group primary level when importing
+      try {
+        const currentCustom = (settings?.custom_settings as Record<string, any>) || {};
+        const currentAcademic = (currentCustom.academic as Record<string, any>) || {};
+        const groupPrimary = group?.levels && group.levels.length > 0 ? organizationService.canonicalizeLevel(group.levels[0]) : null;
+        if (groupPrimary && !currentAcademic.academic_level) {
+          const updatedCustom = { ...currentCustom, academic: { ...currentAcademic, academic_level: groupPrimary } };
+          await supabase.from('organization_settings').update({ custom_settings: updatedCustom }).eq('organization_id', organization.id);
+        }
+      } catch (err) {
+        console.error('Failed to persist org academic level after bulk import:', err);
+      }
+
+      fetchMembers();
+    }
     setBulkLoading(false);
   };
 
@@ -1404,13 +1454,13 @@ export default function OrgMembersPage() {
                               </div>
                             </td>
                             <td className="py-4 px-4">
-                              {member.level ? (
-                                <span className="inline-flex items-center gap-1 px-2 py-1 rounded-lg text-xs font-semibold" style={{ background: `${colors.accentMint}15`, color: colors.accentMint, border: `1px solid ${colors.accentMint}25` }}>
-                                  {member.level}
-                                </span>
-                              ) : (
-                                <span className="text-xs italic" style={{ color: colors.textDisabled }}>—</span>
-                              )}
+                              {(member.level || orgLevel) ? (
+                                  <span className="inline-flex items-center gap-1 px-2 py-1 rounded-lg text-xs font-semibold" style={{ background: `${colors.accentMint}15`, color: colors.accentMint, border: `1px solid ${colors.accentMint}25` }}>
+                                    {member.level || orgLevel}
+                                  </span>
+                                ) : (
+                                  <span className="text-xs italic" style={{ color: colors.textDisabled }}>—</span>
+                                )}
                             </td>
                             <td className="py-4 px-4">
                               {member.email ? (
@@ -1546,9 +1596,9 @@ export default function OrgMembersPage() {
                             <p className="font-semibold text-white text-base truncate">{member.full_name}</p>
                             <div className="flex items-center gap-2 mt-0.5">
                               <p className="text-sm truncate" style={{ color: colors.textSecondary }}>{member.member_id}</p>
-                              {member.level && (
+                              {(member.level || orgLevel) && (
                                 <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-semibold shrink-0" style={{ background: `${colors.accentMint}15`, color: colors.accentMint }}>
-                                  {member.level}
+                                  {member.level || orgLevel}
                                 </span>
                               )}
                             </div>

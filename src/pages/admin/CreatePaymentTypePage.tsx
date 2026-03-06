@@ -10,6 +10,7 @@ import { useAuth } from '@/hooks/useAppAuth';
 import { useToast } from "@/hooks/useToast";
 import { supabase } from "@/config/supabase";
 import { getOrgScope } from '@/utils/orgScope';
+import { organizationService } from '@/services/organizationService';
 import { formatCurrency, formatDate } from "@/utils/formatters";
 import Footer from "@/components/Footer";
 
@@ -133,16 +134,18 @@ export default function CreatePaymentTypePage() {
       let orgId = scope?.orgId || null;
       let groupId: string | null = null;
 
-      // Fallback: derive org info from the member record
+      // Fallback: derive org info (and member level) from the member record
+      let memberLevel: string | null = null;
       if (!orgId && user.id) {
         const { data: memberRow } = await supabase
           .from('organization_members')
-          .select('organization_id, group_id')
+          .select('organization_id, group_id, level')
           .eq('id', user.id)
           .single();
         if (memberRow) {
           orgId = memberRow.organization_id;
           groupId = memberRow.group_id;
+          memberLevel = memberRow.level || null;
         }
       }
 
@@ -176,11 +179,12 @@ export default function CreatePaymentTypePage() {
       if (!groupId) {
         const { data: memberData } = await supabase
           .from('organization_members')
-          .select('group_id')
+          .select('group_id, level')
           .eq('id', user.id)
           .eq('organization_id', orgId)
           .single();
         groupId = memberData?.group_id || null;
+        if (!memberLevel) memberLevel = memberData?.level || null;
       }
 
       if (!groupId) {
@@ -207,6 +211,8 @@ export default function CreatePaymentTypePage() {
           icon: formData.icon,
           color: formData.color,
           is_active: true,
+          // Auto-apply to the creator's level when available. Leave undefined to target all members.
+          ...(memberLevel ? { target_levels: [organizationService.canonicalizeLevel(memberLevel)] } : {}),
           is_public: formData.is_public,
       };
 

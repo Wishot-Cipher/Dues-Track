@@ -56,6 +56,7 @@ interface DeptFormData {
   owner_member_id: string;
   owner_password: string;
   owner_password_confirm: string;
+  level: string;
 }
 
 export default function CreateDepartmentPage() {
@@ -90,6 +91,7 @@ export default function CreateDepartmentPage() {
     owner_member_id: '',
     owner_password: '',
     owner_password_confirm: '',
+    level: '',
   });
 
   const updateForm = (updates: Partial<DeptFormData>) => {
@@ -187,6 +189,10 @@ export default function CreateDepartmentPage() {
           setError('Short name must be at least 2 characters');
           return false;
         }
+        if (!form.level.trim()) {
+          setError('Please specify the primary level for this department (e.g. "200L")');
+          return false;
+        }
         // Check if short name already exists
         if (existingGroups.some(g => g.short_name.toUpperCase() === form.group_short_name.toUpperCase())) {
           setError(`A ${getGroupLabel().toLowerCase()} with this short name already exists in ${selectedOrg?.name}`);
@@ -242,6 +248,7 @@ export default function CreateDepartmentPage() {
         owner_password: form.owner_password,
         description: form.description.trim() || undefined,
         parent_group_id: form.parent_group_id || undefined,
+        levels: [form.level.trim()],
       });
 
       if (result?.slug) {
@@ -633,6 +640,21 @@ export default function CreateDepartmentPage() {
                     rows={2}
                     className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white placeholder-gray-500 outline-none focus:border-[#FF6803] transition-colors resize-none"
                   />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-white mb-1.5">
+                    Primary Level *
+                  </label>
+                  <input
+                    type="text"
+                    placeholder={selectedOrg.organization_type === 'university' ? 'e.g. 200L' : 'e.g. JSS2'}
+                    value={form.level}
+                    onChange={e => updateForm({ level: e.target.value })}
+                    className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white placeholder-gray-500 outline-none focus:border-[#FF6803] transition-colors"
+                  />
+                  <p className="mt-1 text-xs" style={{ color: colors.textTertiary }}>
+                    This level will be assigned to members created in this {getGroupLabel().toLowerCase()} and used as a fallback when a member has no explicit level.
+                  </p>
                 </div>
 
                 {/* Existing departments reminder */}

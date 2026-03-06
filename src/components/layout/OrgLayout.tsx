@@ -1,3 +1,5 @@
+/* eslint-disable @typescript-eslint/no-unused-vars */
+/* eslint-disable @typescript-eslint/no-explicit-any */
 /**
  * OrgLayout - Premium authenticated layout for org-scoped routes
  * Wraps all /:orgSlug/* protected pages
@@ -35,10 +37,12 @@ import {
   Wallet,
 } from 'lucide-react';
 import { colors, glows, glass } from '@/config/colors';
-import { APP_NAME } from '@/config/constants';
+// import { APP_NAME } from '@/config/constants';
 import { useMultiTenantAuth } from '@/hooks/useMultiTenantAuth';
+import { supabase } from '@/config/supabase';
 import LoadingSpinner from '@/components/ui/LoadingSpinner';
 import { NotificationCenter } from '@/components/NotificationCenter';
+import { organizationService } from '@/services/organizationService';
 
 /* ─────────────────────── types ─────────────────────── */
 interface NavItem {
@@ -54,13 +58,15 @@ interface NavItem {
 /* ─────────────────────── component ─────────────────────── */
 export default function OrgLayout() {
   const { orgSlug } = useParams<{ orgSlug: string }>();
-  const { user, organization, loading, isAuthenticated, isAnyAdmin, logout } = useMultiTenantAuth();
+  const { user, organization, group, loading, isAuthenticated, isAnyAdmin, logout } = useMultiTenantAuth();
+  const groupPrimary = group?.levels && group.levels.length > 0 ? organizationService.canonicalizeLevel(group.levels[0]) : null;
   const navigate = useNavigate();
   const location = useLocation();
   const [showProfileMenu, setShowProfileMenu] = useState(false);
   const [showAdminSubmenu, setShowAdminSubmenu] = useState(false);
   const [showLogoutModal, setShowLogoutModal] = useState(false);
   const profileRef = useRef<HTMLDivElement>(null);
+  const [fetchedLevel, setFetchedLevel] = useState<string | null>(null);
 
   const currentSlug = organization?.slug;
 
@@ -94,6 +100,40 @@ export default function OrgLayout() {
     setShowAdminSubmenu(false);
     setShowProfileMenu(false);
   }, [location.pathname]);
+
+  // If the mapped `user` lacks `level`, try to fetch it from organization_members.
+  useEffect(() => {
+    let mounted = true;
+    const fetchLevel = async () => {
+      try {
+        if (!user) return;
+        if (user.level) return;
+
+        // First, try to read the level from organization_members
+        const { data: memberData } = await supabase.from('organization_members').select('level, group_id').eq('id', user.id).single();
+        if (mounted && memberData && (memberData as any).level) {
+          setFetchedLevel((memberData as any).level as string);
+          return;
+        }
+
+        // If member row has no level, try to fetch the group's first level
+        const groupId = (memberData && (memberData as any).group_id) || group?.id;
+        if (groupId) {
+          const { data: groupData } = await supabase.from('organization_groups').select('levels').eq('id', groupId).single();
+          const levels = (groupData && (groupData as any).levels) || [];
+          if (mounted && Array.isArray(levels) && levels.length > 0) {
+            // Use the first canonicalized level
+            setFetchedLevel(organizationService.canonicalizeLevel(levels[0]));
+            return;
+          }
+        }
+      } catch (err) {
+        // Best-effort fetch; ignore failures silently
+      }
+    };
+    void fetchLevel();
+    return () => { mounted = false; };
+  }, [user, group?.id]);
 
   if (loading) return <LoadingSpinner fullScreen size="lg" />;
   if (!user || !organization) return null;
@@ -187,17 +227,43 @@ export default function OrgLayout() {
               <p className="text-sm font-semibold text-white leading-tight group-hover:text-orange-200 transition-colors truncate">
                 {organization.short_name || organization.name}
               </p>
-              <p className="text-[10px] font-medium tracking-wider uppercase truncate" style={{ color: colors.primary }}>
-                {organization.organization_type === 'university' ? '🎓 University'
-                  : organization.organization_type === 'school' ? '🏫 School'
-                  : organization.organization_type === 'church' ? '⛪ Church'
-                  : organization.organization_type === 'club' ? '🏢 Club'
-                  : organization.organization_type === 'association' ? '🤝 Association'
-                  : organization.organization_type === 'cooperative' ? '🏦 Cooperative'
-                  : organization.organization_type === 'ngo' ? '🌍 NGO'
-                  : APP_NAME
-                }{user.level ? ` · ${user.level}` : ''}
-              </p>
+              <div className="flex flex-col">
+                {/* <p className="text-[10px] font-medium tracking-wider uppercase truncate" style={{ color: colors.primary }}>
+                  {organization.organization_type === 'university' ? '🎓 University'
+                    : organization.organization_type === 'school' ? '🏫 School'
+                    : organization.organization_type === 'church' ? '⛪ Church'
+                    : organization.organization_type === 'club' ? '🏢 Club'
+                    : organization.organization_type === 'association' ? '🤝 Association'
+                    : organization.organization_type === 'cooperative' ? '🏦 Cooperative'
+                    : organization.organization_type === 'ngo' ? '🌍 NGO'
+                    : APP_NAME
+                  }
+                </p> */}
+
+                {/* Group short name + level badge (standout) */}
+                <div className="flex items-center gap-2 mt-0.5">
+                  <p className="text-[10px] font-bold uppercase truncate" style={{ color: colors.textTertiary, maxWidth: '160px' }}>
+                    {group?.short_name || group?.name || ''}
+                  </p>
+                  {(user.level || groupPrimary || fetchedLevel) && (
+                    <span
+                      className="text-[10px] font-semibold uppercase truncate"
+                      style={{
+                        background: `${colors.primary}16`,
+                        color: colors.primary,
+                        padding: '2px 8px',
+                        borderRadius: 9999,
+                        border: `1px solid ${colors.primary}25`,
+                        boxShadow: `0 6px 18px ${colors.primary}10`,
+                        whiteSpace: 'nowrap',
+                        maxWidth: '120px'
+                      }}
+                    >
+                      {`Level ${user.level || groupPrimary || fetchedLevel}`}
+                    </span>
+                  )}
+                </div>
+              </div>
             </div>
           </Link>
 
@@ -368,8 +434,8 @@ export default function OrgLayout() {
                         <div className="min-w-0">
                           <p className="text-sm font-semibold text-white truncate">{user.full_name}</p>
                           <p className="text-xs truncate" style={{ color: colors.textTertiary }}>{user.member_id}</p>
-                          {user.level && (
-                            <p className="text-[10px] font-medium truncate" style={{ color: colors.primary }}>{user.level}</p>
+                          {(user.level || groupPrimary || fetchedLevel) && (
+                            <p className="text-[10px] font-medium truncate" style={{ color: colors.primary }}>{user.level || groupPrimary || fetchedLevel}</p>
                           )}
                           {admin && (
                             <span
