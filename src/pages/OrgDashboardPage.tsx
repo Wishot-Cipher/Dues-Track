@@ -1,9 +1,11 @@
+/* eslint-disable no-empty */
 /**
  * OrgDashboardPage - Multi-tenant member dashboard
  * Professional summary with progress ring, stats, quick actions, activity feed
  */
 
 import { useState, useEffect } from 'react';
+import type { Dispatch, SetStateAction } from 'react';
 import { motion } from 'framer-motion';
 import {
   CreditCard,
@@ -16,6 +18,10 @@ import {
   Users,
   Loader2,
   UserPlus,
+  ChevronsLeft,
+  ChevronLeft,
+  ChevronRight,
+  ChevronsRight,
 } from 'lucide-react';
 import { colors } from '@/config/colors';
 import { useMultiTenantAuth } from '@/hooks/useMultiTenantAuth';
@@ -30,6 +36,48 @@ interface DashboardStats {
   approvedCount: number;
   totalPaymentTypes: number;
 }
+
+// Lightweight domain types used in this page
+type Organization = {
+  id: string;
+  slug?: string;
+  currency_symbol?: string;
+  name?: string;
+  payment_label?: string;
+  member_label_plural?: string;
+};
+
+type User = {
+  id: string;
+  group_id?: string;
+  full_name?: string;
+};
+
+type PaymentType = {
+  id: string;
+  title: string;
+  amount: number | string | null;
+  is_mandatory: boolean;
+  deadline?: string | null;
+  icon?: string | null;
+  color?: string | null;
+  category?: string | null;
+  created_at?: string | null;
+};
+
+type Payment = {
+  id: string;
+  amount: number | string | null;
+  status: string;
+  payment_type_id: string;
+  created_at?: string | null;
+};
+
+type UnpaidItem = {
+  paymentType: PaymentType;
+  remaining: number;
+  amountPaid: number;
+};
 
 // Progress Ring SVG component
 function ProgressRing({ progress, size = 120, strokeWidth = 8 }: { progress: number; size?: number; strokeWidth?: number }) {
@@ -65,6 +113,249 @@ function ProgressRing({ progress, size = 120, strokeWidth = 8 }: { progress: num
   );
 }
 
+// Small paginated unpaid dues list used on Org dashboard
+function UnpaidDuesList({ organization, user, unpaidPage, unpaidPerPage, setUnpaidPage }: {
+  organization: Organization | null | undefined;
+  user: User | null | undefined;
+  unpaidPage: number;
+  unpaidPerPage: number;
+  setUnpaidPage: Dispatch<SetStateAction<number>>;
+}) {
+  const [items, setItems] = useState<UnpaidItem[]>([]);
+  const [loading, setLoading] = useState(true);
+  const navigate = useNavigate();
+  const [dismissedIds, setDismissedIds] = useState<string[]>([]);
+  useEffect(() => {
+    if (!user?.id) return;
+    try {
+      const stored = localStorage.getItem(`dismissedDues_${user.id}`);
+      setDismissedIds(stored ? JSON.parse(stored) : []);
+    } catch {
+      setDismissedIds([]);
+    }
+  }, [user?.id]);
+  const [showDismissed, setShowDismissed] = useState(false);
+  const [debugOpen, setDebugOpen] = useState(false);
+
+  useEffect(() => {
+    let mounted = true;
+    const load = async () => {
+      if (!organization || !user) return;
+      setLoading(true);
+      try {
+        const { data: paymentTypes } = await supabase
+          .from('payment_types')
+          .select('id, title, amount, is_mandatory, deadline, icon, color, category, created_at')
+          .eq('organization_id', organization.id)
+          .eq('group_id', user.group_id)
+          .eq('is_active', true);
+
+        const { data: payments } = await supabase
+          .from('payments')
+          .select('id, amount, status, payment_type_id, created_at')
+          .eq('member_id', user.id)
+          .eq('organization_id', organization.id);
+
+        const types: PaymentType[] = (paymentTypes as PaymentType[]) || [];
+        const pays: Payment[] = (payments as Payment[]) || [];
+
+        const unpaid: UnpaidItem[] = types.map((t) => {
+          const paymentsForType = pays.filter((p) => p.payment_type_id === t.id && p.status === 'approved');
+          const amountPaid = paymentsForType.reduce((s, p) => s + Number(p.amount || 0), 0);
+          const remaining = Math.max(0, Number(t.amount || 0) - amountPaid);
+          return {
+            paymentType: t,
+            remaining,
+            amountPaid,
+          };
+        }).filter((it) => it.remaining > 0);
+
+        // Debug: log fetched types/payments/unpaid for troubleshooting
+        try {
+          // eslint-disable-next-line no-console
+          console.debug('OrgDashboard UnpaidDuesList loaded', {
+            paymentTypes: types.map(t => ({ id: t.id, title: t.title, amount: t.amount })),
+            payments: pays.slice(0, 10).map(p => ({ id: p.id, payment_type_id: p.payment_type_id, status: p.status, amount: p.amount })),
+            unpaidIds: unpaid.map(u => u.paymentType.id),
+          });
+        } catch {}
+
+        if (mounted) setItems(unpaid.sort((a, b) => new Date(a.paymentType.created_at || 0).getTime() - new Date(b.paymentType.created_at || 0).getTime()));
+      } catch (err) {
+        console.error('Error loading unpaid dues:', err);
+      } finally {
+        if (mounted) setLoading(false);
+      }
+    };
+
+    load();
+    return () => { mounted = false; };
+  }, [organization, user]);
+
+  // respect dismissed optional dues when computing visible list
+  const visibleItems = items.filter(it => it.paymentType.is_mandatory || showDismissed || !dismissedIds.includes(String(it.paymentType.id)));
+  const visibleTotalPages = Math.max(1, Math.ceil(visibleItems.length / unpaidPerPage));
+  useEffect(() => {
+    if (unpaidPage > visibleTotalPages) setUnpaidPage(1);
+  }, [visibleItems.length, visibleTotalPages, unpaidPage, setUnpaidPage]);
+
+  const startIndex = (unpaidPage - 1) * unpaidPerPage;
+  const endIndex = Math.min(visibleItems.length, startIndex + unpaidPerPage);
+  const pageItems = visibleItems.slice(startIndex, endIndex);
+
+  const scrollToTop = () => window.scrollTo({ top: 0, behavior: 'smooth' });
+
+  return (
+    <div>
+      {loading ? (
+        <div className="p-6 text-center">
+          <Loader2 size={20} className="animate-spin mx-auto" style={{ color: colors.primary }} />
+        </div>
+      ) : visibleItems.length === 0 ? (
+        <div className="p-6 text-center text-sm" style={{ color: colors.textTertiary }}>
+          <div>No unpaid dues</div>
+          {dismissedIds.length > 0 && (
+            <div className="mt-3">
+              <button
+                onClick={() => setShowDismissed(s => !s)}
+                className="text-xs font-medium"
+                style={{ color: colors.primary }}
+              >
+                {showDismissed ? 'Hide' : 'Show'} Skipped ({dismissedIds.length})
+              </button>
+            </div>
+          )}
+        </div>
+      ) : (
+        <div>
+          <div className="flex items-center justify-between mb-3">
+            <div />
+            {dismissedIds.length > 0 && (
+              <button
+                onClick={() => { setShowDismissed(s => { const next = !s; try { console.debug('OrgDashboard UnpaidDuesList toggle showDismissed', { next, dismissedIds }); } catch{}; return next; }); setUnpaidPage(1); }}
+                className="text-xs font-medium"
+                style={{ color: colors.primary }}
+              >
+                {showDismissed ? 'Hide' : 'Show'} Skipped ({dismissedIds.length})
+              </button>
+            )}
+            <div>
+              <button onClick={() => setDebugOpen(d => !d)} className="text-xs ml-3" style={{ color: colors.textTertiary }}>{debugOpen ? 'Hide' : 'Show'} debug</button>
+            </div>
+          </div>
+          <div className="space-y-3">
+            {pageItems.map((it) => {
+              const isDismissed = dismissedIds.includes(String(it.paymentType.id));
+              const isOptional = !it.paymentType.is_mandatory;
+              return (
+              <div key={it.paymentType.id} className="p-3 rounded-xl bg-white/3 flex items-start justify-between">
+                <div className="min-w-0">
+                  <p className="font-semibold text-white text-sm truncate">{it.paymentType.title}</p>
+                  <p className="text-xs mt-1" style={{ color: colors.textTertiary }}>{it.paymentType.category || '—'}</p>
+                </div>
+                <div className="text-right">
+                  <p className="font-bold text-white">{organization?.currency_symbol || '₦'}{Number(it.remaining).toLocaleString('en-NG')}</p>
+                  <div className="flex items-center justify-end gap-3">
+                    <button
+                      onClick={() => navigate(`/${organization?.slug}/payments/${it.paymentType.id}`)}
+                      className="mt-2 text-xs font-medium"
+                      style={{ color: colors.primary }}
+                    >
+                      View
+                    </button>
+                    {isOptional && !isDismissed && (
+                      <button
+                        onClick={() => {
+                          const next = Array.from(new Set([...dismissedIds, String(it.paymentType.id)]));
+                          setDismissedIds(next);
+                          try { if (user?.id) localStorage.setItem(`dismissedDues_${user.id}`, JSON.stringify(next)); } catch {}
+                          try { console.debug('OrgDashboard UnpaidDuesList skip', { added: it.paymentType.id, next }); } catch {}
+                          setUnpaidPage(1);
+                        }}
+                        className="mt-2 text-xs font-medium opacity-80"
+                        style={{ color: colors.textTertiary }}
+                      >
+                        Skip
+                      </button>
+                    )}
+                    {isOptional && isDismissed && (
+                      <button
+                        onClick={() => {
+                          const next = dismissedIds.filter(id => id !== String(it.paymentType.id));
+                          setDismissedIds(next);
+                          try { if (user?.id) localStorage.setItem(`dismissedDues_${user.id}`, JSON.stringify(next)); } catch {}
+                          try { console.debug('OrgDashboard UnpaidDuesList restore', { removed: it.paymentType.id, next }); } catch {}
+                          setUnpaidPage(1);
+                        }}
+                        className="mt-2 text-xs font-medium"
+                        style={{ color: colors.primary }}
+                      >
+                        Restore
+                      </button>
+                    )}
+                  </div>
+                </div>
+              </div>
+            )})}
+          </div>
+
+          {visibleTotalPages > 1 && (
+            <div className="mt-4 rounded-xl p-3 flex items-center justify-between gap-4" style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.06)' }}>
+              <div className="text-sm" style={{ color: colors.textTertiary }}>
+                Showing <span className="font-semibold text-white">{startIndex + 1}-{endIndex}</span> of <span className="font-semibold text-white">{visibleItems.length}</span>
+              </div>
+              <div className="flex items-center gap-1">
+                <button onClick={() => { setUnpaidPage(1); scrollToTop(); }} disabled={unpaidPage === 1} className="p-2 rounded-lg" style={{ background: 'rgba(255,255,255,0.05)' }}>
+                  <ChevronsLeft className="w-4 h-4" style={{ color: colors.textTertiary }} />
+                </button>
+                <button onClick={() => { setUnpaidPage(prev => Math.max(1, prev - 1)); scrollToTop(); }} disabled={unpaidPage === 1} className="p-2 rounded-lg" style={{ background: 'rgba(255,255,255,0.05)' }}>
+                  <ChevronLeft className="w-4 h-4" style={{ color: colors.textTertiary }} />
+                </button>
+
+                <div className="flex items-center gap-1 mx-2">
+                  {Array.from({ length: Math.min(visibleTotalPages, 5) }, (_, i) => {
+                    let pageNumber;
+                    if (visibleTotalPages <= 5) pageNumber = i + 1;
+                    else if (unpaidPage <= 3) pageNumber = i + 1;
+                    else if (unpaidPage >= visibleTotalPages - 2) pageNumber = visibleTotalPages - 4 + i;
+                    else pageNumber = unpaidPage - 2 + i;
+
+                    const isActive = unpaidPage === pageNumber;
+                    return (
+                      <button key={i} onClick={() => { setUnpaidPage(pageNumber); scrollToTop(); }} className="w-9 h-9 rounded-lg font-medium text-sm" style={{ background: isActive ? 'linear-gradient(135deg,' + colors.primary + ', ' + colors.success + ')' : 'rgba(255,255,255,0.05)', color: isActive ? 'white' : colors.textTertiary }}>
+                        {pageNumber}
+                      </button>
+                    );
+                  })}
+                </div>
+
+                <button onClick={() => { setUnpaidPage(prev => Math.min(visibleTotalPages, prev + 1)); scrollToTop(); }} disabled={unpaidPage === visibleTotalPages} className="p-2 rounded-lg" style={{ background: 'rgba(255,255,255,0.05)' }}>
+                  <ChevronRight className="w-4 h-4" style={{ color: colors.textTertiary }} />
+                </button>
+                <button onClick={() => { setUnpaidPage(visibleTotalPages); scrollToTop(); }} disabled={unpaidPage === visibleTotalPages} className="p-2 rounded-lg" style={{ background: 'rgba(255,255,255,0.05)' }}>
+                  <ChevronsRight className="w-4 h-4" style={{ color: colors.textTertiary }} />
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+      {debugOpen && (
+        <div className="mt-3 p-3 text-xs rounded-lg" style={{ background: 'rgba(0,0,0,0.5)', border: '1px solid rgba(255,255,255,0.05)', color: colors.textTertiary }}>
+          <div className="font-semibold text-white mb-2">Debug — Unpaid Dues</div>
+          <div><strong>showDismissed:</strong> {String(showDismissed)}</div>
+          <div><strong>dismissedIds:</strong> {JSON.stringify(dismissedIds)}</div>
+          <div><strong>items.ids:</strong> {JSON.stringify(items.map(i => String(i.paymentType.id)))}</div>
+          <div><strong>visible.ids:</strong> {JSON.stringify(visibleItems.map(i => String(i.paymentType.id)))}</div>
+          <div><strong>pageItems.ids:</strong> {JSON.stringify(pageItems.map(i => String(i.paymentType.id)))}</div>
+          <div><strong>startIndex</strong> {startIndex} <strong>endIndex</strong> {endIndex} <strong>visibleLen</strong> {visibleItems.length}</div>
+          <div><strong>localStorageKey</strong> {user?.id ? `dismissedDues_${user.id}` : 'user.id missing'}</div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function OrgDashboardPage() {
   const { orgSlug } = useParams<{ orgSlug: string }>();
   const { user, organization, group, isAnyAdmin } = useMultiTenantAuth();
@@ -72,6 +363,9 @@ export default function OrgDashboardPage() {
   const [stats, setStats] = useState<DashboardStats>({ totalDue: 0, totalPaid: 0, pendingCount: 0, approvedCount: 0, totalPaymentTypes: 0 });
   const [recentPayments, setRecentPayments] = useState<Array<Record<string, unknown>>>([]);
   const [loading, setLoading] = useState(true);
+  // Unpaid dues pagination state (4 per page)
+  const [unpaidPage, setUnpaidPage] = useState(1);
+  const unpaidPerPage = 4;
 
   useEffect(() => {
     if (user && organization) fetchDashboardData();
@@ -112,6 +406,7 @@ export default function OrgDashboardPage() {
         totalPaymentTypes: types.length,
       });
       setRecentPayments(pays.slice(0, 5));
+      setUnpaidPage(1);
     } catch (error) {
       console.error('Dashboard data error:', error);
     } finally {
@@ -304,6 +599,29 @@ export default function OrgDashboardPage() {
             </button>
           </>
         )}
+      </motion.div>
+
+      {/* ── Unpaid Dues (paginated) ── */}
+      <motion.div
+        initial={{ opacity: 0, y: 10 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ delay: 0.25 }}
+      >
+        <div className="flex items-center justify-between mb-3">
+          <h2 className="text-lg font-semibold text-white">Unpaid Dues</h2>
+          <div className="text-sm" style={{ color: colors.textTertiary }}>{/* summary */}</div>
+        </div>
+        <GlassCard>
+          <div className="p-3">
+            <UnpaidDuesList
+              organization={organization}
+              user={user}
+              unpaidPage={unpaidPage}
+              unpaidPerPage={unpaidPerPage}
+              setUnpaidPage={setUnpaidPage}
+            />
+          </div>
+        </GlassCard>
       </motion.div>
 
       {/* ── Recent Activity ── */}
