@@ -99,6 +99,9 @@ export interface OrganizationGroup {
   id: string;
   organization_id: string;
 
+  // Hierarchy role inside an institution
+  kind?: GroupKind;                         // "faculty" | "class" | "general"
+
   // Basic Info
   name: string;                              // "Computer Science" | "Youth Ministry" | "Lagos Chapter"
   short_name: string;                        // "CS" | "YM" | "LG"
@@ -116,7 +119,7 @@ export interface OrganizationGroup {
   phone?: string;
 
   // Hierarchy (nested groups)
-  parent_group_id?: string;                  // For sub-groups/sub-departments
+  parent_group_id?: string;                  // Class group can point to a faculty group
 
   // Display
   icon?: string;
@@ -136,6 +139,8 @@ export interface OrganizationGroup {
   parent_group?: OrganizationGroup;
   sub_groups?: OrganizationGroup[];
 }
+
+export type GroupKind = 'faculty' | 'class' | 'general';
 
 /**
  * Organization Settings (configurable per org)
@@ -177,6 +182,11 @@ export interface OrganizationSettings {
   current_period_label: string;              // "2025/2026 Session" | "2025 Fiscal Year" | "Q1 2026"
   current_sub_period_label?: string;         // "First Semester" | "January" | "Week 1"
   period_type: PeriodType;
+
+  // Academic progression controls (mainly for universities)
+  auto_promotion_enabled?: boolean;          // false by default for safety
+  promotion_requires_approval?: boolean;     // recommended true
+  promotion_grace_days?: number;             // e.g. 14 days after term end
 
   // Registration Settings
   allow_self_registration: boolean;          // Members can sign up themselves
@@ -239,6 +249,8 @@ export interface OrganizationMember {
 
   // Classification (context-dependent on org type)
   level?: string;                            // "200L" | "Worker" | "Gold Member"
+  current_level_order?: number;              // normalized numeric rank (optional)
+  next_level?: string;                       // preview during promotion window
   section?: string;                          // "A" | "Male" | "Team Alpha"
   role_in_group?: string;                    // "Student" | "Choir Member" | "Treasurer"
   
@@ -279,6 +291,97 @@ export interface OrganizationMember {
   admin_records?: MemberAdmin[];
   admin_permissions?: AggregatedPermissions;
 }
+
+// ============================================================
+// ACADEMIC CALENDAR & PROGRESSION
+// ============================================================
+
+/**
+ * Institution-level academic session (e.g. 2024/2025)
+ */
+export interface AcademicSession {
+  id: string;
+  organization_id: string;
+  label: string;                             // "2024/2025"
+  start_date: string;
+  end_date: string;
+  is_active: boolean;
+  is_locked: boolean;                        // prevents edits after closing
+  created_at: string;
+  updated_at: string;
+}
+
+/**
+ * Sub-period inside a session (semester/trimester/term)
+ */
+export interface AcademicTerm {
+  id: string;
+  organization_id: string;
+  session_id: string;
+  name: string;                              // "First Semester"
+  sequence: number;                          // 1, 2, 3...
+  start_date: string;
+  end_date: string;
+  promotion_window_starts_at?: string;
+  promotion_window_ends_at?: string;
+  status: AcademicTermStatus;
+  created_at: string;
+  updated_at: string;
+}
+
+export type AcademicTermStatus = 'upcoming' | 'active' | 'closing' | 'closed';
+
+/**
+ * Class-group promotion policy (how levels advance)
+ */
+export interface ClassProgressionPolicy {
+  id: string;
+  organization_id: string;
+  group_id: string;                          // class group
+  policy_name: string;
+  level_sequence: string[];                  // ["100L", "200L", ...]
+  terminal_level?: string;                   // e.g. "500L"
+  allow_manual_override: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+/**
+ * Immutable audit record for one promotion execution.
+ */
+export interface PromotionRun {
+  id: string;
+  organization_id: string;
+  term_id: string;
+  group_id?: string;                         // null when org-wide run
+  triggered_by: string;                      // member/admin id
+  status: PromotionRunStatus;
+  total_members: number;
+  promoted_members: number;
+  skipped_members: number;
+  dry_run: boolean;
+  notes?: string;
+  started_at: string;
+  completed_at?: string;
+}
+
+export type PromotionRunStatus = 'queued' | 'running' | 'completed' | 'failed' | 'cancelled';
+
+/**
+ * Per-member promotion decision inside a run.
+ */
+export interface PromotionDecision {
+  id: string;
+  promotion_run_id: string;
+  member_id: string;
+  from_level?: string;
+  to_level?: string;
+  action: PromotionAction;
+  reason?: string;
+  created_at: string;
+}
+
+export type PromotionAction = 'promote' | 'retain' | 'graduated' | 'manual_override';
 
 /**
  * Aggregated admin permissions (derived from admin records)
@@ -339,6 +442,7 @@ export type AdminRole =
   | 'super_admin'       // Platform owner (Payvexo team)
   | 'org_owner'         // Organization creator/owner
   | 'org_admin'         // Organization administrator
+  | 'faculty_admin'     // Faculty-level management (university mode)
   | 'group_admin'       // Group/department/ministry admin
   | 'treasurer'         // Financial secretary / treasurer
   | 'secretary'         // Secretary / class rep
@@ -363,6 +467,11 @@ export const ROLE_TEMPLATES: Record<AdminRole, { label: string; description: str
   org_admin: {
     label: 'Organization Admin',
     description: 'Manages organization operations',
+    permissions: { can_create_payments: true, can_approve_payments: true, can_manage_members: true, can_manage_admins: false, can_manage_expenses: true, can_view_analytics: true, can_export_data: true, can_manage_settings: false },
+  },
+  faculty_admin: {
+    label: 'Faculty Admin',
+    description: 'Manages faculty groups and class reps within a faculty',
     permissions: { can_create_payments: true, can_approve_payments: true, can_manage_members: true, can_manage_admins: false, can_manage_expenses: true, can_view_analytics: true, can_export_data: true, can_manage_settings: false },
   },
   group_admin: {

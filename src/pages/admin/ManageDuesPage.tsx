@@ -5,6 +5,7 @@ import { useAppNav } from '@/hooks/useAppNav';
 import GlassCard from '@/components/ui/GlassCard'
 import ConfirmDialog from '@/components/ui/ConfirmDialog'
 import ProfessionalDropdown from '@/components/ui/ProfessionalDropdown'
+import ProfessionalDateTimePicker from '@/components/ui/ProfessionalDateTimePicker'
 import { colors } from '@/config/colors'
 import { useAuth } from '@/hooks/useAppAuth'
 import { useToast } from '@/hooks/useToast'
@@ -815,16 +816,13 @@ export default function ManageDuesPage() {
                           style={{ borderColor: 'rgba(255, 255, 255, 0.1)' }}
                         />
                       </div>
-                      <div>
-                        <label className="block text-sm font-medium text-white mb-2">Deadline</label>
-                        <input
-                          type="datetime-local"
-                          value={editingPaymentType.deadline?.slice(0, 16) || ''}
-                          onChange={(e) => setEditingPaymentType({ ...editingPaymentType, deadline: e.target.value })}
-                          className="w-full px-4 py-3 rounded-xl bg-white/5 border text-white focus:outline-none focus:ring-2"
-                          style={{ borderColor: 'rgba(255, 255, 255, 0.1)' }}
-                        />
-                      </div>
+                      <ProfessionalDateTimePicker
+                        label="Deadline"
+                        value={editingPaymentType.deadline?.slice(0, 16) || ''}
+                        onChange={(value) => setEditingPaymentType({ ...editingPaymentType, deadline: value })}
+                        includeTime
+                        helperText="Choose when this payment type stops accepting payments."
+                      />
                     </div>
 
                     <div className="grid grid-cols-2 gap-4">

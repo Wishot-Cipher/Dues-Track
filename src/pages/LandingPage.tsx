@@ -1,11 +1,11 @@
 /**
  * LandingPage - Payvexo public landing page
- * Users find their organization or create a new one
+ * Highly interactive, animated, and engaging
  */
 
-import { useState } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { motion } from 'framer-motion';
+import { motion, AnimatePresence, useMotionValue, useTransform, useSpring } from 'framer-motion';
 import {
   Search,
   Building2,
@@ -18,28 +18,289 @@ import {
   Globe,
   ChevronRight,
   Plus,
+  CheckCircle,
+  TrendingUp,
+  DollarSign,
+  Sparkles,
 } from 'lucide-react';
 import { colors } from '@/config/colors';
 import { APP_NAME, APP_TAGLINE } from '@/config/constants';
 import { organizationService } from '@/services/organizationService';
 import type { Organization } from '@/types/multiTenant';
 
-const ORG_TYPE_ICONS: Record<string, React.ReactNode> = {
-  university: <GraduationCap size={20} />,
-  school: <GraduationCap size={20} />,
-  church: <Church size={20} />,
-  club: <Users size={20} />,
-  association: <Users size={20} />,
-  cooperative: <Building2 size={20} />,
-  ngo: <Globe size={20} />,
-  other: <Building2 size={20} />,
+// ── Design tokens ──────────────────────────────────────────────────────────
+const tk = {
+  primary:    '#FF6803',
+  mint:       '#30FFAC',
+  bg:         '#0F0703',
+  cardBg:     'rgba(255,255,255,0.03)',
+  cardBorder: 'rgba(255,255,255,0.08)',
+  textSec:    'rgba(255,255,255,0.55)',
+  textTer:    'rgba(255,255,255,0.3)',
 };
 
+const ORG_TYPE_ICONS: Record<string, React.ReactNode> = {
+  university:  <GraduationCap className="w-5 h-5" />,
+  school:      <GraduationCap className="w-5 h-5" />,
+  church:      <Church className="w-5 h-5" />,
+  club:        <Users className="w-5 h-5" />,
+  association: <Users className="w-5 h-5" />,
+  cooperative: <Building2 className="w-5 h-5" />,
+  ngo:         <Globe className="w-5 h-5" />,
+  other:       <Building2 className="w-5 h-5" />,
+};
+
+// ── Cycling headline words ─────────────────────────────────────────────────
+const CYCLE_WORDS = ['Universities', 'Churches', 'Clubs', 'Cooperatives', 'Associations', 'NGOs'];
+
+function CyclingWord() {
+  const [index, setIndex] = useState(0);
+
+  useEffect(() => {
+    const id = setInterval(() => setIndex((i) => (i + 1) % CYCLE_WORDS.length), 2600);
+    return () => clearInterval(id);
+  }, []);
+
+  return (
+    <span className="relative inline-block overflow-hidden" style={{ minWidth: '320px' }}>
+      <AnimatePresence mode="wait">
+        <motion.span
+          key={CYCLE_WORDS[index]}
+          className="block"
+          style={{ color: tk.primary }}
+          initial={{ y: 32, opacity: 0, filter: 'blur(6px)' }}
+          animate={{ y: 0,  opacity: 1, filter: 'blur(0px)' }}
+          exit={{   y: -32, opacity: 0, filter: 'blur(6px)' }}
+          transition={{ duration: 0.42, ease: [0.22, 1, 0.36, 1] }}
+        >
+          {CYCLE_WORDS[index]}
+        </motion.span>
+      </AnimatePresence>
+    </span>
+  );
+}
+
+// ── Floating activity nodes in background ─────────────────────────────────
+interface FloatNode {
+  id: number;
+  x: number;
+  size: number;
+  delay: number;
+  duration: number;
+  icon: string;
+}
+
+function FloatingNodes() {
+  const nodes: FloatNode[] = Array.from({ length: 14 }, (_, i) => ({
+    id: i,
+    x: 5 + Math.random() * 90,
+    size: 28 + Math.random() * 22,
+    delay: Math.random() * 8,
+    duration: 12 + Math.random() * 10,
+    icon: ['₦', '✓', '💳', '📊', '₦', '✓', '🏦'][i % 7],
+  }));
+
+  return (
+    <div className="fixed inset-0 overflow-hidden pointer-events-none">
+      {nodes.map((n) => (
+        <motion.div
+          key={n.id}
+          className="absolute flex items-center justify-center rounded-xl text-sm font-bold select-none"
+          style={{
+            left: `${n.x}%`,
+            bottom: '-60px',
+            width: n.size,
+            height: n.size,
+            background: 'rgba(255,104,3,0.07)',
+            border: '1px solid rgba(255,104,3,0.12)',
+            color: 'rgba(255,104,3,0.5)',
+            backdropFilter: 'blur(2px)',
+          }}
+          initial={{ y: 0, opacity: 0 }}
+          animate={{
+            y: [0, -(Math.random() * 300 + 500)],
+            opacity: [0, 0.7, 0.7, 0],
+            rotate: [0, Math.random() * 20 - 10],
+          }}
+          transition={{
+            duration: n.duration,
+            delay: n.delay,
+            repeat: Infinity,
+            ease: 'linear',
+          }}
+        >
+          {n.icon}
+        </motion.div>
+      ))}
+    </div>
+  );
+}
+
+// ── Animated stat counter ─────────────────────────────────────────────────
+function CountUp({ to, suffix = '' }: { to: number; suffix?: string }) {
+  const [val, setVal] = useState(0);
+  const ref = useRef<HTMLSpanElement>(null);
+  const started = useRef(false);
+
+  useEffect(() => {
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        if (entry.isIntersecting && !started.current) {
+          started.current = true;
+          const start = Date.now();
+          const duration = 1600;
+          const tick = () => {
+            const elapsed = Date.now() - start;
+            const progress = Math.min(elapsed / duration, 1);
+            const eased = 1 - Math.pow(1 - progress, 3);
+            setVal(Math.round(eased * to));
+            if (progress < 1) requestAnimationFrame(tick);
+          };
+          requestAnimationFrame(tick);
+        }
+      },
+      { threshold: 0.5 }
+    );
+    if (ref.current) observer.observe(ref.current);
+    return () => observer.disconnect();
+  }, [to]);
+
+  return <span ref={ref}>{val.toLocaleString()}{suffix}</span>;
+}
+
+// ── 3D Tilt Feature Card ──────────────────────────────────────────────────
+function TiltCard({
+  icon,
+  title,
+  desc,
+  color,
+  delay,
+}: {
+  icon: React.ReactNode;
+  title: string;
+  desc: string;
+  color: string;
+  delay: number;
+}) {
+  const ref = useRef<HTMLDivElement>(null);
+  const x = useMotionValue(0);
+  const y = useMotionValue(0);
+  const rotateX = useTransform(y, [-0.5, 0.5], ['8deg', '-8deg']);
+  const rotateY = useTransform(x, [-0.5, 0.5], ['-8deg', '8deg']);
+  const springConfig = { stiffness: 300, damping: 30 };
+  const sRotateX = useSpring(rotateX, springConfig);
+  const sRotateY = useSpring(rotateY, springConfig);
+
+  const handleMouseMove = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
+    const rect = ref.current?.getBoundingClientRect();
+    if (!rect) return;
+    x.set((e.clientX - rect.left) / rect.width - 0.5);
+    y.set((e.clientY - rect.top) / rect.height - 0.5);
+  }, [x, y]);
+
+  const handleMouseLeave = () => { x.set(0); y.set(0); };
+
+  return (
+    <motion.div
+      ref={ref}
+      onMouseMove={handleMouseMove}
+      onMouseLeave={handleMouseLeave}
+      style={{ perspective: 800, rotateX: sRotateX, rotateY: sRotateY, transformStyle: 'preserve-3d' }}
+      className="relative p-6 rounded-2xl cursor-default"
+      initial={{ opacity: 0, y: 24 }}
+      whileInView={{ opacity: 1, y: 0 }}
+      viewport={{ once: true }}
+      transition={{ duration: 0.5, delay, ease: [0.22, 1, 0.36, 1] }}
+    >
+      {/* Card bg */}
+      <div
+        className="absolute inset-0 rounded-2xl"
+        style={{
+          background: tk.cardBg,
+          border: `1px solid ${tk.cardBorder}`,
+        }}
+      />
+      {/* Top accent */}
+      <div
+        className="absolute top-0 left-0 right-0 h-0.5 rounded-t-2xl"
+        style={{ background: color }}
+      />
+      {/* Glow on hover — transforms with card */}
+      <motion.div
+        className="absolute inset-0 rounded-2xl opacity-0 transition-opacity"
+        style={{ background: `radial-gradient(circle at 50% 0%, ${color}18, transparent 60%)` }}
+        whileHover={{ opacity: 1 }}
+      />
+
+      <div className="relative text-center space-y-3" style={{ transform: 'translateZ(20px)' }}>
+        <div
+          className="w-12 h-12 rounded-xl flex items-center justify-center mx-auto"
+          style={{ background: `${color}18`, color }}
+        >
+          {icon}
+        </div>
+        <h3 className="text-white font-bold text-base">{title}</h3>
+        <p className="text-sm leading-6" style={{ color: tk.textSec }}>
+          {desc}
+        </p>
+      </div>
+    </motion.div>
+  );
+}
+
+// ── Search result item ────────────────────────────────────────────────────
+function SearchResultItem({
+  org,
+  index,
+  onClick,
+}: {
+  org: Organization;
+  index: number;
+  onClick: () => void;
+}) {
+  const [hovered, setHovered] = useState(false);
+  return (
+    <motion.button
+      initial={{ opacity: 0, x: -12 }}
+      animate={{ opacity: 1, x: 0 }}
+      transition={{ delay: index * 0.06, duration: 0.28, ease: [0.22, 1, 0.36, 1] }}
+      onClick={onClick}
+      onHoverStart={() => setHovered(true)}
+      onHoverEnd={() => setHovered(false)}
+      className="w-full flex items-center gap-4 px-5 py-4 transition-colors text-left"
+      style={{ background: hovered ? 'rgba(255,104,3,0.06)' : 'transparent' }}
+    >
+      <div
+        className="w-10 h-10 rounded-xl flex items-center justify-center shrink-0 transition-all"
+        style={{
+          background: hovered ? `${tk.primary}25` : `${tk.primary}15`,
+          color: tk.primary,
+        }}
+      >
+        {ORG_TYPE_ICONS[org.organization_type] || <Building2 className="w-5 h-5" />}
+      </div>
+      <div className="flex-1 min-w-0">
+        <p className="text-white font-semibold text-sm truncate">{org.name}</p>
+        <p className="text-xs capitalize mt-0.5" style={{ color: tk.textTer }}>
+          {org.organization_type} · {org.short_name}
+        </p>
+      </div>
+      <motion.div animate={{ x: hovered ? 3 : 0 }} transition={{ duration: 0.18 }}>
+        <ChevronRight className="w-4 h-4" style={{ color: hovered ? tk.primary : tk.textTer }} />
+      </motion.div>
+    </motion.button>
+  );
+}
+
+// ── Main component ─────────────────────────────────────────────────────────
 export default function LandingPage() {
-  const [searchQuery, setSearchQuery] = useState('');
+  const [searchQuery, setSearchQuery]   = useState('');
   const [searchResults, setSearchResults] = useState<Organization[]>([]);
-  const [searching, setSearching] = useState(false);
-  const [hasSearched, setHasSearched] = useState(false);
+  const [searching, setSearching]       = useState(false);
+  const [hasSearched, setHasSearched]   = useState(false);
+  const [searchFocused, setSearchFocused] = useState(false);
+  const [slugInput, setSlugInput]       = useState('');
+  const [slugValid, setSlugValid]       = useState<boolean | null>(null);
   const navigate = useNavigate();
 
   const handleSearch = async (query: string) => {
@@ -49,7 +310,6 @@ export default function LandingPage() {
       setHasSearched(false);
       return;
     }
-
     setSearching(true);
     setHasSearched(true);
     try {
@@ -62,297 +322,496 @@ export default function LandingPage() {
     }
   };
 
-  const goToOrg = (slug: string) => {
-    navigate(`/${slug}/login`);
+  const handleSlugChange = (val: string) => {
+    const clean = val.toLowerCase().replace(/[^a-z0-9-]/g, '');
+    setSlugInput(clean);
+    if (clean.length === 0) { setSlugValid(null); return; }
+    setSlugValid(clean.length >= 2);
+  };
+
+  const goToOrg = (slug: string) => navigate(`/${slug}/overview`);
+
+  const handleSlugSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (slugInput && slugValid) goToOrg(slugInput);
+  };
+
+  // Pulsing ring around search box when focused
+  const searchRingVariants = {
+    idle:    { opacity: 0, scale: 1 },
+    focused: { opacity: 1, scale: 1.02 },
   };
 
   return (
     <div
       className="min-h-screen relative overflow-x-hidden"
-      style={{
-        minHeight: '100dvh',
-        background: 'radial-gradient(ellipse at top, #1A0E09 0%, #0F0703 100%)',
-      }}
+      style={{ minHeight: '100dvh', background: tk.bg }}
     >
-      {/* Background effects */}
+      {/* ── Ambient background glows ── */}
       <div className="fixed inset-0 overflow-hidden pointer-events-none">
-        <div
-          className="absolute w-[600px] h-[600px] rounded-full blur-[150px] opacity-20"
+        <motion.div
+          className="absolute rounded-full blur-[160px]"
           style={{
-            background: `radial-gradient(circle, ${colors.primary} 0%, transparent 70%)`,
-            top: '-15%',
-            right: '-10%',
+            width: 640, height: 640,
+            background: `radial-gradient(circle, ${tk.primary} 0%, transparent 70%)`,
+            top: '-18%', right: '-12%', opacity: 0.18,
           }}
+          animate={{ scale: [1, 1.08, 1], opacity: [0.18, 0.23, 0.18] }}
+          transition={{ duration: 8, repeat: Infinity, ease: 'easeInOut' }}
         />
-        <div
-          className="absolute w-[400px] h-[400px] rounded-full blur-[120px] opacity-15"
+        <motion.div
+          className="absolute rounded-full blur-[130px]"
           style={{
-            background: `radial-gradient(circle, ${colors.accentCyan} 0%, transparent 70%)`,
-            bottom: '10%',
-            left: '-10%',
+            width: 420, height: 420,
+            background: `radial-gradient(circle, ${tk.mint} 0%, transparent 70%)`,
+            bottom: '8%', left: '-10%', opacity: 0.10,
+          }}
+          animate={{ scale: [1, 1.12, 1], opacity: [0.10, 0.14, 0.10] }}
+          transition={{ duration: 10, repeat: Infinity, ease: 'easeInOut', delay: 2 }}
+        />
+        {/* Diagonal grid lines */}
+        <div
+          className="absolute inset-0 opacity-[0.025]"
+          style={{
+            backgroundImage: `
+              repeating-linear-gradient(
+                -45deg,
+                transparent,
+                transparent 40px,
+                rgba(255,104,3,0.6) 40px,
+                rgba(255,104,3,0.6) 41px
+              )
+            `,
           }}
         />
       </div>
 
-      {/* Navbar */}
-      <nav className="relative z-10 flex items-center justify-between px-6 py-4 max-w-7xl mx-auto">
-        <div className="flex items-center gap-2">
-          <div
-            className="w-10 h-10 rounded-xl flex items-center justify-center font-bold text-white text-lg"
-            style={{ background: colors.primary }}
+      {/* ── Floating payment nodes ── */}
+      <FloatingNodes />
+
+      {/* ── Navbar ── */}
+      <motion.nav
+        className="relative z-20 flex items-center justify-between px-5 sm:px-8 py-4 max-w-7xl mx-auto"
+        initial={{ opacity: 0, y: -16 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.5 }}
+      >
+        <div className="flex items-center gap-2.5">
+          <motion.div
+            className="w-10 h-10 rounded-xl flex items-center justify-center font-extrabold text-white text-lg"
+            style={{ background: 'linear-gradient(135deg, #FF6803 0%, #FFAC5F 100%)', boxShadow: '0 4px 16px rgba(255,104,3,0.4)' }}
+            whileHover={{ rotate: [0, -5, 5, 0], scale: 1.1 }}
+            transition={{ duration: 0.4 }}
           >
             P
-          </div>
-          <span className="text-xl font-bold text-white">{APP_NAME}</span>
+          </motion.div>
+          <span className="text-xl font-extrabold text-white tracking-tight">{APP_NAME}</span>
         </div>
-        <div className="flex items-center gap-3">
-          <button
-            onClick={() => navigate('/create')}
-            className="hidden sm:flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-medium transition-all hover:scale-105"
-            style={{
-              color: colors.primary,
-              border: `1px solid ${colors.borderPrimary}`,
-              background: `rgba(255, 104, 3, 0.1)`,
-            }}
-          >
-            <Plus size={16} />
-            Create Organization
-          </button>
-        </div>
-      </nav>
 
-      {/* Hero Section */}
-      <main className="relative z-10 flex flex-col items-center px-4 pt-12 sm:pt-20 pb-16 max-w-4xl mx-auto">
-        <motion.div
-          className="text-center space-y-6 mb-12"
-          initial={{ opacity: 0, y: 30 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.7 }}
+        {/* Live indicator */}
+        <div
+          className="hidden sm:flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-semibold"
+          style={{ background: 'rgba(48,255,172,0.08)', color: tk.mint, border: '1px solid rgba(48,255,172,0.15)' }}
         >
-          <h1 className="text-4xl sm:text-5xl lg:text-6xl font-extrabold text-white leading-tight">
-            Smart Payment &
-            <br />
-            <span style={{ color: colors.primary }}> Dues Management</span>
-          </h1>
-          <p className="text-lg sm:text-xl max-w-2xl mx-auto" style={{ color: colors.textSecondary }}>
-            {APP_TAGLINE}. Track dues, manage expenses, and keep your community financially organized.
-          </p>
+          <motion.span
+            className="w-1.5 h-1.5 rounded-full"
+            style={{ background: tk.mint }}
+            animate={{ opacity: [1, 0.3, 1] }}
+            transition={{ duration: 1.6, repeat: Infinity }}
+          />
+          Platform Live
+        </div>
+      </motion.nav>
+
+      {/* ── Hero ── */}
+      <main className="relative z-10 flex flex-col items-center px-4 pt-12 sm:pt-20 pb-16 max-w-5xl mx-auto">
+
+        {/* Badge */}
+        <motion.div
+          className="mb-6 inline-flex items-center gap-2 px-4 py-2 rounded-full text-xs font-semibold"
+          style={{ background: `${tk.primary}14`, color: tk.primary, border: `1px solid ${tk.primary}25` }}
+          initial={{ opacity: 0, y: 12 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.4 }}
+        >
+          <Sparkles className="w-3.5 h-3.5" />
+          Smart Dues & Payment Platform for Nigerian Organizations
         </motion.div>
 
-        {/* Search Box */}
+        {/* Headline */}
         <motion.div
-          className="w-full max-w-xl mb-8"
-          initial={{ opacity: 0, y: 20 }}
+          className="text-center space-y-3 mb-5"
+          initial={{ opacity: 0, y: 24 }}
           animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.5, delay: 0.3 }}
+          transition={{ duration: 0.55, delay: 0.1 }}
         >
-          <div
-            className="relative rounded-2xl overflow-hidden"
-            style={{
-              background: 'rgba(26, 14, 9, 0.8)',
-              border: `1px solid ${colors.borderMedium}`,
-              boxShadow: `0 8px 32px rgba(255, 104, 3, 0.15)`,
-            }}
-          >
-            <Search
-              size={20}
-              className="absolute left-4 top-1/2 -translate-y-1/2"
-              style={{ color: colors.textTertiary }}
-            />
-            <input
-              type="text"
-              placeholder="Search for your organization..."
-              value={searchQuery}
-              onChange={(e) => handleSearch(e.target.value)}
-              className="w-full bg-transparent text-white pl-12 pr-4 py-4 text-lg outline-none placeholder-gray-500"
-            />
+          <h1 className="text-4xl sm:text-5xl lg:text-6xl font-extrabold text-white leading-[1.1] tracking-tight">
+            Payment Management
+            <br />
+            <span className="block mt-1">for</span>
+          </h1>
+          {/* Cycling word — same line height as headline */}
+          <div className="text-4xl sm:text-5xl lg:text-6xl font-extrabold leading-[1.1] tracking-tight h-[1.2em] flex items-center justify-center">
+            <CyclingWord />
           </div>
+        </motion.div>
 
-          {/* Search Results */}
-          {hasSearched && (
-            <motion.div
-              className="mt-3 rounded-2xl overflow-hidden"
-              initial={{ opacity: 0, y: -10 }}
-              animate={{ opacity: 1, y: 0 }}
+        <motion.p
+          className="text-base sm:text-lg max-w-xl text-center mb-10 leading-7"
+          style={{ color: tk.textSec }}
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          transition={{ delay: 0.3 }}
+        >
+          {APP_TAGLINE}. Track dues, manage expenses, and keep your community financially organized — in minutes, not months.
+        </motion.p>
+
+        {/* ── Search ── */}
+        <motion.div
+          className="w-full max-w-xl mb-3"
+          initial={{ opacity: 0, y: 16 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.45, delay: 0.35 }}
+        >
+          {/* Animated focus ring */}
+          <motion.div
+            className="absolute inset-0 rounded-2xl pointer-events-none"
+            style={{ boxShadow: `0 0 0 3px ${tk.primary}40` }}
+            variants={searchRingVariants}
+            animate={searchFocused ? 'focused' : 'idle'}
+            transition={{ duration: 0.25 }}
+          />
+
+          <div className="relative">
+            {/* Pulse glow behind box when focused */}
+            <AnimatePresence>
+              {searchFocused && (
+                <motion.div
+                  className="absolute -inset-px rounded-2xl pointer-events-none"
+                  style={{ boxShadow: `0 0 40px ${tk.primary}30` }}
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  exit={{ opacity: 0 }}
+                />
+              )}
+            </AnimatePresence>
+
+            <div
+              className="relative flex items-center rounded-2xl overflow-hidden transition-all"
               style={{
-                background: 'rgba(26, 14, 9, 0.9)',
-                border: `1px solid ${colors.borderLight}`,
+                background: 'rgba(26,14,9,0.85)',
+                border: `1px solid ${searchFocused ? tk.primary + '60' : tk.cardBorder}`,
+                boxShadow: searchFocused ? `0 8px 40px rgba(255,104,3,0.2)` : `0 4px 20px rgba(0,0,0,0.3)`,
               }}
             >
-              {searching ? (
-                <div className="p-6 text-center" style={{ color: colors.textTertiary }}>
-                  Searching...
-                </div>
-              ) : searchResults.length > 0 ? (
-                <div className="divide-y divide-white/5">
-                  {searchResults.map((org) => (
-                    <button
-                      key={org.id}
-                      onClick={() => goToOrg(org.slug)}
-                      className="w-full flex items-center gap-4 px-5 py-4 hover:bg-white/5 transition-colors text-left"
-                    >
-                      <div
-                        className="w-10 h-10 rounded-xl flex items-center justify-center shrink-0"
-                        style={{
-                          background: `${org.primary_color || colors.primary}20`,
-                          color: org.primary_color || colors.primary,
-                        }}
-                      >
-                        {ORG_TYPE_ICONS[org.organization_type] || <Building2 size={20} />}
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <p className="text-white font-medium truncate">{org.name}</p>
-                        <p className="text-sm capitalize" style={{ color: colors.textTertiary }}>
-                          {org.organization_type} &bull; {org.short_name}
-                        </p>
-                      </div>
-                      <ChevronRight size={18} style={{ color: colors.textTertiary }} />
-                    </button>
-                  ))}
-                </div>
-              ) : (
-                <div className="p-6 text-center space-y-3">
-                  <p style={{ color: colors.textTertiary }}>
-                    No organizations found for &quot;{searchQuery}&quot;
-                  </p>
-                  <button
-                    onClick={() => navigate('/create')}
-                    className="inline-flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-medium transition-all hover:scale-105"
-                    style={{
-                      color: colors.primary,
-                      border: `1px solid ${colors.borderPrimary}`,
-                    }}
+              <motion.div
+                animate={{ color: searchFocused ? tk.primary : tk.textTer }}
+                className="pl-4 shrink-0"
+              >
+                <Search className="w-5 h-5" />
+              </motion.div>
+              <input
+                type="text"
+                placeholder="Search for your organization…"
+                value={searchQuery}
+                onChange={(e) => handleSearch(e.target.value)}
+                onFocus={() => setSearchFocused(true)}
+                onBlur={() => setSearchFocused(false)}
+                className="flex-1 bg-transparent text-white pl-3 pr-4 py-4 text-base outline-none placeholder-white/20"
+              />
+              {/* Searching spinner */}
+              <AnimatePresence>
+                {searching && (
+                  <motion.div
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    exit={{ opacity: 0 }}
+                    className="pr-4"
                   >
-                    <Plus size={16} />
-                    Create your organization
-                  </button>
-                </div>
+                    <motion.div
+                      className="w-4 h-4 border-2 rounded-full"
+                      style={{ borderColor: `${tk.primary}30`, borderTopColor: tk.primary }}
+                      animate={{ rotate: 360 }}
+                      transition={{ duration: 0.8, repeat: Infinity, ease: 'linear' }}
+                    />
+                  </motion.div>
+                )}
+              </AnimatePresence>
+            </div>
+
+            {/* Dropdown results */}
+            <AnimatePresence>
+              {hasSearched && (
+                <motion.div
+                  className="absolute top-full left-0 right-0 mt-2 rounded-2xl overflow-hidden z-30"
+                  style={{
+                    background: 'rgba(18,8,4,0.97)',
+                    border: `1px solid ${tk.cardBorder}`,
+                    boxShadow: '0 16px 48px rgba(0,0,0,0.5)',
+                    backdropFilter: 'blur(16px) ',
+                    transformOrigin: 'top',
+                  }}
+                  initial={{ opacity: 0, y: -8, scaleY: 0.95 }}
+                  animate={{ opacity: 1, y: 0, scaleY: 1 }}
+                  exit={{ opacity: 0, y: -8, scaleY: 0.95 }}
+                  transition={{ duration: 0.22, ease: [0.22, 1, 0.36, 1] }}
+                  // style={{ transformOrigin: 'top' }}
+                >
+                  {searching ? (
+                    <div className="px-5 py-6 flex items-center gap-3" style={{ color: tk.textTer }}>
+                      <motion.div
+                        className="w-4 h-4 border-2 rounded-full shrink-0"
+                        style={{ borderColor: `${tk.primary}30`, borderTopColor: tk.primary }}
+                        animate={{ rotate: 360 }}
+                        transition={{ duration: 0.8, repeat: Infinity, ease: 'linear' }}
+                      />
+                      Searching organizations…
+                    </div>
+                  ) : searchResults.length > 0 ? (
+                    <>
+                      <div
+                        className="px-5 py-2.5 text-[10px] uppercase tracking-widest font-semibold"
+                        style={{ color: tk.textTer, borderBottom: `1px solid ${tk.cardBorder}` }}
+                      >
+                        {searchResults.length} result{searchResults.length !== 1 ? 's' : ''} found
+                      </div>
+                      <div>
+                        {searchResults.map((org, i) => (
+                          <SearchResultItem
+                            key={org.id}
+                            org={org}
+                            index={i}
+                            onClick={() => goToOrg(org.slug)}
+                          />
+                        ))}
+                      </div>
+                    </>
+                  ) : (
+                    <div className="px-5 py-6 text-center space-y-3">
+                      <p className="text-sm" style={{ color: tk.textSec }}>
+                        No organizations found for <span className="text-white font-semibold">"{searchQuery}"</span>
+                      </p>
+                      <motion.button
+                        onClick={() => navigate('/join-org')}
+                        className="inline-flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold"
+                        style={{ color: tk.primary, background: `${tk.primary}15`, border: `1px solid ${tk.primary}30` }}
+                        whileHover={{ scale: 1.04 }}
+                        whileTap={{ scale: 0.97 }}
+                      >
+                        <Plus className="w-4 h-4" />
+                        Request a new organization
+                      </motion.button>
+                    </div>
+                  )}
+                </motion.div>
               )}
-            </motion.div>
-          )}
+            </AnimatePresence>
+          </div>
         </motion.div>
 
-        {/* OR divider */}
-        <div className="flex items-center gap-4 w-full max-w-xl mb-8">
-          <div className="flex-1 h-px" style={{ background: colors.borderLight }} />
-          <span className="text-sm font-medium" style={{ color: colors.textTertiary }}>
-            or enter your org link
-          </span>
-          <div className="flex-1 h-px" style={{ background: colors.borderLight }} />
-        </div>
-
-        {/* Direct Slug Entry */}
-        <motion.form
-          className="w-full max-w-xl flex gap-3"
+        {/* ── Divider ── */}
+        <motion.div
+          className="flex items-center gap-4 w-full max-w-xl my-5"
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           transition={{ delay: 0.5 }}
-          onSubmit={(e) => {
-            e.preventDefault();
-            const input = (e.currentTarget.elements.namedItem('slug') as HTMLInputElement)?.value?.trim().toLowerCase();
-            if (input) goToOrg(input);
-          }}
         >
-          <div
-            className="flex-1 flex items-center rounded-xl overflow-hidden"
-            style={{
-              background: 'rgba(26, 14, 9, 0.9)',
-              border: `1px solid ${colors.borderLight}`,
-            }}
-          >
-            <span className="pl-4 text-sm shrink-0" style={{ color: colors.textTertiary }}>
-              payvexo.com/
-            </span>
-            <input
-              name="slug"
-              type="text"
-              placeholder="your-org"
-              className="flex-1 bg-transparent text-white px-1 py-3 outline-none"
-            />
-          </div>
-          <button
-            type="submit"
-            className="px-5 py-3 rounded-xl font-medium text-white flex items-center gap-2 transition-all hover:scale-105 active:scale-95"
-            style={{ background: colors.primary }}
-          >
-            Go
-            <ArrowRight size={18} />
-          </button>
-        </motion.form>
+          <div className="flex-1 h-px" style={{ background: tk.cardBorder }} />
+          <span className="text-xs font-medium" style={{ color: tk.textTer }}>or enter your org link</span>
+          <div className="flex-1 h-px" style={{ background: tk.cardBorder }} />
+        </motion.div>
 
-        {/* Features Grid */}
-        <motion.div
-          className="grid grid-cols-1 sm:grid-cols-3 gap-4 mt-20 w-full max-w-3xl"
-          initial={{ opacity: 0, y: 30 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.6, delay: 0.7 }}
+        {/* ── Slug Entry ── */}
+        <motion.form
+          className="w-full max-w-xl"
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          transition={{ delay: 0.55 }}
+          onSubmit={handleSlugSubmit}
         >
-          {[
-            {
-              icon: <Shield size={24} />,
-              title: 'Secure',
-              desc: 'Bank-level encryption & role-based access control',
-            },
-            {
-              icon: <Zap size={24} />,
-              title: 'Fast',
-              desc: 'Real-time tracking with instant notifications',
-            },
-            {
-              icon: <Globe size={24} />,
-              title: 'Universal',
-              desc: 'Universities, churches, clubs & organizations',
-            },
-          ].map(({ icon, title, desc }) => (
+          <div className="flex gap-2.5">
             <div
-              key={title}
-              className="p-6 rounded-2xl text-center space-y-3"
+              className="flex-1 flex items-center rounded-xl overflow-hidden transition-all"
               style={{
-                background: 'rgba(26, 14, 9, 0.5)',
-                border: `1px solid ${colors.borderLight}`,
+                background: 'rgba(26,14,9,0.9)',
+                border: `1px solid ${
+                  slugInput.length > 0
+                    ? slugValid
+                      ? 'rgba(48,255,172,0.4)'
+                      : 'rgba(239,68,68,0.4)'
+                    : tk.cardBorder
+                }`,
               }}
             >
-              <div className="inline-flex p-3 rounded-xl" style={{ background: `${colors.primary}15`, color: colors.primary }}>
+              <span
+                className="pl-3.5 text-sm font-medium shrink-0 select-none"
+                style={{ color: tk.textTer }}
+              >
+                payvexo.com/
+              </span>
+              <input
+                name="slug"
+                type="text"
+                placeholder="your-org-slug"
+                value={slugInput}
+                onChange={(e) => handleSlugChange(e.target.value)}
+                className="flex-1 bg-transparent text-white px-1.5 py-3 text-sm outline-none placeholder-white/20"
+              />
+              {/* Validation icon */}
+              <AnimatePresence>
+                {slugInput.length > 0 && (
+                  <motion.span
+                    initial={{ opacity: 0, scale: 0.6 }}
+                    animate={{ opacity: 1, scale: 1 }}
+                    exit={{ opacity: 0, scale: 0.6 }}
+                    className="pr-3"
+                  >
+                    {slugValid
+                      ? <CheckCircle className="w-4 h-4" style={{ color: tk.mint }} />
+                      : <span className="w-4 h-4 flex items-center justify-center text-xs text-red-400">✗</span>
+                    }
+                  </motion.span>
+                )}
+              </AnimatePresence>
+            </div>
+            <motion.button
+              type="submit"
+              disabled={!slugValid}
+              className="px-5 py-3 rounded-xl font-semibold text-sm text-white flex items-center gap-2 disabled:opacity-40"
+              style={{ background: 'linear-gradient(135deg, #FF6803 0%, #FFAC5F 100%)' }}
+              whileHover={{ scale: slugValid ? 1.04 : 1 }}
+              whileTap={{ scale: slugValid ? 0.97 : 1 }}
+            >
+              Go
+              <ArrowRight className="w-4 h-4" />
+            </motion.button>
+          </div>
+          {/* Character hint */}
+          {slugInput.length > 0 && !slugValid && (
+            <motion.p
+              initial={{ opacity: 0, y: -4 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="mt-1.5 text-xs pl-1"
+              style={{ color: '#ef4444' }}
+            >
+              Slug must be at least 2 characters (letters, numbers, hyphens only)
+            </motion.p>
+          )}
+        </motion.form>
+
+        {/* ── Stats strip ── */}
+        <motion.div
+          className="w-full max-w-xl mt-10 grid grid-cols-3 gap-3"
+          initial={{ opacity: 0, y: 16 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.65 }}
+        >
+          {[
+            { icon: <Users className="w-4 h-4" />,      label: 'Members tracked',   to: 12400, suffix: '+', color: tk.primary },
+            { icon: <DollarSign className="w-4 h-4" />, label: 'Dues collected',     to: 3800, suffix: 'M+', color: tk.mint,    prefix: '₦' },
+            { icon: <TrendingUp className="w-4 h-4" />, label: 'Organizations live', to: 420,  suffix: '+', color: '#8b5cf6' },
+          ].map(({ icon, label, to, suffix, color, prefix }) => (
+            <div
+              key={label}
+              className="rounded-2xl p-4 text-center relative overflow-hidden"
+              style={{ background: tk.cardBg, border: `1px solid ${tk.cardBorder}` }}
+            >
+              <div className="absolute top-0 left-0 right-0 h-0.5" style={{ background: color }} />
+              <div
+                className="w-7 h-7 rounded-lg flex items-center justify-center mx-auto mb-2"
+                style={{ background: `${color}15`, color }}
+              >
                 {icon}
               </div>
-              <h3 className="text-white font-semibold">{title}</h3>
-              <p className="text-sm" style={{ color: colors.textTertiary }}>
-                {desc}
+              <p className="text-lg font-extrabold text-white">
+                {prefix}<CountUp to={to} suffix={suffix} />
               </p>
+              <p className="text-[10px] mt-0.5" style={{ color: tk.textTer }}>{label}</p>
             </div>
           ))}
         </motion.div>
 
-        {/* CTA */}
+        {/* ── Feature cards (3D tilt) ── */}
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mt-16 w-full max-w-3xl">
+          <TiltCard
+            icon={<Shield className="w-6 h-6" />}
+            title="Bank-grade Security"
+            desc="Role-based access control, encrypted data, and audit logs on every transaction."
+            color={tk.primary}
+            delay={0}
+          />
+          <TiltCard
+            icon={<Zap className="w-6 h-6" />}
+            title="Real-time Tracking"
+            desc="Instant notifications, live payment status, and real-time analytics dashboards."
+            color={tk.mint}
+            delay={0.1}
+          />
+          <TiltCard
+            icon={<Globe className="w-6 h-6" />}
+            title="Any Organization"
+            desc="Universities, churches, clubs, cooperatives — one platform, every community."
+            color="#8b5cf6"
+            delay={0.2}
+          />
+        </div>
+
+        {/* ── CTA ── */}
         <motion.div
           className="mt-16 text-center space-y-4"
           initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          transition={{ delay: 1 }}
+          whileInView={{ opacity: 1 }}
+          viewport={{ once: true }}
+          transition={{ duration: 0.5 }}
         >
-          <p style={{ color: colors.textTertiary }}>
-            Ready to get started?
+          <p className="text-sm" style={{ color: tk.textTer }}>
+            Ready to get your organization set up?
           </p>
-          <button
-            onClick={() => navigate('/create')}
-            className="px-8 py-4 rounded-2xl text-white font-semibold text-lg transition-all hover:scale-105 active:scale-95"
+          <motion.button
+            onClick={() => navigate('/join-org')}
+            className="px-8 py-4 rounded-2xl text-white font-bold text-base relative overflow-hidden"
             style={{
-              background: `linear-gradient(135deg, ${colors.primary}, ${colors.primaryDark})`,
-              boxShadow: `0 8px 30px ${colors.primary}40`,
+              background: 'linear-gradient(135deg, #FF6803 0%, #FFAC5F 100%)',
+              boxShadow: '0 10px 40px rgba(255,104,3,0.4)',
             }}
+            whileHover={{ scale: 1.05, boxShadow: '0 14px 50px rgba(255,104,3,0.55)' }}
+            whileTap={{ scale: 0.97 }}
           >
-            Create Your Organization — Free
-          </button>
-          <p className="text-xs" style={{ color: colors.textDisabled }}>
-            No credit card required &bull; 14-day free trial
+            {/* Shimmer sweep on hover */}
+            <motion.div
+              className="absolute inset-0 pointer-events-none"
+              style={{ background: 'linear-gradient(105deg, transparent 35%, rgba(255,255,255,0.18) 50%, transparent 65%)' }}
+              initial={{ x: '-100%' }}
+              whileHover={{ x: '100%' }}
+              transition={{ duration: 0.55, ease: 'easeInOut' }}
+            />
+            <span className="relative flex items-center gap-2">
+              Get Started — It's Free
+              <ArrowRight className="w-5 h-5" />
+            </span>
+          </motion.button>
+          <p className="text-xs" style={{ color: tk.textTer }}>
+            No credit card required · 14-day free trial · Cancel anytime
           </p>
         </motion.div>
       </main>
 
-      {/* Footer */}
-      <footer className="relative z-10 border-t py-8 px-6 text-center" style={{ borderColor: colors.borderLight }}>
-        <p className="text-sm" style={{ color: colors.textDisabled }}>
-          &copy; {new Date().getFullYear()} {APP_NAME}. All rights reserved.
+      {/* ── Footer ── */}
+      <footer
+        className="relative z-10 py-8 px-6 text-center mt-4"
+        style={{ borderTop: `1px solid ${tk.cardBorder}` }}
+      >
+        <div className="flex items-center justify-center gap-2 mb-2">
+          <div
+            className="w-6 h-6 rounded-lg flex items-center justify-center font-extrabold text-white text-xs"
+            style={{ background: tk.primary }}
+          >
+            P
+          </div>
+          <span className="text-sm font-bold text-white">{APP_NAME}</span>
+        </div>
+        <p className="text-xs" style={{ color: tk.textTer }}>
+          © {new Date().getFullYear()} {APP_NAME}. Built in Nigeria, for Nigerian organizations.
         </p>
       </footer>
     </div>

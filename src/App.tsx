@@ -28,17 +28,19 @@ import ExpensesPage from '@/pages/admin/ExpensesPage';
 import PublicContributionsPage from '@/pages/admin/PublicContributionsPage';
 import DonationSettingsPage from '@/pages/admin/DonationSettingsPage';
 import BillingPage from '@/pages/admin/BillingPage';
+import OrgGroupsPage from '@/pages/admin/OrgGroupsPage';
+import OrgAcademicCalendarPage from '@/pages/admin/OrgAcademicCalendarPage';
 import ContributePage from '@/pages/ContributePage';
 import NotFoundPage from '@/pages/NotFoundPage';
 
 // Multi-Tenant Pages (public / onboarding)
 import LandingPage from '@/pages/LandingPage';
 import OrgLoginPage from '@/pages/OrgLoginPage';
-import CreateOrganizationPage from '@/pages/CreateOrganizationPage';
 import OrgCompleteProfilePage from '@/pages/OrgCompleteProfilePage';
 import OrgChangePasswordPage from '@/pages/OrgChangePasswordPage';
 import JoinOrganizationPage from '@/pages/JoinOrganizationPage';
 import CreateDepartmentPage from '@/pages/CreateDepartmentPage';
+import OrgOverviewPage from '@/pages/OrgOverviewPage';
 import PlatformConsolePage from '@/pages/PlatformConsolePage';
 import ForgotPasswordPage from '@/pages/student/ForgotPasswordPage';
 import ResetPasswordPage from '@/pages/student/ResetPasswordPage';
@@ -59,11 +61,11 @@ function App() {
               {/* PUBLIC ROUTES                                */}
               {/* ============================================ */}
 
-              {/* Landing — search or create your organization */}
+              {/* Landing — search for your organization */}
               <Route path="/" element={<LandingPage />} />
 
-              {/* Create a new organization */}
-              <Route path="/create" element={<CreateOrganizationPage />} />
+              {/* Create organization — NOW MOVED TO ADMIN CONSOLE (/pvx-console) */}
+              {/* <Route path="/create" element={<CreateOrganizationPage />} /> */}
 
               {/* Join existing org by creating a department */}
               <Route path="/join-org" element={<CreateDepartmentPage />} />
@@ -72,6 +74,7 @@ function App() {
               <Route path="/pvx-console" element={<PlatformConsolePage />} />
 
               {/* Org-scoped login */}
+              <Route path="/:orgSlug/overview" element={<OrgOverviewPage />} />
               <Route path="/:orgSlug/login" element={<OrgLoginPage />} />
 
               {/* Org-scoped public contribution page */}
@@ -104,6 +107,8 @@ function App() {
                 {/* Admin pages */}
                 <Route path="admin/dashboard" element={<OrgProtectedRoute requireAdmin><AdminDashboardPage /></OrgProtectedRoute>} />
                 <Route path="admin/members" element={<OrgProtectedRoute requiredPermission="can_manage_members"><OrgMembersPage /></OrgProtectedRoute>} />
+                <Route path="admin/groups" element={<OrgProtectedRoute requiredPermission="can_manage_members"><OrgGroupsPage /></OrgProtectedRoute>} />
+                <Route path="admin/academic-calendar" element={<OrgProtectedRoute requireAdmin><OrgAcademicCalendarPage /></OrgProtectedRoute>} />
                 <Route path="admin/create-payment" element={<OrgProtectedRoute requiredPermission="can_create_payments"><CreatePaymentTypePage /></OrgProtectedRoute>} />
                 <Route path="admin/manage-dues" element={<OrgProtectedRoute requiredPermission="can_create_payments"><ManageDuesPage /></OrgProtectedRoute>} />
                 <Route path="admin/review" element={<OrgProtectedRoute requiredPermission="can_approve_payments"><AdminReviewPage /></OrgProtectedRoute>} />

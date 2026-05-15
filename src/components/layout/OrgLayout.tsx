@@ -35,6 +35,7 @@ import {
   HandCoins,
   Heart,
   Wallet,
+  CalendarDays,
 } from 'lucide-react';
 import { colors, glows, glass } from '@/config/colors';
 // import { APP_NAME } from '@/config/constants';
@@ -142,6 +143,10 @@ export default function OrgLayout() {
   const isActive = (path: string) => location.pathname === `${basePath}${path}`;
   const isActivePrefix = (prefix: string) => location.pathname.startsWith(`${basePath}${prefix}`);
   const admin = isAnyAdmin();
+  const isAcademicOrg = organization.organization_type === 'university' || organization.organization_type === 'school';
+  const groupNavLabel = isAcademicOrg
+    ? 'Faculties & Classes'
+    : (organization.group_label_plural || 'Groups');
 
   /* ──── Navigation Items ──── */
   const memberNav: NavItem[] = [
@@ -152,6 +157,8 @@ export default function OrgLayout() {
   const adminNav: NavItem[] = admin ? [
     { path: '/admin/dashboard', label: 'Overview', icon: <PieChart size={20} />, section: 'admin' },
     { path: '/admin/members', label: organization.member_label_plural || 'Members', icon: <Users size={20} />, section: 'admin' },
+    { path: '/admin/groups', label: groupNavLabel, icon: <Building2 size={20} />, section: 'admin', hideOnMobile: true },
+    ...(isAcademicOrg ? [{ path: '/admin/academic-calendar', label: 'Academic Calendar', icon: <CalendarDays size={20} />, section: 'admin' as const, hideOnMobile: true }] : []),
     { path: '/admin/create-payment', label: 'Create Dues', icon: <BadgeDollarSign size={20} />, section: 'admin', hideOnMobile: true },
     { path: '/admin/manage-dues', label: 'Manage Dues', icon: <Receipt size={20} />, section: 'admin', hideOnMobile: true },
     { path: '/admin/review', label: 'Review', icon: <ClipboardCheck size={20} />, section: 'admin', hideOnMobile: true },

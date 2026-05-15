@@ -16,8 +16,8 @@ DECLARE
     org_id UUID;
 BEGIN
     SELECT organization_id INTO org_id
-    FROM students
-    WHERE id = auth.uid();
+    FROM organization_members
+        WHERE id::text = auth.uid()::text;
     
     RETURN org_id;
 END;
@@ -29,9 +29,9 @@ RETURNS UUID AS $$
 DECLARE
     dept_id UUID;
 BEGIN
-    SELECT department_id INTO dept_id
-    FROM students
-    WHERE id = auth.uid();
+    SELECT group_id INTO dept_id
+    FROM organization_members
+        WHERE id::text = auth.uid()::text;
     
     RETURN dept_id;
 END;
@@ -42,9 +42,9 @@ CREATE OR REPLACE FUNCTION is_admin_for_org(org_id UUID)
 RETURNS BOOLEAN AS $$
 BEGIN
     RETURN EXISTS (
-        SELECT 1 FROM admins
-        WHERE student_id = auth.uid()
-        AND organization_id = org_id
+        SELECT 1 FROM member_admins
+        WHERE member_id::text = auth.uid()::text
+        AND organization_id::text = org_id::text
         AND is_active = true
     );
 END;
@@ -57,95 +57,121 @@ DECLARE
     has_perm BOOLEAN := false;
 BEGIN
     EXECUTE format(
-        'SELECT COALESCE(bool_or(%I), false) FROM admins WHERE student_id = $1 AND is_active = true',
+        'SELECT COALESCE(bool_or(%I), false) FROM member_admins WHERE member_id::text = $1 AND organization_id::text = get_current_user_org_id()::text AND is_active = true',
         permission_name
-    ) INTO has_perm USING auth.uid();
+    ) INTO has_perm USING auth.uid()::text;
     
     RETURN has_perm;
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER STABLE;
 
+-- Create member_admins table if it does not exist
+CREATE TABLE IF NOT EXISTS member_admins (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    member_id UUID NOT NULL REFERENCES organization_members(id) ON DELETE CASCADE,
+    organization_id UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+    group_id UUID REFERENCES organization_groups(id) ON DELETE CASCADE,
+    role TEXT NOT NULL DEFAULT 'class_rep',
+    can_create_payments BOOLEAN DEFAULT false,
+    can_approve_payments BOOLEAN DEFAULT false,
+    can_manage_students BOOLEAN DEFAULT false,
+    can_manage_admins BOOLEAN DEFAULT false,
+    can_manage_expenses BOOLEAN DEFAULT false,
+    can_view_analytics BOOLEAN DEFAULT false,
+    can_export_data BOOLEAN DEFAULT false,
+    can_manage_settings BOOLEAN DEFAULT false,
+    is_active BOOLEAN DEFAULT true,
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW(),
+    appointed_by UUID REFERENCES member_admins(id),
+    UNIQUE(member_id, organization_id, group_id, role)
+);
+
+CREATE INDEX IF NOT EXISTS idx_member_admins_org ON member_admins(organization_id);
+CREATE INDEX IF NOT EXISTS idx_member_admins_group ON member_admins(group_id);
+CREATE INDEX IF NOT EXISTS idx_member_admins_member ON member_admins(member_id);
+
 -- ============================================================
--- Students RLS Policies
+-- Organization Members RLS Policies
 -- ============================================================
 
-ALTER TABLE students ENABLE ROW LEVEL SECURITY;
+ALTER TABLE organization_members ENABLE ROW LEVEL SECURITY;
 
 -- Drop existing policies
-DROP POLICY IF EXISTS "students_select" ON students;
-DROP POLICY IF EXISTS "students_insert" ON students;
-DROP POLICY IF EXISTS "students_update" ON students;
-DROP POLICY IF EXISTS "students_delete" ON students;
+DROP POLICY IF EXISTS "organization_members_select" ON organization_members;
+DROP POLICY IF EXISTS "organization_members_insert" ON organization_members;
+DROP POLICY IF EXISTS "organization_members_update" ON organization_members;
+DROP POLICY IF EXISTS "organization_members_delete" ON organization_members;
 
--- SELECT: Users can view students in their organization
-CREATE POLICY "students_select" ON students
+-- SELECT: Users can view members in their organization
+CREATE POLICY "organization_members_select" ON organization_members
     FOR SELECT
-    USING (organization_id = get_current_user_org_id());
+    USING (organization_id::text = get_current_user_org_id()::text);
 
--- INSERT: Only admins with can_manage_students can create students
-CREATE POLICY "students_insert" ON students
+-- INSERT: Only admins with can_manage_students can create members
+CREATE POLICY "organization_members_insert" ON organization_members
     FOR INSERT
     WITH CHECK (
-        organization_id = get_current_user_org_id()
+        organization_id::text = get_current_user_org_id()::text
         AND has_permission('can_manage_students')
     );
 
 -- UPDATE: Users can update themselves, admins can update others
-CREATE POLICY "students_update" ON students
+CREATE POLICY "organization_members_update" ON organization_members
     FOR UPDATE
     USING (
-        organization_id = get_current_user_org_id()
+        organization_id::text = get_current_user_org_id()::text
         AND (
-            id = auth.uid()  -- Can update self
+                id::text = auth.uid()::text  -- Can update self
             OR has_permission('can_manage_students')
         )
     );
 
 -- DELETE: Only admins with can_manage_students
-CREATE POLICY "students_delete" ON students
+CREATE POLICY "organization_members_delete" ON organization_members
     FOR DELETE
     USING (
-        organization_id = get_current_user_org_id()
+        organization_id::text = get_current_user_org_id()::text
         AND has_permission('can_manage_students')
     );
 
 -- ============================================================
--- Admins RLS Policies
+-- Member Admins RLS Policies
 -- ============================================================
 
-ALTER TABLE admins ENABLE ROW LEVEL SECURITY;
+ALTER TABLE member_admins ENABLE ROW LEVEL SECURITY;
 
-DROP POLICY IF EXISTS "admins_select" ON admins;
-DROP POLICY IF EXISTS "admins_insert" ON admins;
-DROP POLICY IF EXISTS "admins_update" ON admins;
-DROP POLICY IF EXISTS "admins_delete" ON admins;
+DROP POLICY IF EXISTS "member_admins_select" ON member_admins;
+DROP POLICY IF EXISTS "member_admins_insert" ON member_admins;
+DROP POLICY IF EXISTS "member_admins_update" ON member_admins;
+DROP POLICY IF EXISTS "member_admins_delete" ON member_admins;
 
--- SELECT: Users can view admins in their organization
-CREATE POLICY "admins_select" ON admins
+-- SELECT: Users can view admin records in their organization
+CREATE POLICY "member_admins_select" ON member_admins
     FOR SELECT
-    USING (organization_id = get_current_user_org_id());
+    USING (organization_id::text = get_current_user_org_id()::text);
 
 -- INSERT: Only admins with can_manage_admins
-CREATE POLICY "admins_insert" ON admins
+CREATE POLICY "member_admins_insert" ON member_admins
     FOR INSERT
     WITH CHECK (
-        organization_id = get_current_user_org_id()
+        organization_id::text = get_current_user_org_id()::text
         AND has_permission('can_manage_admins')
     );
 
 -- UPDATE: Only admins with can_manage_admins
-CREATE POLICY "admins_update" ON admins
+CREATE POLICY "member_admins_update" ON member_admins
     FOR UPDATE
     USING (
-        organization_id = get_current_user_org_id()
+        organization_id::text = get_current_user_org_id()::text
         AND has_permission('can_manage_admins')
     );
 
 -- DELETE: Only admins with can_manage_admins
-CREATE POLICY "admins_delete" ON admins
+CREATE POLICY "member_admins_delete" ON member_admins
     FOR DELETE
     USING (
-        organization_id = get_current_user_org_id()
+        organization_id::text = get_current_user_org_id()::text
         AND has_permission('can_manage_admins')
     );
 
@@ -163,13 +189,13 @@ DROP POLICY IF EXISTS "payment_types_delete" ON payment_types;
 -- SELECT: All users can view payment types in their org
 CREATE POLICY "payment_types_select" ON payment_types
     FOR SELECT
-    USING (organization_id = get_current_user_org_id());
+    USING (organization_id::text = get_current_user_org_id()::text);
 
 -- INSERT: Only admins with can_create_payments
 CREATE POLICY "payment_types_insert" ON payment_types
     FOR INSERT
     WITH CHECK (
-        organization_id = get_current_user_org_id()
+        organization_id::text = get_current_user_org_id()::text
         AND has_permission('can_create_payments')
     );
 
@@ -177,7 +203,7 @@ CREATE POLICY "payment_types_insert" ON payment_types
 CREATE POLICY "payment_types_update" ON payment_types
     FOR UPDATE
     USING (
-        organization_id = get_current_user_org_id()
+        organization_id::text = get_current_user_org_id()::text
         AND has_permission('can_create_payments')
     );
 
@@ -185,7 +211,7 @@ CREATE POLICY "payment_types_update" ON payment_types
 CREATE POLICY "payment_types_delete" ON payment_types
     FOR DELETE
     USING (
-        organization_id = get_current_user_org_id()
+        organization_id::text = get_current_user_org_id()::text
         AND has_permission('can_create_payments')
     );
 
@@ -205,7 +231,7 @@ CREATE POLICY "payments_select" ON payments
     USING (
         organization_id = get_current_user_org_id()
         AND (
-            student_id = auth.uid()
+                member_id = auth.uid()::uuid
             OR has_permission('can_approve_payments')
             OR has_permission('can_view_analytics')
         )
@@ -216,7 +242,7 @@ CREATE POLICY "payments_insert" ON payments
     FOR INSERT
     WITH CHECK (
         organization_id = get_current_user_org_id()
-        AND (student_id = auth.uid() OR has_permission('can_create_payments'))
+        AND (member_id = auth.uid()::uuid OR has_permission('can_create_payments'))
     );
 
 -- UPDATE: Only admins with can_approve_payments
@@ -287,7 +313,11 @@ CREATE POLICY "expenses_select" ON expenses
             OR EXISTS (
                 SELECT 1 FROM organization_settings os
                 WHERE os.organization_id = expenses.organization_id
-                AND os.allow_student_expense_view = true
+                AND COALESCE(
+                    (to_jsonb(os)->>'allow_student_expense_view')::boolean,
+                    (to_jsonb(os)->>'allow_member_expense_view')::boolean,
+                    true
+                ) = true
             )
         )
     );
@@ -321,7 +351,7 @@ DROP POLICY IF EXISTS "notifications_update" ON notifications;
 -- SELECT: Users can only see their own notifications
 CREATE POLICY "notifications_select" ON notifications
     FOR SELECT
-    USING (student_id = auth.uid());
+    USING (member_id = auth.uid()::uuid);
 
 -- INSERT: System/admins can create notifications for users in their org
 CREATE POLICY "notifications_insert" ON notifications
@@ -331,7 +361,7 @@ CREATE POLICY "notifications_insert" ON notifications
 -- UPDATE: Users can update (mark read) their own notifications
 CREATE POLICY "notifications_update" ON notifications
     FOR UPDATE
-    USING (student_id = auth.uid());
+    USING (member_id = auth.uid()::uuid);
 
 -- ============================================================
 -- Audit Logs RLS Policies
@@ -361,34 +391,42 @@ CREATE POLICY "audit_logs_insert" ON audit_logs
 
 -- These allow the service role to bypass RLS for admin operations
 
-CREATE POLICY "service_students" ON students
+DROP POLICY IF EXISTS "service_organization_members" ON organization_members;
+CREATE POLICY "service_organization_members" ON organization_members
     FOR ALL TO service_role
     USING (true) WITH CHECK (true);
 
-CREATE POLICY "service_admins" ON admins
+DROP POLICY IF EXISTS "service_member_admins" ON member_admins;
+CREATE POLICY "service_member_admins" ON member_admins
     FOR ALL TO service_role
     USING (true) WITH CHECK (true);
 
+DROP POLICY IF EXISTS "service_payment_types" ON payment_types;
 CREATE POLICY "service_payment_types" ON payment_types
     FOR ALL TO service_role
     USING (true) WITH CHECK (true);
 
+DROP POLICY IF EXISTS "service_payments" ON payments;
 CREATE POLICY "service_payments" ON payments
     FOR ALL TO service_role
     USING (true) WITH CHECK (true);
 
+DROP POLICY IF EXISTS "service_expense_categories" ON expense_categories;
 CREATE POLICY "service_expense_categories" ON expense_categories
     FOR ALL TO service_role
     USING (true) WITH CHECK (true);
 
+DROP POLICY IF EXISTS "service_expenses" ON expenses;
 CREATE POLICY "service_expenses" ON expenses
     FOR ALL TO service_role
     USING (true) WITH CHECK (true);
 
+DROP POLICY IF EXISTS "service_notifications" ON notifications;
 CREATE POLICY "service_notifications" ON notifications
     FOR ALL TO service_role
     USING (true) WITH CHECK (true);
 
+DROP POLICY IF EXISTS "service_audit_logs" ON audit_logs;
 CREATE POLICY "service_audit_logs" ON audit_logs
     FOR ALL TO service_role
     USING (true) WITH CHECK (true);

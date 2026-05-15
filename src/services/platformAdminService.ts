@@ -59,24 +59,35 @@ export interface PlatformStats {
  * Uses bcrypt check against platform_admins table
  */
 export async function platformAdminLogin(email: string, password: string): Promise<PlatformAdmin> {
-  // Use RPC to verify password via pgcrypto (same pattern as main auth)
-  const { data, error } = await supabase.rpc('verify_platform_admin', {
-    p_email: email.toLowerCase().trim(),
-    p_password: password,
-  });
+  const normalizedEmail = email.toLowerCase().trim();
 
-  if (error) {
-    console.error('[PVX Console] RPC error:', error.message, error.code);
-    if (error.message?.includes('Could not find the function') || error.code === '42883') {
-      throw new Error('Console not configured. Run the SQL setup first.');
+  const tryVerify = async (rpcName: 'verify_super_admin' | 'verify_platform_admin') => {
+    const { data, error } = await supabase.rpc(rpcName, {
+      p_email: normalizedEmail,
+      p_password: password,
+    });
+
+    if (error) {
+      if (error.message?.includes('Could not find the function') || error.code === '42883') {
+        return null;
+      }
+      throw new Error(error.message || 'Authentication failed');
     }
-    throw new Error(error.message || 'Authentication failed');
-  }
-  if (!data || (Array.isArray(data) && data.length === 0)) {
+
+    if (!data || (Array.isArray(data) && data.length === 0)) {
+      return null;
+    }
+
+    return Array.isArray(data) ? data[0] : data;
+  };
+
+  const superAdmin = await tryVerify('verify_super_admin');
+  const admin = superAdmin || await tryVerify('verify_platform_admin');
+
+  if (!admin) {
     throw new Error('Invalid email or password');
   }
 
-  const admin = Array.isArray(data) ? data[0] : data;
   if (!admin.is_active) throw new Error('Account is deactivated');
 
   // Store session (deliberately vague key)
@@ -84,10 +95,10 @@ export async function platformAdminLogin(email: string, password: string): Promi
     id: admin.id,
     email: admin.email,
     full_name: admin.full_name,
-    can_manage_organizations: admin.can_manage_organizations,
-    can_manage_subscriptions: admin.can_manage_subscriptions,
-    can_view_all_data: admin.can_view_all_data,
-    can_manage_platform_admins: admin.can_manage_platform_admins,
+    can_manage_organizations: true,
+    can_manage_subscriptions: true,
+    can_view_all_data: true,
+    can_manage_platform_admins: true,
     is_active: admin.is_active,
     last_login_at: admin.last_login_at,
     ts: Date.now(),
@@ -197,10 +208,10 @@ export async function toggleOrganizationStatus(orgId: string, isActive: boolean)
   const admin = getPlatformAdmin();
   if (!admin?.can_manage_organizations) throw new Error('Insufficient permissions');
 
-  const { error } = await supabase
-    .from('organizations')
-    .update({ is_active: isActive })
-    .eq('id', orgId);
+  const { error } = await supabase.rpc('set_organization_status', {
+    p_org_id: orgId,
+    p_is_active: isActive,
+  });
 
   if (error) throw error;
 }
@@ -233,18 +244,16 @@ export async function updateOrgSubscription(
 
   const defaults = planLimits[plan];
 
-  const { error } = await supabase
-    .from('organizations')
-    .update({
-      subscription_plan: plan,
-      max_groups: options?.max_groups ?? defaults.max_groups,
-      max_members: options?.max_members ?? defaults.max_members,
-      max_admins: options?.max_admins ?? defaults.max_admins,
-      subscription_expires_at: options?.subscription_expires_at ?? null,
-      is_on_trial: options?.is_on_trial ?? false,
-      trial_ends_at: options?.trial_ends_at ?? null,
-    })
-    .eq('id', orgId);
+  const { error } = await supabase.rpc('update_organization_subscription', {
+    p_org_id: orgId,
+    p_plan: plan,
+    p_max_groups: options?.max_groups ?? defaults.max_groups,
+    p_max_members: options?.max_members ?? defaults.max_members,
+    p_max_admins: options?.max_admins ?? defaults.max_admins,
+    p_subscription_expires_at: options?.subscription_expires_at ?? null,
+    p_is_on_trial: options?.is_on_trial ?? false,
+    p_trial_ends_at: options?.trial_ends_at ?? null,
+  });
 
   if (error) throw error;
 }
@@ -259,13 +268,10 @@ export async function extendTrial(orgId: string, days: number): Promise<void> {
   const trialEnd = new Date();
   trialEnd.setDate(trialEnd.getDate() + days);
 
-  const { error } = await supabase
-    .from('organizations')
-    .update({
-      is_on_trial: true,
-      trial_ends_at: trialEnd.toISOString(),
-    })
-    .eq('id', orgId);
+  const { error } = await supabase.rpc('extend_organization_trial', {
+    p_org_id: orgId,
+    p_days: days,
+  });
 
   if (error) throw error;
 }

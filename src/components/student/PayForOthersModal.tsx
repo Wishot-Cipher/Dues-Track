@@ -68,7 +68,7 @@ export default function PayForOthersModal({
       // Get all students EXCEPT the current user (who is the one paying)
       let qStudents = supabase
         .from('organization_members')
-        .select('id, full_name, reg_number, level')
+        .select('id, full_name, member_id, level')
         .neq('id', currentStudentId) // Exclude current user from the list
         .order('full_name');
       if (scope) qStudents = qStudents.eq('organization_id', scope.orgId);
@@ -88,7 +88,14 @@ export default function PayForOthersModal({
       const paidStudentIds = new Set(paidPayments?.map(p => p.member_id) || []);
 
       // Filter out students who already paid
-      const unpaidStudents = allStudents?.filter(s => !paidStudentIds.has(s.id)) || [];
+      const unpaidStudents = (allStudents || [])
+        .map((student: any) => ({
+          id: student.id,
+          full_name: student.full_name,
+          reg_number: student.member_id,
+          level: student.level,
+        }))
+        .filter(s => !paidStudentIds.has(s.id));
 
       // Fetch payment type details to compute late fees
       const { data: paymentType } = await supabase

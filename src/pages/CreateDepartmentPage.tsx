@@ -1,17 +1,17 @@
 /**
- * CreateDepartmentPage - Search for an existing organization and create a department within it
+ * CreateDepartmentPage - Search for an existing organization and create a group within it
  * Route: /join-org
  * 
  * Flow:
  * 1. Search for existing organizations
- * 2. Select one & view its existing departments
- * 3. Enter new department name + short code
- * 4. Create admin account for the department
+ * 2. Select one & view its existing groups
+ * 3. Enter new group name + short code
+ * 4. Create admin account for the group
  * 5. Submit → creates group + member + admin role
  */
 
 import { useState, useCallback, useRef, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   ArrowLeft,
@@ -52,6 +52,7 @@ interface DeptFormData {
   group_short_name: string;
   description: string;
   parent_group_id: string;
+  group_kind: 'faculty' | 'class' | 'general';
   owner_name: string;
   owner_member_id: string;
   owner_password: string;
@@ -61,7 +62,9 @@ interface DeptFormData {
 
 export default function CreateDepartmentPage() {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const { login } = useMultiTenantAuth();
+  const presetOrgSlug = searchParams.get('org') || searchParams.get('orgSlug');
 
   // Steps: 1 = Search/Select org, 2 = Dept details, 3 = Admin account
   const [step, setStep] = useState(1);
@@ -87,6 +90,7 @@ export default function CreateDepartmentPage() {
     group_short_name: '',
     description: '',
     parent_group_id: '',
+    group_kind: 'general',
     owner_name: '',
     owner_member_id: '',
     owner_password: '',
@@ -94,8 +98,27 @@ export default function CreateDepartmentPage() {
     level: '',
   });
 
+  const isAcademicOrg = selectedOrg?.organization_type === 'university' || selectedOrg?.organization_type === 'school';
+  const classLabel = selectedOrg?.organization_type === 'university' ? 'Department' : 'Class';
+  const classLabelPlural = classLabel === 'Class' ? 'Classes' : `${classLabel}s`;
+  const facultyGroups = existingGroups.filter(g => g.kind === 'faculty');
+  const classGroups = existingGroups.filter(g => g.kind !== 'faculty');
+  const reminderGroups = isAcademicOrg
+    ? (form.group_kind === 'faculty' ? facultyGroups : classGroups)
+    : existingGroups;
+
   const updateForm = (updates: Partial<DeptFormData>) => {
     setForm(prev => ({ ...prev, ...updates }));
+    setError('');
+  };
+
+  const updateGroupKind = (kind: DeptFormData['group_kind']) => {
+    setForm(prev => ({
+      ...prev,
+      group_kind: kind,
+      parent_group_id: kind === 'class' ? prev.parent_group_id : '',
+      level: kind === 'class' ? prev.level : '',
+    }));
     setError('');
   };
 
@@ -131,11 +154,36 @@ export default function CreateDepartmentPage() {
     };
   }, []);
 
+  // If we came from an organization overview, preselect it and skip the search step.
+  useEffect(() => {
+    let mounted = true;
+    const loadPresetOrg = async () => {
+      if (!presetOrgSlug) return;
+
+      try {
+        const org = await organizationService.getBySlug(presetOrgSlug);
+        if (!mounted || !org) return;
+        await selectOrganization(org);
+        setStep(2);
+      } catch {
+        // Fall back to search if the preset org cannot be loaded.
+      }
+    };
+
+    void loadPresetOrg();
+    return () => { mounted = false; };
+  }, [presetOrgSlug]);
+
   // Load existing groups/departments when org is selected
   const selectOrganization = async (org: Organization) => {
     setSelectedOrg(org);
     setError('');
     setLoadingGroups(true);
+    setForm(prev => ({
+      ...prev,
+      parent_group_id: '',
+      group_kind: (org.organization_type === 'university' || org.organization_type === 'school') ? 'class' : 'general',
+    }));
     try {
       const groups = await organizationService.getGroups(org.id);
       setExistingGroups(groups);
@@ -145,7 +193,7 @@ export default function CreateDepartmentPage() {
     } catch (err) {
       console.error('[JoinOrg] Failed to load departments:', err);
       setExistingGroups([]);
-      setError('Failed to load existing departments. You can still create a new one.');
+      setError('Failed to load existing groups. You can still create a new one.');
     } finally {
       setLoadingGroups(false);
     }
@@ -159,7 +207,10 @@ export default function CreateDepartmentPage() {
 
   // Get the group label for the selected org type
   const getGroupLabel = () => {
-    if (!selectedOrg) return 'Department';
+    if (!selectedOrg) return 'Group';
+    if (isAcademicOrg) {
+      return form.group_kind === 'faculty' ? 'Faculty' : classLabel;
+    }
     switch (selectedOrg.organization_type) {
       case 'university': return 'Department';
       case 'school': return 'Class';
@@ -189,8 +240,12 @@ export default function CreateDepartmentPage() {
           setError('Short name must be at least 2 characters');
           return false;
         }
-        if (!form.level.trim()) {
-          setError('Please specify the primary level for this department (e.g. "200L")');
+        if (isAcademicOrg && !form.group_kind) {
+          setError('Please choose whether you are creating a faculty or a class');
+          return false;
+        }
+        if ((isAcademicOrg ? form.group_kind === 'class' : true) && !form.level.trim()) {
+          setError('Please specify the primary level for this group (e.g. "200L")');
           return false;
         }
         // Check if short name already exists
@@ -247,8 +302,9 @@ export default function CreateDepartmentPage() {
         owner_member_id: form.owner_member_id.trim(),
         owner_password: form.owner_password,
         description: form.description.trim() || undefined,
-        parent_group_id: form.parent_group_id || undefined,
-        levels: [form.level.trim()],
+        parent_group_id: form.group_kind === 'class' ? (form.parent_group_id || undefined) : undefined,
+        levels: form.level.trim() ? [form.level.trim()] : undefined,
+        group_kind: form.group_kind,
       });
 
       if (result?.slug) {
@@ -266,7 +322,7 @@ export default function CreateDepartmentPage() {
         }
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to create department');
+      setError(err instanceof Error ? err.message : 'Failed to create group');
     } finally {
       setLoading(false);
     }
@@ -282,7 +338,17 @@ export default function CreateDepartmentPage() {
         {/* Header */}
         <div className="flex items-center gap-3 mb-8">
           <button
-            onClick={() => step > 1 ? prevStep() : navigate('/create')}
+            onClick={() => {
+              if (step > 1) {
+                prevStep();
+                return;
+              }
+              if (selectedOrg) {
+                navigate(`/${selectedOrg.slug}/overview`);
+                return;
+              }
+              navigate('/');
+            }}
             className="p-2 rounded-xl hover:bg-white/5 transition-colors"
           >
             <ArrowLeft size={20} className="text-white" />
@@ -290,7 +356,7 @@ export default function CreateDepartmentPage() {
           <div className="flex-1">
             <h1 className="text-xl font-bold text-white">Join Organization</h1>
             <p className="text-sm" style={{ color: colors.textTertiary }}>
-              Step {step} of {totalSteps} — Create a {selectedOrg ? getGroupLabel().toLowerCase() : 'department'}
+              Step {step} of {totalSteps} — {selectedOrg ? `Create a ${getGroupLabel().toLowerCase()}` : 'Search and choose an organization'}
             </p>
           </div>
           <div className="flex items-center gap-2 text-sm font-bold" style={{ color: colors.primary }}>
@@ -398,59 +464,88 @@ export default function CreateDepartmentPage() {
                       </button>
                     </div>
 
-                    {/* Existing departments */}
+                    {/* Existing groups */}
                     {loadingGroups ? (
                       <div className="mt-4 flex items-center justify-center py-3">
                         <Loader2 size={16} className="animate-spin" style={{ color: colors.textTertiary }} />
-                        <span className="ml-2 text-xs" style={{ color: colors.textTertiary }}>Loading departments...</span>
+                        <span className="ml-2 text-xs" style={{ color: colors.textTertiary }}>Loading groups...</span>
                       </div>
                     ) : existingGroups.length > 0 ? (
                       <div className="mt-4">
-                        <p className="text-xs font-medium mb-2" style={{ color: colors.textSecondary }}>
-                          <FolderTree size={12} className="inline mr-1 -mt-0.5" />
-                          Existing {getGroupLabel()}s ({existingGroups.length})
-                        </p>
-                        <div className="flex flex-wrap gap-1.5">
-                          {existingGroups.map(g => (
-                            <span
-                              key={g.id}
-                              className="px-2.5 py-1 rounded-lg text-xs font-medium"
-                              style={{ background: 'rgba(255,255,255,0.06)', color: colors.textSecondary }}
-                            >
-                              {g.name}
-                              <span className="opacity-50 ml-1">({g.short_name})</span>
-                            </span>
-                          ))}
-                        </div>
+                        {isAcademicOrg ? (
+                          <>
+                            {facultyGroups.length > 0 && (
+                              <div className="mb-3">
+                                <p className="text-xs font-medium mb-2" style={{ color: colors.textSecondary }}>
+                                  <FolderTree size={12} className="inline mr-1 -mt-0.5" />
+                                  Existing Faculties ({facultyGroups.length})
+                                </p>
+                                <div className="flex flex-wrap gap-1.5">
+                                  {facultyGroups.map(g => (
+                                    <span
+                                      key={g.id}
+                                      className="px-2.5 py-1 rounded-lg text-xs font-medium"
+                                      style={{ background: 'rgba(255,255,255,0.06)', color: colors.textSecondary }}
+                                    >
+                                      {g.name}
+                                      <span className="opacity-50 ml-1">({g.short_name})</span>
+                                    </span>
+                                  ))}
+                                </div>
+                              </div>
+                            )}
+                            <div>
+                              <p className="text-xs font-medium mb-2" style={{ color: colors.textSecondary }}>
+                                <FolderTree size={12} className="inline mr-1 -mt-0.5" />
+                                Existing {classLabelPlural} ({classGroups.length})
+                              </p>
+                              {classGroups.length > 0 ? (
+                                <div className="flex flex-wrap gap-1.5">
+                                  {classGroups.map(g => (
+                                    <span
+                                      key={g.id}
+                                      className="px-2.5 py-1 rounded-lg text-xs font-medium"
+                                      style={{ background: 'rgba(255,255,255,0.06)', color: colors.textSecondary }}
+                                    >
+                                      {g.name}
+                                      <span className="opacity-50 ml-1">({g.short_name})</span>
+                                    </span>
+                                  ))}
+                                </div>
+                              ) : (
+                                <p className="text-xs" style={{ color: colors.textTertiary }}>
+                                  No {classLabelPlural.toLowerCase()} yet.
+                                </p>
+                              )}
+                            </div>
+                          </>
+                        ) : (
+                          <>
+                            <p className="text-xs font-medium mb-2" style={{ color: colors.textSecondary }}>
+                              <FolderTree size={12} className="inline mr-1 -mt-0.5" />
+                              Existing {getGroupLabel()}s ({existingGroups.length})
+                            </p>
+                            <div className="flex flex-wrap gap-1.5">
+                              {existingGroups.map(g => (
+                                <span
+                                  key={g.id}
+                                  className="px-2.5 py-1 rounded-lg text-xs font-medium"
+                                  style={{ background: 'rgba(255,255,255,0.06)', color: colors.textSecondary }}
+                                >
+                                  {g.name}
+                                  <span className="opacity-50 ml-1">({g.short_name})</span>
+                                </span>
+                              ))}
+                            </div>
+                          </>
+                        )}
                       </div>
                     ) : (
                       <p className="mt-3 text-xs" style={{ color: colors.textTertiary }}>
-                        No departments yet — you&apos;ll be the first!
+                        No groups yet — you&apos;ll be the first!
                       </p>
                     )}
                   </div>
-
-                  {/* Parent group selector (optional, for sub-departments) */}
-                  {existingGroups.length > 0 && (
-                    <div className="mt-4">
-                      <label className="block text-xs font-medium mb-1.5" style={{ color: colors.textSecondary }}>
-                        Parent {getGroupLabel()} (optional)
-                      </label>
-                      <ProfessionalDropdown
-                        value={form.parent_group_id}
-                        onChange={(val) => updateForm({ parent_group_id: val as string })}
-                        placeholder={`None (top-level ${getGroupLabel().toLowerCase()})`}
-                        options={[
-                          { value: '', label: `None (top-level ${getGroupLabel().toLowerCase()})` },
-                          ...existingGroups.map(g => ({
-                            value: g.id,
-                            label: `${g.name} (${g.short_name})`,
-                          })),
-                        ]}
-                        clearable
-                      />
-                    </div>
-                  )}
                 </motion.div>
               ) : (
                 /* Search UI (when no org selected) */
@@ -553,7 +648,7 @@ export default function CreateDepartmentPage() {
 
                   {/* Initial prompt */}
                   {!hasSearched && !searching && (
-                    <div className="mt-8 text-center">
+                    <div className="mt-8 text-center rounded-3xl p-6" style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.08)' }}>
                       <div className="w-16 h-16 rounded-2xl mx-auto mb-4 flex items-center justify-center" style={{ background: `${colors.primary}10` }}>
                         <FolderTree size={28} style={{ color: colors.primary }} />
                       </div>
@@ -588,6 +683,40 @@ export default function CreateDepartmentPage() {
               </div>
 
               <div className="space-y-4 mt-6">
+                {isAcademicOrg && (
+                  <div>
+                    <label className="block text-sm font-medium text-white mb-1.5">Group Type *</label>
+                    <div className="grid grid-cols-2 gap-3">
+                      <button
+                        type="button"
+                        onClick={() => updateGroupKind('faculty')}
+                        className="px-4 py-3 rounded-xl text-sm font-semibold transition-all"
+                        style={{
+                          background: form.group_kind === 'faculty' ? colors.primary : 'rgba(255,255,255,0.05)',
+                          color: form.group_kind === 'faculty' ? '#fff' : colors.textSecondary,
+                          border: `1px solid ${form.group_kind === 'faculty' ? colors.primary : 'rgba(255,255,255,0.1)'}`,
+                        }}
+                      >
+                        Faculty
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => updateGroupKind('class')}
+                        className="px-4 py-3 rounded-xl text-sm font-semibold transition-all"
+                        style={{
+                          background: form.group_kind === 'class' ? colors.primary : 'rgba(255,255,255,0.05)',
+                          color: form.group_kind === 'class' ? '#fff' : colors.textSecondary,
+                          border: `1px solid ${form.group_kind === 'class' ? colors.primary : 'rgba(255,255,255,0.1)'}`,
+                        }}
+                      >
+                        {classLabel}
+                      </button>
+                    </div>
+                    <p className="mt-1 text-xs" style={{ color: colors.textTertiary }}>
+                      Faculties hold {classLabelPlural.toLowerCase()}. Choose {classLabel.toLowerCase()} to create a member group.
+                    </p>
+                  </div>
+                )}
                 <div>
                   <label className="block text-sm font-medium text-white mb-1.5">
                     {getGroupLabel()} Name *
@@ -641,24 +770,52 @@ export default function CreateDepartmentPage() {
                     className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white placeholder-gray-500 outline-none focus:border-[#FF6803] transition-colors resize-none"
                   />
                 </div>
-                <div>
-                  <label className="block text-sm font-medium text-white mb-1.5">
-                    Primary Level *
-                  </label>
-                  <input
-                    type="text"
-                    placeholder={selectedOrg.organization_type === 'university' ? 'e.g. 200L' : 'e.g. JSS2'}
-                    value={form.level}
-                    onChange={e => updateForm({ level: e.target.value })}
-                    className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white placeholder-gray-500 outline-none focus:border-[#FF6803] transition-colors"
-                  />
-                  <p className="mt-1 text-xs" style={{ color: colors.textTertiary }}>
-                    This level will be assigned to members created in this {getGroupLabel().toLowerCase()} and used as a fallback when a member has no explicit level.
-                  </p>
-                </div>
+                {isAcademicOrg && form.group_kind === 'class' && (
+                  <div>
+                    <label className="block text-sm font-medium text-white mb-1.5">
+                      Faculty (optional)
+                    </label>
+                    {facultyGroups.length > 0 ? (
+                      <ProfessionalDropdown
+                        value={form.parent_group_id}
+                        onChange={(val) => updateForm({ parent_group_id: val as string })}
+                        placeholder="None (no faculty)"
+                        options={[
+                          { value: '', label: 'None (no faculty)' },
+                          ...facultyGroups.map(g => ({
+                            value: g.id,
+                            label: `${g.name} (${g.short_name})`,
+                          })),
+                        ]}
+                        clearable
+                      />
+                    ) : (
+                      <p className="text-xs" style={{ color: colors.textTertiary }}>
+                        No faculties yet. Create a faculty first, or leave this empty.
+                      </p>
+                    )}
+                  </div>
+                )}
+                {(!isAcademicOrg || form.group_kind === 'class') && (
+                  <div>
+                    <label className="block text-sm font-medium text-white mb-1.5">
+                      Primary Level *
+                    </label>
+                    <input
+                      type="text"
+                      placeholder={selectedOrg.organization_type === 'university' ? 'e.g. 200L' : 'e.g. JSS2'}
+                      value={form.level}
+                      onChange={e => updateForm({ level: e.target.value })}
+                      className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white placeholder-gray-500 outline-none focus:border-[#FF6803] transition-colors"
+                    />
+                    <p className="mt-1 text-xs" style={{ color: colors.textTertiary }}>
+                      This level will be assigned to members created in this {getGroupLabel().toLowerCase()} and used as a fallback when a member has no explicit level.
+                    </p>
+                  </div>
+                )}
 
                 {/* Existing departments reminder */}
-                {existingGroups.length > 0 && (
+                {reminderGroups.length > 0 && (
                   <div
                     className="p-3 rounded-xl text-xs"
                     style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.06)' }}
@@ -667,7 +824,7 @@ export default function CreateDepartmentPage() {
                       Existing {getGroupLabel()}s in {selectedOrg.short_name}:
                     </p>
                     <div className="flex flex-wrap gap-1">
-                      {existingGroups.map(g => (
+                      {reminderGroups.map(g => (
                         <span key={g.id} className="px-2 py-0.5 rounded-md" style={{ background: 'rgba(255,255,255,0.06)', color: colors.textTertiary }}>
                           {g.short_name}
                         </span>
@@ -782,7 +939,7 @@ export default function CreateDepartmentPage() {
                         </div>
                       </div>
                     </div>
-                    {form.parent_group_id && (
+                    {form.group_kind === 'class' && form.parent_group_id && (
                       <div className="flex items-start gap-2.5 pt-1">
                         <div className="w-7 h-7 rounded-lg flex items-center justify-center shrink-0 mt-0.5" style={{ background: 'rgba(255,255,255,0.05)' }}>
                           <Building2 size={14} style={{ color: colors.textSecondary }} />

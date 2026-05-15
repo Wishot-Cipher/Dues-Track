@@ -55,6 +55,8 @@ import {
   type OrgOverview,
   type BillingTransaction,
 } from '@/services/platformAdminService';
+import ConsoleUniversitiesPage from '@/pages/admin/ConsoleUniversitiesPage';
+import ConsoleRoleManagementPage from '@/pages/admin/ConsoleRoleManagementPage';
 
 // ── Theme constants (matching app design language) ──
 const colors = {
@@ -805,6 +807,7 @@ function PlatformDashboard({ admin, onLogout }: { admin: PlatformAdmin; onLogout
   const [error, setError] = useState('');
   const [billingOrg, setBillingOrg] = useState<OrgOverview | null>(null);
   const [filterPlan, setFilterPlan] = useState<string>('all');
+  const [activeSection, setActiveSection] = useState<'dashboard' | 'universities' | 'roles'>('dashboard');
 
   const loadData = useCallback(async (isRefresh = false) => {
     if (isRefresh) setRefreshing(true);
@@ -930,6 +933,33 @@ function PlatformDashboard({ admin, onLogout }: { admin: PlatformAdmin; onLogout
           )}
         </AnimatePresence>
 
+        {/* Section Switcher */}
+        <div className="flex flex-wrap gap-2 p-1 rounded-2xl" style={{ background: 'rgba(255,255,255,0.03)', border: `1px solid ${colors.cardBorder}` }}>
+          {[
+            { key: 'dashboard', label: 'Dashboard' },
+            { key: 'universities', label: 'Organizations' },
+            { key: 'roles', label: 'Role Management' },
+          ].map((section) => (
+            <button
+              key={section.key}
+              onClick={() => setActiveSection(section.key as 'dashboard' | 'universities' | 'roles')}
+              className="px-4 py-2 rounded-xl text-sm font-medium transition-all"
+              style={{
+                background: activeSection === section.key ? `${colors.primary}20` : 'transparent',
+                color: activeSection === section.key ? colors.primary : colors.textSecondary,
+              }}
+            >
+              {section.label}
+            </button>
+          ))}
+        </div>
+
+        {activeSection === 'universities' && <ConsoleUniversitiesPage />}
+        {activeSection === 'roles' && <ConsoleRoleManagementPage />}
+
+        {activeSection === 'dashboard' && (
+          <>
+
         {/* Stats Grid */}
         {stats && (
           <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
@@ -1018,6 +1048,8 @@ function PlatformDashboard({ admin, onLogout }: { admin: PlatformAdmin; onLogout
             )}
           </div>
         </div>
+          </>
+        )}
       </div>
 
       {/* Billing Modal */}

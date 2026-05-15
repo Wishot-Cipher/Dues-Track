@@ -742,10 +742,16 @@ background:linear-gradient(135deg,#FF6803,#FFAC5F);color:white;font-size:14px}
                     <PaymentCardSkeleton key={i} />
                   ))}
                 </div>
-              ) : mandatoryUnpaidDues.length === 0 && optionalUnpaidDues.length === 0 ? (
+              ) : mandatoryUnpaidDues.length === 0 && optionalUnpaidDues.length === 0 && dismissedUnpaidDues.length === 0 ? (
                 <AllPaidState />
               ) : (
                 <div className="space-y-4">
+                  {mandatoryUnpaidDues.length === 0 && optionalUnpaidDues.length === 0 && dismissedUnpaidDues.length > 0 && (
+                    <div className="p-4 rounded-2xl border text-sm" style={{ background: 'rgba(255, 255, 255, 0.03)', borderColor: 'rgba(255, 255, 255, 0.08)', color: colors.textSecondary }}>
+                      You have skipped all optional dues. Open <span style={{ color: colors.primary, fontWeight: 600 }}>Show Skipped</span> to restore any of them.
+                    </div>
+                  )}
+
                   {/* Mandatory Dues Section */}
                   {mandatoryUnpaidDues.length > 0 && (
                     <div className="space-y-3">

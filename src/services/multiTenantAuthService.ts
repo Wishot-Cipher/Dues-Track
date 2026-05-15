@@ -193,26 +193,32 @@ export const multiTenantAuthService = {
    */
   async updateProfile(memberId: string, profileData: MemberProfileUpdateData): Promise<OrganizationMember> {
     try {
-      const { data, error } = await supabase
-        .from('organization_members')
-        .update({
-          ...profileData,
-          updated_at: new Date().toISOString(),
-        })
-        .eq('id', memberId)
-        .select()
-        .single();
+      const { data, error } = await supabase.rpc('update_member_profile', {
+        p_member_id: memberId,
+        p_profile: {
+          full_name: profileData.full_name ?? undefined,
+          email: profileData.email ?? undefined,
+          phone: profileData.phone ?? undefined,
+          section: profileData.section ?? undefined,
+          level: profileData.level ?? undefined,
+          avatar_url: profileData.avatar_url ?? undefined,
+          date_of_birth: profileData.date_of_birth ?? undefined,
+          gender: profileData.gender ?? undefined,
+          address: profileData.address ?? undefined,
+        },
+      });
 
       if (error) throw error;
-      if (!data) throw new Error('Failed to update profile');
+      const updated = Array.isArray(data) && data.length > 0 ? data[0] : data;
+      if (!updated) throw new Error('Failed to update profile');
 
       // Update session
       const currentOrgSlug = localStorage.getItem(SESSION_KEYS.ORG_SLUG);
       if (currentOrgSlug) {
-        this.saveSession(data as OrganizationMember, { slug: currentOrgSlug } as Organization);
+        this.saveSession(updated as OrganizationMember, { slug: currentOrgSlug } as Organization);
       }
 
-      return data as OrganizationMember;
+      return updated as OrganizationMember;
     } catch (error) {
       console.error('Update profile error:', error);
       throw error;

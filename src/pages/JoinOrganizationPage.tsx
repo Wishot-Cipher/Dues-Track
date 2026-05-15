@@ -260,7 +260,7 @@ export default function JoinOrganizationPage() {
           <button
             onClick={() => {
               if (step === 'form') { setStep('code'); setInvite(null); setError(''); }
-              else navigate(orgSlug ? `/${orgSlug}/login` : '/');
+              else navigate(orgSlug ? `/${orgSlug}/overview` : '/');
             }}
             className="p-2 rounded-xl hover:bg-white/5 transition-colors"
           >
@@ -341,7 +341,7 @@ export default function JoinOrganizationPage() {
                     <button
                       className="font-medium hover:underline"
                       style={{ color: colors.primary }}
-                      onClick={() => navigate(orgSlug ? `/${orgSlug}/login` : '/')}
+                      onClick={() => navigate(orgSlug ? `/${orgSlug}/overview` : '/')}
                     >
                       Log in
                     </button>

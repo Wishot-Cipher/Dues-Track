@@ -3,7 +3,7 @@
  * Accessed via /create
  */
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
@@ -31,6 +31,7 @@ import { supabase } from '@/config/supabase';
 import { useMultiTenantAuth } from '@/hooks/useMultiTenantAuth';
 import PageWrapper from '@/components/ui/PageWrapper';
 import ProfessionalDropdown from '@/components/ui/ProfessionalDropdown';
+import Checkbox from '@/components/ui/Checkbox';
 import type { OrganizationType } from '@/config/constants';
 
 const ORG_TYPE_OPTIONS: { type: OrganizationType; label: string; icon: React.ReactNode; desc: string }[] = [
@@ -99,6 +100,11 @@ export default function CreateOrganizationPage() {
   const [error, setError] = useState('');
   const [slugAvailable, setSlugAvailable] = useState<boolean | null>(null);
   const [checkingSlug, setCheckingSlug] = useState(false);
+  const [emailAvailable, setEmailAvailable] = useState<boolean | null>(null);
+  const [checkingEmail, setCheckingEmail] = useState(false);
+  const [ownerAcknowledged, setOwnerAcknowledged] = useState(false);
+  const [authChecked, setAuthChecked] = useState(false);
+  const [accessDenied, setAccessDenied] = useState(false);
 
   const [form, setForm] = useState<FormData>({
     organization_type: '' as OrganizationType,
@@ -127,6 +133,39 @@ export default function CreateOrganizationPage() {
 
   const isAcademic = form.organization_type === 'university' || form.organization_type === 'school';
   const totalSteps = isAcademic ? 5 : 4;
+
+  // Check if user is authorized to create organizations
+  // This runs on component mount
+  const checkAuthorizationStatus = async () => {
+    try {
+      // For now, allow anyone to create organizations (platform is open)
+      // In future, you can add checks like:
+      // - Require authentication: const session = await supabase.auth.getSession();
+      // - Check for specific role/permission
+      // - Verify email domain whitelist
+      // - Require invitation code
+      
+      // Environment-based restriction example:
+      const restrictCreation = import.meta.env.VITE_RESTRICT_ORG_CREATION === 'true';
+      if (restrictCreation) {
+        const { data: { user } } = await supabase.auth.getUser();
+        if (!user) {
+          setAccessDenied(true);
+          return;
+        }
+      }
+      
+      setAuthChecked(true);
+    } catch (err) {
+      console.error('Error checking authorization:', err);
+      setAuthChecked(true); // Allow access even if check fails (graceful degradation)
+    }
+  };
+
+  // Run authorization check on mount
+  useEffect(() => {
+    checkAuthorizationStatus();
+  }, []);
 
   const updateForm = (updates: Partial<FormData>) => {
     setForm(prev => ({ ...prev, ...updates }));
@@ -159,6 +198,24 @@ export default function CreateOrganizationPage() {
     }
   };
 
+  const checkEmailAvailability = async (email: string) => {
+    const normalizedEmail = email.trim().toLowerCase();
+    if (!normalizedEmail) {
+      setEmailAvailable(null);
+      return;
+    }
+
+    setCheckingEmail(true);
+    try {
+      const available = await organizationService.isEmailAvailable(normalizedEmail);
+      setEmailAvailable(available);
+    } catch {
+      setEmailAvailable(null);
+    } finally {
+      setCheckingEmail(false);
+    }
+  };
+
   // Map logical step to actual step function
   const getLogicalStep = () => {
     if (!isAcademic) return step;
@@ -183,6 +240,7 @@ export default function CreateOrganizationPage() {
         if (!form.short_name.trim()) { setError('Short name / abbreviation is required'); return false; }
         if (!form.slug.trim() || form.slug.length < 3) { setError('URL slug must be at least 3 characters'); return false; }
         if (slugAvailable === false) { setError('This URL is already taken'); return false; }
+        if (form.email.trim() && emailAvailable === false) { setError('This organization email is already in use'); return false; }
         return true;
       case academicStep:
         if (isAcademic) {
@@ -210,6 +268,10 @@ export default function CreateOrganizationPage() {
         if (form.owner_password !== form.owner_password_confirm) { setError('Passwords do not match'); return false; }
         return true;
       case ownerStep:
+        if (form.organization_type === 'university' && !ownerAcknowledged) {
+          setError('Please confirm that you are authorized to create this university.');
+          return false;
+        }
         if (!form.owner_name.trim()) { setError('Your full name is required'); return false; }
         if (!form.owner_member_id.trim()) { setError('Your login ID is required'); return false; }
         if (!form.owner_password || form.owner_password.length < 6) { setError('Password must be at least 6 characters'); return false; }
@@ -238,6 +300,14 @@ export default function CreateOrganizationPage() {
     setError('');
 
     try {
+      if (form.email.trim()) {
+        const emailIsAvailable = await organizationService.isEmailAvailable(form.email.trim());
+        if (!emailIsAvailable) {
+          setEmailAvailable(false);
+          throw new Error('This organization email is already in use.');
+        }
+      }
+
       // Determine owner/group levels to pass to service (academic level when applicable)
       let ownerLevels: string[] | undefined = undefined;
       if (isAcademic && form.academic_scope === 'level') {
@@ -330,7 +400,33 @@ export default function CreateOrganizationPage() {
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
       >
-        {/* Header */}
+        {/* Access Denied Message */}
+        {accessDenied && (
+          <div className="mb-6 p-4 rounded-xl border border-red-500/30 bg-red-500/5">
+            <p className="text-red-400 font-semibold mb-2">Access Denied</p>
+            <p className="text-sm text-red-300">
+              Organization creation is currently restricted. Please contact your administrator.
+            </p>
+            <button
+              onClick={() => navigate('/')}
+              className="mt-3 px-4 py-2 rounded-lg bg-red-500/20 hover:bg-red-500/30 text-red-300 text-sm font-medium transition-colors"
+            >
+              Return to Home
+            </button>
+          </div>
+        )}
+
+        {/* Loading Auth Check */}
+        {!authChecked && (
+          <div className="flex flex-col items-center justify-center py-12">
+            <Loader2 size={32} className="animate-spin mb-3" style={{ color: colors.primary }} />
+            <p className="text-sm" style={{ color: colors.textTertiary }}>Verifying access...</p>
+          </div>
+        )}
+
+        {/* Main Form (only show if auth check passed) */}
+        {authChecked && !accessDenied && (
+        <>
         <div className="flex items-center gap-2 sm:gap-3 mb-8">
           <button
             onClick={() => step > 1 ? prevStep() : navigate('/')}
@@ -351,7 +447,7 @@ export default function CreateOrganizationPage() {
             </div>
             {APP_NAME}
           </div>
-        </div>
+        </div> 
 
         {/* Progress Bar */}
         <div className="flex gap-2 mb-8">
@@ -471,6 +567,31 @@ export default function CreateOrganizationPage() {
                     className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white placeholder-gray-500 outline-none focus:border-[#FF6803] transition-colors"
                     maxLength={10}
                   />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-white mb-1.5">Contact Email</label>
+                  <div className="flex items-center bg-white/5 border border-white/10 rounded-xl overflow-hidden focus-within:border-[#FF6803] transition-colors">
+                    <input
+                      type="email"
+                      placeholder="e.g. info@unilag.edu.ng"
+                      value={form.email}
+                      onChange={e => {
+                        const email = e.target.value;
+                        updateForm({ email });
+                        setEmailAvailable(null);
+                      }}
+                      onBlur={() => void checkEmailAvailability(form.email)}
+                      className="w-full bg-transparent px-4 py-3 text-white placeholder-gray-500 outline-none"
+                    />
+                    <div className="pr-3 shrink-0">
+                      {checkingEmail && <Loader2 size={16} className="animate-spin text-gray-400" />}
+                      {!checkingEmail && emailAvailable === true && <Check size={16} className="text-green-400" />}
+                      {!checkingEmail && emailAvailable === false && <span className="text-xs text-red-400">Taken</span>}
+                    </div>
+                  </div>
+                  <p className="mt-1 text-xs" style={{ color: colors.textTertiary }}>
+                    This email is used for admin contact and must be unique.
+                  </p>
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-white mb-1.5">URL Slug *</label>
@@ -777,11 +898,27 @@ export default function CreateOrganizationPage() {
                   <Sparkles size={20} style={{ color: colors.primary }} />
                 </div>
                 <div>
-                  <h2 className="text-lg font-semibold text-white">Your Admin Account</h2>
-                  <p className="text-xs" style={{ color: colors.textTertiary }}>You&apos;ll be the owner with full access.</p>
+                  <h2 className="text-lg font-semibold text-white">{form.organization_type === 'university' ? 'Institution Owner Account' : 'Your Admin Account'}</h2>
+                  <p className="text-xs" style={{ color: colors.textTertiary }}>
+                    {form.organization_type === 'university'
+                      ? 'University creation requires an authorized owner account.'
+                      : 'You will have full access as the organization owner.'}
+                  </p>
                 </div>
               </div>
               <div className="space-y-4 mt-6">
+                {form.organization_type === 'university' && (
+                  <Checkbox
+                    checked={ownerAcknowledged}
+                    onChange={(e) => setOwnerAcknowledged(e.target.checked)}
+                    label={(
+                      <span>
+                        I confirm I am authorized to create and manage this university.
+                      </span>
+                    )}
+                    helperText="This keeps the onboarding flow clear and accountable."
+                  />
+                )}
                 <div>
                   <label className="block text-sm font-medium text-white mb-1.5">Full Name *</label>
                   <input
@@ -933,7 +1070,7 @@ export default function CreateOrganizationPage() {
           )}
           <button
             onClick={step === totalSteps ? handleSubmit : nextStep}
-            disabled={loading}
+            disabled={loading || (form.organization_type === 'university' && step === ownerStep && !ownerAcknowledged)}
             className="flex-1 px-6 py-3 rounded-xl text-white font-semibold flex items-center justify-center gap-2 transition-all hover:scale-[1.02] active:scale-[0.98] disabled:opacity-60"
             style={{ background: colors.primary }}
           >
@@ -955,6 +1092,8 @@ export default function CreateOrganizationPage() {
             )}
           </button>
         </div>
+        </>
+        )}
       </motion.div>
     </PageWrapper>
   );

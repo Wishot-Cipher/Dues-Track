@@ -1,5 +1,9 @@
 import { createClient } from '@supabase/supabase-js';
 
+declare const process: {
+  env: Record<string, string | undefined>;
+};
+
 // Vercel Edge/Serverless types
 interface VercelRequest {
   method?: string;
@@ -31,11 +35,20 @@ export default async function handler(
     return res.status(405).json({ error: 'Method not allowed' });
   }
 
-  // Security: require secret if configured
+  const headerValue = (value: string | string[] | undefined) => {
+    if (Array.isArray(value)) return value[0];
+    return value;
+  };
+
+  // Security: allow Vercel Cron automatically, or require a shared secret for external schedulers
   const authHeader = req.headers.authorization;
+  const vercelCronHeader = headerValue(req.headers['x-vercel-cron']);
   const expectedKey = process.env.KEEP_ALIVE_SECRET;
 
-  if (expectedKey && authHeader !== `Bearer ${expectedKey}`) {
+  const isVercelCron = vercelCronHeader === '1' || vercelCronHeader === 'true';
+  const hasValidSecret = expectedKey && authHeader === `Bearer ${expectedKey}`;
+
+  if (expectedKey && !isVercelCron && !hasValidSecret) {
     return res.status(401).json({ error: 'Unauthorized' });
   }
 

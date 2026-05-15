@@ -5,12 +5,47 @@
  */
 
 import { supabase } from '@/config/supabase';
-import type { Organization, OrganizationGroup, OrganizationSettings, OrganizationInvite } from '@/types/multiTenant';
+import type { Organization, OrganizationGroup, OrganizationSettings, OrganizationInvite, GroupKind } from '@/types/multiTenant';
 import type { OrganizationType } from '@/config/constants';
 import { ORG_TYPE_DEFAULTS } from '@/types/multiTenant';
 
+function getCurrentMemberId(): string | null {
+  try {
+    return localStorage.getItem('pvx_member_id');
+  } catch {
+    return null;
+  }
+}
+
 export interface OrganizationWithGroups extends Organization {
   groups: OrganizationGroup[];
+}
+
+export interface AcademicSessionRecord {
+  id: string;
+  organization_id: string;
+  label: string;
+  start_date: string;
+  end_date: string;
+  is_active: boolean;
+  is_locked: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface AcademicTermRecord {
+  id: string;
+  organization_id: string;
+  session_id: string;
+  name: string;
+  sequence: number;
+  start_date: string;
+  end_date: string;
+  promotion_window_starts_at?: string | null;
+  promotion_window_ends_at?: string | null;
+  status: 'upcoming' | 'active' | 'closing' | 'closed';
+  created_at: string;
+  updated_at: string;
 }
 
 export const organizationService = {
@@ -74,7 +109,7 @@ export const organizationService = {
     try {
       let query = supabase
         .from('organizations')
-        .select('id, name, short_name, slug, organization_type, logo_url, primary_color, country, member_label_plural')
+        .select('*')
         .eq('is_active', true);
 
       if (options?.type) {
@@ -107,7 +142,7 @@ export const organizationService = {
     try {
       let dbQuery = supabase
         .from('organizations')
-        .select('id, name, short_name, slug, organization_type, logo_url, primary_color, country')
+        .select('*')
         .eq('is_active', true)
         .or(`name.ilike.%${query}%,short_name.ilike.%${query}%`);
 
@@ -151,6 +186,14 @@ export const organizationService = {
     levels?: string[];
   }): Promise<{ slug: string; organization_id: string; group_id: string; member_id: string } | null> {
     try {
+      const normalizedEmail = orgData.email?.trim().toLowerCase();
+      if (normalizedEmail) {
+        const emailAvailable = await this.isEmailAvailable(normalizedEmail);
+        if (!emailAvailable) {
+          throw new Error('This organization email is already in use.');
+        }
+      }
+
       // If owner data provided, use the RPC to create everything in one call
       if (ownerData) {
         const { data, error } = await supabase.rpc('create_organization_with_owner', {
@@ -177,7 +220,7 @@ export const organizationService = {
         await supabase
           .from('organizations')
           .update({
-            email: orgData.email || null,
+            email: normalizedEmail || null,
             phone: orgData.phone || null,
             country: orgData.country || 'Nigeria',
             currency_code: orgData.currency_code || 'NGN',
@@ -215,6 +258,7 @@ export const organizationService = {
         .insert({
           ...orgData,
           slug: orgData.slug.toLowerCase().replace(/[^a-z0-9-]/g, '-'),
+          email: normalizedEmail || null,
           member_label: defaults.member_label,
           member_label_plural: defaults.member_label_plural,
           group_label: defaults.group_label,
@@ -285,6 +329,23 @@ export const organizationService = {
         .from('organizations')
         .select('id', { count: 'exact', head: true })
         .eq('slug', slug.toLowerCase());
+
+      if (error) return false;
+      return (count ?? 0) === 0;
+    } catch {
+      return false;
+    }
+  },
+
+  async isEmailAvailable(email: string): Promise<boolean> {
+    try {
+      const normalizedEmail = email.trim().toLowerCase();
+      if (!normalizedEmail) return true;
+
+      const { count, error } = await supabase
+        .from('organizations')
+        .select('id', { count: 'exact', head: true })
+        .eq('email', normalizedEmail);
 
       if (error) return false;
       return (count ?? 0) === 0;
@@ -421,19 +482,23 @@ export const organizationService = {
     leader_name?: string;
     leader_title?: string;
     parent_group_id?: string;
+    kind?: GroupKind;
   }): Promise<OrganizationGroup | null> {
     try {
+      const kind = groupData.kind ?? 'general';
       // Deduplicate levels before inserting and enforce single primary level
       const deduped = groupData.levels ? this.deduplicateLevels(groupData.levels) : [];
-      if (deduped.length === 0) {
-        throw new Error('A group must include exactly one primary level.');
+      if (kind === 'class' && deduped.length === 0) {
+        throw new Error('A class group must include exactly one primary level.');
       }
       if (deduped.length > 1) {
         throw new Error('Only one primary level is allowed per group. Provide a single level.');
       }
+      const primaryLevel = deduped.length > 0 ? this.canonicalizeLevel(deduped[0]) : null;
       const sanitized = {
         ...groupData,
-        levels: [this.canonicalizeLevel(deduped[0])],
+        kind,
+        levels: primaryLevel ? [primaryLevel] : null,
         display_order: 0,
         is_active: true,
       };
@@ -446,43 +511,51 @@ export const organizationService = {
 
       if (error) {
         console.error('Error creating group:', error);
-        return null;
+        throw new Error(error.message || 'Failed to create group');
       }
 
       return data as OrganizationGroup;
     } catch (error) {
       console.error('Error in createGroup:', error);
-      return null;
+      throw error;
     }
   },
 
   /**
    * Update a group
+   * Uses RPC function for better CORS compatibility
    */
   async updateGroup(groupId: string, updates: Partial<OrganizationGroup>): Promise<OrganizationGroup | null> {
     try {
-      // Deduplicate levels if they're being updated and enforce single primary level
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      let sanitized = { ...updates } as any;
-      if (updates.levels) {
-        const deduped = this.deduplicateLevels(updates.levels as string[]);
-        if (deduped.length === 0) throw new Error('A group must include exactly one primary level.');
-        if (deduped.length > 1) throw new Error('Only one primary level is allowed per group.');
-        sanitized = { ...sanitized, levels: [this.canonicalizeLevel(deduped[0])] };
+      const callerId = getCurrentMemberId();
+      if (!callerId) {
+        throw new Error('Please sign in again to update this group.');
       }
 
-      const { data, error } = await supabase
-        .from('organization_groups')
-        .update(sanitized)
-        .eq('id', groupId)
-        .select()
-        .single();
+      // Deduplicate levels if they're being updated and enforce single primary level
+      let levels: string[] | undefined = undefined;
+      if (updates.levels) {
+        const deduped = this.deduplicateLevels(updates.levels as string[]);
+        if (deduped.length > 1) throw new Error('Only one primary level is allowed per group.');
+        levels = deduped.length === 0 ? undefined : [this.canonicalizeLevel(deduped[0])];
+      }
 
-      if (error) return null;
+      const { data, error } = await supabase.rpc('update_organization_group', {
+        p_caller_id: callerId,
+        p_group_id: groupId,
+        p_short_name: updates.short_name || null,
+        p_group_kind: (updates as unknown as Record<string, unknown>).group_kind || null,
+        p_description: updates.description || null,
+        p_levels: levels || null,
+        p_faculty_id: (updates as unknown as Record<string, unknown>).faculty_id || null,
+        p_department_id: (updates as unknown as Record<string, unknown>).department_id || null,
+      });
+
+      if (error) throw error;
       return data as OrganizationGroup;
     } catch (error) {
       console.error('Error in updateGroup:', error);
-      return null;
+      throw error;
     }
   },
 
@@ -530,6 +603,189 @@ export const organizationService = {
     } catch (error) {
       console.error('Error in updateSettings:', error);
       return null;
+    }
+  },
+
+  // ============================================================
+  // ACADEMIC PROGRESSION OPERATIONS
+
+  async getAcademicSessions(organizationId: string): Promise<AcademicSessionRecord[]> {
+    try {
+      const { data, error } = await supabase
+        .from('academic_sessions')
+        .select('*')
+        .eq('organization_id', organizationId)
+        .order('start_date', { ascending: false });
+
+      if (error) throw error;
+      return (data || []) as AcademicSessionRecord[];
+    } catch (error) {
+      console.error('Error fetching academic sessions:', error);
+      return [];
+    }
+  },
+
+  async createAcademicSession(sessionData: {
+    organization_id: string;
+    label: string;
+    start_date: string;
+    end_date: string;
+    is_active?: boolean;
+    is_locked?: boolean;
+  }): Promise<AcademicSessionRecord | null> {
+    try {
+      const callerId = getCurrentMemberId();
+      if (!callerId) throw new Error('Please sign in again to create this session.');
+
+      const { data, error } = await supabase.rpc('create_academic_session', {
+        p_caller_id: callerId,
+        p_org_id: sessionData.organization_id,
+        p_session_name: sessionData.label,
+        p_session_year: sessionData.label,
+        p_start_date: sessionData.start_date,
+        p_end_date: sessionData.end_date,
+        p_is_active: sessionData.is_active ?? false,
+      });
+
+      if (error) throw error;
+      return data as AcademicSessionRecord;
+    } catch (error) {
+      console.error('Error creating academic session:', error);
+      return null;
+    }
+  },
+
+  async updateAcademicSession(sessionId: string, updates: Partial<AcademicSessionRecord>): Promise<AcademicSessionRecord | null> {
+    try {
+      const callerId = getCurrentMemberId();
+      if (!callerId) throw new Error('Please sign in again to update this session.');
+
+      const { data, error } = await supabase.rpc('update_academic_session', {
+        p_caller_id: callerId,
+        p_session_id: sessionId,
+        p_session_name: updates.label || null,
+        p_session_year: updates.label || null,
+        p_start_date: updates.start_date || null,
+        p_end_date: updates.end_date || null,
+        p_is_active: updates.is_active ?? null,
+        p_is_locked: updates.is_locked ?? null,
+      });
+
+      if (error) throw error;
+      return data as AcademicSessionRecord;
+    } catch (error) {
+      console.error('Error updating academic session:', error);
+      return null;
+    }
+  },
+
+  async setActiveAcademicSession(organizationId: string, sessionId: string): Promise<boolean> {
+    try {
+      const callerId = getCurrentMemberId();
+      if (!callerId) throw new Error('Please sign in again to update the active session.');
+
+      const { error } = await supabase.rpc('set_active_academic_session', {
+        p_caller_id: callerId,
+        p_org_id: organizationId,
+        p_session_id: sessionId,
+      });
+
+      if (error) throw error;
+      return true;
+    } catch (error) {
+      console.error('Error setting active academic session:', error);
+      return false;
+    }
+  },
+
+  async getAcademicTerms(organizationId: string, sessionId?: string): Promise<AcademicTermRecord[]> {
+    try {
+      let query = supabase
+        .from('academic_terms')
+        .select('*')
+        .eq('organization_id', organizationId)
+        .order('sequence', { ascending: true });
+
+      if (sessionId) {
+        query = query.eq('session_id', sessionId);
+      }
+
+      const { data, error } = await query;
+      if (error) throw error;
+      return (data || []) as AcademicTermRecord[];
+    } catch (error) {
+      console.error('Error fetching academic terms:', error);
+      return [];
+    }
+  },
+
+  async createAcademicTerm(termData: {
+    organization_id: string;
+    session_id: string;
+    name: string;
+    sequence: number;
+    start_date: string;
+    end_date: string;
+    promotion_window_starts_at?: string | null;
+    promotion_window_ends_at?: string | null;
+    status?: AcademicTermRecord['status'];
+  }): Promise<AcademicTermRecord | null> {
+    try {
+      const { data, error } = await supabase
+        .from('academic_terms')
+        .insert({
+          ...termData,
+          status: termData.status ?? 'upcoming',
+        })
+        .select()
+        .single();
+
+      if (error) throw error;
+      return data as AcademicTermRecord;
+    } catch (error) {
+      console.error('Error creating academic term:', error);
+      return null;
+    }
+  },
+
+  async updateAcademicTerm(termId: string, updates: Partial<AcademicTermRecord>): Promise<AcademicTermRecord | null> {
+    try {
+      const { data, error } = await supabase
+        .from('academic_terms')
+        .update(updates)
+        .eq('id', termId)
+        .select()
+        .single();
+
+      if (error) throw error;
+      return data as AcademicTermRecord;
+    } catch (error) {
+      console.error('Error updating academic term:', error);
+      return null;
+    }
+  },
+
+  async setActiveAcademicTerm(organizationId: string, termId: string): Promise<boolean> {
+    try {
+      const terms = await this.getAcademicTerms(organizationId);
+      const activeTerm = terms.find(term => term.id === termId);
+
+      await Promise.all(
+        terms.map(term =>
+          supabase.from('academic_terms').update({ status: term.id === termId ? 'active' : term.status === 'active' ? 'upcoming' : term.status }).eq('id', term.id)
+        )
+      );
+
+      if (activeTerm) {
+        await this.updateSettings(organizationId, {
+          current_sub_period_label: activeTerm.name,
+        });
+      }
+
+      return true;
+    } catch (error) {
+      console.error('Error setting active academic term:', error);
+      return false;
     }
   },
 
@@ -717,6 +973,7 @@ export const organizationService = {
     description?: string;
     parent_group_id?: string;
     levels?: string[];
+    group_kind?: GroupKind;
   }): Promise<{ group_id: string; member_id: string; slug: string } | null> {
     try {
       // 1. Check if group short_name already exists in this org
@@ -728,18 +985,20 @@ export const organizationService = {
         .single();
 
       if (existing) {
-        throw new Error('A department with this short name already exists in this organization');
+        throw new Error('A group with this short name already exists in this organization');
       }
 
       // 2. Create the group
-      // Prepare levels: require exactly one primary level for a department
+      const kind = deptData.group_kind ?? 'general';
+      // Prepare levels: require exactly one primary level for a class group
       const sanitizedLevels = deptData.levels ? this.deduplicateLevels(deptData.levels) : [];
-      if (sanitizedLevels.length === 0) {
-        throw new Error('A department must include exactly one primary level (e.g. "200L").');
+      if (kind === 'class' && sanitizedLevels.length === 0) {
+        throw new Error('A class must include exactly one primary level (e.g. "200L").');
       }
       if (sanitizedLevels.length > 1) {
-        throw new Error('A department can only have one primary level. Provide a single level.');
+        throw new Error('Only one primary level is allowed per group. Provide a single level.');
       }
+      const primaryLevel = sanitizedLevels.length > 0 ? this.canonicalizeLevel(sanitizedLevels[0]) : null;
 
       const { data: group, error: groupError } = await supabase
         .from('organization_groups')
@@ -748,8 +1007,9 @@ export const organizationService = {
           name: deptData.group_name,
           short_name: deptData.group_short_name.toUpperCase(),
           description: deptData.description || null,
-          parent_group_id: deptData.parent_group_id || null,
-          levels: [this.canonicalizeLevel(sanitizedLevels[0])],
+          kind,
+          parent_group_id: kind === 'class' ? (deptData.parent_group_id || null) : null,
+          levels: primaryLevel ? [primaryLevel] : null,
           is_active: true,
         })
         .select()
@@ -786,7 +1046,7 @@ export const organizationService = {
         member_id: member.id,
         organization_id: orgId,
         group_id: group.id,
-        role: 'group_admin',
+        role: kind === 'faculty' ? 'faculty_admin' : 'group_admin',
         can_create_payments: true,
         can_approve_payments: true,
         can_manage_members: true,
