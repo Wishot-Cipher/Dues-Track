@@ -8,12 +8,8 @@ import {
   Save,
   Shield,
   Sparkles,
-  ChevronRight,
   Lock,
-  Unlock,
   CheckCircle2,
-  Circle,
-  Settings2,
   AlertCircle,
   Timer,
   GraduationCap,
@@ -27,9 +23,7 @@ import Input from '@/components/ui/Input';
 import ProfessionalDropdown from '@/components/ui/ProfessionalDropdown';
 import CustomButton from '@/components/ui/CustomButton';
 import Checkbox from '@/components/ui/Checkbox';
-import StatusBadge from '@/components/ui/StatusBadge';
 import ProfessionalDateTimePicker from '@/components/ui/ProfessionalDateTimePicker';
-import { colors } from '@/config/colors';
 import { useMultiTenantAuth } from '@/hooks/useMultiTenantAuth';
 import { useOrganization } from '@/hooks/useOrganization';
 import organizationService, {

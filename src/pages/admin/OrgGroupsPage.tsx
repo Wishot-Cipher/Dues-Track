@@ -14,17 +14,16 @@ import {
   BookOpen,
   Network,
 } from 'lucide-react';
-import { colors } from '@/config/colors';
 import { useMultiTenantAuth } from '@/hooks/useMultiTenantAuth';
 import organizationService from '@/services/organizationService';
 import type { OrganizationGroup, GroupKind } from '@/types/multiTenant';
 import PageWrapper from '@/components/ui/PageWrapper';
 import EmptyState from '@/components/ui/EmptyState';
-import Input from '@/components/ui/Input';
 import Textarea from '@/components/ui/Textarea';
 import ProfessionalDropdown from '@/components/ui/ProfessionalDropdown';
 import LoadingSpinner from '@/components/ui/LoadingSpinner';
 import Modal from '@/components/ui/Modal';
+// Input component not used in this page
 
 // ── Design tokens ───────────────────────────────────────────────────────────
 const tk = {
@@ -141,7 +140,7 @@ function GroupCard({
   const [hov, setHov] = useState(false)
   const kc = kindColor(group.kind)
   const ki = kindIcon(group.kind)
-  const kindLabel = isAcademicOrg ? (group.kind === 'faculty' ? 'Faculty' : classLabel) : groupLabel
+  // const kindLabel not used — UI shows labels directly
   const primaryLevel = group.levels?.[0] ? organizationService.canonicalizeLevel(group.levels[0]) : null
   const parentName = group.parent_group_id ? (groups.find(g => g.id === group.parent_group_id)?.name || 'Unknown') : null
 
