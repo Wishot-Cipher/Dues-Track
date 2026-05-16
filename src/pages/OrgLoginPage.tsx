@@ -126,7 +126,7 @@ function NotFoundScreen({ orgSlug }: { orgSlug?: string }) {
 
 // ── Left panel geometric art ───────────────────────────────────────────────────
 function LeftArt({ color }: { color: string }) {
-  const rgb = hexToRgb(tk.accent);
+  const rgb = hexToRgb(color);
   return (
     <div className="absolute inset-0 overflow-hidden pointer-events-none">
       {/* Giant arc — the single hero element */}
@@ -168,7 +168,7 @@ function LeftArt({ color }: { color: string }) {
       {/* Horizontal rule near bottom */}
       <div
         className="absolute bottom-32 left-10 right-10"
-        style={{ height: '1px', background: `linear-gradient(90deg, ${tk.accent}30, transparent)` }}
+        style={{ height: '1px', background: `linear-gradient(90deg, ${color}30, transparent)` }}
       />
     </div>
   );
@@ -195,7 +195,7 @@ function GroupChip({
     >
       <span
         className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold"
-        style={{ background: `${tk.accent}14`, color: tk.textPrimary, border: `1px solid ${tk.accent}28` }}
+        style={{ background: `${color}14`, color, border: `1px solid ${color}28` }}
       >
         <Layers className="w-3 h-3" />
         {group.name}
