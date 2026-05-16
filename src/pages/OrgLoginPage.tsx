@@ -25,7 +25,7 @@ import {
 } from 'lucide-react';
 import { colors } from '@/config/colors';
 import { useMultiTenantAuth } from '@/hooks/useMultiTenantAuth';
-import { useNavigate, useParams, Link, useSearchParams } from 'react-router-dom';
+import { useNavigate, useParams, Link, useSearchParams, useLocation } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import PageWrapper from '@/components/ui/PageWrapper';
 import { organizationService } from '@/services/organizationService';
@@ -338,6 +338,7 @@ function NotFoundScreen({ orgSlug }: { orgSlug?: string }) {
 export default function OrgLoginPage() {
   const { orgSlug } = useParams<{ orgSlug: string }>();
   const [searchParams] = useSearchParams();
+  const location = useLocation();
 
   const [memberId, setMemberId]   = useState('');
   const [password, setPassword]   = useState('');
@@ -352,6 +353,9 @@ export default function OrgLoginPage() {
 
   const { login, isAuthenticated, user, needsPasswordChange } = useMultiTenantAuth();
   const navigate = useNavigate();
+  const fromLocation = (location.state as { from?: { pathname: string; search?: string } } | null)?.from;
+  const backTarget = fromLocation ? `${fromLocation.pathname}${fromLocation.search || ''}` : `/${orgSlug}`;
+  const afterLoginTarget = fromLocation ? backTarget : `/${orgSlug}/dashboard`;
 
   // ── Fetch org + groups ──
   useEffect(() => {
@@ -414,7 +418,7 @@ export default function OrgLoginPage() {
       if (result.mustChangePassword) {
         navigate(`/${orgSlug}/change-password`, { replace: true });
       } else {
-        navigate(`/${orgSlug}/dashboard`, { replace: true });
+        navigate(afterLoginTarget, { replace: true });
       }
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'Invalid credentials. Please try again.');
@@ -577,17 +581,25 @@ export default function OrgLoginPage() {
             <p className="text-xs mt-0.5" style={{ color: tk.textTertiary }}>Powered by {APP_NAME}</p>
           </motion.div>
 
-          <div className="w-full max-w-md mx-auto space-y-6">
+          <div className="w-full max-w-2xl mx-auto space-y-7">
 
-            {/* Back link */}
-            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.1 }}>
-              <Link
-                to={`/${orgSlug}`}
+            {/* Back links */}
+            <motion.div className="flex flex-wrap items-center gap-4" initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.1 }}>
+              <button
+                type="button"
+                onClick={() => navigate(backTarget)}
                 className="inline-flex items-center gap-1.5 text-xs font-medium hover:underline transition-colors"
                 style={{ color: tk.textTertiary }}
               >
                 <ArrowLeft className="w-3.5 h-3.5" />
-                Back to {org?.short_name || 'organization'}
+                Back
+              </button>
+              <Link
+                to="/"
+                className="inline-flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-full transition-colors"
+                style={{ color: color, background: `${color}14`, border: `1px solid ${color}22` }}
+              >
+                Change organization
               </Link>
             </motion.div>
 
@@ -609,13 +621,13 @@ export default function OrgLoginPage() {
             {/* Info banner */}
             <motion.div
               className="flex items-start gap-3 p-3.5 rounded-2xl"
-              style={{ background: 'rgba(48,255,172,0.07)', border: '1px solid rgba(48,255,172,0.18)' }}
+              style={{ background: `${color}12`, border: `1px solid ${color}28` }}
               initial={{ opacity: 0, y: -6 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: 0.25 }}
             >
-              <Info className="w-4 h-4 mt-0.5 shrink-0" style={{ color: '#30FFAC' }} />
-              <p className="text-xs leading-5" style={{ color: '#30FFAC' }}>
+              <Info className="w-4 h-4 mt-0.5 shrink-0" style={{ color }} />
+              <p className="text-xs leading-5" style={{ color }}>
                 First time? Use your {memberIdLabel.toLowerCase()} as both username and password — you'll be prompted to create a new one.
               </p>
             </motion.div>
@@ -639,18 +651,19 @@ export default function OrgLoginPage() {
 
             {/* Form card */}
             <motion.div
-              className="rounded-[24px] p-6 sm:p-7 space-y-5"
+              className="rounded-[32px] p-8 sm:p-10 space-y-7"
               style={{
-                background: 'rgba(15,7,3,0.55)',
-                border: `1px solid ${color}28`,
-                boxShadow: `0 0 0 1px ${color}12, 0 24px 56px -12px rgba(0,0,0,0.75), inset 0 1px 0 rgba(255,255,255,0.04)`,
+                background: 'linear-gradient(180deg, rgba(24,11,5,0.98) 0%, rgba(12,6,3,0.9) 100%)',
+                border: `1px solid ${color}44`,
+                boxShadow: `0 0 0 1px ${color}18, 0 34px 76px -18px rgba(0,0,0,0.82), 0 0 48px ${color}20, inset 0 1px 0 rgba(255,255,255,0.05)`,
                 backdropFilter: 'blur(20px)',
               }}
               initial={{ opacity: 0, y: 16 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: 0.3, duration: 0.45, ease: [0.22, 1, 0.36, 1] }}
             >
-              <form onSubmit={handleSubmit} className="space-y-5">
+              <div className="h-1 w-24 rounded-full mb-2" style={{ background: `linear-gradient(90deg, ${color} 0%, #FFB36B 100%)` }} />
+              <form onSubmit={handleSubmit} className="space-y-6">
                 <MemberIdInput
                   label={memberIdLabel}
                   value={memberId}
@@ -670,7 +683,7 @@ export default function OrgLoginPage() {
                   <div className="text-right pt-1">
                     <Link
                       to={`/${orgSlug}/forgot-password`}
-                      className="text-[11px] font-medium hover:underline transition-colors"
+                      className="text-[11px] font-semibold hover:underline transition-colors"
                       style={{ color }}
                     >
                       Forgot password?
@@ -682,14 +695,14 @@ export default function OrgLoginPage() {
                 <motion.button
                   type="submit"
                   disabled={loading || !memberId || !password}
-                  className="w-full py-3.5 rounded-xl text-sm font-bold text-white relative overflow-hidden transition-all"
+                  className="w-full py-4.5 rounded-2xl text-base font-bold text-white relative overflow-hidden transition-all"
                   style={{
                     background: loading || !memberId || !password
                       ? 'rgba(255,255,255,0.08)'
-                      : `linear-gradient(135deg, ${color} 0%, ${lighten(color)} 100%)`,
+                      : `linear-gradient(135deg, ${color} 0%, #FFB36B 100%)`,
                     boxShadow: loading || !memberId || !password
                       ? 'none'
-                      : `0 8px 24px ${color}45`,
+                      : `0 14px 34px ${color}4C`,
                     color: loading || !memberId || !password ? tk.textTertiary : '#fff',
                     cursor: loading || !memberId || !password ? 'not-allowed' : 'pointer',
                   }}
