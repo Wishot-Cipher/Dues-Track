@@ -131,10 +131,10 @@ function TabBtn({ active, onClick, children }: { active: boolean; onClick: () =>
 
 // ── Group card ──────────────────────────────────────────────────────────────
 function GroupCard({
-  group, groups, groupLabel, classLabel, isAcademicOrg, onEdit,
+  group, groups, isAcademicOrg, onEdit,
 }: {
   group: OrganizationGroup; groups: OrganizationGroup[];
-  groupLabel: string; classLabel: string; isAcademicOrg: boolean;
+  isAcademicOrg: boolean;
   onEdit: (g: OrganizationGroup) => void;
 }) {
   const [hov, setHov] = useState(false)
@@ -493,14 +493,12 @@ export default function OrgGroupsPage() {
               <AnimatePresence>
                 {visibleGroups.map(group => (
                   <GroupCard
-                    key={group.id}
-                    group={group}
-                    groups={groups}
-                    groupLabel={groupLabel}
-                    classLabel={classLabel}
-                    isAcademicOrg={isAcademicOrg}
-                    onEdit={openEdit}
-                  />
+                      key={group.id}
+                      group={group}
+                      groups={groups}
+                      isAcademicOrg={isAcademicOrg}
+                      onEdit={openEdit}
+                    />
                 ))}
               </AnimatePresence>
             </motion.div>
