@@ -348,25 +348,21 @@ export default function LandingPage() {
     >
       {/* ── Ambient background glows ── */}
       <div className="fixed inset-0 overflow-hidden pointer-events-none">
-        <motion.div
+        <div
           className="absolute rounded-full blur-[160px]"
           style={{
             width: 640, height: 640,
             background: `radial-gradient(circle, ${tk.primary} 0%, transparent 70%)`,
             top: '-18%', right: '-12%', opacity: 0.18,
           }}
-          animate={{ scale: [1, 1.08, 1], opacity: [0.18, 0.23, 0.18] }}
-          transition={{ duration: 8, repeat: Infinity, ease: 'easeInOut' }}
         />
-        <motion.div
+        <div
           className="absolute rounded-full blur-[130px]"
           style={{
             width: 420, height: 420,
             background: `radial-gradient(circle, ${tk.mint} 0%, transparent 70%)`,
             bottom: '8%', left: '-10%', opacity: 0.10,
           }}
-          animate={{ scale: [1, 1.12, 1], opacity: [0.10, 0.14, 0.10] }}
-          transition={{ duration: 10, repeat: Infinity, ease: 'easeInOut', delay: 2 }}
         />
         {/* Diagonal grid lines */}
         <div

@@ -96,9 +96,14 @@ export default async function handler(req: any, res: any) {
 
     const { data: member, error: memberError } = await memberQ.maybeSingle()
 
-    // Always return success to avoid disclosing accounts
+    // If the member does not belong to this organization, stop here.
     if (memberError || !member) {
-      return res.status(200).json({ success: true, message: 'If that email exists, a reset link has been sent' })
+      return res.status(200).json({
+        success: false,
+        emailSent: false,
+        reason: 'MEMBER_NOT_FOUND_IN_ORG',
+        message: 'That email is not registered in this organization.',
+      })
     }
     
     if (!member.email || !member.email.includes('@')) {

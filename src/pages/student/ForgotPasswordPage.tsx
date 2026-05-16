@@ -52,6 +52,12 @@ export default function ForgotPasswordPage() {
       }
       
       // Email not sent
+      if (body.reason === 'MEMBER_NOT_FOUND_IN_ORG') {
+        setShowContactAdmin(false);
+        setError(body.message || 'That email is not registered in this organization.');
+        return;
+      }
+
       if (body.reason === 'RESEND_API_KEY not set') {
         setShowContactAdmin(true);
         setError("Email service is currently unavailable. Please contact your admin for password reset.");
