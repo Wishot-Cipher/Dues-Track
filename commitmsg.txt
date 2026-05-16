@@ -1,0 +1,13 @@
+chore(repo): update UI, datepicker, auth flows, org pages, and RLS migrations
+
+- Upgrade TypeScript / lockfile changes (package.json & package-lock.json)
+- UI: add `helperText` to ProfessionalDateTimePicker and render helper text; render dropdown via portal to avoid clipping.
+- Remove legacy `DateRangeFilter` component; replace usages across affected components.
+- Auth: enhance `ChangePasswordPage` and `ResetPasswordPage` flows and validation/UX.
+- Org: updates to `OrgGroupsPage` and `OrgAcademicCalendarPage` (form helpers, helper text).
+- Admin: UI/UX refinements in ExpenseApprovalQueue, ExpenseList, RecordExpense, ManageDuesPage, CreatePaymentTypePage, etc.
+- Supabase: tighten RLS policies and add migration files (multi-tenant/migrations/*).
+- Dev: guard service worker registration in `src/registerSW.ts` to avoid stale caches during development.
+- Services: organizationService updates to match backend changes.
+
+No secrets intentionally added. Please review diffs before pushing.

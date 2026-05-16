@@ -1,11 +1,12 @@
 ﻿import { useState } from "react";
 import { motion } from "framer-motion";
-import { Building2, Palette, Check, ArrowLeft, Plus, Sparkles, CreditCard, Calendar, CheckCircle, Tag } from "lucide-react";
+import { Building2, Palette, Check, ArrowLeft, Plus, Sparkles, CreditCard, CheckCircle, Tag } from "lucide-react";
 import { colors } from "@/config/colors";
 import { useAppNav } from '@/hooks/useAppNav';
 import GlassCard from "@/components/ui/GlassCard";
 import Input from "@/components/ui/Input";
 import ProfessionalDropdown from "@/components/ui/ProfessionalDropdown";
+import ProfessionalDateTimePicker from '@/components/ui/ProfessionalDateTimePicker'
 import { useAuth } from '@/hooks/useAppAuth';
 import { useToast } from "@/hooks/useToast";
 import { supabase } from "@/config/supabase";
@@ -493,28 +494,13 @@ export default function CreatePaymentTypePage() {
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-white mb-2">
-                    Payment Deadline *
-                  </label>
-                  <div className="relative">
-                    <div className="absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none">
-                      <Calendar className="w-5 h-5" style={{ color: colors.primary }} />
-                    </div>
-                    <input
-                      type="date"
-                      value={formData.deadline}
-                      onChange={(e) =>
-                        setFormData({ ...formData, deadline: e.target.value })
-                      }
-                      className="w-full pl-12 pr-4 py-3 rounded-xl border text-white transition-all focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-orange-500 cursor-pointer"
-                      style={{
-                        background: "rgba(255, 255, 255, 0.05)",
-                        borderColor: "rgba(255, 104, 3, 0.2)",
-                        colorScheme: "dark",
-                      }}
-                      required
-                    />
-                  </div>
+                  <ProfessionalDateTimePicker
+                    label="Payment Deadline"
+                    value={formData.deadline}
+                    onChange={(v) => setFormData({ ...formData, deadline: v })}
+                    // includeTime={false}
+                    // required
+                  />
                 </div>
               </div>
             </GlassCard>

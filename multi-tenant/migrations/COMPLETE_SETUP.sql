@@ -151,7 +151,7 @@ CREATE TABLE IF NOT EXISTS admins (
     student_id UUID NOT NULL REFERENCES students(id) ON DELETE CASCADE,
     organization_id UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
     department_id UUID REFERENCES departments(id) ON DELETE CASCADE,
-    role TEXT NOT NULL DEFAULT 'class_rep',
+    role TEXT NOT NULL DEFAULT 'group_admin',
     can_create_payments BOOLEAN DEFAULT false,
     can_approve_payments BOOLEAN DEFAULT false,
     can_manage_students BOOLEAN DEFAULT false,

@@ -13,6 +13,7 @@ import { deleteExpense, updateExpenseFields, fetchExpenseCategories, type Expens
 import ProfessionalDropdown from '@/components/ui/ProfessionalDropdown'
 import type { Expense } from '@/services/expenseService'
 import { CheckCircle, Clock, XCircle, Calendar, Tag, FileText, X, Download, Eye, User, ChevronLeft, ChevronRight, ChevronDown, FileSpreadsheet, Trash2, Edit3, Save, Loader2 } from 'lucide-react'
+import ProfessionalDateTimePicker from '@/components/ui/ProfessionalDateTimePicker'
 import * as LucideIcons from 'lucide-react'
 import { exportExpensesToPDF } from '@/utils/htmlPrintExports'
 
@@ -1125,18 +1126,11 @@ export default function ExpenseList({ categoryFilter = 'all' }: { categoryFilter
 
             {/* Date */}
             <div>
-              <label className="block text-xs font-medium mb-1.5" style={{ color: colors.textSecondary }}>
-                Expense Date
-              </label>
-              <input
-                type="date"
+              <ProfessionalDateTimePicker
+                label="Expense Date"
                 value={editingExpense.expense_date ? new Date(editingExpense.expense_date).toISOString().split('T')[0] : ''}
-                onChange={(e) => setEditingExpense({ ...editingExpense, expense_date: e.target.value })}
-                className="w-full px-4 py-2.5 rounded-lg text-white"
-                style={{
-                  background: 'rgba(255, 255, 255, 0.05)',
-                  border: `1px solid ${colors.borderLight}`,
-                }}
+                onChange={(v) => setEditingExpense({ ...editingExpense, expense_date: v })}
+                // includeTime={false}
               />
             </div>
 

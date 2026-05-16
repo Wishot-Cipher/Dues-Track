@@ -820,7 +820,7 @@ export default function ManageDuesPage() {
                         label="Deadline"
                         value={editingPaymentType.deadline?.slice(0, 16) || ''}
                         onChange={(value) => setEditingPaymentType({ ...editingPaymentType, deadline: value })}
-                        includeTime
+                        // includeTime
                         helperText="Choose when this payment type stops accepting payments."
                       />
                     </div>

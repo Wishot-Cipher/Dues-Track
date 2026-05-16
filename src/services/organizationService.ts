@@ -544,11 +544,10 @@ export const organizationService = {
         p_caller_id: callerId,
         p_group_id: groupId,
         p_short_name: updates.short_name || null,
-        p_group_kind: (updates as unknown as Record<string, unknown>).group_kind || null,
+        p_kind: (updates as unknown as Record<string, unknown>).kind || null,
         p_description: updates.description || null,
         p_levels: levels || null,
-        p_faculty_id: (updates as unknown as Record<string, unknown>).faculty_id || null,
-        p_department_id: (updates as unknown as Record<string, unknown>).department_id || null,
+        p_parent_group_id: (updates as unknown as Record<string, unknown>).parent_group_id || null,
       });
 
       if (error) throw error;

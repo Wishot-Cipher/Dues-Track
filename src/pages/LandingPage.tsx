@@ -23,7 +23,6 @@ import {
   DollarSign,
   Sparkles,
 } from 'lucide-react';
-import { colors } from '@/config/colors';
 import { APP_NAME, APP_TAGLINE } from '@/config/constants';
 import { organizationService } from '@/services/organizationService';
 import type { Organization } from '@/types/multiTenant';

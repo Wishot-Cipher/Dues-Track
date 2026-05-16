@@ -36,6 +36,7 @@ import {
   BarChart3,
   Receipt,
   Calendar,
+  Building2,
   Heart,
   Bell,
 } from 'lucide-react';
@@ -493,7 +494,42 @@ export default function AdminDashboardPage() {
           </GlassCard>
         </motion.div>
 
-        {/* Stats Grid */}
+          {/* Quick Admin Shortcuts (visible and prominent on mobile) */}
+          <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.05 }}>
+            <div className="grid grid-cols-2 gap-3 sm:hidden">
+              <div onClick={() => navigate('/admin/groups')} className="cursor-pointer">
+                <GlassCard className="p-4">
+                  <div className="flex items-center gap-3">
+                    <div className="w-12 h-12 rounded-lg flex items-center justify-center"
+                         style={{ background: `linear-gradient(135deg, ${colors.primary}30, ${colors.primary}10)` }}>
+                      <Building2 className="w-6 h-6" style={{ color: colors.primary }} />
+                    </div>
+                    <div>
+                      <p className="text-sm font-semibold text-white">Groups</p>
+                      <p className="text-xs" style={{ color: colors.textSecondary }}>Faculties & Classes</p>
+                    </div>
+                  </div>
+                </GlassCard>
+              </div>
+
+              <div onClick={() => navigate('/admin/academic-calendar')} className="cursor-pointer">
+                <GlassCard className="p-4">
+                  <div className="flex items-center gap-3">
+                    <div className="w-12 h-12 rounded-lg flex items-center justify-center"
+                         style={{ background: `linear-gradient(135deg, ${colors.accentMint}30, ${colors.accentMint}10)` }}>
+                      <Calendar className="w-6 h-6" style={{ color: colors.accentMint }} />
+                    </div>
+                    <div>
+                      <p className="text-sm font-semibold text-white">Academic Calendar</p>
+                      <p className="text-xs" style={{ color: colors.textSecondary }}>Sessions & Terms</p>
+                    </div>
+                  </div>
+                </GlassCard>
+              </div>
+            </div>
+          </motion.div>
+
+          {/* Stats Grid */}
         {loading ? (
           <AdminDashboardSkeleton />
         ) : (
