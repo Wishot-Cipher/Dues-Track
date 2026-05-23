@@ -10,15 +10,7 @@
 
 import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import {
-  Flame,
-  Users,
-  X,
-  Send,
-  CheckCircle,
-  AlertCircle,
-  Heart,
-} from 'lucide-react';
+import { Users, X, Send, CheckCircle, AlertCircle, Heart } from 'lucide-react';
 import { colors } from '@/config/colors';
 import { supabase } from '@/config/supabase';
 import { getOrgScope } from '@/utils/orgScope';

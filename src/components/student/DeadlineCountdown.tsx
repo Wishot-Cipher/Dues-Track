@@ -14,7 +14,7 @@
 
 import { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Clock, AlertTriangle, Flame, CheckCircle } from 'lucide-react';
+import { Clock, AlertTriangle, Flame } from 'lucide-react';
 
 interface Props {
   deadline: string | null | undefined;

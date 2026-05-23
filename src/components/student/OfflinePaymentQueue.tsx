@@ -24,7 +24,7 @@
 
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { WifiOff, Wifi, Clock, Send, CheckCircle } from 'lucide-react';
+import { WifiOff, Clock, Send, CheckCircle } from 'lucide-react';
 
 const QUEUE_KEY = 'payvexo_payment_queue';
 
