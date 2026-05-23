@@ -210,7 +210,21 @@ export interface OrganizationGroup {
   sub_groups?: OrganizationGroup[];
 }
 
-export type GroupKind = 'faculty' | 'class' | 'general';
+// Matches the CHECK constraint on organization_groups.kind (mig 005 + 034).
+// Adding a kind here? Update the DB constraint too.
+export type GroupKind =
+  | 'faculty'           // top-level academic unit
+  | 'college'           // optional tier above faculty (e.g. College of Engineering)
+  | 'department'        // discipline within a faculty
+  | 'association'       // student professional body inside a department (NIESS, NICE)
+  | 'class'             // a single level inside a department (300L)
+  | 'level'             // alias used in some seed data
+  | 'sug'               // student union governance (no dues)
+  | 'university_unit'   // GSP, ICT centre, SIWES — direct under university
+  | 'fellowship'        // religious / interest group
+  | 'chapter'           // alumni or branch chapter
+  | 'year_group'        // cohort across departments
+  | 'general';          // catch-all
 
 /**
  * Organization Settings (configurable per org)

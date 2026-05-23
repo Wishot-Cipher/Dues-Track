@@ -3,7 +3,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { colors, gradients } from '@/config/colors';
 import { formatCurrency } from '@/utils/formatters';
 import GlassCard from '@/components/ui/GlassCard';
-import HoldToConfirm from '@/components/student/HoldToConfirm ';
+import HoldToConfirm from '@/components/student/HoldToConfirm';
 import FileUploader from '@/components/ui/FileUploader';
 import {
   ArrowLeft,

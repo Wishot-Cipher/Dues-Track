@@ -22,11 +22,9 @@ import { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import {
-  ArrowLeft,
   ArrowRight,
   BookOpen,
   Building2,
-  GraduationCap,
   Layers,
   Search,
   Users,

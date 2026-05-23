@@ -59,7 +59,9 @@ export default function ClaimSubmitPage() {
   const initialGroupId = params.get('group') ?? group?.id ?? null;
 
   const [claimedScope, setClaimedScope] = useState<'org' | 'unit' | 'group'>(initialScope);
-  const [claimedGroupId, setClaimedGroupId] = useState<string | null>(initialGroupId);
+  // Group id is fixed for now (defaults to caller's own group from session/URL).
+  // A future enhancement: let unit/org-scope claimers pick a different target.
+  const [claimedGroupId] = useState<string | null>(initialGroupId);
   const [role, setRole] = useState('class_rep');
   const [positionTitle, setPositionTitle] = useState('');
   const [phone, setPhone] = useState(user?.phone ?? '');

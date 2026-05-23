@@ -217,12 +217,12 @@ export default function StudentDashboardPage() {
     const cutoff = Date.now() - 7 * 24 * 60 * 60 * 1000;
     return enriched
       .filter((e) => {
-        const created = new Date(e.pt.created_at || e.pt.start_date || '').getTime();
+        const created = new Date(e.pt.created_at || '').getTime();
         return !Number.isNaN(created) && created >= cutoff;
       })
       .sort((a, b) => {
-        const ad = new Date(a.pt.created_at || a.pt.start_date || '').getTime();
-        const bd = new Date(b.pt.created_at || b.pt.start_date || '').getTime();
+        const ad = new Date(a.pt.created_at || '').getTime();
+        const bd = new Date(b.pt.created_at || '').getTime();
         return bd - ad;
       });
   }, [enriched]);

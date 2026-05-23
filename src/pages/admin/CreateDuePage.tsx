@@ -41,7 +41,6 @@ import {
   DollarSign,
   Eye,
   Image as ImageIcon,
-  Layers,
   Loader2,
   MapPin,
   Megaphone,

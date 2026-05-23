@@ -16,7 +16,8 @@
     "noEmit": true,
     "jsx": "react-jsx",
 
-    "baseUrl": ".",
+    // baseUrl removed — deprecated in TS 5.0. `paths` patterns are now
+    // resolved relative to this tsconfig's directory automatically.
     "paths": {
       "@/*": [
         "./src/*"

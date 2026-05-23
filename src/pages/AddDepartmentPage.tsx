@@ -24,7 +24,6 @@ import {
   ArrowLeft,
   ArrowRight,
   BookOpen,
-  Check,
   GraduationCap,
   Layers,
   Loader2,
@@ -33,7 +32,6 @@ import {
   Phone,
   Sparkles,
   User,
-  Users,
 } from 'lucide-react';
 import { organizationService } from '@/services/organizationService';
 import TrustBadge from '@/components/trust/TrustBadge';

@@ -9,7 +9,8 @@
     }
   ],
   "compilerOptions": {
-    "baseUrl": ".",
+    // baseUrl removed — deprecated in TS 5.0. `paths` resolves relative
+    // to this tsconfig automatically.
     "paths": {
       "@/*": ["./src/*"]
     }

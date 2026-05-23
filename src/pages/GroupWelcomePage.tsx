@@ -29,7 +29,6 @@ import {
   BookOpen,
   Check,
   GraduationCap,
-  Key,
   Layers,
   Loader2,
   LogIn,
@@ -93,7 +92,12 @@ export default function GroupWelcomePage() {
   const { orgSlug, groupShortName } = useParams<{ orgSlug: string; groupShortName: string }>();
   const navigate = useNavigate();
 
-  const [loading, setLoading] = useState(true);
+  // Explicit state machine — same pattern as FacultyDetailPage. The bug
+  // before: setLoading(false) ran between the org-load and group-load awaits,
+  // so for a frame the render saw loading=false + group=null and flashed
+  // "Class not found" before the data arrived.
+  type LoadState = 'loading' | 'ok' | 'org_not_found' | 'group_not_found';
+  const [loadState, setLoadState] = useState<LoadState>('loading');
   const [org, setOrg] = useState<Organization | null>(null);
   const [group, setGroup] = useState<OrganizationGroup | null>(null);
   const [parentGroup, setParentGroup] = useState<OrganizationGroup | null>(null);
@@ -121,13 +125,18 @@ export default function GroupWelcomePage() {
   // ── Load org + group + settings ──
   useEffect(() => {
     let cancelled = false;
-    (async () => {
-      if (!orgSlug || !groupShortName) return;
-      setLoading(true);
+    if (!orgSlug || !groupShortName) return;
 
+    setLoadState('loading');
+    setOrg(null);
+    setGroup(null);
+    setParentGroup(null);
+
+    (async () => {
       const orgData = await organizationService.getBySlug(orgSlug);
-      if (cancelled || !orgData) {
-        setLoading(false);
+      if (cancelled) return;
+      if (!orgData) {
+        setLoadState('org_not_found');
         return;
       }
       setOrg(orgData);
@@ -137,9 +146,14 @@ export default function GroupWelcomePage() {
       const g = groups.find(
         (gr) => gr.short_name?.toLowerCase() === decodeURIComponent(groupShortName).toLowerCase()
       ) ?? null;
+
+      if (!g) {
+        setLoadState('group_not_found');
+        return;
+      }
       setGroup(g);
 
-      if (g?.parent_group_id) {
+      if (g.parent_group_id) {
         setParentGroup(groups.find((gr) => gr.id === g.parent_group_id) ?? null);
       }
 
@@ -149,13 +163,12 @@ export default function GroupWelcomePage() {
         .select('allow_self_registration, require_admin_approval')
         .eq('organization_id', orgData.id)
         .maybeSingle();
+      if (cancelled) return;
       setAllowSignup(settings?.allow_self_registration ?? true);
 
-      setLoading(false);
+      setLoadState('ok');
     })();
-    return () => {
-      cancelled = true;
-    };
+    return () => { cancelled = true; };
   }, [orgSlug, groupShortName]);
 
   const canSubmit = useMemo(() => {
@@ -222,11 +235,11 @@ export default function GroupWelcomePage() {
   // ─────────────────────────────────────────────────────────────────────────
   // Loading / not found
   // ─────────────────────────────────────────────────────────────────────────
-  if (loading) {
+  if (loadState === 'loading') {
     return <Loader />;
   }
 
-  if (!org || !group) {
+  if (loadState === 'org_not_found' || loadState === 'group_not_found' || !org || !group) {
     return (
       <FullCenter>
         <div className="text-center max-w-md">
