@@ -54,6 +54,7 @@ import type { Payment, PaymentType, PaymentStats } from '@/types';
 import ExpenseTransparencyDashboard from '@/components/student/ExpenseTransparencyDashboard';
 import AchievementSystem from '@/components/student/AchievementSystem';
 import VoteInbox from '@/components/claims/VoteInbox';
+import VerificationStatusBanner from '@/components/claims/VerificationStatusBanner';
 
 // ────────────────────────────────────────────────────────────────────────────
 // Design tokens
@@ -322,6 +323,14 @@ export default function StudentDashboardPage() {
           onPayUrgent={() => urgent && go(`/payment/${urgent.pt.id}`)}
           onSeeAllDues={() => go('/payments')}
         />
+
+        {/* ───────────── VERIFICATION STATUS BANNER ─────────────
+            Surfaces the user's exact next step:
+              • not an admin → "Claim a role"
+              • unverified admin (e.g. fresh founder) → "Verify your role"
+              • mid-flight claim → progress bar + waiting state
+            Hides when verification_layer >= 4 (fully verified). */}
+        <VerificationStatusBanner />
 
         {/* ───────────── VOTE INBOX ─────────────
             Hides itself entirely when there's nothing to vote on,
