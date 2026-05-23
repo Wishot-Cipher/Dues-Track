@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Bell, X, AlertCircle, DollarSign, CheckCircle, BellOff, Sparkles, Trash2 } from 'lucide-react';
+import { Bell, X, AlertCircle, DollarSign, CheckCircle, BellOff, Sparkles, Trash2, Vote as VoteIcon, ShieldCheck } from 'lucide-react';
 import { supabase } from '@/config/supabase';
 import notificationService from '@/services/notificationService';
 import { useAppAuth as useAuth } from '@/hooks/useAppAuth';
@@ -11,9 +11,18 @@ import { useSettings } from '@/contexts/SettingsContext';
 import { getOrgScope } from '@/utils/orgScope';
 import { notificationSound } from '@/utils/notificationSound';
 
+type NotificationType =
+  | 'payment_approved'
+  | 'payment_rejected'
+  | 'payment_waived'
+  | 'claim_vote_requested'
+  | 'claim_confirm_requested'
+  | 'claim_approved'
+  | 'claim_rejected';
+
 interface Notification {
   id: string;
-  type: 'payment_approved' | 'payment_rejected' | 'payment_waived';
+  type: NotificationType;
   title: string;
   message: string;
   is_read: boolean;
@@ -27,6 +36,8 @@ interface Notification {
     amount?: number;
   };
   link?: string | null;
+  related_type?: string | null;
+  related_id?: string | null;
 }
 
 // Notification skeleton loader
@@ -67,7 +78,7 @@ export const NotificationCenter = () => {
       const scope = getOrgScope();
       let q = supabase
         .from('notifications')
-        .select('*')
+        .select('id, type, title, message, is_read, created_at, metadata, link, related_type, related_id, organization_id, group_id, member_id')
         .eq('member_id', user.id)
         .order('created_at', { ascending: false })
         .limit(20);
@@ -121,12 +132,14 @@ export const NotificationCenter = () => {
 
             // Play sound for new notification (respects user settings)
             const notification = payload.new as Notification;
-            if (notification.type === 'payment_approved') {
+            if (notification.type === 'payment_approved' || notification.type === 'claim_approved') {
               playNotificationSound('success');
-            } else if (notification.type === 'payment_rejected') {
+            } else if (notification.type === 'payment_rejected' || notification.type === 'claim_rejected') {
               playNotificationSound('warning');
             } else if (notification.type === 'payment_waived') {
               playNotificationSound('ding');
+            } else if (notification.type === 'claim_vote_requested' || notification.type === 'claim_confirm_requested') {
+              playNotificationSound('info');
             } else {
               playNotificationSound('info');
             }
@@ -220,12 +233,14 @@ export const NotificationCenter = () => {
     const iconClass = "w-5 h-5";
     switch (type) {
       case 'payment_approved':
+      case 'claim_approved':
         return (
           <div className="w-10 h-10 rounded-xl flex items-center justify-center" style={{ background: `${colors.statusPaid}20` }}>
             <CheckCircle className={iconClass} style={{ color: colors.statusPaid }} />
           </div>
         );
       case 'payment_rejected':
+      case 'claim_rejected':
         return (
           <div className="w-10 h-10 rounded-xl flex items-center justify-center" style={{ background: `${colors.statusUnpaid}20` }}>
             <AlertCircle className={iconClass} style={{ color: colors.statusUnpaid }} />
@@ -235,6 +250,18 @@ export const NotificationCenter = () => {
         return (
           <div className="w-10 h-10 rounded-xl flex items-center justify-center" style={{ background: `${colors.accentMint}20` }}>
             <DollarSign className={iconClass} style={{ color: colors.accentMint }} />
+          </div>
+        );
+      case 'claim_vote_requested':
+        return (
+          <div className="w-10 h-10 rounded-xl flex items-center justify-center" style={{ background: `${colors.primary}20` }}>
+            <VoteIcon className={iconClass} style={{ color: colors.primary }} />
+          </div>
+        );
+      case 'claim_confirm_requested':
+        return (
+          <div className="w-10 h-10 rounded-xl flex items-center justify-center" style={{ background: `${colors.primary}20` }}>
+            <ShieldCheck className={iconClass} style={{ color: colors.primary }} />
           </div>
         );
       default:
@@ -249,11 +276,16 @@ export const NotificationCenter = () => {
   const getNotificationColor = (type: string) => {
     switch (type) {
       case 'payment_approved':
+      case 'claim_approved':
         return colors.statusPaid;
       case 'payment_rejected':
+      case 'claim_rejected':
         return colors.statusUnpaid;
       case 'payment_waived':
         return colors.accentMint;
+      case 'claim_vote_requested':
+      case 'claim_confirm_requested':
+        return colors.primary;
       default:
         return colors.primary;
     }
@@ -464,34 +496,39 @@ export const NotificationCenter = () => {
                               }
                             }
 
-                            // Handle navigation based on notification type
+                            // Resolve target route from notification type.
+                            // The DB writes a `link` field, but for claim notifications it
+                            // emits the un-scoped `/claims/<uuid>` shape — we must rewrite
+                            // it to the org-scoped vote/confirm pages here.
                             let targetLink = notification.link;
-                            
-                            // Fix legacy links from database triggers that use /payments/{id} instead of /payment/{id}
-                            if (targetLink && targetLink.startsWith('/payments/') && !targetLink.includes('/payments/history')) {
-                              // Extract the payment ID and convert to correct route
+                            const claimId =
+                              (notification.related_type === 'claim_request' && notification.related_id) ||
+                              (targetLink?.startsWith('/claims/') ? targetLink.replace('/claims/', '') : null);
+
+                            if ((notification.type === 'claim_vote_requested' || notification.type === 'claim_confirm_requested') && claimId) {
+                              // One landing page for both — it auto-detects what the viewer can do.
+                              targetLink = `/claim/${claimId}/decide`;
+                            } else if (notification.type === 'claim_approved' || notification.type === 'claim_rejected') {
+                              targetLink = '/dashboard';
+                            } else if (targetLink && targetLink.startsWith('/payments/') && !targetLink.includes('/payments/history')) {
+                              // Legacy payment link rewrite
                               const paymentId = targetLink.replace('/payments/', '');
                               targetLink = `/payment/${paymentId}`;
                             }
-                            
-                            // If no link provided, determine based on notification type
+
+                            // If still no link, fall back by type
                             if (!targetLink) {
                               if (notification.type === 'payment_approved' || notification.type === 'payment_rejected') {
-                                // Try to get payment ID from metadata
-                                if (notification.metadata?.payment_id) {
-                                  targetLink = `/payment/${notification.metadata.payment_id}`;
-                                } else {
-                                  // Fallback to payments history
-                                  targetLink = '/payments';
-                                }
+                                targetLink = notification.metadata?.payment_id
+                                  ? `/payment/${notification.metadata.payment_id}`
+                                  : '/payments';
                               } else if (notification.type === 'payment_waived') {
                                 targetLink = '/payments';
                               } else {
-                                // Default to dashboard
                                 targetLink = '/dashboard';
                               }
                             }
-                            
+
                             navigate(targetLink);
                             setShowPanel(false);
                           } catch (err) {

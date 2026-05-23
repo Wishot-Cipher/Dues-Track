@@ -27,7 +27,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { ArrowRight, Hourglass, ShieldCheck, Vote as VoteIcon } from 'lucide-react';
+import { ArrowRight, Hourglass, ShieldCheck, Vote as VoteIcon, X as XIcon } from 'lucide-react';
 import { supabase } from '@/config/supabase';
 import { useMultiTenantAuth } from '@/hooks/useMultiTenantAuth';
 
@@ -71,6 +71,15 @@ export default function VerificationStatusBanner() {
   const [adminRow, setAdminRow] = useState<AdminRow | null>(null);
   const [pendingClaim, setPendingClaim] = useState<PendingClaim | null>(null);
   const [loading, setLoading] = useState(true);
+  const [dismissed, setDismissed] = useState(false);
+  const [lastSeenVotes, setLastSeenVotes] = useState<number | null>(null);
+
+  const dismissKey = memberId && orgId
+    ? `pvx_claim_banner_dismissed_${orgId}_${memberId}`
+    : null;
+  const progressKey = pendingClaim && memberId
+    ? `pvx_claim_progress_${pendingClaim.id}_${memberId}`
+    : null;
 
   useEffect(() => {
     let cancelled = false;
@@ -98,7 +107,7 @@ export default function VerificationStatusBanner() {
         .select('id, position_title, bootstrap_path, votes_received, votes_required, current_layer, required_layer')
         .eq('claimant_user_id', memberId)
         .eq('organization_id', orgId)
-        .in('status', ['awaiting_votes', 'submitted', 'under_review'])
+        .in('status', ['awaiting_votes', 'submitted', 'under_review', 'email_sent', 'votes_complete'])
         .order('created_at', { ascending: false })
         .limit(1);
       const claim = (claims ?? [])[0] ?? null;
@@ -111,6 +120,47 @@ export default function VerificationStatusBanner() {
     })();
     return () => { cancelled = true; };
   }, [memberId, orgId]);
+
+  useEffect(() => {
+    if (!dismissKey) return;
+    try {
+      setDismissed(localStorage.getItem(dismissKey) === '1');
+    } catch {
+      // ignore storage errors
+    }
+  }, [dismissKey]);
+
+  useEffect(() => {
+    if (!progressKey || !pendingClaim) {
+      setLastSeenVotes(null);
+      return;
+    }
+    try {
+      const stored = localStorage.getItem(progressKey);
+      if (stored === null) {
+        localStorage.setItem(progressKey, String(pendingClaim.votes_received));
+        setLastSeenVotes(pendingClaim.votes_received);
+        return;
+      }
+      const parsed = Number(stored);
+      setLastSeenVotes(Number.isFinite(parsed) ? parsed : pendingClaim.votes_received);
+    } catch {
+      setLastSeenVotes(pendingClaim.votes_received);
+    }
+  }, [progressKey, pendingClaim]);
+
+  useEffect(() => {
+    if (!progressKey || !pendingClaim) return;
+    if (lastSeenVotes === null) return;
+    if (pendingClaim.votes_received > lastSeenVotes) {
+      try {
+        localStorage.setItem(progressKey, String(pendingClaim.votes_received));
+      } catch {
+        // ignore storage errors
+      }
+      setLastSeenVotes(pendingClaim.votes_received);
+    }
+  }, [progressKey, pendingClaim, lastSeenVotes]);
 
   const variant = useMemo(() => {
     if (loading) return 'hidden';
@@ -125,11 +175,19 @@ export default function VerificationStatusBanner() {
   }, [loading, adminRow, pendingClaim]);
 
   if (variant === 'hidden') return null;
+  if (variant === 'not_admin' && dismissed) return null;
 
   const goToClaim = () => navigate(`/${orgSlug}/claim`);
+  const handleDismiss = () => {
+    if (!dismissKey) return;
+    try { localStorage.setItem(dismissKey, '1'); } catch { /* ignore */ }
+    setDismissed(true);
+  };
 
   // ── Variant: in-progress claim ──
   if (variant === 'in_progress' && pendingClaim) {
+    if (lastSeenVotes === null) return null;
+    if (pendingClaim.votes_received <= lastSeenVotes) return null;
     const pct = Math.min(
       100,
       Math.round((pendingClaim.votes_received / Math.max(1, pendingClaim.votes_required)) * 100)
@@ -187,6 +245,7 @@ export default function VerificationStatusBanner() {
       icon={<VoteIcon className="w-4 h-4" />}
       eyebrow="Help run this organization"
       onClick={goToClaim}
+      onDismiss={handleDismiss}
     >
       <p className="text-sm font-bold text-white mb-1">
         Are you the {organization?.payment_label?.toLowerCase().includes('tithe') ? 'treasurer' : 'class rep'},
@@ -210,12 +269,14 @@ function BannerShell({
   eyebrow,
   children,
   onClick,
+  onDismiss,
 }: {
   accent: string;
   icon: React.ReactNode;
   eyebrow: string;
   children: React.ReactNode;
   onClick?: () => void;
+  onDismiss?: () => void;
 }) {
   return (
     <motion.section
@@ -235,6 +296,20 @@ function BannerShell({
         style={{ background: `radial-gradient(ellipse 50% 60% at 100% 0%, ${accent}28, transparent)` }}
       />
       <div className="relative">
+        {onDismiss && (
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              onDismiss();
+            }}
+            className="absolute right-0 top-0 p-1 rounded-lg"
+            style={{ color: `${accent}AA` }}
+            aria-label="Dismiss"
+          >
+            <XIcon className="w-4 h-4" />
+          </button>
+        )}
         <div className="flex items-center gap-2 mb-2">
           <span
             className="w-7 h-7 rounded-lg flex items-center justify-center"

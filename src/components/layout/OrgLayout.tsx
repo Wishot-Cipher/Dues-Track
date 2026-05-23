@@ -36,9 +36,12 @@ import {
   Heart,
   Wallet,
   CalendarDays,
+  MoreHorizontal,
+  X as XIcon,
 } from 'lucide-react';
+// import Footer from '@/components/Footer';
 import { colors, glows, glass } from '@/config/colors';
-// import { APP_NAME } from '@/config/constants';
+import { isAcademicOrgType } from '@/config/constants';
 import { useMultiTenantAuth } from '@/hooks/useMultiTenantAuth';
 import { supabase } from '@/config/supabase';
 import LoadingSpinner from '@/components/ui/LoadingSpinner';
@@ -66,6 +69,7 @@ export default function OrgLayout() {
   const [showProfileMenu, setShowProfileMenu] = useState(false);
   const [showAdminSubmenu, setShowAdminSubmenu] = useState(false);
   const [showLogoutModal, setShowLogoutModal] = useState(false);
+  const [showMoreSheet, setShowMoreSheet] = useState(false);
   const profileRef = useRef<HTMLDivElement>(null);
   const [fetchedLevel, setFetchedLevel] = useState<string | null>(null);
 
@@ -100,6 +104,7 @@ export default function OrgLayout() {
   useEffect(() => {
     setShowAdminSubmenu(false);
     setShowProfileMenu(false);
+    setShowMoreSheet(false);
   }, [location.pathname]);
 
   // If the mapped `user` lacks `level`, try to fetch it from organization_members.
@@ -143,7 +148,7 @@ export default function OrgLayout() {
   const isActive = (path: string) => location.pathname === `${basePath}${path}`;
   const isActivePrefix = (prefix: string) => location.pathname.startsWith(`${basePath}${prefix}`);
   const admin = isAnyAdmin();
-  const isAcademicOrg = organization.organization_type === 'university' || organization.organization_type === 'school';
+  const isAcademicOrg = isAcademicOrgType(organization.organization_type);
   const groupNavLabel = isAcademicOrg
     ? 'Faculties & Departments'
     : (organization.group_label_plural || 'Groups');
@@ -168,16 +173,23 @@ export default function OrgLayout() {
     { path: '/admin/billing', label: 'Billing', icon: <Wallet size={20} />, section: 'admin', hideOnMobile: true },
   ] : [];
 
-  // Bottom tab items (mobile) — limited to 5 for thumb reach
+  // Bottom tab items (mobile) — limited to 5 for thumb reach.
+  // For admins the 5th slot is "More" → opens a slide-up sheet with
+  // every secondary admin route (Groups, Manage Dues, Review, etc.).
+  // Without this sheet, ~10 admin routes are desktop-only.
   const bottomTabItems: NavItem[] = [
     { path: '/dashboard', label: 'Home', icon: <LayoutDashboard size={22} />, section: 'member' },
     { path: '/payments', label: organization.payment_label || 'Fee', icon: <CreditCard size={22} />, section: 'member' },
     ...(admin ? [
       { path: '/admin/dashboard', label: 'Admin', icon: <Shield size={22} />, section: 'admin' as const },
-      { path: '/admin/members', label: organization.member_label_plural || 'Students', icon: <Users size={22} />, section: 'admin' as const },
-      { path: '/admin/billing', label: 'Billing', icon: <Wallet size={22} />, section: 'admin' as const },
+      { path: '/admin/members', label: organization.member_label_plural || 'Members', icon: <Users size={22} />, section: 'admin' as const },
     ] : []),
   ];
+
+  // Routes that overflow the 5-tab bottom bar — surfaced via the More sheet.
+  const moreSheetItems: NavItem[] = admin
+    ? adminNav.filter(item => !['/admin/dashboard', '/admin/members'].includes(item.path))
+    : [];
 
   const handleLogout = async () => {
     setShowLogoutModal(false);
@@ -526,8 +538,10 @@ export default function OrgLayout() {
 
         <div className="flex items-center justify-around px-2 h-16">
           {bottomTabItems.map(item => {
+            // /admin/dashboard owns the "Admin" tab — it's active whenever any
+            // admin/* route is open EXCEPT the ones that have their own tab.
             const active = item.path === '/admin/dashboard'
-              ? isActivePrefix('/admin') && !isActive('/admin/members') && !isActive('/admin/billing')
+              ? isActivePrefix('/admin') && !isActive('/admin/members')
               : isActive(item.path);
             return (
               <Link
@@ -536,7 +550,6 @@ export default function OrgLayout() {
                 className="relative flex flex-col items-center justify-center gap-0.5 py-1 px-3 rounded-2xl transition-all"
                 style={{ minWidth: '60px' }}
               >
-                {/* Active glow background */}
                 {active && (
                   <motion.div
                     layoutId="bottomTabGlow"
@@ -548,7 +561,7 @@ export default function OrgLayout() {
                     transition={{ type: 'spring', stiffness: 400, damping: 30 }}
                   />
                 )}
-                
+
                 <span
                   className="relative z-10 transition-colors"
                   style={{ color: active ? colors.primary : colors.textTertiary }}
@@ -562,7 +575,6 @@ export default function OrgLayout() {
                   {item.label}
                 </span>
 
-                {/* Active dot indicator */}
                 {active && (
                   <motion.span
                     layoutId="bottomTabDot"
@@ -577,8 +589,112 @@ export default function OrgLayout() {
               </Link>
             );
           })}
+
+          {/* "More" tab — only for admins, opens the overflow sheet */}
+          {moreSheetItems.length > 0 && (
+            <button
+              type="button"
+              onClick={() => setShowMoreSheet(true)}
+              className="relative flex flex-col items-center justify-center gap-0.5 py-1 px-3 rounded-2xl transition-all"
+              style={{ minWidth: '60px' }}
+            >
+              <span className="relative z-10 transition-colors" style={{ color: showMoreSheet ? colors.primary : colors.textTertiary }}>
+                <MoreHorizontal size={22} />
+              </span>
+              <span
+                className="relative z-10 text-[10px] font-medium transition-colors"
+                style={{ color: showMoreSheet ? colors.primary : colors.textTertiary }}
+              >
+                More
+              </span>
+            </button>
+          )}
         </div>
       </nav>
+
+      {/* ═══════════ MOBILE MORE SHEET ═══════════ */}
+      <AnimatePresence>
+        {showMoreSheet && (
+          <>
+            <motion.div
+              className="fixed inset-0 z-90 lg:hidden"
+              style={{ background: 'rgba(0,0,0,0.55)', backdropFilter: 'blur(6px)' }}
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setShowMoreSheet(false)}
+            />
+            <motion.div
+              className="fixed left-0 right-0 bottom-0 z-95 lg:hidden rounded-t-3xl overflow-hidden"
+              style={{
+                ...glass.strong,
+                borderTop: `1px solid rgba(255,104,3,0.18)`,
+                paddingBottom: 'calc(env(safe-area-inset-bottom, 0px) + 12px)',
+                maxHeight: '80vh',
+              }}
+              initial={{ y: '100%' }}
+              animate={{ y: 0 }}
+              exit={{ y: '100%' }}
+              transition={{ type: 'spring', stiffness: 380, damping: 38 }}
+            >
+              {/* Drag handle */}
+              <div className="flex justify-center pt-3 pb-1">
+                <span
+                  className="block w-10 h-1 rounded-full"
+                  style={{ background: 'rgba(255,255,255,0.18)' }}
+                />
+              </div>
+
+              {/* Header */}
+              <div className="px-5 pt-2 pb-3 flex items-center justify-between">
+                <div>
+                  <p className="text-[10px] uppercase tracking-[0.18em] font-bold" style={{ color: colors.primary }}>
+                    Admin tools
+                  </p>
+                  <h3 className="text-base font-bold text-white">More</h3>
+                </div>
+                <button
+                  onClick={() => setShowMoreSheet(false)}
+                  className="w-9 h-9 rounded-xl flex items-center justify-center"
+                  style={{ background: 'rgba(255,255,255,0.05)' }}
+                  aria-label="Close"
+                >
+                  <XIcon className="w-4 h-4" style={{ color: colors.textSecondary }} />
+                </button>
+              </div>
+
+              {/* Items */}
+              <div className="px-3 pb-3 overflow-y-auto" style={{ maxHeight: 'calc(80vh - 80px)' }}>
+                <div className="grid grid-cols-2 gap-2">
+                  {moreSheetItems.map(item => (
+                    <Link
+                      key={item.path}
+                      to={`${basePath}${item.path}`}
+                      onClick={() => setShowMoreSheet(false)}
+                      className="flex items-center gap-3 px-3.5 py-3 rounded-2xl transition-all"
+                      style={{
+                        background: isActive(item.path) ? `${colors.primary}18` : 'rgba(255,255,255,0.03)',
+                        border: `1px solid ${isActive(item.path) ? `${colors.primary}30` : colors.borderLight}`,
+                      }}
+                    >
+                      <span
+                        className="w-8 h-8 rounded-lg flex items-center justify-center shrink-0"
+                        style={{
+                          background: isActive(item.path) ? `${colors.primary}22` : 'rgba(255,255,255,0.04)',
+                          color: isActive(item.path) ? colors.primary : colors.textSecondary,
+                        }}
+                      >
+                        {item.icon}
+                      </span>
+                      <span className="text-xs font-semibold text-white truncate">{item.label}</span>
+                    </Link>
+                  ))}
+                </div>
+              </div>
+            </motion.div>
+          </>
+        )}
+      </AnimatePresence>
 
       {/* ═══════════ LOGOUT CONFIRMATION MODAL ═══════════ */}
       <AnimatePresence>

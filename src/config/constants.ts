@@ -19,6 +19,136 @@ export const ORGANIZATION_TYPES = {
 
 export type OrganizationType = typeof ORGANIZATION_TYPES[keyof typeof ORGANIZATION_TYPES]
 
+/**
+ * Academic org types use the faculty/department/level hierarchy.
+ * Non-academic orgs (church, club, association, cooperative, ngo, other)
+ * skip these fields in onboarding and signup.
+ */
+export function isAcademicOrgType(type: OrganizationType | string | null | undefined): boolean {
+  return type === 'university' || type === 'school';
+}
+
+/**
+ * Org-type-aware label for the "level / position" field on signup forms.
+ * Academic orgs see "Level / Year"; everything else sees "Position / Role".
+ */
+export function levelFieldLabel(type: OrganizationType | string | null | undefined): {
+  label: string;
+  placeholder: string;
+  hint: string;
+} {
+  if (isAcademicOrgType(type)) {
+    return { label: 'Level / Year', placeholder: '200L', hint: 'optional, e.g. 200L, SS2' };
+  }
+  return { label: 'Position / Role', placeholder: 'Member', hint: 'optional, e.g. Member, Worker' };
+}
+
+/**
+ * Exec-role dropdown options for the claim-submission form, scoped by
+ * org type. The `value` is what gets stored in claim_requests.claimed_role
+ * (a free string in the DB — permissions don't key off it today), and
+ * `label` is the auto-fill text for the `position_title` field. `custom`
+ * is always present last so users can type their own title.
+ */
+export interface ClaimRoleOption {
+  value: string;
+  label: string;
+}
+
+export function getClaimRoleOptions(type: OrganizationType | string | null | undefined): ClaimRoleOption[] {
+  const ACADEMIC: ClaimRoleOption[] = [
+    { value: 'class_rep',           label: 'Class Rep' },
+    { value: 'treasurer',           label: 'Treasurer' },
+    { value: 'financial_secretary', label: 'Financial Secretary' },
+    { value: 'secretary',           label: 'Secretary' },
+    { value: 'president',           label: 'President' },
+    { value: 'vice_president',      label: 'Vice President' },
+    { value: 'hod',                 label: 'HOD' },
+    { value: 'director',            label: 'Director' },
+    { value: 'pro',                 label: 'PRO' },
+  ];
+
+  const CHURCH: ClaimRoleOption[] = [
+    { value: 'pastor',              label: 'Pastor' },
+    { value: 'assistant_pastor',    label: 'Assistant Pastor' },
+    { value: 'treasurer',           label: 'Treasurer' },
+    { value: 'financial_secretary', label: 'Financial Secretary' },
+    { value: 'secretary',           label: 'Secretary' },
+    { value: 'welfare_officer',     label: 'Welfare Officer' },
+    { value: 'choir_director',      label: 'Choir Director' },
+    { value: 'usher_head',          label: 'Head Usher' },
+    { value: 'worker',              label: 'Worker' },
+  ];
+
+  const CLUB: ClaimRoleOption[] = [
+    { value: 'president',           label: 'President' },
+    { value: 'vice_president',      label: 'Vice President' },
+    { value: 'treasurer',           label: 'Treasurer' },
+    { value: 'financial_secretary', label: 'Financial Secretary' },
+    { value: 'secretary',           label: 'Secretary' },
+    { value: 'pro',                 label: 'PRO' },
+    { value: 'welfare_officer',     label: 'Welfare Officer' },
+  ];
+
+  const ASSOCIATION: ClaimRoleOption[] = [
+    { value: 'president',           label: 'President' },
+    { value: 'vice_president',      label: 'Vice President' },
+    { value: 'secretary',           label: 'Secretary' },
+    { value: 'treasurer',           label: 'Treasurer' },
+    { value: 'pro',                 label: 'PRO' },
+    { value: 'welfare_officer',     label: 'Welfare Officer' },
+  ];
+
+  const COOPERATIVE: ClaimRoleOption[] = [
+    { value: 'chairman',            label: 'Chairman' },
+    { value: 'vice_chairman',       label: 'Vice Chairman' },
+    { value: 'treasurer',           label: 'Treasurer' },
+    { value: 'secretary',           label: 'Secretary' },
+    { value: 'auditor',             label: 'Auditor' },
+  ];
+
+  const NGO: ClaimRoleOption[] = [
+    { value: 'director',            label: 'Director' },
+    { value: 'deputy_director',     label: 'Deputy Director' },
+    { value: 'treasurer',           label: 'Treasurer' },
+    { value: 'secretary',           label: 'Secretary' },
+    { value: 'program_manager',     label: 'Program Manager' },
+  ];
+
+  let list: ClaimRoleOption[];
+  switch (type) {
+    case 'university':
+    case 'school':
+      list = ACADEMIC;
+      break;
+    case 'church':
+      list = CHURCH;
+      break;
+    case 'club':
+      list = CLUB;
+      break;
+    case 'association':
+      list = ASSOCIATION;
+      break;
+    case 'cooperative':
+      list = COOPERATIVE;
+      break;
+    case 'ngo':
+      list = NGO;
+      break;
+    default:
+      // Unknown / 'other' — give the broad superset so users aren't blocked
+      list = [
+        { value: 'president',           label: 'President' },
+        { value: 'vice_president',      label: 'Vice President' },
+        { value: 'treasurer',           label: 'Treasurer' },
+        { value: 'financial_secretary', label: 'Financial Secretary' },
+        { value: 'secretary',           label: 'Secretary' },
+      ];
+  }
+  return [...list, { value: 'custom', label: 'Other / custom' }];
+}
+
 // User roles
 export const USER_ROLES = {
   STUDENT: 'student',

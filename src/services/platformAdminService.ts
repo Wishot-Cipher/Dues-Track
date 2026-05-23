@@ -1,15 +1,27 @@
 /**
  * Platform Admin Service
- * Handles authentication and data access for Payvexo platform administrators.
- * This is completely separate from the org-level admin system.
- * 
- * @author Dev_Wishot
- * @copyright Dev_Wishot - @wishotstudio
+ *
+ * Authenticates platform operators (super admins) and proxies privileged
+ * RPCs (org status toggle, subscription updates, trial extension) that
+ * are gated by a server-side session token — see migration 044.
+ *
+ * Key invariants:
+ *   • Session token + expiry come from the DB on login; we store both
+ *     in sessionStorage as opaque values and pass the token back to
+ *     every privileged RPC.
+ *   • Permission flags (can_manage_organizations, ...) come from the
+ *     DB row and are never overridden client-side. The RPCs re-check
+ *     them server-side anyway, so client-side checks are advisory.
+ *   • A stale / expired token causes every privileged RPC to return
+ *     `{ ok: false, error: 'Session expired ...' }` and the UI should
+ *     clear the session and redirect to login.
+ *
+ * NOTE: this service is completely separate from the org-level
+ * member_admins system.
  */
 
 import { supabase } from '@/config/supabase';
 
-// Storage key (deliberately vague name)
 const PLATFORM_KEY = 'pvx_sys_ctx';
 
 export interface PlatformAdmin {
@@ -20,8 +32,11 @@ export interface PlatformAdmin {
   can_manage_subscriptions: boolean;
   can_view_all_data: boolean;
   can_manage_platform_admins: boolean;
+  can_impersonate: boolean;
   is_active: boolean;
   last_login_at: string | null;
+  session_token: string;
+  session_expires_at: string;
 }
 
 export interface OrgOverview {
@@ -34,7 +49,6 @@ export interface OrgOverview {
   member_count: number;
   payment_count: number;
   total_collected: number;
-  // Billing fields
   subscription_plan: string;
   subscription_expires_at: string | null;
   is_on_trial: boolean;
@@ -54,9 +68,47 @@ export interface PlatformStats {
   recentOrgs: OrgOverview[];
 }
 
+interface AdminRpcRow {
+  id: string;
+  email: string;
+  full_name: string;
+  can_manage_organizations?: boolean | null;
+  can_manage_subscriptions?: boolean | null;
+  can_view_all_data?: boolean | null;
+  can_manage_platform_admins?: boolean | null;
+  can_impersonate?: boolean | null;
+  is_active: boolean;
+  last_login_at: string | null;
+  session_token: string;
+  session_expires_at: string;
+}
+
+function rowToAdmin(row: AdminRpcRow): PlatformAdmin {
+  return {
+    id: row.id,
+    email: row.email,
+    full_name: row.full_name,
+    // Trust the DB row verbatim — older code overrode every flag to `true`
+    // before mig 044. Null defaults to false (deny).
+    can_manage_organizations:   row.can_manage_organizations   ?? false,
+    can_manage_subscriptions:   row.can_manage_subscriptions   ?? false,
+    can_view_all_data:          row.can_view_all_data          ?? false,
+    can_manage_platform_admins: row.can_manage_platform_admins ?? false,
+    can_impersonate:            row.can_impersonate            ?? false,
+    is_active: row.is_active,
+    last_login_at: row.last_login_at,
+    session_token: row.session_token,
+    session_expires_at: row.session_expires_at,
+  };
+}
+
+function persistAdmin(admin: PlatformAdmin): void {
+  sessionStorage.setItem(PLATFORM_KEY, JSON.stringify(admin));
+}
+
 /**
- * Authenticate a platform admin via email + password
- * Uses bcrypt check against platform_admins table
+ * Authenticate a platform admin via email + password.
+ * The server rotates the session token on every login.
  */
 export async function platformAdminLogin(email: string, password: string): Promise<PlatformAdmin> {
   const normalizedEmail = email.toLowerCase().trim();
@@ -66,77 +118,110 @@ export async function platformAdminLogin(email: string, password: string): Promi
       p_email: normalizedEmail,
       p_password: password,
     });
-
     if (error) {
+      // Function-not-found → try the alias; anything else is a real failure.
       if (error.message?.includes('Could not find the function') || error.code === '42883') {
         return null;
       }
       throw new Error(error.message || 'Authentication failed');
     }
-
-    if (!data || (Array.isArray(data) && data.length === 0)) {
-      return null;
-    }
-
+    if (!data || (Array.isArray(data) && data.length === 0)) return null;
     return Array.isArray(data) ? data[0] : data;
   };
 
-  const superAdmin = await tryVerify('verify_super_admin');
-  const admin = superAdmin || await tryVerify('verify_platform_admin');
+  const row =
+    (await tryVerify('verify_super_admin')) ??
+    (await tryVerify('verify_platform_admin'));
 
-  if (!admin) {
-    throw new Error('Invalid email or password');
-  }
+  if (!row) throw new Error('Invalid email or password');
+  if (!row.is_active) throw new Error('Account is deactivated');
+  if (!row.session_token) throw new Error('Server did not issue a session token. Run migration 044.');
 
-  if (!admin.is_active) throw new Error('Account is deactivated');
-
-  // Store session (deliberately vague key)
-  const session = {
-    id: admin.id,
-    email: admin.email,
-    full_name: admin.full_name,
-    can_manage_organizations: true,
-    can_manage_subscriptions: true,
-    can_view_all_data: true,
-    can_manage_platform_admins: true,
-    is_active: admin.is_active,
-    last_login_at: admin.last_login_at,
-    ts: Date.now(),
-  };
-  sessionStorage.setItem(PLATFORM_KEY, JSON.stringify(session));
-
-  return session;
+  const admin = rowToAdmin(row as AdminRpcRow);
+  persistAdmin(admin);
+  return admin;
 }
 
 /**
- * Get current platform admin session (if any)
+ * Get the current cached platform admin (if any). This does NOT re-verify
+ * the token with the server — callers should follow up with `verifySession()`
+ * on mount and on tab focus.
  */
 export function getPlatformAdmin(): PlatformAdmin | null {
   try {
     const raw = sessionStorage.getItem(PLATFORM_KEY);
     if (!raw) return null;
-    const session = JSON.parse(raw);
-    // Expire after 4 hours
-    if (Date.now() - session.ts > 4 * 60 * 60 * 1000) {
+    const admin = JSON.parse(raw) as PlatformAdmin;
+    if (admin.session_expires_at && new Date(admin.session_expires_at).getTime() < Date.now()) {
       sessionStorage.removeItem(PLATFORM_KEY);
       return null;
     }
-    return session;
+    return admin;
   } catch {
     return null;
   }
 }
 
 /**
- * Logout platform admin
+ * Re-verify the cached token against the server. Returns the fresh admin
+ * row (if still valid) or null (caller should clear session and redirect).
  */
-export function platformAdminLogout(): void {
-  sessionStorage.removeItem(PLATFORM_KEY);
+export async function verifySession(): Promise<PlatformAdmin | null> {
+  const cached = getPlatformAdmin();
+  if (!cached?.session_token) return null;
+
+  const { data, error } = await supabase.rpc('verify_session_token', {
+    p_token: cached.session_token,
+  });
+  if (error) {
+    console.error('[Platform] verify_session_token error', error);
+    return null;
+  }
+  if (!data || (Array.isArray(data) && data.length === 0)) {
+    sessionStorage.removeItem(PLATFORM_KEY);
+    return null;
+  }
+  const row = Array.isArray(data) ? data[0] : data;
+  const admin = rowToAdmin(row as AdminRpcRow);
+  persistAdmin(admin);
+  return admin;
 }
 
 /**
- * Fetch all organizations with aggregated stats
+ * Logout — invalidates the token server-side and clears the cache.
  */
+export async function platformAdminLogout(): Promise<void> {
+  const cached = getPlatformAdmin();
+  sessionStorage.removeItem(PLATFORM_KEY);
+  if (cached?.session_token) {
+    try {
+      await supabase.rpc('platform_logout', { p_token: cached.session_token });
+    } catch (err) {
+      console.warn('[Platform] platform_logout RPC failed (clearing local session anyway)', err);
+    }
+  }
+}
+
+/**
+ * Surfaces session-expired errors from privileged RPC responses so the UI
+ * can redirect to login.
+ */
+function unwrap<T extends { ok: boolean; error?: string }>(data: T | null): T {
+  if (!data) throw new Error('Empty RPC response');
+  if (!data.ok) {
+    const msg = data.error || 'Unknown error';
+    if (/session expired|sign in again/i.test(msg)) {
+      sessionStorage.removeItem(PLATFORM_KEY);
+    }
+    throw new Error(msg);
+  }
+  return data;
+}
+
+/* ──────────────────────────────────────────────────────────────
+ * Data fetching
+ * ──────────────────────────────────────────────────────────── */
+
 export async function fetchOrganizations(): Promise<OrgOverview[]> {
   const admin = getPlatformAdmin();
   if (!admin) throw new Error('Not authenticated');
@@ -149,7 +234,6 @@ export async function fetchOrganizations(): Promise<OrgOverview[]> {
   if (error) throw error;
   if (!orgs) return [];
 
-  // For each org, get member count and payment stats
   const results: OrgOverview[] = [];
   for (const org of orgs) {
     const [memberRes, paymentRes] = await Promise.all([
@@ -179,46 +263,39 @@ export async function fetchOrganizations(): Promise<OrgOverview[]> {
   return results;
 }
 
-/**
- * Fetch platform-wide statistics
- */
 export async function fetchPlatformStats(): Promise<PlatformStats> {
   const orgs = await fetchOrganizations();
-
-  const totalOrganizations = orgs.length;
-  const activeOrganizations = orgs.filter(o => o.is_active).length;
-  const totalMembers = orgs.reduce((sum, o) => sum + o.member_count, 0);
-  const totalPayments = orgs.reduce((sum, o) => sum + o.payment_count, 0);
-  const totalCollected = orgs.reduce((sum, o) => sum + o.total_collected, 0);
-
   return {
-    totalOrganizations,
-    activeOrganizations,
-    totalMembers,
-    totalPayments,
-    totalCollected,
+    totalOrganizations: orgs.length,
+    activeOrganizations: orgs.filter(o => o.is_active).length,
+    totalMembers: orgs.reduce((sum, o) => sum + o.member_count, 0),
+    totalPayments: orgs.reduce((sum, o) => sum + o.payment_count, 0),
+    totalCollected: orgs.reduce((sum, o) => sum + o.total_collected, 0),
     recentOrgs: orgs.slice(0, 10),
   };
 }
 
-/**
- * Toggle org active status
- */
+export async function fetchAllOrganizations(): Promise<OrgOverview[]> {
+  return fetchOrganizations();
+}
+
+/* ──────────────────────────────────────────────────────────────
+ * Privileged mutations — all token-gated by the RPC
+ * ──────────────────────────────────────────────────────────── */
+
 export async function toggleOrganizationStatus(orgId: string, isActive: boolean): Promise<void> {
   const admin = getPlatformAdmin();
-  if (!admin?.can_manage_organizations) throw new Error('Insufficient permissions');
+  if (!admin) throw new Error('Not authenticated');
 
-  const { error } = await supabase.rpc('set_organization_status', {
+  const { data, error } = await supabase.rpc('set_organization_status', {
+    p_session_token: admin.session_token,
     p_org_id: orgId,
     p_is_active: isActive,
   });
-
-  if (error) throw error;
+  if (error) throw new Error(error.message);
+  unwrap(data as { ok: boolean; error?: string });
 }
 
-/**
- * Update an organization's subscription plan from the platform console
- */
 export async function updateOrgSubscription(
   orgId: string,
   plan: 'free' | 'starter' | 'professional' | 'enterprise',
@@ -232,19 +309,18 @@ export async function updateOrgSubscription(
   }
 ): Promise<void> {
   const admin = getPlatformAdmin();
-  if (!admin?.can_manage_subscriptions) throw new Error('Insufficient permissions');
+  if (!admin) throw new Error('Not authenticated');
 
-  // Plan defaults
   const planLimits: Record<string, { max_groups: number; max_members: number; max_admins: number }> = {
-    free: { max_groups: 1, max_members: 50, max_admins: 3 },
-    starter: { max_groups: 3, max_members: 300, max_admins: 10 },
-    professional: { max_groups: 20, max_members: 5000, max_admins: 50 },
-    enterprise: { max_groups: 999, max_members: 99999, max_admins: 999 },
+    free:         { max_groups: 1,   max_members: 50,    max_admins: 3 },
+    starter:      { max_groups: 3,   max_members: 300,   max_admins: 10 },
+    professional: { max_groups: 20,  max_members: 5000,  max_admins: 50 },
+    enterprise:   { max_groups: 999, max_members: 99999, max_admins: 999 },
   };
-
   const defaults = planLimits[plan];
 
-  const { error } = await supabase.rpc('update_organization_subscription', {
+  const { data, error } = await supabase.rpc('update_organization_subscription', {
+    p_session_token: admin.session_token,
     p_org_id: orgId,
     p_plan: plan,
     p_max_groups: options?.max_groups ?? defaults.max_groups,
@@ -254,31 +330,27 @@ export async function updateOrgSubscription(
     p_is_on_trial: options?.is_on_trial ?? false,
     p_trial_ends_at: options?.trial_ends_at ?? null,
   });
-
-  if (error) throw error;
+  if (error) throw new Error(error.message);
+  unwrap(data as { ok: boolean; error?: string });
 }
 
-/**
- * Extend an organization's trial period
- */
 export async function extendTrial(orgId: string, days: number): Promise<void> {
   const admin = getPlatformAdmin();
-  if (!admin?.can_manage_subscriptions) throw new Error('Insufficient permissions');
+  if (!admin) throw new Error('Not authenticated');
 
-  const trialEnd = new Date();
-  trialEnd.setDate(trialEnd.getDate() + days);
-
-  const { error } = await supabase.rpc('extend_organization_trial', {
+  const { data, error } = await supabase.rpc('extend_organization_trial', {
+    p_session_token: admin.session_token,
     p_org_id: orgId,
     p_days: days,
   });
-
-  if (error) throw error;
+  if (error) throw new Error(error.message);
+  unwrap(data as { ok: boolean; error?: string });
 }
 
-/**
- * Fetch billing transactions for a specific organization
- */
+/* ──────────────────────────────────────────────────────────────
+ * Billing history (read-only)
+ * ──────────────────────────────────────────────────────────── */
+
 export interface BillingTransaction {
   id: string;
   organization_id: string;
@@ -307,13 +379,5 @@ export async function fetchOrgBillingHistory(orgId: string): Promise<BillingTran
     console.error('[Platform] Error fetching billing history:', error);
     return [];
   }
-
   return data || [];
-}
-
-/**
- * Fetch all organizations (for billing view - returns full list not just top 10)
- */
-export async function fetchAllOrganizations(): Promise<OrgOverview[]> {
-  return fetchOrganizations();
 }

@@ -20,7 +20,7 @@ import {
 } from 'lucide-react';
 import { organizationService } from '@/services/organizationService';
 import { useMultiTenantAuth } from '@/hooks/useMultiTenantAuth';
-import { APP_NAME } from '@/config/constants';
+import { APP_NAME, getClaimRoleOptions } from '@/config/constants';
 
 const tk = {
   bg:        '#0F0703',
@@ -35,24 +35,17 @@ const tk = {
   danger:    '#ef4444',
 };
 
-const ROLE_OPTIONS = [
-  { value: 'class_rep',           label: 'Class Rep' },
-  { value: 'treasurer',           label: 'Treasurer' },
-  { value: 'financial_secretary', label: 'Financial Secretary' },
-  { value: 'secretary',           label: 'Secretary' },
-  { value: 'president',           label: 'President' },
-  { value: 'vice_president',      label: 'Vice President' },
-  { value: 'hod',                 label: 'HOD' },
-  { value: 'director',            label: 'Director' },
-  { value: 'pro',                 label: 'PRO' },
-  { value: 'custom',              label: 'Other / custom' },
-];
-
 export default function ClaimSubmitPage() {
   const { orgSlug } = useParams<{ orgSlug: string }>();
   const [params] = useSearchParams();
   const navigate = useNavigate();
   const { user, organization, group } = useMultiTenantAuth();
+
+  // Org-type-aware list of exec roles (academic vs church vs club vs ...)
+  const ROLE_OPTIONS = useMemo(
+    () => getClaimRoleOptions(organization?.organization_type),
+    [organization?.organization_type]
+  );
 
   // Defaults from URL + current context
   const initialScope = (params.get('scope') as 'org' | 'unit' | 'group' | null) ?? 'group';
@@ -62,7 +55,9 @@ export default function ClaimSubmitPage() {
   // Group id is fixed for now (defaults to caller's own group from session/URL).
   // A future enhancement: let unit/org-scope claimers pick a different target.
   const [claimedGroupId] = useState<string | null>(initialGroupId);
-  const [role, setRole] = useState('class_rep');
+  // Default role is the first option for this org type (so churches don't
+  // default to "class_rep" before the user has even picked one).
+  const [role, setRole] = useState<string>(() => ROLE_OPTIONS[0]?.value ?? 'custom');
   const [positionTitle, setPositionTitle] = useState('');
   const [phone, setPhone] = useState(user?.phone ?? '');
   const [personalEmail, setPersonalEmail] = useState(user?.email ?? '');
@@ -115,6 +110,15 @@ export default function ClaimSubmitPage() {
       setError(res.error || 'Could not submit your claim. Please try again.');
       setSubmitting(false);
       return;
+    }
+
+    try {
+      if (organization?.id && user?.id) {
+        localStorage.setItem(`pvx_claim_submitted_${organization.id}_${user.id}`, res.claim_id);
+        localStorage.setItem(`pvx_claim_progress_${res.claim_id}_${user.id}`, '0');
+      }
+    } catch {
+      // ignore storage errors
     }
 
     setSubmitted({

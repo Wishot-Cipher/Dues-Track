@@ -42,7 +42,7 @@ import {
 } from 'lucide-react';
 import { organizationService } from '@/services/organizationService';
 import TrustBadge from '@/components/trust/TrustBadge';
-import { APP_NAME } from '@/config/constants';
+import { APP_NAME, levelFieldLabel } from '@/config/constants';
 import type {
   Organization,
   OrganizationGroup,
@@ -528,9 +528,14 @@ export default function GroupWelcomePage() {
                     </Field>
                   </Row>
 
-                  <Field label="Level / position" hint="optional, e.g. 200L, SS2, Member">
-                    <Input value={form.level} onChange={(v) => setForm({ ...form, level: v })} placeholder="200L" />
-                  </Field>
+                  {(() => {
+                    const lf = levelFieldLabel(org?.organization_type);
+                    return (
+                      <Field label={lf.label} hint={lf.hint}>
+                        <Input value={form.level} onChange={(v) => setForm({ ...form, level: v })} placeholder={lf.placeholder} />
+                      </Field>
+                    );
+                  })()}
 
                   {pwMismatch && (
                     <p className="text-xs flex items-center gap-1.5" style={{ color: tk.danger }}>

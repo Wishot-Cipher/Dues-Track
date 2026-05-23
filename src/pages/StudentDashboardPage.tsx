@@ -55,6 +55,7 @@ import ExpenseTransparencyDashboard from '@/components/student/ExpenseTransparen
 import AchievementSystem from '@/components/student/AchievementSystem';
 import VoteInbox from '@/components/claims/VoteInbox';
 import VerificationStatusBanner from '@/components/claims/VerificationStatusBanner';
+import VoteUrgencyBanner from '@/components/claims/VoteUrgencyBanner';
 
 // ────────────────────────────────────────────────────────────────────────────
 // Design tokens
@@ -308,6 +309,9 @@ export default function StudentDashboardPage() {
             </motion.div>
           )}
         </AnimatePresence>
+
+        {/* ───────────── VOTE URGENCY BANNER ───────────── */}
+        <VoteUrgencyBanner orgSlug={orgSlug} />
 
         {/* ───────────── HERO ───────────── */}
         <HeroCard

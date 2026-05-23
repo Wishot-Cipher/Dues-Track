@@ -45,6 +45,7 @@ import {
   platformAdminLogin,
   getPlatformAdmin,
   platformAdminLogout,
+  verifySession,
   fetchPlatformStats,
   toggleOrganizationStatus,
   updateOrgSubscription,
@@ -1069,11 +1070,53 @@ function PlatformDashboard({ admin, onLogout }: { admin: PlatformAdmin; onLogout
 // ── Main Page Component ──
 export default function PlatformConsolePage() {
   const [admin, setAdmin] = useState<PlatformAdmin | null>(() => getPlatformAdmin());
+  const [verifying, setVerifying] = useState<boolean>(() => Boolean(getPlatformAdmin()));
 
-  const handleLogout = () => {
-    platformAdminLogout();
+  // Re-verify the cached token against the server on mount and on every
+  // tab focus. A stale or expired token kicks the user back to login —
+  // we never trust client-side session data alone.
+  useEffect(() => {
+    let cancelled = false;
+    const check = async () => {
+      const cached = getPlatformAdmin();
+      if (!cached) {
+        if (!cancelled) { setAdmin(null); setVerifying(false); }
+        return;
+      }
+      const fresh = await verifySession();
+      if (!cancelled) {
+        setAdmin(fresh);
+        setVerifying(false);
+      }
+    };
+    void check();
+    const onVisible = () => {
+      if (document.visibilityState === 'visible') void check();
+    };
+    document.addEventListener('visibilitychange', onVisible);
+    return () => {
+      cancelled = true;
+      document.removeEventListener('visibilitychange', onVisible);
+    };
+  }, []);
+
+  const handleLogout = async () => {
+    await platformAdminLogout();
     setAdmin(null);
   };
+
+  if (verifying) {
+    return (
+      <div className="min-h-screen flex items-center justify-center" style={{ background: '#0F0703' }}>
+        <motion.div
+          className="w-8 h-8 border-2 rounded-full"
+          style={{ borderColor: '#FF680330', borderTopColor: '#FF6803' }}
+          animate={{ rotate: 360 }}
+          transition={{ duration: 1, repeat: Infinity, ease: 'linear' }}
+        />
+      </div>
+    );
+  }
 
   if (!admin) {
     return <PlatformLoginForm onLogin={setAdmin} />;

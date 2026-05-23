@@ -52,6 +52,7 @@ import GroupWelcomePage from '@/pages/GroupWelcomePage';
 import AddDepartmentPage from '@/pages/AddDepartmentPage';
 import AddFacultyPage from '@/pages/AddFacultyPage';
 import ClaimSubmitPage from '@/pages/ClaimSubmitPage';
+import ClaimDecisionPage from '@/pages/ClaimDecisionPage';
 import PlatformConsolePage from '@/pages/PlatformConsolePage';
 import ForgotPasswordPage from '@/pages/student/ForgotPasswordPage';
 import ResetPasswordPage from '@/pages/student/ResetPasswordPage';
@@ -119,6 +120,7 @@ function App() {
                 {/* Member pages */}
                 <Route path="dashboard" element={<OrgProtectedRoute><StudentDashboardPage /></OrgProtectedRoute>} />
                 <Route path="claim" element={<OrgProtectedRoute><ClaimSubmitPage /></OrgProtectedRoute>} />
+                <Route path="claim/:claimId/decide" element={<OrgProtectedRoute><ClaimDecisionPage /></OrgProtectedRoute>} />
                 <Route path="payments" element={<OrgProtectedRoute><PaymentHistoryPage /></OrgProtectedRoute>} />
                 <Route path="payment/:id" element={<OrgProtectedRoute><PaymentDetailPage /></OrgProtectedRoute>} />
                 <Route path="profile" element={<OrgProtectedRoute><ProfilePage /></OrgProtectedRoute>} />
