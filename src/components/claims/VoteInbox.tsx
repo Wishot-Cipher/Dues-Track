@@ -81,7 +81,7 @@ export default function VoteInbox() {
     async (claimId: string, vote: 'confirm' | 'reject' | 'abstain') => {
       if (!memberId || voting) return;
       setVoting(claimId);
-      const res = await organizationService.castClaimVote({
+      const res = await organizationService.castClaimVoteV2({
         claimId,
         voterMemberId: memberId,
         vote,
@@ -93,12 +93,18 @@ export default function VoteInbox() {
         return;
       }
 
-      if (res.finalize?.approved) {
-        toast?.success?.('Your vote pushed them over the line — they are now a verified admin.');
+      // Copy depends on whether this is a bootstrap claim (peer vote alone
+      // unlocks money) or a normal claim (peer vote strengthens trust but
+      // money only unlocks when a parent-org exec confirms — Layer 4).
+      if (res.promoted) {
+        toast?.success?.('Your vote pushed them over the threshold — they are verified.');
       } else if (vote === 'confirm') {
-        const got = res.finalize?.votes_received ?? 0;
-        const need = res.finalize?.votes_required ?? 0;
-        toast?.success?.(`Vote recorded. ${got} of ${need} confirmations.`);
+        const got = res.votes_received ?? 0;
+        const need = res.votes_required ?? 0;
+        const tail = res.bootstrap_path
+          ? `${got} of ${need} confirmations.`
+          : `${got} of ${need} peer votes — payments unlock once their parent exec confirms.`;
+        toast?.success?.(`Vote recorded. ${tail}`);
       } else if (vote === 'reject') {
         toast?.info?.('Rejection recorded.');
       } else {

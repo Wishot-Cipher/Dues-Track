@@ -1439,4 +1439,207 @@ Generated server-side after the Paystack webhook confirms `charge.success`. PDF 
 
 ---
 
+## SECTION 13 — Layered Trust, Multi-Role & Role Switcher
+
+> **Status:** Source of truth for the verification flow. **Supersedes** the single-pass member-vote model that mig 039 originally shipped. When implementing verification work, build to this section.
+
+### 13.1 The core problem
+
+We cannot trust self-declaration alone (anyone could claim to be the president). We also cannot require pure voting (a class with 3 registered students voting is meaningless — chicken-and-egg). The solution is **layered trust** — every claim climbs through stages, gaining strength as more independent signals stack.
+
+### 13.2 The five trust layers
+
+```
+Layer 0 — None              Acting state. Zero money may flow.
+Layer 1 — Self-declared     Caller submitted a claim. Acting.
+Layer 2 — School email      Verified .edu.ng / institutional email. Acting.
+Layer 3 — Peer voted        7 members of target group confirmed. Acting,
+                            UNLESS bootstrap path (see 13.3 below).
+Layer 4 — Higher-org confirmed  The verified exec ABOVE this scope has
+                            confirmed the claimant. THIS UNLOCKS MONEY.
+                            Org flips from acting → active.
+Layer 5 — Document reviewed (optional)  Used for SUG / faculty president.
+                            Election result / appointment letter uploaded.
+                            Manual review by platform admin.
+                            Highest trust badge.
+```
+
+**The critical insight: Layer 4 — confirmation by the verified exec ABOVE — is the trust anchor.** Department execs know their class reps personally. Faculty execs know their department presidents. The university's own social hierarchy becomes the verification engine.
+
+### 13.3 The bootstrap problem & its resolution
+
+When a university joins Payvexo for the very first time, NOBODY above any claimant is verified yet. The bootstrap path:
+
+```
+First claim ever at a uni
+  ↓
+School email verified (Layer 2)                ─── MUST be present
+  ↓
+7 classmates registered + confirmed (Layer 3)  ─── MUST hit threshold
+  ↓
+Org flips active. Claimant becomes the trust anchor for everyone above them.
+  ↓
+Department president joins, claims their role
+  ↓
+Now Layer 4 is available: the already-verified class rep confirms them.
+  ↓
+Faculty president joins.
+  ↓
+Layer 4: 2 of the already-verified dept presidents confirm.
+```
+
+**Bootstrap threshold (LOCKED 2026-05-22):** 7 classmates + school email. Both required.
+
+### 13.4 Membership rules per scope
+
+The exec body of a level can include execs from different sub-units. Hard rules per scope:
+
+| Org level | Exec membership rule | Member rule |
+|---|---|---|
+| **Class (300L Civil Eng)** | Same dept + same level — hard | Same dept + same level — hard |
+| **Department (Civil Eng)** | Same dept, **any** level | Same dept |
+| **Departmental Association (NIESS)** | Same dept, any level | Same dept |
+| **Faculty (Engineering)** | **Any dept** within the faculty | Any student in the faculty |
+| **SUG** | Any student in the university | All students |
+
+Enforced server-side at signup AND at claim submission. Trying to claim a class-rep role for a different department's class is hard-rejected.
+
+### 13.5 Faculty verification is TWO parts
+
+Because faculty execs can come from different departments, identity proof and role confirmation are separate signals:
+
+```
+Adaeze (300L Civil Eng) claims to be Faculty of Engineering Treasurer
+  ↓
+Part 1 — Identity confirmation
+  Her DEPARTMENT exec confirms: "Yes she is a Civil Eng student"
+  ↓
+Part 2 — Role confirmation
+  Faculty President alone confirms (highest weight)
+        OR
+  2 already-verified faculty execs confirm (collective)
+  ↓
+Verified. Faculty Treasurer dashboard unlocked.
+```
+
+### 13.6 Multi-membership: one human, many roles
+
+A single account supports unlimited org memberships. Each (member, org_group, role) is its own row:
+
+```
+Chukwuemeka Obi
+Matric: 2022/245678
+├── 400L Mech Eng Class       → MEMBER (pays dues here)
+├── Mech Eng Department       → EXEC (Dept President)
+├── NIESS Association         → EXEC (NIESS President)
+└── Engineering Faculty       → EXEC (Faculty PRO)
+```
+
+One login. Four relationships. Three verified exec roles. Each unlocks an isolated dashboard context (the role switcher; see 13.7).
+
+### 13.7 The role switcher (top-nav tabs)
+
+Sitting permanently in the top bar for anyone with ≥1 verified exec role:
+
+```
+[👤 Student]  [🏛️ Faculty Exec]  [🏢 Dept Exec]  [👥 NIESS Exec]
+```
+
+Rules:
+- **A regular student with NO exec role sees no switcher** — zero clutter.
+- A tab appears **only after that role is verified** (Layer 4 reached). Pending claims show as a greyed-out tab.
+- Each tab is a completely **isolated dashboard context**: different navigation, different RLS scope, different notifications.
+- Active role stored in `localStorage.pvx_active_role`. Switching changes what `useAppNav` returns and what dashboard renders.
+- A single user can hold multiple exec roles in the same org level (e.g. Class Rep + Class Treasurer of two different classes). Each gets its own tab.
+
+### 13.8 Dashboard contents per exec level
+
+**Class Rep / Class Exec**
+- Members (joined / not joined)
+- Dues manager: create + active + archived
+- Events manager
+- Financial summary (this session)
+- Receipts archive
+
+**Department Exec**
+- Classes under me — **directory only, not internal payments**
+- Department dues manager (target all classes OR one class)
+- Events
+- Financial summary (department-wide this session)
+- **Verification Panel: pending class-rep claims** (Layer 4 source)
+
+**Faculty Exec**
+- Departments under me — directory only
+- Faculty dues manager (target all depts OR one dept)
+- Events
+- Financial summary (faculty-wide)
+- **Verification Panel: pending department-president claims**
+
+**SUG Exec**
+- Events only (no dues — bursar collects SUG fees outside Payvexo)
+- University-wide announcements
+- **Verification Panel: pending faculty-president claims**
+
+### 13.9 Session-based progression
+
+A student moving from 300L to 400L is handled by **academic session transition**, not manual reassignment:
+- 300L class membership ends automatically at session end
+- 400L class membership begins at next session start
+- Any class-level exec role expires with the session
+- Department / faculty exec roles are independent of level — they survive level changes
+- Dues from the old session stay attached to the old session; new dues live in the new session
+
+### 13.10 What this means for mig 039 (the existing claim flow)
+
+The work shipped in mig 039 needs revision:
+
+1. `cast_claim_vote` currently auto-flips the org to `active` once the vote threshold hits. **Wrong** — votes only unlock Layer 3, not money. Money requires Layer 4.
+2. `finalize_claim_if_ready` needs to branch: bootstrap path flips active on Layer 3; normal path requires Layer 4.
+3. A new `confirm_claim_by_parent_exec` RPC: the verified parent calls this; it directly promotes to Layer 4.
+4. `VoteInbox` copy changes from "you push them over" to "you confirm — once their dept president signs off, money unlocks."
+
+### 13.11 Implementation phases (LOCKED)
+
+**Phase A — Schema for layered trust + multi-membership**
+- Add `verification_layer INTEGER NOT NULL DEFAULT 0` to `member_admins`
+- Add `confirmed_by_admin_id UUID REFERENCES member_admins(id)` — the Layer-4 confirmer
+- Add `bootstrap_path BOOLEAN`, `required_layer INTEGER`, `current_layer INTEGER` to `claim_requests`
+- Add `is_bootstrap` flag computed at claim submission (TRUE when no verified parent exec exists)
+- Constraint trigger on `member_admins` enforcing membership rules per scope (13.4)
+- Reject cooldown table: `claim_rejections (claim_target_signature TEXT, member_id UUID, expires_at TIMESTAMPTZ)` for the 90-day soft-reject policy
+
+**Phase B — New RPCs (supersede mig 039)**
+- `submit_claim_v2(...)` — computes is_bootstrap, picks the right path
+- `compute_trust_layer(claim_id)` — given current state, returns 0–5
+- `confirm_claim_by_parent_exec(claim_id, confirmer_admin_id)` — Layer 4
+- `cast_claim_vote_v2(...)` — Layer 3 only; only advances org → active on bootstrap path
+- `recompute_org_state_on_layer_change(org_id)` — triggered when a claim advances layer
+
+**Phase C — Verification panel UI**
+- New `<VerificationPanel>` component on Dept / Faculty / SUG dashboards
+- Lists pending child-exec claims at the right scope
+- Confirm / Reject / View Profile actions
+- Existing `<VoteInbox>` repurposed for Layer 3 only with updated copy
+
+**Phase D — Role switcher**
+- `useUserRoles()` returns `Array<{ kind, label, group_id, verified_at }>`
+- `<RoleSwitcher>` in OrgLayout top bar
+- `useActiveRole()` + `pvx_active_role` localStorage key
+- Notifications filtered per active role
+
+**Phase E — Membership-rule enforcement**
+- Trigger from Phase A enforces at DB layer
+- All signup / claim RPCs validated against rules before insert
+- Friendly errors in UI
+
+### 13.12 LOCKED decisions (do not re-litigate without explicit user OK)
+
+- **Bootstrap = 7 classmates + verified school email.** Both required. No exceptions.
+- **Soft reject = 90-day cooldown.** Rejected claimant cannot re-claim same role at same scope for 90 days. Admin can lift via OrgMembers page if abuse.
+- **SUG never collects dues on Payvexo.** Governance + events only. Confirmed in spec.
+- **Money flows only at Layer 4** (or Layer 3 if bootstrap path). Never at Layer 1 or 2.
+- **Role switcher is invisible for non-execs.** Regular students see no tabs.
+
+---
+
 **End of blueprint.** When adding to this document, append new subsections rather than rewriting existing ones, and bump the "Last updated" date at the top.

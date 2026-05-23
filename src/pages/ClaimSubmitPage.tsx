@@ -99,7 +99,7 @@ export default function ClaimSubmitPage() {
     setSubmitting(true);
     setError(null);
 
-    const res = await organizationService.submitClaim({
+    const res = await organizationService.submitClaimV2({
       callerMemberId:     user.id,
       claimedRole:        role === 'custom' ? 'custom' : role,
       claimedScope,
