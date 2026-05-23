@@ -1,24 +1,67 @@
 /**
- * JoinOrganizationPage — Public page for joining an org via invite link/code
- * Route: /:orgSlug/join?code=XXXX  or  /:orgSlug/join (manual code entry)
+ * JoinOrganizationPage — invite-code redemption.
+ *
+ * Route: /:orgSlug/join          (manual code entry)
+ *        /:orgSlug/join?code=XXX (auto-prefilled, deep link from email/SMS)
+ *
+ * Three steps, each is a fluid framer-motion transition:
+ *   1. CODE   — 8 segmented character cells, auto-uppercased,
+ *               auto-submits on the final keystroke. Beautiful, like a 2FA
+ *               or treasure-map input.
+ *   2. FORM   — preview the org with its trust badge, fill the new-member
+ *               form. The form mirrors GroupWelcomePage so the experience
+ *               feels consistent.
+ *   3. DONE   — celebratory state shown only if auto-login fails; otherwise
+ *               the user lands straight on /:slug/dashboard.
+ *
+ * Backend logic preserved exactly: validateInvite → hash_password →
+ * member existence check → billing limit check → organization_members
+ * insert → invite usage increment → welcome notification + email →
+ * auto-login.
  */
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef, useMemo } from 'react';
 import { useParams, useSearchParams, useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
-  ArrowLeft, Loader2, Check, ShieldCheck,
-  UserPlus, Eye, EyeOff, AlertTriangle,
+  ArrowLeft,
+  Loader2,
+  Check,
+  ShieldCheck,
+  UserPlus,
+  Eye,
+  EyeOff,
+  AlertCircle,
+  Ticket,
   Globe,
+  Mail,
+  Phone,
+  KeyRound,
+  Sparkles,
+  ArrowRight,
 } from 'lucide-react';
-import { colors } from '@/config/colors';
 import { APP_NAME } from '@/config/constants';
 import { supabase } from '@/config/supabase';
 import { organizationService } from '@/services/organizationService';
 import { billingService } from '@/services/billingService';
 import notificationService from '@/services/notificationService';
 import { useMultiTenantAuth } from '@/hooks/useMultiTenantAuth';
-import PageWrapper from '@/components/ui/PageWrapper';
+import TrustBadge from '@/components/trust/TrustBadge';
+import type { TrustLevel } from '@/types/multiTenant';
+
+const tk = {
+  bg:        '#0F0703',
+  panel:     'rgba(255,255,255,0.03)',
+  panelHov:  'rgba(255,255,255,0.05)',
+  border:    'rgba(255,255,255,0.08)',
+  borderHov: 'rgba(255,104,3,0.32)',
+  text:      '#FFFFFF',
+  textSec:   'rgba(255,255,255,0.65)',
+  textTer:   'rgba(255,255,255,0.32)',
+  primary:   '#FF6803',
+  mint:      '#30FFAC',
+  danger:    '#ef4444',
+};
 
 interface InviteInfo {
   id: string;
@@ -36,8 +79,11 @@ interface InviteInfo {
     organization_type: string;
     logo_url: string | null;
     primary_color: string;
+    trust_level?: TrustLevel;
   };
 }
+
+const CODE_LEN = 8;
 
 export default function JoinOrganizationPage() {
   const { orgSlug } = useParams<{ orgSlug: string }>();
@@ -48,7 +94,14 @@ export default function JoinOrganizationPage() {
   const [step, setStep] = useState<'code' | 'form' | 'success'>('code');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
-  const [inviteCode, setInviteCode] = useState(searchParams.get('code') || '');
+
+  // Code state: an array of N characters
+  const [codeChars, setCodeChars] = useState<string[]>(() => {
+    const initial = (searchParams.get('code') || '').toUpperCase().slice(0, CODE_LEN).split('');
+    return Array.from({ length: CODE_LEN }, (_, i) => initial[i] ?? '');
+  });
+  const codeRefs = useRef<(HTMLInputElement | null)[]>([]);
+
   const [invite, setInvite] = useState<InviteInfo | null>(null);
   const [showPassword, setShowPassword] = useState(false);
 
@@ -63,25 +116,79 @@ export default function JoinOrganizationPage() {
     use_id_as_password: true,
   });
 
-  // Auto-validate code from URL param on mount
+  const codeJoined = useMemo(() => codeChars.join(''), [codeChars]);
+
+  // ── Auto-validate when URL prefilled or all cells filled ──
   useEffect(() => {
     const code = searchParams.get('code');
-    if (code) {
-      validateCode(code);
+    if (code && code.length >= 4) {
+      validateCode(code.toUpperCase());
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  useEffect(() => {
+    if (step === 'code' && codeJoined.length === CODE_LEN && !loading) {
+      validateCode(codeJoined);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [codeJoined]);
+
+  // ── Cell input handlers ──
+  const handleCellChange = (i: number, value: string) => {
+    setError('');
+    const v = value.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 1);
+    setCodeChars((prev) => {
+      const next = [...prev];
+      next[i] = v;
+      return next;
+    });
+    if (v && i < CODE_LEN - 1) {
+      codeRefs.current[i + 1]?.focus();
+    }
+  };
+
+  const handleCellKeyDown = (i: number, e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'Backspace' && !codeChars[i] && i > 0) {
+      codeRefs.current[i - 1]?.focus();
+    } else if (e.key === 'ArrowLeft' && i > 0) {
+      e.preventDefault();
+      codeRefs.current[i - 1]?.focus();
+    } else if (e.key === 'ArrowRight' && i < CODE_LEN - 1) {
+      e.preventDefault();
+      codeRefs.current[i + 1]?.focus();
+    } else if (e.key === 'Enter' && codeJoined.length >= 4) {
+      validateCode(codeJoined);
+    }
+  };
+
+  const handlePaste = (e: React.ClipboardEvent<HTMLInputElement>) => {
+    e.preventDefault();
+    const pasted = e.clipboardData.getData('text').toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, CODE_LEN);
+    if (!pasted) return;
+    setCodeChars(() => Array.from({ length: CODE_LEN }, (_, i) => pasted[i] ?? ''));
+    const focusIdx = Math.min(pasted.length, CODE_LEN - 1);
+    setTimeout(() => codeRefs.current[focusIdx]?.focus(), 0);
+  };
+
+  const clearCode = () => {
+    setCodeChars(Array.from({ length: CODE_LEN }, () => ''));
+    setError('');
+    codeRefs.current[0]?.focus();
+  };
+
+  // ── Validate code ──
   const validateCode = async (code: string) => {
-    if (!code || code.length < 4) {
-      setError('Please enter a valid invite code');
+    const trimmed = code.trim().toUpperCase();
+    if (trimmed.length < 4) {
+      setError('Please enter at least 4 characters of your code.');
       return;
     }
     setLoading(true);
     setError('');
 
     try {
-      const raw = await organizationService.validateInvite(code.trim().toUpperCase());
+      const raw = await organizationService.validateInvite(trimmed);
       if (!raw) {
         setError('This invite code is invalid, expired, or has reached its maximum number of uses.');
         setLoading(false);
@@ -90,9 +197,8 @@ export default function JoinOrganizationPage() {
 
       const result = raw as unknown as InviteInfo;
 
-      // If org slug in URL doesn't match invite's org, show error
       if (orgSlug && result.organization?.slug && result.organization.slug !== orgSlug) {
-        setError('This invite code belongs to a different organization.');
+        setError(`This code belongs to a different organization (${result.organization.short_name || result.organization.slug}).`);
         setLoading(false);
         return;
       }
@@ -106,17 +212,16 @@ export default function JoinOrganizationPage() {
     }
   };
 
+  // ── Submit form ──
   const handleSubmit = async () => {
-    // Validate form
-    if (!form.full_name.trim()) { setError('Full name is required'); return; }
-    if (!form.member_id.trim()) { setError('Your Login ID / Registration Number is required'); return; }
+    if (!form.full_name.trim()) { setError('Your full name is required.'); return; }
+    if (!form.member_id.trim()) { setError('Your member ID is required.'); return; }
     const password = form.use_id_as_password ? form.member_id.trim() : form.password;
     if (!form.use_id_as_password) {
-      if (!form.password || form.password.length < 6) { setError('Password must be at least 6 characters'); return; }
-      if (form.password !== form.password_confirm) { setError('Passwords do not match'); return; }
+      if (!form.password || form.password.length < 6) { setError('Password must be at least 6 characters.'); return; }
+      if (form.password !== form.password_confirm) { setError('Passwords do not match.'); return; }
     }
-
-    if (!invite) { setError('Invalid invite'); return; }
+    if (!invite) { setError('Invalid invite.'); return; }
 
     setLoading(true);
     setError('');
@@ -125,11 +230,9 @@ export default function JoinOrganizationPage() {
       const orgId = invite.organization.id;
       const groupId = invite.group_id;
 
-      // Hash the password server-side
       const { data: hashedPw, error: hashErr } = await supabase.rpc('hash_password', { p_password: password });
-      if (hashErr) throw new Error('Failed to secure password');
+      if (hashErr) throw new Error('Failed to secure password.');
 
-      // Check if member_id already exists in this org
       const { data: existing } = await supabase
         .from('organization_members')
         .select('id')
@@ -138,27 +241,24 @@ export default function JoinOrganizationPage() {
         .maybeSingle();
 
       if (existing) {
-        setError('This Login ID is already registered in this organization. Please log in instead.');
+        setError('This member ID is already registered in this organization. Try logging in instead.');
         setLoading(false);
         return;
       }
 
-      // ── Check org member limit before creating ──
       try {
         const limitResult = await billingService.checkLimit(orgId, 'members');
         if (limitResult && !limitResult.allowed) {
           setError(
-            `This organization has reached its member limit (${limitResult.current}/${limitResult.limit} on the ${limitResult.planName} plan). Please contact the administrator to upgrade.`
+            `This organization has reached its member limit (${limitResult.current}/${limitResult.limit} on the ${limitResult.planName} plan). Please contact the administrator.`
           );
           setLoading(false);
           return;
         }
       } catch {
-        // If limit check fails, allow join (fail-open)
-        console.warn('Could not verify member limit, proceeding...');
+        // fail-open if billing check fails
       }
 
-      // Determine group_id: use invite's group, or the org's first group
       let finalGroupId = groupId;
       if (!finalGroupId) {
         const { data: groups } = await supabase
@@ -170,7 +270,6 @@ export default function JoinOrganizationPage() {
         finalGroupId = groups?.[0]?.id || null;
       }
 
-      // Create the member
       const { error: insertErr } = await supabase
         .from('organization_members')
         .insert({
@@ -182,13 +281,13 @@ export default function JoinOrganizationPage() {
           phone: form.phone.trim() || null,
           level: form.level.trim() || null,
           password_hash: hashedPw,
-          force_password_change: form.use_id_as_password, // Force change if using ID as password
+          force_password_change: form.use_id_as_password,
           is_active: true,
         });
 
       if (insertErr) {
         if (insertErr.message?.includes('duplicate') || insertErr.message?.includes('unique')) {
-          setError('This Login ID is already taken. Please use a different one.');
+          setError('This member ID is already taken. Please use a different one.');
         } else {
           throw insertErr;
         }
@@ -196,26 +295,19 @@ export default function JoinOrganizationPage() {
         return;
       }
 
-      // Increment invite usage
       await organizationService.useInvite(invite.id);
 
-      // Get the newly created member's ID for welcome notification
       const { data: newMember } = await supabase
         .from('organization_members')
         .select('id')
         .eq('organization_id', orgId)
         .eq('member_id', form.member_id.trim())
-        .single();
+        .maybeSingle();
 
-      // Send welcome notification (non-blocking)
       if (newMember) {
-        notificationService.sendWelcomeNotification(
-          newMember.id,
-          form.full_name.trim()
-        ).catch(() => {});
+        notificationService.sendWelcomeNotification(newMember.id, form.full_name.trim()).catch(() => {});
       }
 
-      // Send welcome email (non-blocking)
       if (form.email.trim()) {
         fetch('/api/send-welcome-email', {
           method: 'POST',
@@ -225,7 +317,7 @@ export default function JoinOrganizationPage() {
             memberEmail: form.email.trim(),
             memberName: form.full_name.trim(),
           }),
-        }).catch(() => {}); // Non-critical
+        }).catch(() => {});
       }
 
       // Auto-login
@@ -238,7 +330,6 @@ export default function JoinOrganizationPage() {
           navigate(`/${slug}/dashboard`, { replace: true, state: { justJoined: true, orgName: invite.organization.name } });
         }
       } catch {
-        // If auto-login fails, send to login page
         setStep('success');
       }
     } catch (err) {
@@ -248,287 +339,579 @@ export default function JoinOrganizationPage() {
     }
   };
 
+  // ─────────────────────────────────────────────────────────────────────────
+  // Render
+  // ─────────────────────────────────────────────────────────────────────────
+
+  const orgAccent = invite?.organization.primary_color || tk.primary;
+
   return (
-    <PageWrapper centered noPadding className="p-4 sm:p-6">
-      <motion.div
-        className="w-full max-w-md"
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-      >
-        {/* Header */}
-        <div className="flex items-center gap-3 mb-6">
-          <button
-            onClick={() => {
-              if (step === 'form') { setStep('code'); setInvite(null); setError(''); }
-              else navigate(orgSlug ? `/${orgSlug}/overview` : '/');
-            }}
-            className="p-2 rounded-xl hover:bg-white/5 transition-colors"
+    <div className="min-h-screen relative overflow-x-hidden" style={{ minHeight: '100dvh', background: tk.bg }}>
+      {/* Background glow */}
+      <div className="fixed inset-0 pointer-events-none overflow-hidden">
+        <div
+          className="absolute rounded-full blur-[160px]"
+          style={{
+            width: 560, height: 560,
+            background: `radial-gradient(circle, ${tk.primary} 0%, transparent 70%)`,
+            top: '-12%', right: '-10%', opacity: 0.14,
+          }}
+        />
+        <div
+          className="absolute rounded-full blur-[140px]"
+          style={{
+            width: 420, height: 420,
+            background: `radial-gradient(circle, ${tk.mint} 0%, transparent 70%)`,
+            bottom: '5%', left: '-8%', opacity: 0.08,
+          }}
+        />
+      </div>
+
+      {/* Top bar */}
+      <nav className="relative z-10 max-w-2xl mx-auto px-5 sm:px-6 py-5 flex items-center justify-between">
+        <button
+          onClick={() => {
+            if (step === 'form') { setStep('code'); setInvite(null); setError(''); }
+            else navigate(orgSlug ? `/${orgSlug}/overview` : '/');
+          }}
+          className="flex items-center gap-2 text-sm font-medium transition-colors"
+          style={{ color: tk.textSec }}
+        >
+          <ArrowLeft className="w-4 h-4" />
+          {step === 'form' ? 'Change code' : 'Back'}
+        </button>
+        <div className="flex items-center gap-2">
+          <div
+            className="w-8 h-8 rounded-lg flex items-center justify-center font-extrabold text-white text-sm"
+            style={{ background: 'linear-gradient(135deg, #FF6803 0%, #FFAC5F 100%)' }}
           >
-            <ArrowLeft size={20} className="text-white" />
-          </button>
-          <div className="flex-1">
-            <h1 className="text-xl font-bold text-white">Join Organization</h1>
-            <p className="text-sm" style={{ color: colors.textTertiary }}>
-              {step === 'code' ? 'Enter your invite code' : step === 'form' ? 'Create your account' : 'Welcome!'}
-            </p>
+            P
           </div>
-          <div className="flex items-center gap-2 text-sm font-bold" style={{ color: colors.primary }}>
-            <div className="w-8 h-8 rounded-full flex items-center justify-center text-white text-xs"
-              style={{ background: colors.primary }}>
-              P
-            </div>
-            {APP_NAME}
-          </div>
+          <span className="text-base font-bold text-white">{APP_NAME}</span>
         </div>
+      </nav>
 
-        {/* Error */}
-        <AnimatePresence>
-          {error && (
-            <motion.div
-              initial={{ opacity: 0, y: -10 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -10 }}
-              className="mb-4 p-3 rounded-xl text-sm text-red-400 flex items-start gap-2"
-              style={{ background: 'rgba(255,77,77,0.1)', border: '1px solid rgba(255,77,77,0.2)' }}
-            >
-              <AlertTriangle size={16} className="shrink-0 mt-0.5" />
-              <span>{error}</span>
-            </motion.div>
-          )}
-        </AnimatePresence>
-
+      <main className="relative z-10 max-w-2xl mx-auto px-5 sm:px-6 pb-24">
         <AnimatePresence mode="wait">
-          {/* STEP: Enter Code */}
+          {/* ── STEP: CODE ─────────────────────────────────────────────── */}
           {step === 'code' && (
-            <motion.div key="code" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }}>
-              <div className="p-6 rounded-2xl" style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.08)' }}>
-                <div className="flex justify-center mb-4">
-                  <div className="w-16 h-16 rounded-2xl flex items-center justify-center" style={{ background: `${colors.primary}15` }}>
-                    <ShieldCheck size={32} style={{ color: colors.primary }} />
-                  </div>
-                </div>
-                <h2 className="text-lg font-semibold text-white text-center mb-1">Got an invite code?</h2>
-                <p className="text-sm text-center mb-6" style={{ color: colors.textTertiary }}>
-                  Enter the code shared by your admin or group leader to join.
+            <motion.section
+              key="code"
+              initial={{ opacity: 0, y: 18 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -12 }}
+              transition={{ duration: 0.32, ease: [0.22, 1, 0.36, 1] }}
+            >
+              <header className="text-center mb-8 mt-2">
+                <motion.div
+                  initial={{ scale: 0.85, opacity: 0 }}
+                  animate={{ scale: 1, opacity: 1 }}
+                  transition={{ delay: 0.05 }}
+                  className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-semibold mb-5"
+                  style={{ background: `${tk.primary}14`, color: tk.primary, border: `1px solid ${tk.primary}28` }}
+                >
+                  <Ticket className="w-3.5 h-3.5" />
+                  Invite code
+                </motion.div>
+                <h1 className="text-3xl sm:text-4xl font-extrabold text-white tracking-tight mb-3 leading-tight">
+                  Got an invite?
+                </h1>
+                <p className="text-sm sm:text-base leading-7 max-w-md mx-auto" style={{ color: tk.textSec }}>
+                  Drop the 8-character code your admin shared with you. We'll do the rest.
                 </p>
-                <div className="space-y-4">
-                  <input
-                    type="text"
-                    placeholder="e.g. ABC12XYZ"
-                    value={inviteCode}
-                    onChange={e => { setInviteCode(e.target.value.toUpperCase()); setError(''); }}
-                    onKeyDown={e => e.key === 'Enter' && validateCode(inviteCode)}
-                    className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3.5 text-white text-center text-lg tracking-widest font-mono placeholder-gray-500 outline-none focus:border-[#FF6803] transition-colors uppercase"
-                    maxLength={12}
-                    autoFocus
-                  />
-                  <button
-                    onClick={() => validateCode(inviteCode)}
-                    disabled={loading || inviteCode.length < 4}
-                    className="w-full px-6 py-3.5 rounded-xl text-white font-semibold flex items-center justify-center gap-2 transition-all hover:scale-[1.02] active:scale-[0.98] disabled:opacity-60"
-                    style={{ background: colors.primary }}
-                  >
-                    {loading ? (
-                      <><Loader2 size={18} className="animate-spin" /> Validating...</>
-                    ) : (
-                      <><Check size={18} /> Verify Code</>
-                    )}
-                  </button>
+              </header>
+
+              {/* Big segmented code input */}
+              <div className="rounded-3xl p-6 sm:p-8" style={{ background: tk.panel, border: `1px solid ${tk.border}` }}>
+                <div className="flex items-center justify-center gap-1.5 sm:gap-2.5">
+                  {codeChars.map((c, i) => (
+                    <CodeCell
+                      key={i}
+                      value={c}
+                      filled={Boolean(c)}
+                      focused={false}
+                      separator={i === 3}
+                      inputRef={(el) => { codeRefs.current[i] = el; }}
+                      onChange={(v) => handleCellChange(i, v)}
+                      onKeyDown={(e) => handleCellKeyDown(i, e)}
+                      onPaste={i === 0 ? handlePaste : undefined}
+                    />
+                  ))}
                 </div>
-                <div className="mt-4 text-center">
-                  <p className="text-xs" style={{ color: colors.textTertiary }}>
-                    Already have an account?{' '}
-                    <button
-                      className="font-medium hover:underline"
-                      style={{ color: colors.primary }}
-                      onClick={() => navigate(orgSlug ? `/${orgSlug}/overview` : '/')}
+
+                <AnimatePresence>
+                  {error && (
+                    <motion.div
+                      initial={{ opacity: 0, y: -4 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      exit={{ opacity: 0, y: -4 }}
+                      className="mt-5 rounded-xl px-4 py-3 flex items-start gap-3"
+                      style={{ background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.25)' }}
                     >
-                      Log in
-                    </button>
-                  </p>
-                </div>
-              </div>
-            </motion.div>
-          )}
-
-          {/* STEP: Registration Form */}
-          {step === 'form' && invite && (
-            <motion.div key="form" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }}>
-              {/* Org Info Card */}
-              <div className="flex items-center gap-3 p-4 rounded-2xl mb-5" style={{ background: `${colors.primary}08`, border: `1px solid ${colors.primary}20` }}>
-                {invite.organization.logo_url ? (
-                  <img src={invite.organization.logo_url} alt="" className="w-11 h-11 rounded-xl object-cover" />
-                ) : (
-                  <div className="w-11 h-11 rounded-xl flex items-center justify-center text-white text-sm font-bold" style={{ background: colors.primary }}>
-                    {invite.organization.short_name?.slice(0, 2)}
-                  </div>
-                )}
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm font-semibold text-white truncate">{invite.organization.name}</p>
-                  <p className="text-xs flex items-center gap-1" style={{ color: colors.textTertiary }}>
-                    <Globe size={10} />
-                    {invite.organization.slug} &middot; <span className="capitalize">{invite.organization.organization_type}</span>
-                  </p>
-                </div>
-                <div className="px-2.5 py-1 rounded-full text-[10px] font-semibold" style={{ background: `${colors.success}15`, color: colors.success }}>
-                  <Check size={10} className="inline mr-1" />Verified
-                </div>
-              </div>
-
-              {/* Form */}
-              <div className="space-y-4">
-                <div>
-                  <label className="block text-sm font-medium text-white mb-1.5">Full Name *</label>
-                  <input
-                    type="text"
-                    placeholder="e.g. Jane Doe"
-                    value={form.full_name}
-                    onChange={e => setForm(f => ({ ...f, full_name: e.target.value }))}
-                    className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white placeholder-gray-500 outline-none focus:border-[#FF6803] transition-colors"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-white mb-1.5">
-                    Login ID / Registration Number *
-                  </label>
-                  <input
-                    type="text"
-                    placeholder={
-                      invite.organization.organization_type === 'university' ? 'e.g. CSC/2022/001' :
-                      invite.organization.organization_type === 'school' ? 'e.g. STD/2024/042' :
-                      'e.g. MEM001'
-                    }
-                    value={form.member_id}
-                    onChange={e => setForm(f => ({ ...f, member_id: e.target.value }))}
-                    className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white placeholder-gray-500 outline-none focus:border-[#FF6803] transition-colors"
-                  />
-                </div>
-
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <label className="block text-sm font-medium text-white mb-1.5">Email</label>
-                    <input
-                      type="email"
-                      placeholder="Optional"
-                      value={form.email}
-                      onChange={e => setForm(f => ({ ...f, email: e.target.value }))}
-                      className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white placeholder-gray-500 outline-none focus:border-[#FF6803] transition-colors"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-white mb-1.5">Phone</label>
-                    <input
-                      type="tel"
-                      placeholder="Optional"
-                      value={form.phone}
-                      onChange={e => setForm(f => ({ ...f, phone: e.target.value }))}
-                      className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white placeholder-gray-500 outline-none focus:border-[#FF6803] transition-colors"
-                    />
-                  </div>
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-white mb-1.5">Level / Year</label>
-                  <input
-                    type="text"
-                    placeholder="e.g. 200L, Year 2, Grade 10"
-                    value={form.level}
-                    onChange={e => setForm(f => ({ ...f, level: e.target.value }))}
-                    className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white placeholder-gray-500 outline-none focus:border-[#FF6803] transition-colors"
-                  />
-                </div>
-
-                {/* Password Toggle */}
-                <div className="p-3 rounded-xl" style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.06)' }}>
-                  <label className="flex items-center gap-3 cursor-pointer">
-                    <input
-                      type="checkbox"
-                      checked={form.use_id_as_password}
-                      onChange={e => setForm(f => ({ ...f, use_id_as_password: e.target.checked }))}
-                      className="w-4 h-4 rounded accent-[#FF6803]"
-                    />
-                    <div>
-                      <p className="text-sm text-white font-medium">Use my Login ID as password</p>
-                      <p className="text-xs" style={{ color: colors.textTertiary }}>
-                        You&apos;ll be asked to change it on first login
-                      </p>
-                    </div>
-                  </label>
-                </div>
-
-                {/* Custom Password */}
-                {!form.use_id_as_password && (
-                  <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} className="space-y-3">
-                    <div className="relative">
-                      <label className="block text-sm font-medium text-white mb-1.5">Password *</label>
-                      <input
-                        type={showPassword ? 'text' : 'password'}
-                        placeholder="At least 6 characters"
-                        value={form.password}
-                        onChange={e => setForm(f => ({ ...f, password: e.target.value }))}
-                        className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 pr-10 text-white placeholder-gray-500 outline-none focus:border-[#FF6803] transition-colors"
-                      />
-                      <button
-                        type="button"
-                        onClick={() => setShowPassword(!showPassword)}
-                        className="absolute right-3 top-9 text-gray-400 hover:text-white"
-                      >
-                        {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
-                      </button>
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium text-white mb-1.5">Confirm Password *</label>
-                      <input
-                        type="password"
-                        placeholder="Repeat your password"
-                        value={form.password_confirm}
-                        onChange={e => setForm(f => ({ ...f, password_confirm: e.target.value }))}
-                        className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white placeholder-gray-500 outline-none focus:border-[#FF6803] transition-colors"
-                      />
-                    </div>
-                  </motion.div>
-                )}
-
-                <button
-                  onClick={handleSubmit}
-                  disabled={loading}
-                  className="w-full px-6 py-3.5 rounded-xl text-white font-semibold flex items-center justify-center gap-2 transition-all hover:scale-[1.02] active:scale-[0.98] disabled:opacity-60 mt-2"
-                  style={{ background: colors.primary }}
-                >
-                  {loading ? (
-                    <><Loader2 size={18} className="animate-spin" /> Joining...</>
-                  ) : (
-                    <><UserPlus size={18} /> Join Organization</>
+                      <AlertCircle className="w-5 h-5 shrink-0" style={{ color: tk.danger, marginTop: 1 }} />
+                      <p className="text-sm leading-6" style={{ color: 'rgba(254,202,202,0.95)' }}>{error}</p>
+                    </motion.div>
                   )}
+                </AnimatePresence>
+
+                <div className="mt-6 flex items-center justify-between gap-3 flex-wrap">
+                  <button
+                    type="button"
+                    onClick={clearCode}
+                    className="text-xs font-medium transition-colors hover:text-white"
+                    style={{ color: tk.textTer }}
+                  >
+                    Clear
+                  </button>
+
+                  <motion.button
+                    onClick={() => validateCode(codeJoined)}
+                    disabled={loading || codeJoined.length < 4}
+                    className="px-6 py-3 rounded-2xl text-white font-bold text-sm flex items-center gap-2 disabled:opacity-40 disabled:cursor-not-allowed"
+                    style={{
+                      background: 'linear-gradient(135deg, #FF6803 0%, #FFAC5F 100%)',
+                      boxShadow: loading || codeJoined.length < 4 ? 'none' : '0 8px 28px rgba(255,104,3,0.4)',
+                    }}
+                    whileHover={!loading && codeJoined.length >= 4 ? { scale: 1.03 } : undefined}
+                    whileTap={!loading && codeJoined.length >= 4 ? { scale: 0.97 } : undefined}
+                  >
+                    {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <ShieldCheck className="w-4 h-4" />}
+                    Verify code
+                    <ArrowRight className="w-4 h-4" />
+                  </motion.button>
+                </div>
+              </div>
+
+              {/* Alternative paths */}
+              <div className="mt-6 grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <button
+                  onClick={() => navigate(orgSlug ? `/${orgSlug}/overview` : '/')}
+                  className="rounded-2xl px-4 py-3.5 text-left transition-colors"
+                  style={{ background: tk.panel, border: `1px solid ${tk.border}` }}
+                >
+                  <p className="text-xs font-semibold mb-0.5" style={{ color: tk.text }}>I already have an account</p>
+                  <p className="text-[11px]" style={{ color: tk.textTer }}>Sign in to your organization →</p>
+                </button>
+                <button
+                  onClick={() => navigate('/bring-school')}
+                  className="rounded-2xl px-4 py-3.5 text-left transition-colors"
+                  style={{ background: tk.panel, border: `1px solid ${tk.border}` }}
+                >
+                  <p className="text-xs font-semibold mb-0.5" style={{ color: tk.text }}>No invite code yet</p>
+                  <p className="text-[11px]" style={{ color: tk.textTer }}>Bring your school online instead →</p>
                 </button>
               </div>
-            </motion.div>
+            </motion.section>
           )}
 
-          {/* STEP: Success (fallback when auto-login fails) */}
-          {step === 'success' && (
-            <motion.div key="success" initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }}>
-              <div className="p-8 rounded-2xl text-center" style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.08)' }}>
-                <div className="w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4" style={{ background: `${colors.success}15` }}>
-                  <Check size={32} style={{ color: colors.success }} />
+          {/* ── STEP: FORM ─────────────────────────────────────────────── */}
+          {step === 'form' && invite && (
+            <motion.section
+              key="form"
+              initial={{ opacity: 0, y: 18 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -12 }}
+              transition={{ duration: 0.32, ease: [0.22, 1, 0.36, 1] }}
+            >
+              {/* Org preview card */}
+              <motion.div
+                initial={{ opacity: 0, scale: 0.97 }}
+                animate={{ opacity: 1, scale: 1 }}
+                transition={{ delay: 0.08 }}
+                className="rounded-3xl p-5 sm:p-6 relative overflow-hidden mb-5"
+                style={{
+                  background: `linear-gradient(135deg, ${orgAccent}14, rgba(255,255,255,0.02))`,
+                  border: `1px solid ${tk.border}`,
+                }}
+              >
+                <div
+                  className="absolute inset-0 pointer-events-none"
+                  style={{ background: `radial-gradient(ellipse 50% 60% at 90% 0%, ${orgAccent}25, transparent)` }}
+                />
+                <div className="relative flex items-center gap-4">
+                  {invite.organization.logo_url ? (
+                    <img src={invite.organization.logo_url} alt="" className="w-14 h-14 rounded-2xl object-cover shrink-0" />
+                  ) : (
+                    <div
+                      className="w-14 h-14 rounded-2xl flex items-center justify-center text-white text-lg font-bold shrink-0"
+                      style={{ background: `linear-gradient(135deg, ${orgAccent} 0%, ${orgAccent}99 100%)` }}
+                    >
+                      {invite.organization.short_name?.slice(0, 1) || 'O'}
+                    </div>
+                  )}
+                  <div className="flex-1 min-w-0">
+                    <p className="text-[9px] uppercase tracking-[0.22em] font-semibold mb-1" style={{ color: tk.textTer }}>
+                      You're joining
+                    </p>
+                    <h2 className="text-lg sm:text-xl font-extrabold text-white leading-tight truncate">
+                      {invite.organization.name}
+                    </h2>
+                    <div className="flex flex-wrap items-center gap-1.5 mt-1.5">
+                      <TrustBadge level={invite.organization.trust_level ?? 'community'} size="sm" />
+                      <span className="inline-flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-full font-medium capitalize"
+                        style={{ background: 'rgba(255,255,255,0.06)', color: tk.textSec }}>
+                        <Globe className="w-3 h-3" /> {invite.organization.organization_type}
+                      </span>
+                      <span className="inline-flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-full font-medium"
+                        style={{ background: 'rgba(48,255,172,0.10)', color: tk.mint, border: '1px solid rgba(48,255,172,0.18)' }}>
+                        <Check className="w-3 h-3" /> Code verified
+                      </span>
+                    </div>
+                  </div>
                 </div>
-                <h2 className="text-lg font-semibold text-white mb-2">Welcome aboard!</h2>
-                <p className="text-sm mb-6" style={{ color: colors.textTertiary }}>
-                  Your account has been created successfully.
+              </motion.div>
+
+              {/* Member details */}
+              <motion.div
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 0.16 }}
+                className="rounded-3xl p-5 sm:p-6"
+                style={{ background: tk.panel, border: `1px solid ${tk.border}` }}
+              >
+                <div className="flex items-center gap-2 mb-1">
+                  <Sparkles className="w-4 h-4" style={{ color: tk.primary }} />
+                  <h2 className="text-base font-bold text-white">Set up your account</h2>
+                </div>
+                <p className="text-xs leading-5 mb-5" style={{ color: tk.textSec }}>
+                  This is what you'll use to sign in. Your data lives only in this organization.
                 </p>
-                <button
-                  onClick={() => navigate(`/${invite?.organization.slug || orgSlug}/login`)}
-                  className="px-8 py-3 rounded-xl text-white font-semibold transition-all hover:scale-[1.02]"
-                  style={{ background: colors.primary }}
+
+                <div className="space-y-4">
+                  <Row>
+                    <Field label="Full name" required>
+                      <Input
+                        value={form.full_name}
+                        onChange={(v) => setForm({ ...form, full_name: v })}
+                        placeholder="Jane Doe"
+                        autoComplete="name"
+                      />
+                    </Field>
+                    <Field label="Login ID / Member number" required hint="matric / staff / member">
+                      <Input
+                        value={form.member_id}
+                        onChange={(v) => setForm({ ...form, member_id: v })}
+                        placeholder={
+                          invite.organization.organization_type === 'university' ? '2018/1/12345' :
+                          invite.organization.organization_type === 'school' ? 'STD/2024/042' :
+                          'MEM001'
+                        }
+                      />
+                    </Field>
+                  </Row>
+
+                  <Row>
+                    <Field label="Email" icon={<Mail className="w-3 h-3" />} hint="optional">
+                      <Input value={form.email} onChange={(v) => setForm({ ...form, email: v })} placeholder="you@example.com" type="email" autoComplete="email" />
+                    </Field>
+                    <Field label="Phone" icon={<Phone className="w-3 h-3" />} hint="optional">
+                      <Input value={form.phone} onChange={(v) => setForm({ ...form, phone: v })} placeholder="+234 800 000 0000" type="tel" autoComplete="tel" />
+                    </Field>
+                  </Row>
+
+                  <Field label="Level / Year / Position" hint="optional, e.g. 200L, SS2, Member">
+                    <Input value={form.level} onChange={(v) => setForm({ ...form, level: v })} placeholder="200L" />
+                  </Field>
+
+                  {/* Password mode toggle */}
+                  <div
+                    className="rounded-2xl p-4"
+                    style={{
+                      background: form.use_id_as_password ? `${tk.primary}10` : 'rgba(255,255,255,0.03)',
+                      border: `1px solid ${form.use_id_as_password ? `${tk.primary}30` : tk.border}`,
+                    }}
+                  >
+                    <label className="flex items-start gap-3 cursor-pointer">
+                      <div
+                        className="w-5 h-5 rounded-md flex items-center justify-center shrink-0 mt-0.5"
+                        style={{
+                          background: form.use_id_as_password ? tk.primary : 'transparent',
+                          border: `1.5px solid ${form.use_id_as_password ? tk.primary : 'rgba(255,255,255,0.25)'}`,
+                          transition: 'all 0.18s',
+                        }}
+                      >
+                        {form.use_id_as_password && <Check className="w-3 h-3 text-white" strokeWidth={3} />}
+                      </div>
+                      <input
+                        type="checkbox"
+                        checked={form.use_id_as_password}
+                        onChange={(e) => setForm({ ...form, use_id_as_password: e.target.checked })}
+                        className="sr-only"
+                      />
+                      <div className="flex-1">
+                        <p className="text-sm font-semibold text-white">Use my member ID as my first password</p>
+                        <p className="text-[11px] mt-0.5" style={{ color: tk.textSec }}>
+                          We'll force you to change it on first login. Recommended for now.
+                        </p>
+                      </div>
+                      <KeyRound className="w-4 h-4 shrink-0 mt-0.5" style={{ color: form.use_id_as_password ? tk.primary : tk.textTer }} />
+                    </label>
+                  </div>
+
+                  <AnimatePresence>
+                    {!form.use_id_as_password && (
+                      <motion.div
+                        initial={{ opacity: 0, height: 0 }}
+                        animate={{ opacity: 1, height: 'auto' }}
+                        exit={{ opacity: 0, height: 0 }}
+                        className="overflow-hidden"
+                      >
+                        <Row>
+                          <Field label="Password" required hint="min 6 chars">
+                            <div className="relative">
+                              <Input
+                                value={form.password}
+                                onChange={(v) => setForm({ ...form, password: v })}
+                                placeholder="••••••••"
+                                type={showPassword ? 'text' : 'password'}
+                                autoComplete="new-password"
+                              />
+                              <button
+                                type="button"
+                                onClick={() => setShowPassword(!showPassword)}
+                                className="absolute right-3 top-1/2 -translate-y-1/2"
+                                style={{ color: tk.textTer }}
+                              >
+                                {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                              </button>
+                            </div>
+                          </Field>
+                          <Field label="Confirm" required>
+                            <Input
+                              value={form.password_confirm}
+                              onChange={(v) => setForm({ ...form, password_confirm: v })}
+                              placeholder="••••••••"
+                              type="password"
+                              autoComplete="new-password"
+                            />
+                          </Field>
+                        </Row>
+                      </motion.div>
+                    )}
+                  </AnimatePresence>
+
+                  <AnimatePresence>
+                    {error && (
+                      <motion.div
+                        initial={{ opacity: 0, y: -4 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        exit={{ opacity: 0, y: -4 }}
+                        className="rounded-xl px-4 py-3 flex items-start gap-3"
+                        style={{ background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.25)' }}
+                      >
+                        <AlertCircle className="w-5 h-5 shrink-0" style={{ color: tk.danger, marginTop: 1 }} />
+                        <p className="text-sm leading-6" style={{ color: 'rgba(254,202,202,0.95)' }}>{error}</p>
+                      </motion.div>
+                    )}
+                  </AnimatePresence>
+
+                  <div className="pt-2 flex items-center justify-between gap-3 flex-wrap">
+                    <p className="text-[11px] leading-5" style={{ color: tk.textTer, maxWidth: 260 }}>
+                      Your activity is scoped to this organization. Other organizations cannot see it.
+                    </p>
+                    <motion.button
+                      onClick={handleSubmit}
+                      disabled={loading}
+                      className="px-6 py-3 rounded-2xl text-white font-bold text-sm flex items-center gap-2 disabled:opacity-40"
+                      style={{
+                        background: 'linear-gradient(135deg, #FF6803 0%, #FFAC5F 100%)',
+                        boxShadow: loading ? 'none' : '0 8px 28px rgba(255,104,3,0.4)',
+                      }}
+                      whileHover={!loading ? { scale: 1.03 } : undefined}
+                      whileTap={!loading ? { scale: 0.97 } : undefined}
+                    >
+                      {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <UserPlus className="w-4 h-4" />}
+                      Join {invite.organization.short_name}
+                      <ArrowRight className="w-4 h-4" />
+                    </motion.button>
+                  </div>
+                </div>
+              </motion.div>
+            </motion.section>
+          )}
+
+          {/* ── STEP: SUCCESS (auto-login fallback) ─────────────────────── */}
+          {step === 'success' && (
+            <motion.section
+              key="success"
+              initial={{ opacity: 0, scale: 0.96 }}
+              animate={{ opacity: 1, scale: 1 }}
+              className="max-w-md mx-auto mt-12"
+            >
+              <div className="rounded-3xl p-8 text-center" style={{ background: tk.panel, border: `1px solid ${tk.border}` }}>
+                {/* Animated checkmark */}
+                <motion.div
+                  initial={{ scale: 0, rotate: -180 }}
+                  animate={{ scale: 1, rotate: 0 }}
+                  transition={{ type: 'spring', stiffness: 250, damping: 18, delay: 0.1 }}
+                  className="w-16 h-16 rounded-2xl flex items-center justify-center mx-auto mb-5"
+                  style={{ background: 'rgba(48,255,172,0.10)', border: '1px solid rgba(48,255,172,0.25)' }}
                 >
-                  Go to Login
-                </button>
+                  <Check className="w-8 h-8" style={{ color: tk.mint }} strokeWidth={3} />
+                </motion.div>
+                <h2 className="text-2xl font-extrabold text-white mb-2 tracking-tight">Welcome aboard.</h2>
+                <p className="text-sm leading-6 mb-6" style={{ color: tk.textSec }}>
+                  Your account is ready. Sign in to {invite?.organization.name} to get started.
+                </p>
+                <motion.button
+                  onClick={() => navigate(`/${invite?.organization.slug || orgSlug}/login`)}
+                  className="w-full px-6 py-3.5 rounded-2xl text-white font-bold text-sm flex items-center justify-center gap-2"
+                  style={{ background: 'linear-gradient(135deg, #FF6803 0%, #FFAC5F 100%)', boxShadow: '0 8px 28px rgba(255,104,3,0.4)' }}
+                  whileHover={{ scale: 1.02 }}
+                  whileTap={{ scale: 0.97 }}
+                >
+                  Go to sign in
+                  <ArrowRight className="w-4 h-4" />
+                </motion.button>
               </div>
-            </motion.div>
+            </motion.section>
           )}
         </AnimatePresence>
+      </main>
+    </div>
+  );
+}
+
+// ────────────────────────────────────────────────────────────────────────────
+// Code cell — 1 character, focused/filled styling, separator divider
+// ────────────────────────────────────────────────────────────────────────────
+function CodeCell({
+  value,
+  filled,
+  separator,
+  inputRef,
+  onChange,
+  onKeyDown,
+  onPaste,
+}: {
+  value: string;
+  filled: boolean;
+  focused: boolean;
+  separator: boolean;
+  inputRef: (el: HTMLInputElement | null) => void;
+  onChange: (v: string) => void;
+  onKeyDown: (e: React.KeyboardEvent<HTMLInputElement>) => void;
+  onPaste?: (e: React.ClipboardEvent<HTMLInputElement>) => void;
+}) {
+  return (
+    <>
+      <motion.div
+        whileHover={{ y: -1 }}
+        className="relative"
+      >
+        <input
+          ref={inputRef}
+          type="text"
+          inputMode="text"
+          maxLength={1}
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          onKeyDown={onKeyDown}
+          onPaste={onPaste}
+          autoComplete="off"
+          spellCheck={false}
+          className="
+            w-10 h-12 sm:w-12 sm:h-14
+            text-center font-mono font-bold uppercase
+            text-lg sm:text-2xl
+            rounded-xl outline-none transition-all
+          "
+          style={{
+            background: filled ? 'rgba(255,104,3,0.10)' : 'rgba(26,14,9,0.85)',
+            border: `1.5px solid ${filled ? 'rgba(255,104,3,0.35)' : 'rgba(255,255,255,0.10)'}`,
+            color: '#FFFFFF',
+            caretColor: '#FF6803',
+            boxShadow: filled ? '0 4px 12px rgba(255,104,3,0.15)' : 'none',
+          }}
+          onFocus={(e) => {
+            e.currentTarget.style.borderColor = 'rgba(255,104,3,0.60)';
+            e.currentTarget.style.boxShadow = '0 0 0 3px rgba(255,104,3,0.15)';
+            e.currentTarget.select();
+          }}
+          onBlur={(e) => {
+            e.currentTarget.style.borderColor = filled ? 'rgba(255,104,3,0.35)' : 'rgba(255,255,255,0.10)';
+            e.currentTarget.style.boxShadow = filled ? '0 4px 12px rgba(255,104,3,0.15)' : 'none';
+          }}
+        />
+        {filled && (
+          <motion.div
+            initial={{ scale: 0 }}
+            animate={{ scale: 1 }}
+            className="absolute -bottom-1 left-1/2 -translate-x-1/2 w-1 h-1 rounded-full"
+            style={{ background: '#FF6803' }}
+          />
+        )}
       </motion.div>
-    </PageWrapper>
+      {separator && <span className="px-1" style={{ color: 'rgba(255,255,255,0.25)' }}>•</span>}
+    </>
+  );
+}
+
+// ────────────────────────────────────────────────────────────────────────────
+// Form bits
+// ────────────────────────────────────────────────────────────────────────────
+function Row({ children }: { children: React.ReactNode }) {
+  return <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">{children}</div>;
+}
+
+function Field({
+  label,
+  hint,
+  required,
+  icon,
+  children,
+}: {
+  label: string;
+  hint?: string;
+  required?: boolean;
+  icon?: React.ReactNode;
+  children: React.ReactNode;
+}) {
+  return (
+    <label className="block">
+      <div className="flex items-center justify-between mb-1.5">
+        <span className="text-[11px] font-semibold uppercase tracking-wider" style={{ color: 'rgba(255,255,255,0.65)' }}>
+          {icon}
+          <span className="ml-1.5 inline-block align-middle">
+            {label}
+            {required && <span style={{ color: '#FF6803' }}> *</span>}
+          </span>
+        </span>
+        {hint && <span className="text-[10px]" style={{ color: 'rgba(255,255,255,0.32)' }}>{hint}</span>}
+      </div>
+      {children}
+    </label>
+  );
+}
+
+function Input({
+  value,
+  onChange,
+  placeholder,
+  type = 'text',
+  autoComplete,
+}: {
+  value: string;
+  onChange: (v: string) => void;
+  placeholder?: string;
+  type?: string;
+  autoComplete?: string;
+}) {
+  return (
+    <input
+      type={type}
+      value={value}
+      autoComplete={autoComplete}
+      onChange={(e) => onChange(e.target.value)}
+      placeholder={placeholder}
+      className="w-full rounded-xl px-3.5 py-2.5 text-sm outline-none transition-colors"
+      style={{
+        background: 'rgba(26,14,9,0.85)',
+        border: '1px solid rgba(255,255,255,0.10)',
+        color: '#FFFFFF',
+      }}
+      onFocus={(e) => { e.currentTarget.style.borderColor = 'rgba(255,104,3,0.40)'; }}
+      onBlur={(e) => { e.currentTarget.style.borderColor = 'rgba(255,255,255,0.10)'; }}
+    />
   );
 }

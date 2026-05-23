@@ -35,7 +35,7 @@ import organizationService, {
 const tk = {
   primary:    '#FF6803',
   mint:       '#30FFAC',
-  purple:     '#a855f7',
+  purple:     '#FF6803',
   blue:       '#3b82f6',
   amber:      '#f59e0b',
   danger:     '#EF4444',

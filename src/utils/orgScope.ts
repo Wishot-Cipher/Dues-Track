@@ -12,7 +12,7 @@
  *
  * SECURITY: Every Supabase query that touches shared tables (payments,
  * payment_types, expenses, notifications, etc.) MUST filter by
- * organization_id when running in multi-tenant mode.
+ * organization_id and group_id when running in multi-tenant mode.
  */
 
 const SESSION_KEYS = {
@@ -20,12 +20,14 @@ const SESSION_KEYS = {
   ORG_SLUG: 'pvx_org_slug',
   AUTH: 'pvx_auth',
   MEMBER_ID: 'pvx_member_id',
+  GROUP_ID: 'pvx_group_id',
 } as const;
 
 export interface OrgScope {
   orgId: string;
   orgSlug: string;
   memberId: string;
+  groupId: string;
 }
 
 /**
@@ -41,10 +43,11 @@ export function getOrgScope(): OrgScope | null {
     const orgId = localStorage.getItem(SESSION_KEYS.ORG_ID);
     const orgSlug = localStorage.getItem(SESSION_KEYS.ORG_SLUG);
     const memberId = localStorage.getItem(SESSION_KEYS.MEMBER_ID);
+    const groupId = localStorage.getItem(SESSION_KEYS.GROUP_ID);
 
-    if (!orgId || !orgSlug || !memberId) return null;
+    if (!orgId || !orgSlug || !memberId || !groupId) return null;
 
-    return { orgId, orgSlug, memberId };
+    return { orgId, orgSlug, memberId, groupId };
   } catch {
     return null;
   }

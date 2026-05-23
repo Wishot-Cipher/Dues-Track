@@ -67,7 +67,10 @@ class NotificationService {
         link,
         is_read: false,
       };
-      if (scope) insertData.organization_id = scope.orgId;
+      if (scope) {
+        insertData.organization_id = scope.orgId;
+        insertData.group_id = scope.groupId;
+      }
 
       const { error } = await supabase.from('notifications').insert(insertData);
 
@@ -279,7 +282,10 @@ class NotificationService {
             .update({ is_read: true, read_at: new Date().toISOString() })
             .eq('id', notificationId)
             .eq('member_id', userId);
-          if (nScope) mrQ = mrQ.eq('organization_id', nScope.orgId);
+          if (nScope) {
+            mrQ = mrQ.eq('organization_id', nScope.orgId);
+            mrQ = mrQ.eq('group_id', nScope.groupId);
+          }
           const { error } = await mrQ;
           if (error) {
             console.error('Supabase fallback error marking as read:', error);
@@ -326,7 +332,10 @@ class NotificationService {
             .update({ is_read: true, read_at: new Date().toISOString() })
             .eq('member_id', userId)
             .eq('is_read', false);
-          if (naScope) marQ = marQ.eq('organization_id', naScope.orgId);
+          if (naScope) {
+            marQ = marQ.eq('organization_id', naScope.orgId);
+            marQ = marQ.eq('group_id', naScope.groupId);
+          }
           const { error } = await marQ;
           if (error) {
             console.error('Supabase fallback error marking all as read:', error);
@@ -357,7 +366,10 @@ class NotificationService {
         .from('notifications')
         .delete()
         .eq('id', notificationId);
-      if (dScope) delQ = delQ.eq('organization_id', dScope.orgId);
+      if (dScope) {
+        delQ = delQ.eq('organization_id', dScope.orgId);
+        delQ = delQ.eq('group_id', dScope.groupId);
+      }
       const { error } = await delQ;
 
       if (error) {
@@ -384,7 +396,10 @@ class NotificationService {
         .delete()
         .eq('member_id', userId)
         .eq('is_read', true);
-      if (dScope) delQ = delQ.eq('organization_id', dScope.orgId);
+      if (dScope) {
+        delQ = delQ.eq('organization_id', dScope.orgId);
+        delQ = delQ.eq('group_id', dScope.groupId);
+      }
       const { error } = await delQ;
 
       if (error) {

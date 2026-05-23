@@ -49,7 +49,10 @@ export default function ExpenseTransparencyDashboard() {
         .select('amount')
         .eq('status', 'approved')
         .not('transaction_ref', 'like', 'WAIVED-%')
-      if (scope) qPayments = qPayments.eq('organization_id', scope.orgId)
+      if (scope) {
+        qPayments = qPayments.eq('organization_id', scope.orgId)
+        qPayments = qPayments.eq('group_id', scope.groupId)
+      }
       const { data: payments } = await qPayments
 
       const totalCollected = payments?.reduce((sum, p) => sum + Number(p.amount), 0) || 0
@@ -67,7 +70,10 @@ export default function ExpenseTransparencyDashboard() {
         `)
         .eq('status', 'approved')
         .order('expense_date', { ascending: false })
-      if (scope) qExpenses = qExpenses.eq('organization_id', scope.orgId)
+      if (scope) {
+        qExpenses = qExpenses.eq('organization_id', scope.orgId)
+        qExpenses = qExpenses.eq('group_id', scope.groupId)
+      }
       const { data: expenses } = await qExpenses
 
       const totalSpent = expenses?.reduce((sum, e) => sum + Number(e.amount), 0) || 0

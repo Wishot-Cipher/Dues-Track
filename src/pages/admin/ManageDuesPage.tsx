@@ -109,11 +109,15 @@ export default function ManageDuesPage() {
     try {
       setLoading(true)
       const scope = getOrgScope()
-      const { data, error } = await supabase
+      let query = supabase
         .from('payment_types')
         .select('*')
-        .eq('organization_id', scope?.orgId || '')
         .order('created_at', { ascending: false })
+      if (scope) {
+        query = query.eq('organization_id', scope.orgId)
+        query = query.eq('group_id', scope.groupId)
+      }
+      const { data, error } = await query
 
       if (error) throw error
 
@@ -147,7 +151,10 @@ export default function ManageDuesPage() {
         .from('payment_types')
         .update({ is_active: newStatus, updated_at: new Date().toISOString() })
         .eq('id', paymentType.id);
-      if (scope) updateQ = updateQ.eq('organization_id', scope.orgId);
+      if (scope) {
+        updateQ = updateQ.eq('organization_id', scope.orgId);
+        updateQ = updateQ.eq('group_id', scope.groupId);
+      }
       const { error } = await updateQ;
 
       if (error) throw error
@@ -187,7 +194,10 @@ export default function ManageDuesPage() {
           updated_at: new Date().toISOString()
         })
         .eq('id', editingPaymentType.id);
-      if (scope) editQ = editQ.eq('organization_id', scope.orgId);
+      if (scope) {
+        editQ = editQ.eq('organization_id', scope.orgId);
+        editQ = editQ.eq('group_id', scope.groupId);
+      }
       const { error } = await editQ;
 
       if (error) throw error
@@ -214,7 +224,10 @@ export default function ManageDuesPage() {
         .from('payments')
         .select('id', { count: 'exact', head: true })
         .eq('payment_type_id', paymentTypeId);
-      if (scope) countQ = countQ.eq('organization_id', scope.orgId);
+      if (scope) {
+        countQ = countQ.eq('organization_id', scope.orgId);
+        countQ = countQ.eq('group_id', scope.groupId);
+      }
       const { count } = await countQ;
 
       if (count && count > 0) {
@@ -227,7 +240,10 @@ export default function ManageDuesPage() {
         .from('payment_types')
         .delete()
         .eq('id', paymentTypeId);
-      if (scope) deleteQ = deleteQ.eq('organization_id', scope.orgId);
+      if (scope) {
+        deleteQ = deleteQ.eq('organization_id', scope.orgId);
+        deleteQ = deleteQ.eq('group_id', scope.groupId);
+      }
       const { error } = await deleteQ;
 
       if (error) throw error

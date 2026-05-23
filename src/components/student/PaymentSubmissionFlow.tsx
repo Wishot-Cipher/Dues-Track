@@ -3,6 +3,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { colors, gradients } from '@/config/colors';
 import { formatCurrency } from '@/utils/formatters';
 import GlassCard from '@/components/ui/GlassCard';
+import HoldToConfirm from '@/components/student/HoldToConfirm ';
 import FileUploader from '@/components/ui/FileUploader';
 import {
   ArrowLeft,
@@ -14,7 +15,6 @@ import {
   FileText,
   Users,
   AlertTriangle,
-  Sparkles,
   CheckCircle,
   Receipt,
   Banknote,
@@ -885,33 +885,15 @@ export default function PaymentSubmissionFlow({
             <ArrowRight className="w-5 h-5" />
           </motion.button>
         ) : (
-          <motion.button
-            onClick={handleSubmit}
-            disabled={submitting}
-            className="flex-1 py-3 px-4 sm:py-4 sm:px-6 rounded-xl font-semibold flex items-center justify-center gap-2 min-w-0"
-            style={{
-              background: gradients.primary,
-              boxShadow: `0 4px 20px ${colors.primary}40`,
-            }}
-            whileHover={{ scale: 1.02 }}
-            whileTap={{ scale: 0.98 }}
-          >
-            {submitting ? (
-              <>
-                <motion.div
-                  className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full"
-                  animate={{ rotate: 360 }}
-                  transition={{ duration: 1, repeat: Infinity, ease: 'linear' }}
-                />
-                Submitting...
-              </>
-            ) : (
-              <>
-                <Sparkles className="w-5 h-5" />
-                Submit Payment
-              </>
-            )}
-          </motion.button>
+          <HoldToConfirm
+            onConfirm={handleSubmit}
+            loading={submitting}
+            holdDuration={1500}
+            label="Hold to Submit Payment"
+            confirmLabel="Submitting..."
+            color={colors.primary}
+            className="flex-1 min-w-0"
+          />
         )}
       </div>
     </div>

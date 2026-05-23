@@ -42,7 +42,10 @@ export default function ClassProgressVisualization() {
       let qStudents = supabase
         .from('organization_members')
         .select('*', { count: 'exact', head: true })
-      if (scope) qStudents = qStudents.eq('organization_id', scope.orgId)
+      if (scope) {
+        qStudents = qStudents.eq('organization_id', scope.orgId)
+        qStudents = qStudents.eq('group_id', scope.groupId)
+      }
       const { count: totalStudents } = await qStudents
 
       // Get all active payment types
@@ -50,7 +53,10 @@ export default function ClassProgressVisualization() {
         .from('payment_types')
         .select('id, amount')
         .eq('is_active', true)
-      if (scope) qPaymentTypes = qPaymentTypes.eq('organization_id', scope.orgId)
+      if (scope) {
+        qPaymentTypes = qPaymentTypes.eq('organization_id', scope.orgId)
+        qPaymentTypes = qPaymentTypes.eq('group_id', scope.groupId)
+      }
       const { data: paymentTypes } = await qPaymentTypes
 
       const totalExpected = (paymentTypes?.reduce((sum, pt) => sum + Number(pt.amount), 0) || 0) * (totalStudents || 0)
@@ -60,7 +66,10 @@ export default function ClassProgressVisualization() {
         .from('payments')
         .select('amount, member_id, status, transaction_ref')
         .eq('status', 'approved')
-      if (scope) qAllPayments = qAllPayments.eq('organization_id', scope.orgId)
+      if (scope) {
+        qAllPayments = qAllPayments.eq('organization_id', scope.orgId)
+        qAllPayments = qAllPayments.eq('group_id', scope.groupId)
+      }
       const { data: allPayments } = await qAllPayments
 
       // Calculate total collected (excluding waived)
@@ -96,7 +105,10 @@ export default function ClassProgressVisualization() {
         .not('transaction_ref', 'like', 'WAIVED-%')
         .order('created_at', { ascending: false })
         .limit(5)
-      if (scope) qRecent = qRecent.eq('organization_id', scope.orgId)
+      if (scope) {
+        qRecent = qRecent.eq('organization_id', scope.orgId)
+        qRecent = qRecent.eq('group_id', scope.groupId)
+      }
       const { data: recentPayments } = await qRecent
 
       // Recent payers (last 5)

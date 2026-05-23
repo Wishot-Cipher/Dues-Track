@@ -57,7 +57,7 @@ export default async function handler(req: any, res: any) {
     // Validate the payment exists, belongs to this member, and same org
     const { data: payment, error: paymentError } = await supabaseAdmin
       .from('payments')
-      .select('id, member_id, amount, status, organization_id')
+      .select('id, member_id, amount, status, organization_id, group_id')
       .eq('id', paymentId)
       .eq('member_id', studentId)
       .eq('organization_id', auth.data.organization_id)
@@ -76,7 +76,13 @@ export default async function handler(req: any, res: any) {
     const organizationId = payment.organization_id;
 
     // Fetch names for message (multi-tenant: organization_members table)
-    const { data: pt } = await supabaseAdmin.from('payment_types').select('title').eq('id', paymentTypeId).eq('organization_id', organizationId).single()
+    let ptQ = supabaseAdmin
+      .from('payment_types')
+      .select('title')
+      .eq('id', paymentTypeId)
+      .eq('organization_id', organizationId)
+    if (payment.group_id) ptQ = ptQ.eq('group_id', payment.group_id)
+    const { data: pt } = await ptQ.single()
     const { data: member } = await supabaseAdmin
       .from('organization_members')
       .select('full_name, member_id')
@@ -100,7 +106,7 @@ export default async function handler(req: any, res: any) {
 
     // Find approvers: admins who can approve payments or have role treasurer
     // Scoped to the same organization as the payment
-    const { data: approvers } = await supabaseAdmin
+    let approverQ = supabaseAdmin
       .from('member_admins')
       .select(`
         member_id,
@@ -114,6 +120,12 @@ export default async function handler(req: any, res: any) {
       .eq('is_active', true)
       .or('can_approve_payments.eq.true,role.eq.treasurer,role.eq.org_owner,role.eq.org_admin')
 
+    if (payment.group_id) {
+      approverQ = approverQ.eq('group_id', payment.group_id)
+    }
+
+    const { data: approvers } = await approverQ
+
     if (!approvers || approvers.length === 0) return res.status(200).json({ ok: true, inserted: 0 })
 
     const reviewLink = orgSlug ? `/${orgSlug}/admin/review` : `/admin/review`
@@ -122,6 +134,7 @@ export default async function handler(req: any, res: any) {
     const inserts = approvers.map((a: any) => ({
       member_id: a.member_id,
       organization_id: organizationId,
+      group_id: payment.group_id || null,
       type: 'payment_pending',
       title: `💰 New Payment - ${paymentTypeName}`,
       message: `${memberName} (${memberId}) submitted ${formattedAmount} for "${paymentTypeName}". Tap to review.`,

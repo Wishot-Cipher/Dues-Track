@@ -145,7 +145,7 @@ export default function OrgLayout() {
   const admin = isAnyAdmin();
   const isAcademicOrg = organization.organization_type === 'university' || organization.organization_type === 'school';
   const groupNavLabel = isAcademicOrg
-    ? 'Faculties & Classes'
+    ? 'Faculties & Departments'
     : (organization.group_label_plural || 'Groups');
 
   /* ──── Navigation Items ──── */

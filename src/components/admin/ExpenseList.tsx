@@ -81,7 +81,10 @@ export default function ExpenseList({ categoryFilter = 'all' }: { categoryFilter
       try {
         const scope = getOrgScope()
         let q = supabase.from('payment_types').select('id, title').eq('is_active', true).order('title')
-        if (scope) q = q.eq('organization_id', scope.orgId)
+        if (scope) {
+          q = q.eq('organization_id', scope.orgId)
+          q = q.eq('group_id', scope.groupId)
+        }
         const { data } = await q
         if (mounted) setPaymentTypes(data || [])
       } catch (err) {
@@ -106,6 +109,7 @@ export default function ExpenseList({ categoryFilter = 'all' }: { categoryFilter
           .limit(2000)
 
         if (scope) query = query.eq('organization_id', scope.orgId)
+        if (scope) query = query.eq('group_id', scope.groupId)
 
         if (paymentFilter && paymentFilter !== 'all') {
           query = query.eq('payment_type_id', paymentFilter)
@@ -153,7 +157,10 @@ export default function ExpenseList({ categoryFilter = 'all' }: { categoryFilter
         setCategories(cats)
         const scope = getOrgScope()
         let q = supabase.from('payment_types').select('id, title').eq('is_active', true)
-        if (scope) q = q.eq('organization_id', scope.orgId)
+        if (scope) {
+          q = q.eq('organization_id', scope.orgId)
+          q = q.eq('group_id', scope.groupId)
+        }
         const { data } = await q
         setPaymentTypes(data || [])
       } catch (err) {

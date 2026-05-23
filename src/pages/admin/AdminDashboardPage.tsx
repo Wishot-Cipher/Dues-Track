@@ -138,7 +138,10 @@ export default function AdminDashboardPage() {
         `)
         .order('created_at', { ascending: false })
         .limit(20);
-      if (scope) expQ = expQ.eq('organization_id', scope.orgId);
+      if (scope) {
+        expQ = expQ.eq('organization_id', scope.orgId);
+        expQ = expQ.eq('group_id', scope.groupId);
+      }
       const { data } = await expQ;
 
       const formatted = (data || []).map(exp => ({
@@ -177,7 +180,10 @@ export default function AdminDashboardPage() {
         .from('organization_members')
         .select('*', { count: 'exact', head: true })
         .eq('is_active', true);
-      if (scope) memberQ = memberQ.eq('organization_id', scope.orgId);
+      if (scope) {
+        memberQ = memberQ.eq('organization_id', scope.orgId);
+        memberQ = memberQ.eq('group_id', scope.groupId);
+      }
       const { count: studentCount } = await memberQ;
 
       // Total payment types
@@ -185,7 +191,10 @@ export default function AdminDashboardPage() {
         .from('payment_types')
         .select('*', { count: 'exact', head: true })
         .eq('is_active', true);
-      if (scope) ptQ = ptQ.eq('organization_id', scope.orgId);
+      if (scope) {
+        ptQ = ptQ.eq('organization_id', scope.orgId);
+        ptQ = ptQ.eq('group_id', scope.groupId);
+      }
       const { count: paymentTypeCount } = await ptQ;
 
       // Pending review
@@ -193,7 +202,10 @@ export default function AdminDashboardPage() {
         .from('payments')
         .select('*', { count: 'exact', head: true })
         .eq('status', 'pending');
-      if (scope) pendQ = pendQ.eq('organization_id', scope.orgId);
+      if (scope) {
+        pendQ = pendQ.eq('organization_id', scope.orgId);
+        pendQ = pendQ.eq('group_id', scope.groupId);
+      }
       const { count: pendingCount } = await pendQ;
 
       // Total collected (approved payments excluding waived)
@@ -201,7 +213,10 @@ export default function AdminDashboardPage() {
         .from('payments')
         .select('amount, transaction_ref')
         .eq('status', 'approved');
-      if (scope) apprQ = apprQ.eq('organization_id', scope.orgId);
+      if (scope) {
+        apprQ = apprQ.eq('organization_id', scope.orgId);
+        apprQ = apprQ.eq('group_id', scope.groupId);
+      }
       const { data: approvedPayments } = await apprQ;
 
       const totalCollected = approvedPayments
@@ -216,7 +231,10 @@ export default function AdminDashboardPage() {
         .select('transaction_ref')
         .eq('status', 'approved')
         .gte('approved_at', today.toISOString());
-      if (scope) todayQ = todayQ.eq('organization_id', scope.orgId);
+      if (scope) {
+        todayQ = todayQ.eq('organization_id', scope.orgId);
+        todayQ = todayQ.eq('group_id', scope.groupId);
+      }
       const { data: approvedTodayPayments } = await todayQ;
 
       const approvedTodayCount = approvedTodayPayments
@@ -228,7 +246,10 @@ export default function AdminDashboardPage() {
         .from('payments')
         .select('*', { count: 'exact', head: true })
         .eq('status', 'rejected');
-      if (scope) rejQ = rejQ.eq('organization_id', scope.orgId);
+      if (scope) {
+        rejQ = rejQ.eq('organization_id', scope.orgId);
+        rejQ = rejQ.eq('group_id', scope.groupId);
+      }
       const { count: rejectedCount } = await rejQ;
 
       setStats({
@@ -266,7 +287,10 @@ export default function AdminDashboardPage() {
         `)
         .in('status', ['approved', 'rejected', 'pending'])
         .order('updated_at', { ascending: false });
-      if (scope) payQ = payQ.eq('organization_id', scope.orgId);
+      if (scope) {
+        payQ = payQ.eq('organization_id', scope.orgId);
+        payQ = payQ.eq('group_id', scope.groupId);
+      }
       const { data: allData } = await payQ;
 
       setAllPayments(allData || []);

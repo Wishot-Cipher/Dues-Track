@@ -50,7 +50,10 @@ export default function AchievementSystem() {
         .eq('member_id', user?.id)
         .eq('status', 'approved')
         .order('created_at', { ascending: true })
-      if (scope) qPayments = qPayments.eq('organization_id', scope.orgId)
+      if (scope) {
+        qPayments = qPayments.eq('organization_id', scope.orgId)
+        qPayments = qPayments.eq('group_id', scope.groupId)
+      }
       const { data: payments } = await qPayments
 
       // Get payments made for others
@@ -60,7 +63,10 @@ export default function AchievementSystem() {
         .eq('paid_by', user?.id)
         .neq('member_id', user?.id)
         .eq('status', 'approved')
-      if (scope) qHelped = qHelped.eq('organization_id', scope.orgId)
+      if (scope) {
+        qHelped = qHelped.eq('organization_id', scope.orgId)
+        qHelped = qHelped.eq('group_id', scope.groupId)
+      }
       const { data: helpedPayments } = await qHelped
 
       const paymentCount = payments?.length || 0
@@ -75,7 +81,10 @@ export default function AchievementSystem() {
       let qTypes = supabase
         .from('payment_types')
         .select('id, deadline')
-      if (scope) qTypes = qTypes.eq('organization_id', scope.orgId)
+      if (scope) {
+        qTypes = qTypes.eq('organization_id', scope.orgId)
+        qTypes = qTypes.eq('group_id', scope.groupId)
+      }
       const { data: paymentTypes } = await qTypes
 
       const earlyPayments = payments?.filter(p => {

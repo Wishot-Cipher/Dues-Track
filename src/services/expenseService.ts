@@ -209,7 +209,7 @@ export async function createExpense(payload: CreateExpensePayload) {
 
     // Resolve org/group IDs
     let orgId = scope?.orgId || null
-    let groupId: string | null = null
+    let groupId: string | null = scope?.groupId || null
 
     // If scope not available, try to derive from member record
     if (!orgId && payload.recorded_by) {
@@ -281,7 +281,10 @@ export async function fetchExpenses(limit = 50, status?: 'pending' | 'approved' 
     .order('expense_date', { ascending: false })
     .limit(limit)
 
-  if (scope) query = query.eq('organization_id', scope.orgId)
+  if (scope) {
+    query = query.eq('organization_id', scope.orgId)
+    query = query.eq('group_id', scope.groupId)
+  }
   if (status) {
     query = query.eq('status', status)
   }
@@ -303,7 +306,10 @@ export async function fetchExpenseCategories(includeInactive = false): Promise<E
   if (!includeInactive) {
     query = query.eq('is_active', true)
   }
-  if (scope) query = query.eq('organization_id', scope.orgId)
+  if (scope) {
+    query = query.eq('organization_id', scope.orgId)
+    query = query.eq('group_id', scope.groupId)
+  }
 
   const { data, error } = await query
 
@@ -378,7 +384,10 @@ export async function getExpenseAuditLog(expenseId: string) {
     `)
     .eq('expense_id', expenseId)
     .order('created_at', { ascending: false })
-  if (scope) query = query.eq('organization_id', scope.orgId)
+  if (scope) {
+    query = query.eq('organization_id', scope.orgId)
+    query = query.eq('group_id', scope.groupId)
+  }
 
   const { data, error } = await query
 
@@ -393,7 +402,10 @@ export async function deleteExpense(expenseId: string) {
     .from('expenses')
     .delete()
     .eq('id', expenseId)
-  if (scope) query = query.eq('organization_id', scope.orgId)
+  if (scope) {
+    query = query.eq('organization_id', scope.orgId)
+    query = query.eq('group_id', scope.groupId)
+  }
 
   const { error } = await query
 
@@ -421,7 +433,10 @@ export async function updateExpenseFields(
       updated_at: new Date().toISOString()
     })
     .eq('id', expenseId)
-  if (scope) query = query.eq('organization_id', scope.orgId)
+  if (scope) {
+    query = query.eq('organization_id', scope.orgId)
+    query = query.eq('group_id', scope.groupId)
+  }
   const { data, error } = await query.select().single()
 
   if (error) throw error

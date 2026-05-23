@@ -26,7 +26,7 @@ export default {
           mint: '#30FFAC',
           green: '#16F456',
           cyan: '#00E6FF',
-          purple: '#8A2BE2',
+          purple: '#3B82F6',
         },
         
         // Status Colors
@@ -35,7 +35,7 @@ export default {
           unpaid: '#FF4D4D',
           partial: '#FFC300',
           pending: '#30FFAC',
-          waived: '#6366F1', // Professional Indigo
+          waived: '#3B82F6', // Professional Blue
         },
         
         // Semantic
@@ -63,12 +63,12 @@ export default {
       backgroundImage: {
         'gradient-primary': 'linear-gradient(135deg, #FF6803 0%, #FFAC5F 100%)',
         'gradient-secondary': 'linear-gradient(135deg, #30FFAC 0%, #16F456 100%)',
-        'gradient-accent': 'linear-gradient(135deg, #00E6FF 0%, #8A2BE2 100%)',
+        'gradient-accent': 'linear-gradient(135deg, #00E6FF 0%, #3B82F6 100%)',
         'gradient-warm': 'linear-gradient(135deg, #FF6803 0%, #CC5202 100%)',
         'gradient-glass': 'linear-gradient(135deg, rgba(255, 104, 3, 0.1) 0%, rgba(48, 255, 172, 0.05) 100%)',
         'radial-warm': 'radial-gradient(circle, #FF6803 0%, transparent 70%)',
         'radial-mint': 'radial-gradient(circle, #30FFAC 0%, transparent 70%)',
-        'radial-purple': 'radial-gradient(circle, #8A2BE2 0%, transparent 70%)',
+        'radial-purple': 'radial-gradient(circle, #3B82F6 0%, transparent 70%)',
       },
       
       boxShadow: {
@@ -77,7 +77,7 @@ export default {
         'glow-mint': '0 0 30px rgba(48, 255, 172, 0.5)',
         'glow-green': '0 0 30px rgba(22, 244, 86, 0.5)',
         'glow-cyan': '0 0 30px rgba(0, 230, 255, 0.5)',
-        'glow-purple': '0 0 30px rgba(138, 43, 226, 0.5)',
+        'glow-purple': '0 0 30px rgba(59, 130, 246, 0.5)',
         'glow-red': '0 0 30px rgba(255, 77, 77, 0.5)',
         'glow-yellow': '0 0 30px rgba(255, 195, 0, 0.5)',
         'card': '0 8px 32px 0 rgba(255, 104, 3, 0.1), inset 0 0 20px rgba(48, 255, 172, 0.05)',

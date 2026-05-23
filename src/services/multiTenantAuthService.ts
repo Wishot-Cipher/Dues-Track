@@ -40,6 +40,7 @@ const SESSION_KEYS = {
   MEMBER_ID: 'pvx_member_id',
   ORG_ID: 'pvx_org_id',
   ORG_SLUG: 'pvx_org_slug',
+  GROUP_ID: 'pvx_group_id',
 };
 
 // ============================================================
@@ -241,6 +242,7 @@ export const multiTenantAuthService = {
     localStorage.removeItem(SESSION_KEYS.MEMBER_ID);
     localStorage.removeItem(SESSION_KEYS.ORG_ID);
     localStorage.removeItem(SESSION_KEYS.ORG_SLUG);
+    localStorage.removeItem(SESSION_KEYS.GROUP_ID);
   },
 
   /**
@@ -252,6 +254,7 @@ export const multiTenantAuthService = {
       localStorage.setItem(SESSION_KEYS.MEMBER_ID, member.id);
       localStorage.setItem(SESSION_KEYS.ORG_ID, member.organization_id);
       localStorage.setItem(SESSION_KEYS.ORG_SLUG, org.slug);
+      localStorage.setItem(SESSION_KEYS.GROUP_ID, member.group_id || '');
     } catch (error) {
       console.error('Error saving session:', error);
     }
@@ -322,6 +325,9 @@ export const multiTenantAuthService = {
 
       delete (fullMember as unknown as Record<string, unknown>).password_hash;
 
+      // Refresh session storage with group scope
+      this.saveSession(fullMember, org as Organization);
+
       return {
         member: fullMember,
         organization: org as Organization,
@@ -344,6 +350,7 @@ export const multiTenantAuthService = {
     localStorage.removeItem(SESSION_KEYS.MEMBER_ID);
     localStorage.removeItem(SESSION_KEYS.ORG_ID);
     localStorage.removeItem(SESSION_KEYS.ORG_SLUG);
+    localStorage.removeItem(SESSION_KEYS.GROUP_ID);
   },
 
   /**

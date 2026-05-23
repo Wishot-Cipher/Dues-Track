@@ -56,7 +56,10 @@ export default function SmartDeadlineReminders() {
         .select('id, title, amount, deadline, allow_partial, late_fee_per_day')
         .eq('is_active', true)
         .not('deadline', 'is', null)
-      if (scope) qTypes = qTypes.eq('organization_id', scope.orgId)
+      if (scope) {
+        qTypes = qTypes.eq('organization_id', scope.orgId)
+        qTypes = qTypes.eq('group_id', scope.groupId)
+      }
       const { data: paymentTypes } = await qTypes
 
       if (!paymentTypes) return
@@ -66,7 +69,10 @@ export default function SmartDeadlineReminders() {
         .from('payments')
         .select('payment_type_id, amount, status')
         .eq('member_id', user?.id)
-      if (scope) qPayments = qPayments.eq('organization_id', scope.orgId)
+      if (scope) {
+        qPayments = qPayments.eq('organization_id', scope.orgId)
+        qPayments = qPayments.eq('group_id', scope.groupId)
+      }
       const { data: payments } = await qPayments
 
       const now = new Date()

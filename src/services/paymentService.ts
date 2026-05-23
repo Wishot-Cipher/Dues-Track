@@ -11,7 +11,7 @@ import { organizationService } from '@/services/organizationService';
  * Handles all payment-related data fetching and mutations.
  *
  * MULTI-TENANT: When an org session is active (pvx_auth), queries are
- * automatically scoped to the current organization via organization_id filters.
+ * scoped to the current organization and group via organization_id + group_id filters.
  */
 
 class PaymentService {
@@ -69,7 +69,10 @@ class PaymentService {
         .from('payment_types')
         .select('id, amount, deadline, late_fee_per_day, target_levels, group_id')
         .eq('is_active', true);
-      if (scope) ptQuery = ptQuery.eq('organization_id', scope.orgId);
+      if (scope) {
+        ptQuery = ptQuery.eq('organization_id', scope.orgId);
+        ptQuery = ptQuery.eq('group_id', scope.groupId);
+      }
 
       const { data: allPaymentTypes, error: typesError } = await ptQuery;
       if (typesError) throw typesError;
@@ -93,7 +96,10 @@ class PaymentService {
         .from('payments')
         .select('payment_type_id, amount, status, transaction_ref')
         .eq('member_id', studentId);
-      if (scope) pmtQuery = pmtQuery.eq('organization_id', scope.orgId);
+      if (scope) {
+        pmtQuery = pmtQuery.eq('organization_id', scope.orgId);
+        pmtQuery = pmtQuery.eq('group_id', scope.groupId);
+      }
       const { data: allPayments } = await pmtQuery;
 
       // Calculate stats
@@ -240,7 +246,10 @@ class PaymentService {
           )
         `)
         .eq('member_id', studentId);
-      if (scope) query = query.eq('organization_id', scope.orgId);
+      if (scope) {
+        query = query.eq('organization_id', scope.orgId);
+        query = query.eq('group_id', scope.groupId);
+      }
       query = query.order('created_at', { ascending: false }).limit(limit);
 
       const { data, error } = await query;
@@ -275,7 +284,10 @@ class PaymentService {
         .select('*')
         .eq('is_active', true)
         .order('deadline', { ascending: true });
-      if (scope) ptQuery = ptQuery.eq('organization_id', scope.orgId);
+      if (scope) {
+        ptQuery = ptQuery.eq('organization_id', scope.orgId);
+        ptQuery = ptQuery.eq('group_id', scope.groupId);
+      }
 
       const { data: allPaymentTypes, error } = await ptQuery;
 
@@ -307,7 +319,10 @@ class PaymentService {
           .eq('member_id', studentId)
           .eq('payment_type_id', type.id)
           .eq('status', 'approved');
-        if (scope) pQuery = pQuery.eq('organization_id', scope.orgId);
+        if (scope) {
+          pQuery = pQuery.eq('organization_id', scope.orgId);
+          pQuery = pQuery.eq('group_id', scope.groupId);
+        }
 
         const { data: payments } = await pQuery;
 
@@ -344,7 +359,10 @@ class PaymentService {
           )
         `)
         .eq('member_id', studentId);
-      if (scope) query = query.eq('organization_id', scope.orgId);
+      if (scope) {
+        query = query.eq('organization_id', scope.orgId);
+        query = query.eq('group_id', scope.groupId);
+      }
       query = query.order('created_at', { ascending: false });
 
       const { data, error } = await query;
@@ -385,6 +403,7 @@ class PaymentService {
       // Include org and group IDs for multi-tenant data isolation
       if (scope) {
         insertData.organization_id = scope.orgId;
+        insertData.group_id = scope.groupId;
       }
 
       const { data, error } = await supabase
@@ -444,7 +463,10 @@ class PaymentService {
         .from('payment_types')
         .select('id, amount, deadline, late_fee_per_day, target_levels')
         .eq('is_active', true);
-      if (scope2) ptQuery2 = ptQuery2.eq('organization_id', scope2.orgId);
+      if (scope2) {
+        ptQuery2 = ptQuery2.eq('organization_id', scope2.orgId);
+        ptQuery2 = ptQuery2.eq('group_id', scope2.groupId);
+      }
       const { data: allActivePaymentTypes } = await ptQuery2;
       const activePaymentTypes = (allActivePaymentTypes || []).filter((pt: any) => {
         const targets: string[] = pt.target_levels || [];
@@ -458,7 +480,10 @@ class PaymentService {
         .from('payments')
         .select('payment_type_id, amount, status, transaction_ref')
         .eq('member_id', studentId);
-      if (scope2) pmtQuery2 = pmtQuery2.eq('organization_id', scope2.orgId);
+      if (scope2) {
+        pmtQuery2 = pmtQuery2.eq('organization_id', scope2.orgId);
+        pmtQuery2 = pmtQuery2.eq('group_id', scope2.groupId);
+      }
       const { data: allPayments } = await pmtQuery2;
 
       let totalPaid = 0;
@@ -573,7 +598,10 @@ class PaymentService {
         .select('*')
         .eq('is_active', true)
         .order('deadline', { ascending: true });
-      if (scope) ptQuery = ptQuery.eq('organization_id', scope.orgId);
+      if (scope) {
+        ptQuery = ptQuery.eq('organization_id', scope.orgId);
+        ptQuery = ptQuery.eq('group_id', scope.groupId);
+      }
       const { data: allPaymentTypesRes, error } = await ptQuery;
       if (error) throw error;
       const memberLevelCanon = organizationService.canonicalizeLevel(student.level || '');
@@ -640,7 +668,10 @@ class PaymentService {
           )
         `)
         .eq('member_id', studentId);
-      if (scope) query = query.eq('organization_id', scope.orgId);
+      if (scope) {
+        query = query.eq('organization_id', scope.orgId);
+        query = query.eq('group_id', scope.groupId);
+      }
       query = query.order('created_at', { ascending: false });
 
       const { data, error } = await query;
@@ -670,7 +701,10 @@ class PaymentService {
           )
         `)
         .eq('id', paymentTypeId);
-      if (scope) query = query.eq('organization_id', scope.orgId);
+      if (scope) {
+        query = query.eq('organization_id', scope.orgId);
+        query = query.eq('group_id', scope.groupId);
+      }
       const { data, error } = await query.single();
 
       if (error) throw error;
@@ -697,7 +731,7 @@ class PaymentService {
       // Get payment type info
       const { data: paymentType } = await supabase
         .from('payment_types')
-        .select('amount, target_levels, organization_id')
+        .select('amount, target_levels, organization_id, group_id')
         .eq('id', paymentTypeId)
         .single();
 
@@ -718,7 +752,9 @@ class PaymentService {
       }
 
       if (scope) memberQuery = memberQuery.eq('organization_id', scope.orgId);
+      if (scope) memberQuery = memberQuery.eq('group_id', scope.groupId);
       else if (paymentType.organization_id) memberQuery = memberQuery.eq('organization_id', paymentType.organization_id);
+      if (!scope && paymentType.group_id) memberQuery = memberQuery.eq('group_id', paymentType.group_id);
       const { count: totalStudents } = await memberQuery;
 
       // Count paid (approved)
@@ -728,7 +764,9 @@ class PaymentService {
         .eq('payment_type_id', paymentTypeId)
         .eq('status', 'approved');
       if (scope) paidQuery = paidQuery.eq('organization_id', scope.orgId);
+      if (scope) paidQuery = paidQuery.eq('group_id', scope.groupId);
       else if (paymentType.organization_id) paidQuery = paidQuery.eq('organization_id', paymentType.organization_id);
+      if (!scope && paymentType.group_id) paidQuery = paidQuery.eq('group_id', paymentType.group_id);
       const { count: paidCount, data: paidPayments } = await paidQuery;
 
       // Count pending
@@ -738,7 +776,9 @@ class PaymentService {
         .eq('payment_type_id', paymentTypeId)
         .eq('status', 'pending');
       if (scope) pendingQuery = pendingQuery.eq('organization_id', scope.orgId);
+      if (scope) pendingQuery = pendingQuery.eq('group_id', scope.groupId);
       else if (paymentType.organization_id) pendingQuery = pendingQuery.eq('organization_id', paymentType.organization_id);
+      if (!scope && paymentType.group_id) pendingQuery = pendingQuery.eq('group_id', paymentType.group_id);
       const { count: pendingCount } = await pendingQuery;
 
       const totalCollected = paidPayments?.reduce((sum, p) => sum + Number(p.amount), 0) || 0;
@@ -785,7 +825,10 @@ class PaymentService {
         .from('payment_types')
         .select('amount')
         .eq('id', paymentTypeId);
-      if (scope) ptQuery = ptQuery.eq('organization_id', scope.orgId);
+      if (scope) {
+        ptQuery = ptQuery.eq('organization_id', scope.orgId);
+        ptQuery = ptQuery.eq('group_id', scope.groupId);
+      }
       const { data: paymentType } = await ptQuery.single();
 
       if (!paymentType) {
@@ -800,7 +843,10 @@ class PaymentService {
         .eq('payment_type_id', paymentTypeId)
         .order('created_at', { ascending: false })
         .limit(1);
-      if (scope) pmtQuery = pmtQuery.eq('organization_id', scope.orgId);
+      if (scope) {
+        pmtQuery = pmtQuery.eq('organization_id', scope.orgId);
+        pmtQuery = pmtQuery.eq('group_id', scope.groupId);
+      }
       const { data: payments } = await pmtQuery;
 
       const payment = payments?.[0] || null;

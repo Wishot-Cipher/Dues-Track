@@ -214,9 +214,9 @@ function GroupChip({
         </span>
       )}
       <Link
-        to={`/${orgSlug}`}
+        to={`/${orgSlug}/overview`}
         className="inline-flex items-center gap-0.5 text-[11px] font-medium transition-colors"
-        // style={{ color }}
+        style={{ color }}
       >
         Change <ChevronRight className="w-3 h-3" />
       </Link>
@@ -597,7 +597,7 @@ export default function OrgLoginPage() {
                 <p className="text-sm font-semibold text-white truncate">{selectedGroup.name}</p>
               </div>
               <Link
-                to={`/${orgSlug}`}
+                to={`/${orgSlug}/overview`}
                 className="text-[11px] font-semibold shrink-0 hover:underline"
                 style={{ color }}
               >
@@ -662,7 +662,7 @@ export default function OrgLoginPage() {
               <Link
                 to="/"
                 className="text-xs font-medium transition-colors"
-                // style={{ color }}
+                style={{ color }}
               >
                 Switch organization
               </Link>
@@ -739,7 +739,7 @@ export default function OrgLoginPage() {
                   <Link
                     to={`/${orgSlug}/forgot-password`}
                     className="text-[11px] font-medium transition-opacity hover:opacity-70"
-                    // style={{ color: tk.textTertiary }}
+                    style={{ color }}
                   >
                     Forgot password?
                   </Link>
@@ -764,15 +764,15 @@ export default function OrgLoginPage() {
                 className="w-full py-4 rounded-2xl text-sm font-bold tracking-wide relative overflow-hidden transition-all"
                 style={{
                   background: canSubmit && !loading
-                    ? `linear-gradient(135deg, ${tk.accent} 0%, ${lighten(tk.inputBg)} 100%)`
-                    : tk.inputBg,
-                  color: canSubmit && !loading ? '#fff' : tk.textTertiary,
+                    ? `linear-gradient(135deg, ${color} 0%, ${lighten(color)} 100%)`
+                    : `linear-gradient(135deg, rgba(${rgb},0.08), rgba(${rgb},0.03))`,
+                  color: '#fff',
                   border: `1px solid ${canSubmit && !loading ? 'transparent' : tk.borderFaint}`,
-                  boxShadow: canSubmit && !loading ? `0 12px 32px ${tk.accent}38` : 'none',
+                  boxShadow: canSubmit && !loading ? `0 12px 32px rgba(${rgb},0.22)` : 'none',
                   cursor: loading || !canSubmit ? 'not-allowed' : 'pointer',
                   
                 }}
-                whileHover={canSubmit && !loading ? { scale: 1.01, boxShadow: `0 16px 40px ${color}48` } : {}}
+                whileHover={canSubmit && !loading ? { scale: 1.01, boxShadow: `0 16px 40px rgba(${rgb},0.28)` } : {}}
                 whileTap={canSubmit && !loading ? { scale: 0.985 } : {}}
               >
                 {/* Shimmer on hover */}

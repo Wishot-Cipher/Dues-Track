@@ -5,7 +5,17 @@
  */
 
 import { supabase } from '@/config/supabase';
-import type { Organization, OrganizationGroup, OrganizationSettings, OrganizationInvite, GroupKind } from '@/types/multiTenant';
+import type {
+  Organization,
+  OrganizationGroup,
+  OrganizationSettings,
+  OrganizationInvite,
+  GroupKind,
+  SearchResult,
+  SeedInstitution,
+  TrustLevel,
+  ClaimStatus,
+} from '@/types/multiTenant';
 import type { OrganizationType } from '@/config/constants';
 import { ORG_TYPE_DEFAULTS } from '@/types/multiTenant';
 
@@ -17,8 +27,61 @@ function getCurrentMemberId(): string | null {
   }
 }
 
+/**
+ * Stable ordering for search results: highest-trust live orgs first,
+ * then lower trust bands, then seeds last. Within a band, larger member
+ * count wins, then alphabetical by name.
+ */
+const TRUST_ORDER: Record<TrustLevel, number> = {
+  official:   0,
+  verified:   1,
+  recognized: 2,
+  community:  3,
+  seed:       4,
+};
+
+function sortByTrust(results: SearchResult[]): SearchResult[] {
+  return [...results].sort((a, b) => {
+    const ta = TRUST_ORDER[a.trust_level] ?? 9;
+    const tb = TRUST_ORDER[b.trust_level] ?? 9;
+    if (ta !== tb) return ta - tb;
+    const ma = a.member_count ?? 0;
+    const mb = b.member_count ?? 0;
+    if (ma !== mb) return mb - ma;
+    return a.name.localeCompare(b.name);
+  });
+}
+
 export interface OrganizationWithGroups extends Organization {
   groups: OrganizationGroup[];
+}
+
+/** Result of get_due_creation_context RPC (mig 035) */
+export interface DueCreationContext {
+  ok: boolean;
+  error?: string;
+  org?: {
+    id: string;
+    slug: string;
+    name: string;
+    state: 'active' | 'acting' | 'orphaned' | null;
+  };
+  caller?: {
+    scope: 'org' | 'unit' | 'group' | null;
+    group_id: string | null;
+    verification_status: string | null;
+    can_publish: boolean;
+  };
+  session?: { id: string; label: string } | null;
+  targets?: Array<{
+    id: string;
+    name: string;
+    short_name: string;
+    kind: string;
+    parent_group_id: string | null;
+    can_collect_dues: boolean;
+    member_count: number;
+  }>;
 }
 
 export interface AcademicSessionRecord {
@@ -58,6 +121,9 @@ export const organizationService = {
    */
   async getBySlug(slug: string): Promise<Organization | null> {
     try {
+      // maybeSingle() returns null when no row matches, instead of
+      // triggering the 406 error that .single() throws. The calling
+      // pages already handle null by showing a NotFoundScreen.
       const { data, error } = await supabase
         .from('organizations')
         .select(`
@@ -66,14 +132,14 @@ export const organizationService = {
         `)
         .eq('slug', slug.toLowerCase())
         .eq('is_active', true)
-        .single();
+        .maybeSingle();
 
       if (error) {
         console.error('Error fetching organization:', error);
         return null;
       }
 
-      return data as Organization;
+      return (data as Organization | null);
     } catch (error) {
       console.error('Error in getBySlug:', error);
       return null;
@@ -136,7 +202,694 @@ export const organizationService = {
   },
 
   /**
-   * Search organizations by name
+   * Two-layer search for the landing page.
+   *
+   * Layer 1: live `organizations` (real, joinable, with trust badges).
+   * Layer 2: `seed_institutions` not yet linked to a live org —
+   *          these surface so a student who searches for an unlisted
+   *          school can promote it via the Bring My School flow.
+   *
+   * If a seed shares a name (case-insensitive) with a live org, the
+   * live one wins and the seed is suppressed. Results are returned in
+   * trust order so the most legitimate matches surface first.
+   */
+  async searchUnified(
+    query: string,
+    opts?: { countryCode?: string; limit?: number }
+  ): Promise<SearchResult[]> {
+    const limit = opts?.limit ?? 8;
+    const safeQuery = query.trim();
+    if (safeQuery.length < 2) return [];
+
+    // ── Layer 1: live organizations ──
+    //
+    // We attempt the modern column set first (mig 012 adds type,
+    // trust_level, claim_status, country_code, etc.). If migrations
+    // have NOT been applied yet, PostgREST returns 400 and we fall
+    // back to a legacy column set. This makes the landing-page
+    // search work on a stock Supabase before migrations run.
+    let orgRows: Record<string, unknown>[] | null = null;
+    let modernShape = true;
+
+    {
+      let modernQuery = supabase
+        .from('organizations')
+        .select('id, name, short_name, slug, type, organization_type, trust_level, claim_status, logo_url, member_count, country_code, country')
+        .eq('is_active', true)
+        .or(`name.ilike.%${safeQuery}%,short_name.ilike.%${safeQuery}%`);
+
+      if (opts?.countryCode) {
+        modernQuery = modernQuery.or(
+          `country_code.eq.${opts.countryCode},country.eq.${opts.countryCode}`
+        );
+      }
+
+      const res = await modernQuery.limit(limit);
+      if (res.error) {
+        console.warn('searchUnified: modern columns not available, falling back', res.error.message);
+        modernShape = false;
+      } else {
+        orgRows = res.data as Record<string, unknown>[];
+      }
+    }
+
+    if (!modernShape) {
+      // Legacy fallback — only the columns guaranteed to exist on the
+      // organizations table before migration 012.
+      const legacyQuery = supabase
+        .from('organizations')
+        .select('id, name, short_name, slug, organization_type, logo_url, country')
+        .eq('is_active', true)
+        .or(`name.ilike.%${safeQuery}%,short_name.ilike.%${safeQuery}%`)
+        .limit(limit);
+
+      const res = await legacyQuery;
+      if (res.error) {
+        console.error('searchUnified: legacy org query also failed', res.error);
+        orgRows = [];
+      } else {
+        orgRows = res.data as Record<string, unknown>[];
+      }
+    }
+
+    const orgs: SearchResult[] = (orgRows ?? []).map((r) => ({
+      kind: 'organization',
+      id: String(r.id),
+      name: String(r.name),
+      short_name: (r.short_name as string) ?? null,
+      type: (r.type as string) ?? (r.organization_type as string) ?? 'other',
+      trust_level: ((r.trust_level as TrustLevel | undefined) ?? 'community'),
+      slug: r.slug as string | undefined,
+      logo_url: (r.logo_url as string | null) ?? null,
+      member_count: typeof r.member_count === 'number' ? (r.member_count as number) : undefined,
+      claim_status: ((r.claim_status as ClaimStatus | undefined) ?? 'unclaimed'),
+      country_code: (r.country_code as string | undefined) ?? undefined,
+    }));
+
+    if (orgs.length >= Math.min(5, limit)) {
+      return sortByTrust(orgs).slice(0, limit);
+    }
+
+    // ── Layer 2: seed institutions ──
+    //
+    // Wrapped defensively: if mig 011 hasn't run yet, the table
+    // doesn't exist and PostgREST returns 42P01. Catch and skip.
+    const remaining = limit - orgs.length;
+    let seedRows: Record<string, unknown>[] = [];
+
+    try {
+      let seedQuery = supabase
+        .from('seed_institutions')
+        .select('id, name, short_name, type, state, city, ownership, country_code')
+        .is('linked_org_id', null)
+        .or(`name.ilike.%${safeQuery}%,short_name.ilike.%${safeQuery}%,aliases.cs.{${safeQuery.toUpperCase()}}`);
+
+      if (opts?.countryCode) {
+        seedQuery = seedQuery.eq('country_code', opts.countryCode);
+      }
+
+      const res = await seedQuery.limit(remaining * 2);
+      if (res.error) {
+        console.warn('searchUnified: seed_institutions not queryable yet', res.error.message);
+      } else if (res.data) {
+        seedRows = res.data as Record<string, unknown>[];
+      }
+    } catch (e) {
+      console.warn('searchUnified: seed layer skipped', e);
+    }
+
+    const seenNames = new Set(orgs.map((o) => o.name.toLowerCase()));
+    const seeds: SearchResult[] = seedRows
+      .filter((s) => !seenNames.has(String(s.name).toLowerCase()))
+      .slice(0, remaining)
+      .map((s) => ({
+        kind: 'seed',
+        id: String(s.id),
+        name: String(s.name),
+        short_name: (s.short_name as string) ?? null,
+        type: String(s.type ?? 'other'),
+        trust_level: 'seed' as TrustLevel,
+        state: (s.state as string | null) ?? null,
+        city: (s.city as string | null) ?? null,
+        ownership: ((s.ownership as 'federal' | 'state' | 'private' | null) ?? null),
+        country_code: (s.country_code as string | undefined) ?? undefined,
+      }));
+
+    return sortByTrust([...orgs, ...seeds]).slice(0, limit);
+  },
+
+  /**
+   * Add a new faculty (top-level unit) to an existing organization.
+   *
+   * Atomic — creates a single organization_groups row with kind='faculty'
+   * and no parent_group_id, via the add_faculty_to_org RPC (mig 029).
+   *
+   * Use case: the founder created their org via bring-school, which
+   * gave them ONE faculty. They want to add more.
+   */
+  async addFacultyToOrg(input: {
+    orgSlug: string;
+    facultyName: string;
+    facultyShortName?: string;
+  }): Promise<{
+    ok: boolean;
+    error?: string;
+    slug?: string;
+    org_id?: string;
+    faculty_id?: string;
+    faculty_short?: string;
+  }> {
+    const { data, error } = await supabase.rpc('add_faculty_to_org', {
+      p_org_slug:           input.orgSlug,
+      p_faculty_name:       input.facultyName,
+      p_faculty_short_name: input.facultyShortName ?? null,
+    });
+    if (error) {
+      console.error('addFacultyToOrg RPC error', error);
+      return { ok: false, error: error.message || 'Network error. Please try again.' };
+    }
+    return (data ?? { ok: false, error: 'Empty response' }) as {
+      ok: boolean;
+      error?: string;
+      slug?: string;
+      org_id?: string;
+      faculty_id?: string;
+      faculty_short?: string;
+    };
+  },
+
+  /**
+   * Submit a claim to be an exec on the caller's org.
+   *
+   * Per mig 039 `submit_claim_request`. Inserts the claim, notifies
+   * every eligible member, and returns the claim id + computed
+   * vote threshold. After this, the UI takes the user to a
+   * "Waiting for votes" status screen and shows the claim to other
+   * members in their NotificationCenter as "Vote on a claim".
+   */
+  async submitClaim(input: {
+    callerMemberId: string;
+    claimedRole: string;
+    claimedScope: 'org' | 'unit' | 'group';
+    claimedGroupId: string | null;
+    positionTitle: string;
+    phone?: string;
+    personalEmail?: string;
+    institutionalEmail?: string;
+    documentUrls?: string[];
+    method?: 'email' | 'member_vote' | 'document';
+  }): Promise<{
+    ok: boolean;
+    error?: string;
+    claim_id?: string;
+    votes_required?: number;
+    vote_deadline?: string;
+  }> {
+    const { data, error } = await supabase.rpc('submit_claim_request', {
+      p_caller_member_id:    input.callerMemberId,
+      p_claimed_role:        input.claimedRole,
+      p_claimed_scope:       input.claimedScope,
+      p_claimed_group_id:    input.claimedGroupId,
+      p_position_title:      input.positionTitle,
+      p_phone:               input.phone ?? null,
+      p_personal_email:      input.personalEmail ?? null,
+      p_institutional_email: input.institutionalEmail ?? null,
+      p_document_urls:       input.documentUrls ?? null,
+      p_method:              input.method ?? 'member_vote',
+    });
+    if (error) {
+      console.error('submitClaim RPC error', error);
+      return { ok: false, error: error.message };
+    }
+    return (data ?? { ok: false, error: 'Empty response' }) as {
+      ok: boolean; error?: string; claim_id?: string;
+      votes_required?: number; vote_deadline?: string;
+    };
+  },
+
+  /**
+   * Cast a vote on a pending claim (mig 039 `cast_claim_vote`).
+   * The RPC also auto-runs finalize_claim_if_ready, so when the
+   * threshold is met the claimant is promoted to a verified admin
+   * in the same call. The response includes a nested `finalize`
+   * object describing what happened.
+   */
+  async castClaimVote(input: {
+    claimId: string;
+    voterMemberId: string;
+    vote: 'confirm' | 'reject' | 'abstain';
+    comment?: string;
+  }): Promise<{
+    ok: boolean;
+    error?: string;
+    vote?: string;
+    finalize?: {
+      ok: boolean;
+      approved?: boolean;
+      votes_received?: number;
+      votes_required?: number;
+      admin_id?: string;
+    };
+  }> {
+    const { data, error } = await supabase.rpc('cast_claim_vote', {
+      p_claim_id:        input.claimId,
+      p_voter_member_id: input.voterMemberId,
+      p_vote:            input.vote,
+      p_comment:         input.comment ?? null,
+    });
+    if (error) {
+      console.error('castClaimVote RPC error', error);
+      return { ok: false, error: error.message };
+    }
+    return (data ?? { ok: false, error: 'Empty response' }) as {
+      ok: boolean; error?: string; vote?: string;
+      finalize?: { ok: boolean; approved?: boolean; votes_received?: number; votes_required?: number; admin_id?: string };
+    };
+  },
+
+  /**
+   * List pending claims the caller can vote on (their org +
+   * awaiting_votes + caller is in the target scope + caller is
+   * NOT the claimant + caller hasn't already voted).
+   */
+  async listOpenClaimsForVoter(callerMemberId: string): Promise<Array<{
+    id: string;
+    organization_id: string;
+    claimant_user_id: string;
+    full_name: string;
+    position_title: string;
+    claimed_role: string;
+    claimed_scope: string;
+    claimed_group_id: string | null;
+    claimed_unit_group_id: string | null;
+    votes_required: number;
+    votes_received: number;
+    vote_deadline: string;
+    created_at: string;
+  }>> {
+    // First resolve the caller's org so we filter correctly even with relaxed RLS
+    const { data: me } = await supabase
+      .from('organization_members')
+      .select('organization_id, group_id')
+      .eq('id', callerMemberId)
+      .maybeSingle();
+    if (!me?.organization_id) return [];
+
+    const { data, error } = await supabase
+      .from('claim_requests')
+      .select('id, organization_id, claimant_user_id, full_name, position_title, claimed_role, claimed_scope, claimed_group_id, claimed_unit_group_id, votes_required, votes_received, vote_deadline, created_at')
+      .eq('organization_id', me.organization_id)
+      .eq('status', 'awaiting_votes')
+      .neq('claimant_user_id', callerMemberId)
+      .order('created_at', { ascending: false });
+
+    if (error) {
+      console.error('listOpenClaimsForVoter error', error);
+      return [];
+    }
+    // Filter out claims the caller has already voted on
+    const ids = (data ?? []).map((c) => c.id);
+    if (ids.length === 0) return [];
+    const { data: voted } = await supabase
+      .from('claim_votes')
+      .select('claim_request_id')
+      .eq('voter_member_id', callerMemberId)
+      .in('claim_request_id', ids);
+    const votedSet = new Set((voted ?? []).map((v) => v.claim_request_id));
+    return (data ?? []).filter((c) => !votedSet.has(c.id)) as Array<{
+      id: string; organization_id: string; claimant_user_id: string;
+      full_name: string; position_title: string; claimed_role: string;
+      claimed_scope: string; claimed_group_id: string | null;
+      claimed_unit_group_id: string | null; votes_required: number;
+      votes_received: number; vote_deadline: string; created_at: string;
+    }>;
+  },
+
+  /**
+   * Generic "add a subgroup to a parent" — supports both:
+   *   parent = faculty/college → creates a department
+   *   parent = department      → creates a class / level / association
+   *
+   * Calls add_subgroup_to_parent RPC (mig 037). Same atomic pattern
+   * as bring_school_online: creates the group, the founder member,
+   * and the founder admin row in one transaction.
+   */
+  async addSubgroupToParent(input: {
+    orgSlug: string;
+    parentShortName: string;
+    subgroupName: string;
+    subgroupShortName?: string;
+    subgroupKind?: 'department' | 'class' | 'level' | 'association' | 'general';
+    fullName: string;
+    email: string;
+    phone?: string;
+    memberNumber: string;
+    password: string;
+    userLevel?: string;
+  }): Promise<{
+    ok: boolean;
+    error?: string;
+    slug?: string;
+    org_id?: string;
+    parent_id?: string;
+    parent_short?: string;
+    parent_kind?: string;
+    group_id?: string;
+    group_short?: string;
+    group_kind?: string;
+    member_id?: string;
+    member_login_id?: string;
+  }> {
+    const { data, error } = await supabase.rpc('add_subgroup_to_parent', {
+      p_org_slug:            input.orgSlug,
+      p_parent_short_name:   input.parentShortName,
+      p_subgroup_name:       input.subgroupName,
+      p_subgroup_short_name: input.subgroupShortName ?? null,
+      p_subgroup_kind:       input.subgroupKind ?? null,
+      p_full_name:           input.fullName,
+      p_email:               input.email,
+      p_phone:               input.phone ?? null,
+      p_member_number:       input.memberNumber,
+      p_password:            input.password,
+      p_user_level:          input.userLevel ?? null,
+    });
+    if (error) {
+      console.error('addSubgroupToParent RPC error', error);
+      return { ok: false, error: error.message || 'Network error. Please try again.' };
+    }
+    return (data ?? { ok: false, error: 'Empty response' }) as {
+      ok: boolean;
+      error?: string;
+      slug?: string;
+      org_id?: string;
+      parent_id?: string;
+      parent_short?: string;
+      parent_kind?: string;
+      group_id?: string;
+      group_short?: string;
+      group_kind?: string;
+      member_id?: string;
+      member_login_id?: string;
+    };
+  },
+
+  /**
+   * Returns everything the CreateDuePage needs to render the
+   * scope-aware targeting picker in ONE round trip.
+   *
+   * Per mig 035 `get_due_creation_context`. Result shape:
+   *   {
+   *     ok: true,
+   *     org: { id, slug, name, state },
+   *     caller: { scope, group_id, verification_status, can_publish },
+   *     session: { id, label } | null,
+   *     targets: [{ id, name, short_name, kind, parent_group_id, can_collect_dues, member_count }]
+   *   }
+   */
+  async getDueCreationContext(callerMemberId: string): Promise<DueCreationContext> {
+    const { data, error } = await supabase.rpc('get_due_creation_context', {
+      p_caller_member_id: callerMemberId,
+    });
+    if (error) {
+      console.error('getDueCreationContext RPC error', error);
+      return { ok: false, error: error.message };
+    }
+    return (data ?? { ok: false, error: 'Empty response' }) as DueCreationContext;
+  },
+
+  /**
+   * Publish a due via the scope-checked RPC (mig 033 + 035).
+   *
+   * The RPC validates: org_state='active', caller has can_create_payments,
+   * verification_status is trusted, target scope is within caller's reach,
+   * target group can_collect_dues, and binds the due to the org's current
+   * academic session. On success, it fans out notifications automatically.
+   */
+  async createDueWithScope(input: {
+    callerMemberId: string;
+    targetScope: 'org' | 'faculty' | 'group';
+    targetGroupId: string | null;
+    payload: Record<string, unknown>;
+  }): Promise<{
+    ok: boolean;
+    error?: string;
+    payment_type_id?: string;
+    target_scope?: string;
+    target_group_id?: string | null;
+    caller_scope?: string;
+    session_label?: string | null;
+    notified_count?: number;
+    target_count?: number;
+  }> {
+    const { data, error } = await supabase.rpc('create_due_with_scope_check', {
+      p_caller_member_id: input.callerMemberId,
+      p_target_scope:     input.targetScope,
+      p_target_group_id:  input.targetGroupId,
+      p_payload:          input.payload,
+    });
+    if (error) {
+      console.error('createDueWithScope RPC error', error);
+      return { ok: false, error: error.message };
+    }
+    return (data ?? { ok: false, error: 'Empty response' }) as {
+      ok: boolean;
+      error?: string;
+      payment_type_id?: string;
+      target_scope?: string;
+      target_group_id?: string | null;
+      caller_scope?: string;
+      session_label?: string | null;
+      notified_count?: number;
+      target_count?: number;
+    };
+  },
+
+  /**
+   * Add a new department/class inside an existing faculty.
+   *
+   * Atomic — creates the department group + the founder member +
+   * the founder admin row in one transaction via the
+   * add_department_to_faculty RPC (mig 027).
+   *
+   * Use case: a student / staff member finds their school and
+   * faculty on Payvexo but their department isn't there yet.
+   * They click "Add a department" on the faculty page, fill the
+   * form, and become the founding admin of that department.
+   */
+  async addDepartmentToFaculty(input: {
+    orgSlug: string;
+    facultyShortName: string;
+
+    departmentName: string;
+    departmentShortName?: string;
+    departmentKind?: 'department' | 'class' | 'general';
+
+    fullName: string;
+    email: string;
+    phone?: string;
+    memberNumber: string;
+    password: string;
+    userLevel?: string;
+  }): Promise<{
+    ok: boolean;
+    error?: string;
+    slug?: string;
+    org_id?: string;
+    faculty_id?: string;
+    faculty_short?: string;
+    group_id?: string;
+    group_short?: string;
+    member_id?: string;
+    member_login_id?: string;
+  }> {
+    const { data, error } = await supabase.rpc('add_department_to_faculty', {
+      p_org_slug:              input.orgSlug,
+      p_faculty_short_name:    input.facultyShortName,
+      p_department_name:       input.departmentName,
+      p_department_short_name: input.departmentShortName ?? null,
+      p_department_kind:       input.departmentKind ?? 'department',
+      p_full_name:             input.fullName,
+      p_email:                 input.email,
+      p_phone:                 input.phone ?? null,
+      p_member_number:         input.memberNumber,
+      p_password:              input.password,
+      p_user_level:            input.userLevel ?? null,
+    });
+
+    if (error) {
+      console.error('addDepartmentToFaculty RPC error', error);
+      return { ok: false, error: error.message || 'Network error. Please try again.' };
+    }
+    return (data ?? { ok: false, error: 'Empty response' }) as {
+      ok: boolean;
+      error?: string;
+      slug?: string;
+      org_id?: string;
+      faculty_id?: string;
+      faculty_short?: string;
+      group_id?: string;
+      group_short?: string;
+      member_id?: string;
+      member_login_id?: string;
+    };
+  },
+
+  /**
+   * Self-signup into an EXISTING organization + group.
+   *
+   * Distinct from `bringSchoolOnline` (which creates a new org). This
+   * is the path for "I'm new to this class" on the GroupWelcomePage.
+   *
+   * The RPC honors org gating:
+   *   - `allow_self_registration` must be TRUE on the org's settings,
+   *     otherwise the call fails with a friendly message asking the
+   *     user to get an invite code from their admin.
+   *   - `require_admin_approval` flips the new member to pending
+   *     (inactive + suspended) until an admin approves them.
+   */
+  async signupMemberForGroup(input: {
+    orgSlug: string;
+    groupShortName: string;
+    fullName: string;
+    email: string;
+    phone?: string;
+    memberNumber: string;
+    password: string;
+    level?: string;
+  }): Promise<{
+    ok: boolean;
+    error?: string;
+    slug?: string;
+    org_id?: string;
+    group_id?: string;
+    member_id?: string;
+    member_login_id?: string;
+    requires_approval?: boolean;
+  }> {
+    const { data, error } = await supabase.rpc('signup_member_for_group', {
+      p_org_slug:         input.orgSlug,
+      p_group_short_name: input.groupShortName,
+      p_full_name:        input.fullName,
+      p_email:            input.email,
+      p_phone:            input.phone ?? null,
+      p_member_number:    input.memberNumber,
+      p_password:         input.password,
+      p_level:            input.level ?? null,
+    });
+
+    if (error) {
+      console.error('signupMemberForGroup RPC error', error);
+      return { ok: false, error: error.message || 'Network error. Please try again.' };
+    }
+    return (data ?? { ok: false, error: 'Empty response' }) as {
+      ok: boolean;
+      error?: string;
+      slug?: string;
+      org_id?: string;
+      group_id?: string;
+      member_id?: string;
+      member_login_id?: string;
+      requires_approval?: boolean;
+    };
+  },
+
+  /**
+   * Fetch a single seed institution by id (used by BringMySchoolPage
+   * to pre-fill the form with NUC/Wikidata data).
+   */
+  async getSeedInstitution(seedId: string): Promise<SeedInstitution | null> {
+    const { data, error } = await supabase
+      .from('seed_institutions')
+      .select('*')
+      .eq('id', seedId)
+      .maybeSingle();
+    if (error) {
+      console.error('getSeedInstitution error', error);
+      return null;
+    }
+    return data as SeedInstitution | null;
+  },
+
+  /**
+   * Bring a school online — atomic creation of org + faculty + class +
+   * founder member + founder admin row via the bring_school_online RPC
+   * (multi-tenant/migrations/023_bring_school_rpc.sql).
+   */
+  async bringSchoolOnline(input: {
+    fullName: string;
+    email: string;
+    phone?: string;
+    memberNumber: string;
+    password: string;
+
+    orgName: string;
+    orgShortName?: string;
+    orgType: string;
+    countryCode?: string;
+    state?: string;
+    city?: string;
+    website?: string;
+
+    seedId?: string | null;
+
+    facultyName?: string;
+    facultyShort?: string;
+
+    groupName: string;
+    groupShort?: string;
+    groupKind?: string;
+    userLevel?: string;
+  }): Promise<{
+    ok: boolean;
+    error?: string;
+    slug?: string;
+    org_id?: string;
+    group_id?: string;
+    faculty_id?: string;
+    member_id?: string;
+    member_login_id?: string;
+  }> {
+    const { data, error } = await supabase.rpc('bring_school_online', {
+      p_full_name:      input.fullName,
+      p_email:          input.email,
+      p_phone:          input.phone ?? null,
+      p_member_number:  input.memberNumber,
+      p_password:       input.password,
+      p_org_name:       input.orgName,
+      p_org_short_name: input.orgShortName ?? null,
+      p_org_type:       input.orgType,
+      p_country_code:   input.countryCode ?? 'NG',
+      p_state:          input.state ?? null,
+      p_city:           input.city ?? null,
+      p_website:        input.website ?? null,
+      p_seed_id:        input.seedId ?? null,
+      p_faculty_name:   input.facultyName ?? null,
+      p_faculty_short:  input.facultyShort ?? null,
+      p_group_name:     input.groupName,
+      p_group_short:    input.groupShort ?? null,
+      p_group_kind:     input.groupKind ?? 'class',
+      p_user_level:     input.userLevel ?? null,
+    });
+
+    if (error) {
+      console.error('bringSchoolOnline RPC error', error);
+      return { ok: false, error: error.message || 'Network error. Please try again.' };
+    }
+    return (data ?? { ok: false, error: 'Empty response' }) as {
+      ok: boolean;
+      error?: string;
+      slug?: string;
+      org_id?: string;
+      group_id?: string;
+      faculty_id?: string;
+      member_id?: string;
+      member_login_id?: string;
+    };
+  },
+
+  /**
+   * Legacy single-layer search kept for backwards compatibility.
+   * New code should call `searchUnified` instead.
    */
   async search(query: string, type?: OrganizationType): Promise<Organization[]> {
     try {
@@ -265,7 +1018,7 @@ export const organizationService = {
           group_label_plural: defaults.group_label_plural,
           payment_label: defaults.payment_label,
           admin_label: defaults.admin_label,
-          primary_color: '#6C3AED',
+          primary_color: '#FF6803',
           secondary_color: '#0A0118',
           country: orgData.country || 'Nigeria',
           currency_code: orgData.currency_code || 'NGN',

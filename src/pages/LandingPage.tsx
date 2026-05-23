@@ -25,7 +25,8 @@ import {
 } from 'lucide-react';
 import { APP_NAME, APP_TAGLINE } from '@/config/constants';
 import { organizationService } from '@/services/organizationService';
-import type { Organization } from '@/types/multiTenant';
+import type { SearchResult } from '@/types/multiTenant';
+import TrustBadge from '@/components/trust/TrustBadge';
 
 // ── Design tokens ──────────────────────────────────────────────────────────
 const tk = {
@@ -249,15 +250,26 @@ function TiltCard({
 
 // ── Search result item ────────────────────────────────────────────────────
 function SearchResultItem({
-  org,
+  result,
   index,
   onClick,
 }: {
-  org: Organization;
+  result: SearchResult;
   index: number;
   onClick: () => void;
 }) {
   const [hovered, setHovered] = useState(false);
+  const isSeed = result.kind === 'seed';
+
+  const subtitleLeft = result.short_name
+    ? `${result.type} · ${result.short_name}`
+    : result.type;
+  const subtitleRight = isSeed
+    ? [result.ownership, result.state].filter(Boolean).join(' · ')
+    : typeof result.member_count === 'number' && result.member_count > 0
+      ? `${result.member_count.toLocaleString()} members`
+      : null;
+
   return (
     <motion.button
       initial={{ opacity: 0, x: -12 }}
@@ -266,22 +278,32 @@ function SearchResultItem({
       onClick={onClick}
       onHoverStart={() => setHovered(true)}
       onHoverEnd={() => setHovered(false)}
-      className="w-full flex items-center gap-4 px-5 py-4 transition-colors text-left"
-      style={{ background: hovered ? 'rgba(255,104,3,0.06)' : 'transparent' }}
+      className="w-full flex items-center gap-4 px-5 py-3.5 transition-colors text-left"
+      style={{
+        background: hovered
+          ? (isSeed ? 'rgba(156,163,175,0.06)' : 'rgba(255,104,3,0.06)')
+          : 'transparent',
+      }}
     >
       <div
         className="w-10 h-10 rounded-xl flex items-center justify-center shrink-0 transition-all"
         style={{
-          background: hovered ? `${tk.primary}25` : `${tk.primary}15`,
-          color: tk.primary,
+          background: isSeed
+            ? (hovered ? 'rgba(156,163,175,0.18)' : 'rgba(156,163,175,0.10)')
+            : (hovered ? `${tk.primary}25` : `${tk.primary}15`),
+          color: isSeed ? '#9CA3AF' : tk.primary,
         }}
       >
-        {ORG_TYPE_ICONS[org.organization_type] || <Building2 className="w-5 h-5" />}
+        {ORG_TYPE_ICONS[result.type] || <Building2 className="w-5 h-5" />}
       </div>
       <div className="flex-1 min-w-0">
-        <p className="text-white font-semibold text-sm truncate">{org.name}</p>
-        <p className="text-xs capitalize mt-0.5" style={{ color: tk.textTer }}>
-          {org.organization_type} · {org.short_name}
+        <div className="flex items-center gap-2 mb-0.5">
+          <p className="text-white font-semibold text-sm truncate flex-1">{result.name}</p>
+          <TrustBadge level={result.trust_level} size="sm" />
+        </div>
+        <p className="text-xs capitalize" style={{ color: tk.textTer }}>
+          {subtitleLeft}
+          {subtitleRight ? ` · ${subtitleRight}` : ''}
         </p>
       </div>
       <motion.div animate={{ x: hovered ? 3 : 0 }} transition={{ duration: 0.18 }}>
@@ -294,7 +316,7 @@ function SearchResultItem({
 // ── Main component ─────────────────────────────────────────────────────────
 export default function LandingPage() {
   const [searchQuery, setSearchQuery]   = useState('');
-  const [searchResults, setSearchResults] = useState<Organization[]>([]);
+  const [searchResults, setSearchResults] = useState<SearchResult[]>([]);
   const [searching, setSearching]       = useState(false);
   const [hasSearched, setHasSearched]   = useState(false);
   const [searchFocused, setSearchFocused] = useState(false);
@@ -312,12 +334,25 @@ export default function LandingPage() {
     setSearching(true);
     setHasSearched(true);
     try {
-      const results = await organizationService.search(query);
+      const results = await organizationService.searchUnified(query, { countryCode: 'NG' });
       setSearchResults(results);
     } catch {
       setSearchResults([]);
     } finally {
       setSearching(false);
+    }
+  };
+
+  /**
+   * Branch routing by result kind:
+   *  - live org   → /:slug/overview (existing org page)
+   *  - seed       → /bring-school?seed=<id> (promote to community org)
+   */
+  const handleResultClick = (r: SearchResult) => {
+    if (r.kind === 'organization' && r.slug) {
+      navigate(`/${r.slug}/overview`);
+    } else if (r.kind === 'seed') {
+      navigate(`/bring-school?seed=${r.id}`);
     }
   };
 
@@ -571,12 +606,12 @@ export default function LandingPage() {
                         {searchResults.length} result{searchResults.length !== 1 ? 's' : ''} found
                       </div>
                       <div>
-                        {searchResults.map((org, i) => (
+                        {searchResults.map((r, i) => (
                           <SearchResultItem
-                            key={org.id}
-                            org={org}
+                            key={`${r.kind}-${r.id}`}
+                            result={r}
                             index={i}
-                            onClick={() => goToOrg(org.slug)}
+                            onClick={() => handleResultClick(r)}
                           />
                         ))}
                       </div>
@@ -584,17 +619,20 @@ export default function LandingPage() {
                   ) : (
                     <div className="px-5 py-6 text-center space-y-3">
                       <p className="text-sm" style={{ color: tk.textSec }}>
-                        No organizations found for <span className="text-white font-semibold">"{searchQuery}"</span>
+                        No match for <span className="text-white font-semibold">"{searchQuery}"</span>
+                      </p>
+                      <p className="text-xs" style={{ color: tk.textTer }}>
+                        Be the first to bring your school onto Payvexo.
                       </p>
                       <motion.button
-                        onClick={() => navigate('/join-org')}
+                        onClick={() => navigate(`/bring-school?name=${encodeURIComponent(searchQuery)}`)}
                         className="inline-flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold"
                         style={{ color: tk.primary, background: `${tk.primary}15`, border: `1px solid ${tk.primary}30` }}
                         whileHover={{ scale: 1.04 }}
                         whileTap={{ scale: 0.97 }}
                       >
                         <Plus className="w-4 h-4" />
-                        Request a new organization
+                        Bring my school here
                       </motion.button>
                     </div>
                   )}
@@ -704,7 +742,7 @@ export default function LandingPage() {
           {[
             { icon: <Users className="w-4 h-4" />,      label: 'Members tracked',   to: 12400, suffix: '+', color: tk.primary },
             { icon: <DollarSign className="w-4 h-4" />, label: 'Dues collected',     to: 3800, suffix: 'M+', color: tk.mint,    prefix: '₦' },
-            { icon: <TrendingUp className="w-4 h-4" />, label: 'Organizations live', to: 420,  suffix: '+', color: '#8b5cf6' },
+            { icon: <TrendingUp className="w-4 h-4" />, label: 'Organizations live', to: 420,  suffix: '+', color: tk.primary },
           ].map(({ icon, label, to, suffix, color, prefix }) => (
             <div
               key={label}
@@ -746,7 +784,7 @@ export default function LandingPage() {
             icon={<Globe className="w-6 h-6" />}
             title="Any Organization"
             desc="Universities, churches, clubs, cooperatives — one platform, every community."
-            color="#8b5cf6"
+            color={tk.primary}
             delay={0.2}
           />
         </div>
@@ -763,7 +801,7 @@ export default function LandingPage() {
             Ready to get your organization set up?
           </p>
           <motion.button
-            onClick={() => navigate('/join-org')}
+            onClick={() => navigate('/bring-school')}
             className="px-8 py-4 rounded-2xl text-white font-bold text-base relative overflow-hidden"
             style={{
               background: 'linear-gradient(135deg, #FF6803 0%, #FFAC5F 100%)',

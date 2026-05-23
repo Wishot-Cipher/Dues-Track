@@ -29,7 +29,6 @@ import Modal from '@/components/ui/Modal';
 const tk = {
   primary:    '#FF6803',
   mint:       '#30FFAC',
-  purple:     '#a855f7',
   blue:       '#3b82f6',
   amber:      '#f59e0b',
   cyan:       '#06b6d4',
@@ -64,7 +63,7 @@ const cardVariants = {
 const KIND_COLORS: Record<string, string> = {
   faculty:    tk.blue,
   class:      tk.primary,
-  department: tk.purple,
+  department: tk.primary,
   general:    tk.cyan,
   year:       tk.mint,
   level:      tk.pink,
@@ -274,7 +273,9 @@ export default function OrgGroupsPage() {
   const [editTarget, setEditTarget] = useState<OrganizationGroup | null>(null)
 
   const isAcademicOrg    = organization?.organization_type === 'university' || organization?.organization_type === 'school'
-  const classLabel       = organization?.organization_type === 'university' ? 'Department' : 'Class'
+  const classLabel       = (organization?.organization_type === 'university' || organization?.organization_type === 'school')
+    ? 'Department'
+    : 'Class'
   const classLabelPlural = classLabel === 'Class' ? 'Classes' : `${classLabel}s`
   const groupLabel       = organization?.group_label || 'Group'
   const groupLabelPlural = organization?.group_label_plural || 'Groups'
@@ -368,7 +369,7 @@ export default function OrgGroupsPage() {
       {/* Ambient glows */}
       <div className="fixed inset-0 pointer-events-none overflow-hidden">
         <motion.div className="absolute rounded-full blur-[200px]" style={{ width: 560, height: 560, background: `radial-gradient(circle, ${tk.blue}, transparent 70%)`, top: '-18%', right: '-12%', opacity: 0.09 }} animate={{ scale: [1, 1.08, 1] }} transition={{ duration: 11, repeat: Infinity, ease: 'easeInOut' }} />
-        <motion.div className="absolute rounded-full blur-[160px]" style={{ width: 400, height: 400, background: `radial-gradient(circle, ${tk.purple}, transparent 70%)`, bottom: '5%', left: '-8%', opacity: 0.07 }} animate={{ scale: [1, 1.1, 1] }} transition={{ duration: 13, repeat: Infinity, ease: 'easeInOut', delay: 3 }} />
+        <motion.div className="absolute rounded-full blur-[160px]" style={{ width: 400, height: 400, background: `radial-gradient(circle, ${tk.primary}, transparent 70%)`, bottom: '5%', left: '-8%', opacity: 0.07 }} animate={{ scale: [1, 1.1, 1] }} transition={{ duration: 13, repeat: Infinity, ease: 'easeInOut', delay: 3 }} />
         <div className="absolute inset-0 opacity-[0.018]" style={{ backgroundImage: `repeating-linear-gradient(-45deg, transparent, transparent 50px, rgba(59,130,246,0.5) 50px, rgba(59,130,246,0.5) 51px)` }} />
       </div>
 
@@ -377,8 +378,8 @@ export default function OrgGroupsPage() {
 
           {/* ── HERO ── */}
           <motion.div {...fadeUp(0)}>
-            <div className="rounded-[32px] overflow-hidden relative" style={{ background: 'linear-gradient(135deg, rgba(59,130,246,0.1), rgba(168,85,247,0.07))', border: `1px solid ${tk.cardBorder}` }}>
-              <div className="absolute top-0 left-0 right-0 h-[2px]" style={{ background: `linear-gradient(90deg, ${tk.blue}, ${tk.purple} 50%, transparent)` }} />
+            <div className="rounded-[32px] overflow-hidden relative" style={{ background: 'linear-gradient(135deg, rgba(59,130,246,0.1), rgba(255,104,3,0.08))', border: `1px solid ${tk.cardBorder}` }}>
+              <div className="absolute top-0 left-0 right-0 h-[2px]" style={{ background: `linear-gradient(90deg, ${tk.blue}, ${tk.primary} 50%, transparent)` }} />
               <div className="absolute inset-0 pointer-events-none" style={{ background: 'radial-gradient(ellipse 55% 55% at 95% 5%, rgba(59,130,246,0.13), transparent)' }} />
               <div className="absolute -right-10 -top-10 w-60 h-60 opacity-[0.03] pointer-events-none text-white"><Network className="w-full h-full" /></div>
 
@@ -400,7 +401,7 @@ export default function OrgGroupsPage() {
                     whileHover={{ scale: 1.04 }} whileTap={{ scale: 0.97 }}
                     onClick={openCreate}
                     className="shrink-0 inline-flex items-center gap-2 px-6 py-3 rounded-2xl text-sm font-bold text-white"
-                    style={{ background: `linear-gradient(135deg, ${tk.blue}, ${tk.purple})`, boxShadow: `0 8px 28px ${tk.blue}30` }}
+                    style={{ background: `linear-gradient(135deg, ${tk.blue}, ${tk.primary})`, boxShadow: `0 8px 28px ${tk.blue}30` }}
                   >
                     <Plus className="w-4 h-4" />
                     New {isAcademicOrg ? classLabel : groupLabel}
@@ -414,7 +415,7 @@ export default function OrgGroupsPage() {
           <div className="grid grid-cols-3 gap-4">
             <MiniStat label={groupLabelPlural} value={groups.length} color={tk.primary} />
             <MiniStat label={isAcademicOrg ? 'Faculties' : 'Active'} value={isAcademicOrg ? facultyGroups.length : groups.filter(g => g.is_active).length} color={tk.blue} />
-            <MiniStat label={isAcademicOrg ? classLabelPlural : 'Inactive'} value={isAcademicOrg ? classGroups.length : groups.filter(g => !g.is_active).length} color={tk.purple} />
+            <MiniStat label={isAcademicOrg ? classLabelPlural : 'Inactive'} value={isAcademicOrg ? classGroups.length : groups.filter(g => !g.is_active).length} color={tk.primary} />
           </div>
 
           {/* ── SEARCH + TABS ── */}
@@ -478,7 +479,7 @@ export default function OrgGroupsPage() {
                 {searchQuery ? 'Try a different search term.' : 'Create your first group and start organizing members.'}
               </p>
               {!searchQuery && (
-                <motion.button whileHover={{ scale: 1.04 }} onClick={openCreate} className="mt-5 inline-flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-bold text-white" style={{ background: `linear-gradient(135deg, ${tk.blue}, ${tk.purple})` }}>
+                <motion.button whileHover={{ scale: 1.04 }} onClick={openCreate} className="mt-5 inline-flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-bold text-white" style={{ background: `linear-gradient(135deg, ${tk.blue}, ${tk.primary})` }}>
                   <Plus className="w-4 h-4" /> Create {isAcademicOrg ? classLabel : groupLabel}
                 </motion.button>
               )}
@@ -575,7 +576,7 @@ export default function OrgGroupsPage() {
           <motion.button whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }} onClick={closeModal} disabled={saving} className="px-5 py-2.5 rounded-xl text-sm font-semibold" style={{ background: 'rgba(255,255,255,0.05)', color: tk.textSec }}>
             Cancel
           </motion.button>
-          <motion.button whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }} onClick={handleSave} disabled={saving} className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-bold text-white disabled:opacity-40" style={{ background: `linear-gradient(135deg, ${tk.blue}, ${tk.purple})`, boxShadow: `0 6px 20px ${tk.blue}28` }}>
+          <motion.button whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }} onClick={handleSave} disabled={saving} className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-bold text-white disabled:opacity-40" style={{ background: `linear-gradient(135deg, ${tk.blue}, ${tk.primary})`, boxShadow: `0 6px 20px ${tk.blue}28` }}>
             {saving
               ? <motion.div className="w-4 h-4 border-2 rounded-full" style={{ borderColor: 'rgba(255,255,255,0.3)', borderTopColor: '#fff' }} animate={{ rotate: 360 }} transition={{ duration: 0.7, repeat: Infinity, ease: 'linear' }} />
               : editTarget ? <Edit2 className="w-4 h-4" /> : <Plus className="w-4 h-4" />

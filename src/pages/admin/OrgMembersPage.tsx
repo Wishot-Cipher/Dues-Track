@@ -169,10 +169,11 @@ export default function OrgMembersPage() {
         .select('*, admin_records:member_admins(role)')
         .eq('organization_id', organization.id)
         .order('created_at', { ascending: false });
-
-      // If group admin, only show their group
-      if (group && !hasPermission('can_manage_admins')) {
+      const scope = getOrgScope();
+      if (group?.id) {
         query = query.eq('group_id', group.id);
+      } else if (scope) {
+        query = query.eq('group_id', scope.groupId);
       }
 
       const { data, error } = await query;
@@ -602,7 +603,10 @@ export default function OrgMembersPage() {
         .from('organization_members')
         .update({ is_active: !member.is_active, updated_at: new Date().toISOString() })
         .eq('id', member.id);
-      if (scope) q = q.eq('organization_id', scope.orgId);
+      if (scope) {
+        q = q.eq('organization_id', scope.orgId);
+        q = q.eq('group_id', scope.groupId);
+      }
       await q;
       fetchMembers();
     } catch (err) {
@@ -621,7 +625,10 @@ export default function OrgMembersPage() {
         .from('organization_members')
         .update({ password_hash: hashedPw, force_password_change: true, updated_at: new Date().toISOString() })
         .eq('id', member.id);
-      if (scope) q = q.eq('organization_id', scope.orgId);
+      if (scope) {
+        q = q.eq('organization_id', scope.orgId);
+        q = q.eq('group_id', scope.groupId);
+      }
       await q;
       setAddSuccess({ name: member.full_name, id: member.member_id, password: pwd });
     } catch (err) {
@@ -644,7 +651,10 @@ export default function OrgMembersPage() {
           updated_at: new Date().toISOString(),
         })
         .eq('id', editingMember.id);
-      if (scope) q = q.eq('organization_id', scope.orgId);
+      if (scope) {
+        q = q.eq('organization_id', scope.orgId);
+        q = q.eq('group_id', scope.groupId);
+      }
       await q;
       setShowEditModal(false);
       setEditingMember(null);
@@ -663,7 +673,10 @@ export default function OrgMembersPage() {
     try {
       const scope = getOrgScope();
       let q = supabase.from('organization_members').delete().eq('id', member.id);
-      if (scope) q = q.eq('organization_id', scope.orgId);
+      if (scope) {
+        q = q.eq('organization_id', scope.orgId);
+        q = q.eq('group_id', scope.groupId);
+      }
       await q;
       fetchMembers();
     } catch (err) {
@@ -732,13 +745,16 @@ export default function OrgMembersPage() {
       const checkRoles = role === 'admin' ? ['admin', 'org_admin'] : [roleMap[role]];
       const dbRole = roleMap[role];
       const orgId = organization.id;
+      const scope = getOrgScope();
+      const groupId = group?.id || scope?.groupId || null;
 
       const { data: existing } = await supabase
         .from('member_admins')
         .select('id')
         .eq('member_id', member.id)
         .in('role', checkRoles)
-        .eq('organization_id', orgId);
+        .eq('organization_id', orgId)
+        .eq('group_id', groupId || '');
 
       if (existing && existing.length > 0) {
         // Remove role
@@ -747,6 +763,7 @@ export default function OrgMembersPage() {
         await supabase.from('notifications').insert({
           member_id: member.id,
           organization_id: orgId,
+          group_id: groupId,
           type: 'role_removed',
           title: `${role === 'admin' ? 'Admin' : role === 'finsec' ? 'FinSec' : 'Class Rep'} Role Removed`,
           message: `Your ${role === 'admin' ? 'Admin' : role === 'finsec' ? 'Financial Secretary' : 'Class Rep'} role has been removed.`,
@@ -772,6 +789,7 @@ export default function OrgMembersPage() {
         await supabase.from('member_admins').insert({
           member_id: member.id,
           organization_id: orgId,
+          group_id: groupId,
           role: dbRole,
           ...permissions[role],
         });
@@ -779,6 +797,7 @@ export default function OrgMembersPage() {
         await supabase.from('notifications').insert({
           member_id: member.id,
           organization_id: orgId,
+          group_id: groupId,
           type: 'role_assigned',
           title: `${role === 'admin' ? 'Admin' : role === 'finsec' ? 'FinSec' : 'Class Rep'} Role Granted`,
           message: `You have been granted ${role === 'admin' ? 'Admin' : role === 'finsec' ? 'Financial Secretary' : 'Class Rep'} privileges.`,

@@ -239,6 +239,7 @@ export default function BulkStudentImport({ onComplete, onClose }: BulkStudentIm
             .from('organization_members')
             .insert({
               organization_id: scope.orgId,
+              group_id: scope.groupId,
               member_id: s.reg_number,
               full_name: s.full_name,
               email: s.email || null,

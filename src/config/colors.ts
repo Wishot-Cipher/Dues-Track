@@ -12,7 +12,7 @@ export const colors: Record<string, string> = {
   accentMint: '#30FFAC',
   accentGreen: '#16F456',
   accentCyan: '#00E6FF',
-  accentPurple: '#8A2BE2',
+  accentPurple: '#3B82F6',
   textPrimary: '#FFFFFF',
   textSecondary: '#B8B8B8',
   textTertiary: '#7A7A7A',
@@ -22,7 +22,7 @@ export const colors: Record<string, string> = {
   statusPartial: '#FFC300',
   statusPending: '#F59E0B',
   statusRejected: '#FF4D4D',
-  statusWaived: '#8A2BE2',
+  statusWaived: '#3B82F6',
   success: '#16F456',
   warning: '#FFC300',
   error: '#FF4D4D',
@@ -36,13 +36,13 @@ export const colors: Record<string, string> = {
 export const gradients: Record<string, string> = {
   primary: 'linear-gradient(135deg, #FF6803 0%, #FFAC5F 100%)',
   secondary: 'linear-gradient(135deg, #30FFAC 0%, #16F456 100%)',
-  accent: 'linear-gradient(135deg, #00E6FF 0%, #8A2BE2 100%)',
+  accent: 'linear-gradient(135deg, #00E6FF 0%, #3B82F6 100%)',
   warm: 'linear-gradient(135deg, #FF6803 0%, #CC5202 100%)',
   cool: 'linear-gradient(135deg, #30FFAC 0%, #00E6FF 100%)',
   glass: 'linear-gradient(135deg, rgba(255, 104, 3, 0.1) 0%, rgba(48, 255, 172, 0.05) 100%)',
   radialWarm: 'radial-gradient(circle, #FF6803 0%, transparent 70%)',
   radialMint: 'radial-gradient(circle, #30FFAC 0%, transparent 70%)',
-  radialPurple: 'radial-gradient(circle, #8A2BE2 0%, transparent 70%)',
+  radialPurple: 'radial-gradient(circle, #3B82F6 0%, transparent 70%)',
 }
 
 export const glows: Record<string, string> = {
@@ -51,7 +51,7 @@ export const glows: Record<string, string> = {
   mint: '0 0 30px rgba(48, 255, 172, 0.5)',
   green: '0 0 30px rgba(22, 244, 86, 0.5)',
   cyan: '0 0 30px rgba(0, 230, 255, 0.5)',
-  purple: '0 0 30px rgba(138, 43, 226, 0.5)',
+  purple: '0 0 30px rgba(59, 130, 246, 0.5)',
   red: '0 0 30px rgba(255, 77, 77, 0.5)',
   yellow: '0 0 30px rgba(255, 195, 0, 0.5)',
 }

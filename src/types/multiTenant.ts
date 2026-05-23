@@ -31,8 +31,8 @@ export interface Organization {
   // Branding
   logo_url?: string;
   cover_image_url?: string;
-  primary_color: string;                     // "#6C3AED" (Payvexo purple default)
-  secondary_color: string;                   // "#0A0118"
+  primary_color: string;                     // "#FF6803" (Payvexo brand orange default)
+  secondary_color: string;                   // "#1A0E09" (Payvexo brand dark)
   accent_color?: string;                     // Optional tertiary color
 
   // Contact
@@ -74,6 +74,19 @@ export interface Organization {
   verified_at?: string;
   deactivated_reason?: string;
 
+  // Trust & claim system (mig 012)
+  trust_level?: TrustLevel;                  // seed | community | recognized | verified | official
+  claim_status?: ClaimStatus;                // unclaimed | pending | claimed | disputed | frozen
+  verification_score?: number;
+  email_domain?: string | null;
+  type?: string;                             // new explicit type column ("university" | "church" | ...)
+  description?: string | null;
+  unit_label?: string;
+  unit_label_plural?: string;
+  founded_by_user_id?: string | null;
+  seed_institution_id?: string | null;
+  last_activity_at?: string | null;
+
   // Onboarding
   onboarding_completed: boolean;
   onboarding_step?: number;
@@ -87,6 +100,63 @@ export interface Organization {
   groups?: OrganizationGroup[];
   settings?: OrganizationSettings;
   member_count?: number;
+}
+
+// ============================================================
+// DISCOVERY LAYER (mig 011 + 012)
+// ============================================================
+
+/** Trust levels — gates feature access; see Section 7 of the blueprint. */
+export type TrustLevel = 'seed' | 'community' | 'recognized' | 'verified' | 'official';
+
+/** Claim status of an organization. */
+export type ClaimStatus = 'unclaimed' | 'pending' | 'claimed' | 'disputed' | 'frozen';
+
+/** A pre-loaded institution from NUC/NBTE/NCCE/Wikidata. Not yet a live org. */
+export interface SeedInstitution {
+  id: string;
+  name: string;
+  short_name?: string | null;
+  aliases: string[];
+  country_code: string;                      // ISO 3166-1 alpha-2 — "NG"
+  state?: string | null;
+  city?: string | null;
+  type: 'university' | 'polytechnic' | 'college_of_education' | 'monotechnic' | 'seminary' | 'other';
+  ownership?: 'federal' | 'state' | 'private' | null;
+  website?: string | null;
+  email_domain?: string | null;
+  jamb_code?: string | null;
+  wikidata_id?: string | null;
+  logo_url?: string | null;
+  is_active: boolean;
+  linked_org_id?: string | null;
+  source: 'nuc' | 'nbte' | 'ncce' | 'jamb' | 'wikidata' | 'manual';
+  created_at: string;
+  updated_at: string;
+}
+
+/** Unified result returned by the two-layer landing-page search. */
+export type SearchResultKind = 'organization' | 'seed';
+
+export interface SearchResult {
+  kind: SearchResultKind;
+  id: string;
+  name: string;
+  short_name: string | null;
+  type: string;                              // "university" | "polytechnic" | "church" | ...
+  trust_level: TrustLevel;                   // seeds report 'seed'; orgs report their level
+
+  // Organization-only
+  slug?: string;
+  logo_url?: string | null;
+  member_count?: number;
+  claim_status?: ClaimStatus;
+
+  // Seed-only
+  state?: string | null;
+  city?: string | null;
+  ownership?: 'federal' | 'state' | 'private' | null;
+  country_code?: string;
 }
 
 export type SubscriptionTier = 'free' | 'starter' | 'professional' | 'enterprise';

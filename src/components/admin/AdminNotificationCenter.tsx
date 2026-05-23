@@ -79,7 +79,10 @@ export const AdminNotificationCenter = () => {
         .eq('status', 'pending')
         .order('created_at', { ascending: false })
         .limit(10);
-      if (scope) q = q.eq('organization_id', scope.orgId);
+      if (scope) {
+        q = q.eq('organization_id', scope.orgId);
+        q = q.eq('group_id', scope.groupId);
+      }
       const { data, error } = await q;
       if (error) throw error;
       
@@ -110,7 +113,10 @@ export const AdminNotificationCenter = () => {
         .from('payments')
         .select('*', { count: 'exact', head: true })
         .eq('status', 'pending');
-      if (scope) qPending = qPending.eq('organization_id', scope.orgId);
+      if (scope) {
+        qPending = qPending.eq('organization_id', scope.orgId);
+        qPending = qPending.eq('group_id', scope.groupId);
+      }
       const { count: pendingCount } = await qPending;
 
       const today = new Date();
@@ -120,7 +126,10 @@ export const AdminNotificationCenter = () => {
         .select('amount, transaction_ref')
         .eq('status', 'approved')
         .gte('approved_at', today.toISOString());
-      if (scope) qToday = qToday.eq('organization_id', scope.orgId);
+      if (scope) {
+        qToday = qToday.eq('organization_id', scope.orgId);
+        qToday = qToday.eq('group_id', scope.groupId);
+      }
       const { data: todayPayments } = await qToday;
 
       const todayFiltered = todayPayments?.filter(p => !p.transaction_ref?.startsWith('WAIVED-')) || [];
@@ -133,7 +142,10 @@ export const AdminNotificationCenter = () => {
         .select('amount, transaction_ref')
         .eq('status', 'approved')
         .gte('approved_at', weekAgo.toISOString());
-      if (scope) qWeek = qWeek.eq('organization_id', scope.orgId);
+      if (scope) {
+        qWeek = qWeek.eq('organization_id', scope.orgId);
+        qWeek = qWeek.eq('group_id', scope.groupId);
+      }
       const { data: weekPayments } = await qWeek;
 
       const weekFiltered = weekPayments?.filter(p => !p.transaction_ref?.startsWith('WAIVED-')) || [];
@@ -147,7 +159,10 @@ export const AdminNotificationCenter = () => {
           .select('*', { count: 'exact', head: true })
           .eq('member_id', user.id)
           .eq('is_read', false);
-        if (scope) qNotif = qNotif.eq('organization_id', scope.orgId);
+        if (scope) {
+          qNotif = qNotif.eq('organization_id', scope.orgId);
+          qNotif = qNotif.eq('group_id', scope.groupId);
+        }
         const { count: unread } = await qNotif;
         setUnreadCount(unread || 0);
       }
@@ -168,12 +183,14 @@ export const AdminNotificationCenter = () => {
       void notificationSound.forceInit();
       
       // Create a stable subscription that doesn't depend on changing values
+      const scope = getOrgScope();
       const channel = supabase
         .channel('admin-payment-notifications-' + user.id)
         .on('postgres_changes', { 
           event: 'INSERT', 
           schema: 'public', 
-          table: 'payments'
+          table: 'payments',
+          ...(scope ? { filter: `group_id=eq.${scope.groupId}` } : {}),
         }, (payload) => {
           console.log('🔔 New payment inserted:', payload);
           // Play sound for any new payment (we'll check status in the callback)
@@ -185,7 +202,8 @@ export const AdminNotificationCenter = () => {
         .on('postgres_changes', { 
           event: 'UPDATE', 
           schema: 'public', 
-          table: 'payments' 
+          table: 'payments',
+          ...(scope ? { filter: `group_id=eq.${scope.groupId}` } : {}),
         }, (payload) => {
           console.log('🔔 Payment updated:', payload);
           // Play sound when a payment becomes pending (e.g., submitted for review)

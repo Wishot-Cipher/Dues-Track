@@ -71,7 +71,10 @@ export const NotificationCenter = () => {
         .eq('member_id', user.id)
         .order('created_at', { ascending: false })
         .limit(20);
-      if (scope) q = q.eq('organization_id', scope.orgId);
+      if (scope) {
+        q = q.eq('organization_id', scope.orgId);
+        q = q.eq('group_id', scope.groupId);
+      }
       const { data, error } = await q;
 
       if (error) {

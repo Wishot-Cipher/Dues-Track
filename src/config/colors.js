@@ -18,7 +18,7 @@ export const colors = {
   accentMint: '#30FFAC',        // Neon Mint - positive actions
   accentGreen: '#16F456',       // Bright Success - paid status
   accentCyan: '#00E6FF',        // Electric Cyan - info
-  accentPurple: '#8A2BE2',      // Soft Purple - charts
+  accentPurple: '#3B82F6',      // Accent Blue - charts
   
   // Text Colors
   textPrimary: '#FFFFFF',       // Main text
@@ -32,7 +32,7 @@ export const colors = {
   statusPartial: '#70D078',     // Amber Yellow
   statusPending: '#FFC300',     // Amber (pending)
   statusRejected: '#FF4D4D',    // Red
-  statusWaived: '#8A2BE2',      // Purple
+  statusWaived: '#3B82F6',      // Blue
   
   // Semantic Colors
   success: '#16F456',
@@ -51,13 +51,13 @@ export const colors = {
 export const gradients = {
   primary: 'linear-gradient(135deg, #FF6803 0%, #FFAC5F 100%)',
   secondary: 'linear-gradient(135deg, #30FFAC 0%, #16F456 100%)',
-  accent: 'linear-gradient(135deg, #00E6FF 0%, #8A2BE2 100%)',
+  accent: 'linear-gradient(135deg, #00E6FF 0%, #3B82F6 100%)',
   warm: 'linear-gradient(135deg, #FF6803 0%, #CC5202 100%)',
   cool: 'linear-gradient(135deg, #30FFAC 0%, #00E6FF 100%)',
   glass: 'linear-gradient(135deg, rgba(255, 104, 3, 0.1) 0%, rgba(48, 255, 172, 0.05) 100%)',
   radialWarm: 'radial-gradient(circle, #FF6803 0%, transparent 70%)',
   radialMint: 'radial-gradient(circle, #30FFAC 0%, transparent 70%)',
-  radialPurple: 'radial-gradient(circle, #8A2BE2 0%, transparent 70%)',
+  radialPurple: 'radial-gradient(circle, #3B82F6 0%, transparent 70%)',
 };
 
 // Glow/Shadow Effects
@@ -67,7 +67,7 @@ export const glows = {
   mint: '0 0 30px rgba(48, 255, 172, 0.5)',
   green: '0 0 30px rgba(22, 244, 86, 0.5)',
   cyan: '0 0 30px rgba(0, 230, 255, 0.5)',
-  purple: '0 0 30px rgba(138, 43, 226, 0.5)',
+  purple: '0 0 30px rgba(59, 130, 246, 0.5)',
   red: '0 0 30px rgba(255, 77, 77, 0.5)',
   yellow: '0 0 30px rgba(255, 195, 0, 0.5)',
 };

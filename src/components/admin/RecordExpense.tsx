@@ -186,14 +186,20 @@ export default function RecordExpense() {
         .select('amount, payment_type_id, payment_types ( id, title, category )')
         .eq('status', 'approved')
         .not('transaction_ref', 'like', 'WAIVED-%')
-      if (scope) qPayments = qPayments.eq('organization_id', scope.orgId)
+      if (scope) {
+        qPayments = qPayments.eq('organization_id', scope.orgId)
+        qPayments = qPayments.eq('group_id', scope.groupId)
+      }
       const { data: paymentsData } = await qPayments
 
       let qExpenses = supabase
         .from('expenses')
         .select('amount, funded_by, payment_types:funded_by ( id, title, category )')
         .eq('status', 'approved')
-      if (scope) qExpenses = qExpenses.eq('organization_id', scope.orgId)
+      if (scope) {
+        qExpenses = qExpenses.eq('organization_id', scope.orgId)
+        qExpenses = qExpenses.eq('group_id', scope.groupId)
+      }
       const { data: expensesData } = await qExpenses
 
       const paymentTypeMap = new Map<string, { collected: number; spent: number; available: number }>()
@@ -736,7 +742,10 @@ async function fetchPaymentTypes() {
   const { supabase } = await import('@/config/supabase')
   const scope = getOrgScope()
   let q = supabase.from('payment_types').select('id, title, amount').order('title')
-  if (scope) q = q.eq('organization_id', scope.orgId)
+  if (scope) {
+    q = q.eq('organization_id', scope.orgId)
+    q = q.eq('group_id', scope.groupId)
+  }
   const { data, error } = await q
   if (error) throw error
   return data || []

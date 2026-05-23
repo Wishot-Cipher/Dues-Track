@@ -254,7 +254,10 @@ export default function ScanQRCodePage() {
           .from("organization_members")
           .select("id, full_name, reg_number")
           .eq("id", data.paidBy);
-        if (scope) payerQ = payerQ.eq('organization_id', scope.orgId);
+        if (scope) {
+          payerQ = payerQ.eq('organization_id', scope.orgId);
+          payerQ = payerQ.eq('group_id', scope.groupId);
+        }
         const { data: payerData, error: payerError } = await payerQ;
 
         if (payerError || !payerData) {
@@ -267,7 +270,10 @@ export default function ScanQRCodePage() {
           .from("payment_types")
           .select("id, title, amount")
           .eq("id", data.paymentTypeId);
-        if (scope) ptQ = ptQ.eq('organization_id', scope.orgId);
+        if (scope) {
+          ptQ = ptQ.eq('organization_id', scope.orgId);
+          ptQ = ptQ.eq('group_id', scope.groupId);
+        }
         const { data: paymentTypeData, error: paymentTypeError } = await ptQ
           .single();
 
@@ -279,11 +285,16 @@ export default function ScanQRCodePage() {
         // Check for already paid students
         const alreadyPaidStudents: string[] = [];
         for (const stu of data.students) {
-          const { data: existingPayments } = await supabase
+          let existingPaymentsQ = supabase
             .from("payments")
             .select("status, amount")
             .eq("member_id", stu.id)
             .eq("payment_type_id", data.paymentTypeId);
+          if (scope) {
+            existingPaymentsQ = existingPaymentsQ.eq('organization_id', scope.orgId);
+            existingPaymentsQ = existingPaymentsQ.eq('group_id', scope.groupId);
+          }
+          const { data: existingPayments } = await existingPaymentsQ;
 
           const totalPaid =
             existingPayments
@@ -555,11 +566,16 @@ export default function ScanQRCodePage() {
         const studentToPay = qrData.students[i];
 
         // Check if already paid
-        const { data: existingPayments } = await supabase
+        let existingPaymentsQ = supabase
           .from("payments")
           .select("status, amount")
           .eq("member_id", studentToPay.id)
           .eq("payment_type_id", qrData.paymentTypeId);
+        if (scope) {
+          existingPaymentsQ = existingPaymentsQ.eq('organization_id', scope.orgId);
+          existingPaymentsQ = existingPaymentsQ.eq('group_id', scope.groupId);
+        }
+        const { data: existingPayments } = await existingPaymentsQ;
 
         const totalPaid =
           existingPayments
@@ -592,6 +608,7 @@ export default function ScanQRCodePage() {
           receipt_url: "",
         };
         if (scope) payInsert.organization_id = scope.orgId;
+        if (scope) payInsert.group_id = scope.groupId;
         const { error: insertError } = await supabase.from("payments").insert(payInsert);
 
         if (insertError) {
@@ -605,6 +622,7 @@ export default function ScanQRCodePage() {
         await supabase.from("notifications").insert({
           member_id: studentToPay.id,
           ...(scope ? { organization_id: scope.orgId } : {}),
+          ...(scope ? { group_id: scope.groupId } : {}),
           type: "payment_approved",
           title: `Cash Payment Received - ${qrData.paymentTypeName}`,
           message:
@@ -670,7 +688,10 @@ export default function ScanQRCodePage() {
       let memQ = supabase
         .from("organization_members")
         .select("id, full_name, member_id");
-      if (scope) memQ = memQ.eq('organization_id', scope.orgId);
+      if (scope) {
+        memQ = memQ.eq('organization_id', scope.orgId);
+        memQ = memQ.eq('group_id', scope.groupId);
+      }
       const { data: allStudents } = await memQ;
 
       const matchingStudent = allStudents?.find(
@@ -688,7 +709,10 @@ export default function ScanQRCodePage() {
         .from("payment_types")
         .select("id, title, amount")
         .eq("is_active", true);
-      if (scope) ptManQ = ptManQ.eq('organization_id', scope.orgId);
+      if (scope) {
+        ptManQ = ptManQ.eq('organization_id', scope.orgId);
+        ptManQ = ptManQ.eq('group_id', scope.groupId);
+      }
       const { data: allPaymentTypes } = await ptManQ;
 
       const matchingPaymentType = allPaymentTypes?.find(
@@ -707,7 +731,10 @@ export default function ScanQRCodePage() {
           .from('payment_types')
           .select('id, title, amount, deadline, late_fee_per_day')
           .eq('id', matchingPaymentType.id);
-        if (scope) fullPTQ = fullPTQ.eq('organization_id', scope.orgId);
+        if (scope) {
+          fullPTQ = fullPTQ.eq('organization_id', scope.orgId);
+          fullPTQ = fullPTQ.eq('group_id', scope.groupId);
+        }
         const { data: fullPT } = await fullPTQ.single();
 
         let pmtDataQ = supabase
@@ -715,7 +742,10 @@ export default function ScanQRCodePage() {
           .select('member_id, amount, status, transaction_ref')
           .eq('payment_type_id', matchingPaymentType.id)
           .eq('member_id', matchingStudent.id);
-        if (scope) pmtDataQ = pmtDataQ.eq('organization_id', scope.orgId);
+        if (scope) {
+          pmtDataQ = pmtDataQ.eq('organization_id', scope.orgId);
+          pmtDataQ = pmtDataQ.eq('group_id', scope.groupId);
+        }
         const { data: paymentsData } = await pmtDataQ;
 
         const paidForType = (paymentsData || [])

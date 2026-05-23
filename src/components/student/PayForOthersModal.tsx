@@ -71,7 +71,10 @@ export default function PayForOthersModal({
         .select('id, full_name, member_id, level')
         .neq('id', currentStudentId) // Exclude current user from the list
         .order('full_name');
-      if (scope) qStudents = qStudents.eq('organization_id', scope.orgId);
+      if (scope) {
+        qStudents = qStudents.eq('organization_id', scope.orgId);
+        qStudents = qStudents.eq('group_id', scope.groupId);
+      }
       const { data: allStudents, error: studentsError } = await qStudents;
 
       if (studentsError) throw studentsError;
@@ -82,7 +85,10 @@ export default function PayForOthersModal({
         .select('member_id')
         .eq('payment_type_id', paymentTypeId)
         .eq('status', 'approved');
-      if (scope) qPaid = qPaid.eq('organization_id', scope.orgId);
+      if (scope) {
+        qPaid = qPaid.eq('organization_id', scope.orgId);
+        qPaid = qPaid.eq('group_id', scope.groupId);
+      }
       const { data: paidPayments } = await qPaid;
 
       const paidStudentIds = new Set(paidPayments?.map(p => p.member_id) || []);
@@ -98,11 +104,15 @@ export default function PayForOthersModal({
         .filter(s => !paidStudentIds.has(s.id));
 
       // Fetch payment type details to compute late fees
-      const { data: paymentType } = await supabase
+      let ptQ = supabase
         .from('payment_types')
         .select('deadline, late_fee_per_day')
         .eq('id', paymentTypeId)
-        .single();
+      if (scope) {
+        ptQ = ptQ.eq('organization_id', scope.orgId)
+        ptQ = ptQ.eq('group_id', scope.groupId)
+      }
+      const { data: paymentType } = await ptQ.single();
 
       // Fetch payments for these students for the given payment type
       const studentIds = unpaidStudents.map(s => s.id);
@@ -117,7 +127,10 @@ export default function PayForOthersModal({
           .select('member_id, amount, status, transaction_ref')
           .eq('payment_type_id', paymentTypeId)
           .in('member_id', studentIds as string[]);
-        if (scope) qPaymentsForType = qPaymentsForType.eq('organization_id', scope.orgId);
+        if (scope) {
+          qPaymentsForType = qPaymentsForType.eq('organization_id', scope.orgId);
+          qPaymentsForType = qPaymentsForType.eq('group_id', scope.groupId);
+        }
         const { data: paymentsData } = await qPaymentsForType;
 
         paymentsForType = paymentsData || [];

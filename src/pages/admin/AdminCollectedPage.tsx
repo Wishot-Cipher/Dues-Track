@@ -104,7 +104,10 @@ export default function AdminCollectedPage() {
         .from('organization_members')
         .select('id, full_name, member_id, is_active, level, section')
         .order('full_name', { ascending: true });
-      if (scope) membersQ = membersQ.eq('organization_id', scope.orgId);
+      if (scope) {
+        membersQ = membersQ.eq('organization_id', scope.orgId);
+        membersQ = membersQ.eq('group_id', scope.groupId);
+      }
       const { data: studentsData, error: studentsError } = await membersQ;
       if (studentsError) throw studentsError;
 
@@ -120,7 +123,10 @@ export default function AdminCollectedPage() {
         .in('status', ['approved', 'pending', 'partial'])
         .limit(1000)
         .order('created_at', { ascending: false });
-      if (scope) paymentsQ = paymentsQ.eq('organization_id', scope.orgId);
+      if (scope) {
+        paymentsQ = paymentsQ.eq('organization_id', scope.orgId);
+        paymentsQ = paymentsQ.eq('group_id', scope.groupId);
+      }
       const { data: paymentsData, error } = await paymentsQ;
       if (error) throw error;
 
@@ -132,7 +138,10 @@ export default function AdminCollectedPage() {
           category:expense_categories(id, name)
         `)
         .eq('status', 'approved');
-      if (scope) expQ = expQ.eq('organization_id', scope.orgId);
+      if (scope) {
+        expQ = expQ.eq('organization_id', scope.orgId);
+        expQ = expQ.eq('group_id', scope.groupId);
+      }
       const { data: expensesData, error: expensesError } = await expQ;
       if (expensesError) console.warn('Error fetching expenses:', expensesError);
       const expenses = expensesData || [];
@@ -177,7 +186,10 @@ export default function AdminCollectedPage() {
       const paymentTypesFallback = new Map<string, { id: string; title: string; category: string }>();
       if (missingPaymentTypeIds.length > 0) {
         let ptFallQ = supabase.from('payment_types').select('id, title, category').in('id', missingPaymentTypeIds);
-        if (scope) ptFallQ = ptFallQ.eq('organization_id', scope.orgId);
+        if (scope) {
+          ptFallQ = ptFallQ.eq('organization_id', scope.orgId);
+          ptFallQ = ptFallQ.eq('group_id', scope.groupId);
+        }
         const { data: ptData } = await ptFallQ;
         ptData?.forEach((pt: any) => paymentTypesFallback.set(pt.id, pt));
       }
@@ -249,7 +261,10 @@ export default function AdminCollectedPage() {
       const paymentTypesMap = new Map<string, { category: string; title: string }>();
       try {
         let ptMapQ = supabase.from('payment_types').select('id, category, title');
-        if (scope) ptMapQ = ptMapQ.eq('organization_id', scope.orgId);
+        if (scope) {
+          ptMapQ = ptMapQ.eq('organization_id', scope.orgId);
+          ptMapQ = ptMapQ.eq('group_id', scope.groupId);
+        }
         const { data: ptData } = await ptMapQ;
         ptData?.forEach(pt => paymentTypesMap.set(pt.id, { category: pt.category, title: pt.title }));
       } catch (e) { console.warn('Failed to fetch payment types:', e); }

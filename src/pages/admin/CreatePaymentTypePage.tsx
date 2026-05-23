@@ -133,7 +133,7 @@ export default function CreatePaymentTypePage() {
       // Resolve org scope — required for multi-tenant
       const scope = getOrgScope();
       let orgId = scope?.orgId || null;
-      let groupId: string | null = null;
+      let groupId: string | null = scope?.groupId || null;
 
       // Fallback: derive org info (and member level) from the member record
       let memberLevel: string | null = null;
@@ -155,27 +155,6 @@ export default function CreatePaymentTypePage() {
         return;
       }
 
-      // Get admin record for the current user (for created_by field)
-      const { data: adminDataArray, error: adminError } = await supabase
-        .from("member_admins")
-        .select("id")
-        .eq("member_id", user.id)
-        .eq('organization_id', orgId)
-        .limit(1);
-
-      if (adminError) {
-        console.error("Error fetching admin record:", adminError);
-        toast.error("Error verifying admin status. Please try again.");
-        return;
-      }
-
-      if (!adminDataArray || adminDataArray.length === 0) {
-        toast.error("Admin record not found. Please contact support.");
-        return;
-      }
-
-      const adminData = adminDataArray[0];
-
       // If we don't have groupId yet, fetch from member record
       if (!groupId) {
         const { data: memberData } = await supabase
@@ -192,6 +171,28 @@ export default function CreatePaymentTypePage() {
         toast.error('Group context not found. Please contact support.');
         return;
       }
+
+      // Get admin record for the current user (scoped to org + group)
+      const { data: adminDataArray, error: adminError } = await supabase
+        .from("member_admins")
+        .select("id")
+        .eq("member_id", user.id)
+        .eq('organization_id', orgId)
+        .eq('group_id', groupId)
+        .limit(1);
+
+      if (adminError) {
+        console.error("Error fetching admin record:", adminError);
+        toast.error("Error verifying admin status. Please try again.");
+        return;
+      }
+
+      if (!adminDataArray || adminDataArray.length === 0) {
+        toast.error("Admin record not found. Please contact support.");
+        return;
+      }
+
+      const adminData = adminDataArray[0];
 
       const insertData: Record<string, unknown> = {
           organization_id: orgId,

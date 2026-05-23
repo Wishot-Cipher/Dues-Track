@@ -11,13 +11,18 @@ import InstallPWA from '@/components/InstallPWA';
 import UpdateNotification from '@/components/UpdateNotification';
 
 // Pages
-import DashboardPage from '@/pages/DashboardPage';
+// NOTE: src/pages/DashboardPage.tsx is the legacy student dashboard. It is
+// intentionally NOT imported here so it stays as a safe-to-revert backup on
+// disk. The active student route now uses StudentDashboardPage.
+import StudentDashboardPage from '@/pages/StudentDashboardPage';
 import ProfilePage from '@/pages/ProfilePage';
 import SettingsPage from '@/pages/student/SettingsPage';
 import PaymentHistoryPage from '@/pages/student/PaymentHistoryPage';
 import PaymentDetailPage from '@/pages/PaymentDetailPage';
 import AdminDashboardPage from '@/pages/admin/AdminDashboardPage';
-import CreatePaymentTypePage from '@/pages/admin/CreatePaymentTypePage';
+// NOTE: src/pages/admin/CreatePaymentTypePage.tsx is the legacy create-due page.
+// It stays on disk as a safe-revert backup but is no longer routed.
+import CreateDuePage from '@/pages/admin/CreateDuePage';
 import ManageDuesPage from '@/pages/admin/ManageDuesPage';
 import AdminReviewPage from '@/pages/admin/AdminReviewPage';
 import WaivePaymentPage from '@/pages/admin/WaivePaymentPage';
@@ -35,12 +40,18 @@ import NotFoundPage from '@/pages/NotFoundPage';
 
 // Multi-Tenant Pages (public / onboarding)
 import LandingPage from '@/pages/LandingPage';
+import BringMySchoolPage from '@/pages/BringMySchoolPage';
 import OrgLoginPage from '@/pages/OrgLoginPage';
 import OrgCompleteProfilePage from '@/pages/OrgCompleteProfilePage';
 import OrgChangePasswordPage from '@/pages/OrgChangePasswordPage';
 import JoinOrganizationPage from '@/pages/JoinOrganizationPage';
-import CreateDepartmentPage from '@/pages/CreateDepartmentPage';
 import OrgOverviewPage from '@/pages/OrgOverviewPage';
+import FacultyDetailPage from '@/pages/FacultyDetailPage';
+import DepartmentDetailPage from '@/pages/DepartmentDetailPage';
+import GroupWelcomePage from '@/pages/GroupWelcomePage';
+import AddDepartmentPage from '@/pages/AddDepartmentPage';
+import AddFacultyPage from '@/pages/AddFacultyPage';
+import ClaimSubmitPage from '@/pages/ClaimSubmitPage';
 import PlatformConsolePage from '@/pages/PlatformConsolePage';
 import ForgotPasswordPage from '@/pages/student/ForgotPasswordPage';
 import ResetPasswordPage from '@/pages/student/ResetPasswordPage';
@@ -64,17 +75,27 @@ function App() {
               {/* Landing — search for your organization */}
               <Route path="/" element={<LandingPage />} />
 
+              {/* Bring a school / org online (community trust) */}
+              <Route path="/bring-school" element={<BringMySchoolPage />} />
+
               {/* Create organization — NOW MOVED TO ADMIN CONSOLE (/pvx-console) */}
               {/* <Route path="/create" element={<CreateOrganizationPage />} /> */}
 
-              {/* Join existing org by creating a department */}
-              <Route path="/join-org" element={<CreateDepartmentPage />} />
+              {/* Legacy /join-org → bring-school (department creation now
+                  happens inside FacultyDetailPage → AddDepartmentPage) */}
+              <Route path="/join-org" element={<Navigate to="/bring-school" replace />} />
 
               {/* Platform console (hidden, not linked in navigation) */}
               <Route path="/pvx-console" element={<PlatformConsolePage />} />
 
               {/* Org-scoped login */}
               <Route path="/:orgSlug/overview" element={<OrgOverviewPage />} />
+              <Route path="/:orgSlug/add-faculty" element={<AddFacultyPage />} />
+              <Route path="/:orgSlug/f/:facultyShortName" element={<FacultyDetailPage />} />
+              <Route path="/:orgSlug/f/:facultyShortName/new" element={<AddDepartmentPage />} />
+              <Route path="/:orgSlug/d/:departmentShort" element={<DepartmentDetailPage />} />
+              <Route path="/:orgSlug/d/:departmentShort/new" element={<AddDepartmentPage />} />
+              <Route path="/:orgSlug/g/:groupShortName" element={<GroupWelcomePage />} />
               <Route path="/:orgSlug/login" element={<OrgLoginPage />} />
 
               {/* Org-scoped public contribution page */}
@@ -96,7 +117,8 @@ function App() {
               {/* ============================================ */}
               <Route path="/:orgSlug" element={<OrgLayout />}>
                 {/* Member pages */}
-                <Route path="dashboard" element={<OrgProtectedRoute><DashboardPage /></OrgProtectedRoute>} />
+                <Route path="dashboard" element={<OrgProtectedRoute><StudentDashboardPage /></OrgProtectedRoute>} />
+                <Route path="claim" element={<OrgProtectedRoute><ClaimSubmitPage /></OrgProtectedRoute>} />
                 <Route path="payments" element={<OrgProtectedRoute><PaymentHistoryPage /></OrgProtectedRoute>} />
                 <Route path="payment/:id" element={<OrgProtectedRoute><PaymentDetailPage /></OrgProtectedRoute>} />
                 <Route path="profile" element={<OrgProtectedRoute><ProfilePage /></OrgProtectedRoute>} />
@@ -109,7 +131,7 @@ function App() {
                 <Route path="admin/members" element={<OrgProtectedRoute requiredPermission="can_manage_members"><OrgMembersPage /></OrgProtectedRoute>} />
                 <Route path="admin/groups" element={<OrgProtectedRoute requiredPermission="can_manage_members"><OrgGroupsPage /></OrgProtectedRoute>} />
                 <Route path="admin/academic-calendar" element={<OrgProtectedRoute requireAdmin><OrgAcademicCalendarPage /></OrgProtectedRoute>} />
-                <Route path="admin/create-payment" element={<OrgProtectedRoute requiredPermission="can_create_payments"><CreatePaymentTypePage /></OrgProtectedRoute>} />
+                <Route path="admin/create-payment" element={<OrgProtectedRoute requiredPermission="can_create_payments"><CreateDuePage /></OrgProtectedRoute>} />
                 <Route path="admin/manage-dues" element={<OrgProtectedRoute requiredPermission="can_create_payments"><ManageDuesPage /></OrgProtectedRoute>} />
                 <Route path="admin/review" element={<OrgProtectedRoute requiredPermission="can_approve_payments"><AdminReviewPage /></OrgProtectedRoute>} />
                 <Route path="admin/expenses" element={<OrgProtectedRoute requiredPermission="can_manage_expenses"><ExpensesPage /></OrgProtectedRoute>} />

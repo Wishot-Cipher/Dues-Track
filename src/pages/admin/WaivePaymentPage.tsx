@@ -94,7 +94,10 @@ export default function WaivePaymentPage() {
         .from("payment_types")
         .select("id, title, amount, description, deadline, target_levels, group_id")
         .eq("is_active", true);
-      if (scope) ptQ = ptQ.eq('organization_id', scope.orgId);
+      if (scope) {
+        ptQ = ptQ.eq('organization_id', scope.orgId);
+        ptQ = ptQ.eq('group_id', scope.groupId);
+      }
       const { data: allPaymentTypes, error: ptError } = await ptQ;
 
       if (ptError) throw ptError;
@@ -120,7 +123,10 @@ export default function WaivePaymentPage() {
         .from("payments")
         .select("payment_type_id, status, amount")
         .eq("member_id", selectedStudent.id);
-      if (scope) payQ = payQ.eq('organization_id', scope.orgId);
+      if (scope) {
+        payQ = payQ.eq('organization_id', scope.orgId);
+        payQ = payQ.eq('group_id', scope.groupId);
+      }
       const { data: existingPayments, error: paymentsError } = await payQ;
 
       if (paymentsError) throw paymentsError;
@@ -163,7 +169,10 @@ export default function WaivePaymentPage() {
         .or(`full_name.ilike.%${query}%,member_id.ilike.%${query}%`)
         .eq("is_active", true)
         .limit(10);
-      if (scope) searchQ = searchQ.eq('organization_id', scope.orgId);
+      if (scope) {
+        searchQ = searchQ.eq('organization_id', scope.orgId);
+        searchQ = searchQ.eq('group_id', scope.groupId);
+      }
       const { data, error } = await searchQ;
 
       if (error) throw error;

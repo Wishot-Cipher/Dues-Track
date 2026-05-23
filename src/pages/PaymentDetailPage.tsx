@@ -8,14 +8,11 @@ import {
   ArrowLeft,
   AlertCircle,
   CheckCircle,
-  Clock,
-  XCircle,
-  Calendar,
-  RefreshCw,
   Info,
   Sparkles,
   TrendingUp,
   Banknote,
+  RefreshCw,
 } from "lucide-react";
 import { supabase, STORAGE_BUCKETS } from "@/config/supabase";
 import { useAuth } from '@/hooks/useAppAuth';
@@ -23,7 +20,7 @@ import { useToast } from "@/hooks/useToast";
 import { colors, gradients } from "@/config/colors";
 import GlassCard from "@/components/ui/GlassCard";
 import LoadingSpinner from "@/components/ui/LoadingSpinner";
-import { formatCurrency, formatDate } from "@/utils/formatters";
+import { formatCurrency } from "@/utils/formatters";
 import { PrivacyMask } from '@/components/ui/PrivacyMask';
 import PaymentMethodSelector from "@/components/student/PaymentMethodSelector";
 import QRCodeGenerator from "@/components/student/QRCodeGenerator";
@@ -34,6 +31,12 @@ import notificationService from "@/services/notificationService";
 import { SuccessCelebration } from "@/components/ui/Confetti";
 import PageWrapper from "@/components/ui/PageWrapper";
 import { getOrgScope } from "@/utils/orgScope";
+
+// ── NEW IMPORTS ───────────────────────────────────────────────────────────────
+import DeadlineCountdown from "@/components/student/DeadlineCountdown";
+import PaymentTimeline from "@/components/student/PaymentTimeline";
+import { PeerPaymentBadge, LateFeeWaiverRequest } from "@/components/student/PaymentSocialFeatures";
+import { OfflineBanner, useOfflineQueue } from "@/components/student/OfflinePaymentQueue";
 
 type PaymentMethod = "bank_transfer" | "cash" | "pos";
 
@@ -74,6 +77,16 @@ interface Student {
   level: string;
 }
 
+// ── The core submit logic, extracted so it can be wrapped by useOfflineQueue ─
+type SubmitPayload = {
+  method: PaymentMethod;
+  transactionRefValue: string;
+  receiptFileValue: File | null;
+  notesValue: string;
+  paymentOptionValue: "full" | "partial";
+  amountValue: number;
+};
+
 export default function PaymentDetailPage() {
   const { id } = useParams<{ id: string }>();
   const { go: navigate } = useAppNav();
@@ -81,73 +94,56 @@ export default function PaymentDetailPage() {
   const toast = useToast();
 
   const [paymentType, setPaymentType] = useState<PaymentType | null>(null);
-  const [existingPayments, setExistingPayments] = useState<ExistingPayment[]>(
-    []
-  );
+  const [existingPayments, setExistingPayments] = useState<ExistingPayment[]>([]);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
 
-  // Payment flow state
   const [step, setStep] = useState<"method" | "qr" | "upload">("method");
-  const [selectedMethod, setSelectedMethod] = useState<PaymentMethod | null>(
-    null
-  );
+  const [selectedMethod, setSelectedMethod] = useState<PaymentMethod | null>(null);
   const [showPayForOthers, setShowPayForOthers] = useState(false);
   const [selectedStudents, setSelectedStudents] = useState<Student[]>([]);
   const [includeSelf, setIncludeSelf] = useState(false);
 
-  // Form state (used by PaymentSubmissionFlow now, but paymentOption needed for QR flow)
   const [paymentOption] = useState<"full" | "partial">("full");
   const [amount, setAmount] = useState<number>(0);
 
-  // Success celebration state
   const [showCelebration, setShowCelebration] = useState(false);
   const [celebrationMessage, setCelebrationMessage] = useState("");
 
-  // Calculate payment status
+  // ── Derived payment status ──────────────────────────────────────────────
   const totalPaid = existingPayments
     .filter((p) => p.status === "approved")
     .reduce((sum, p) => sum + (Number(p.amount) || 0), 0);
 
-  const paymentTypeAmount = Number(paymentType?.amount) || 0;
-  const remainingAmount = paymentTypeAmount - totalPaid;
-  const isFullyPaid = remainingAmount <= 0;
-  const hasPendingPayment = existingPayments.some(
-    (p) => p.status === "pending"
-  );
-  // Check if payment was waived (has WAIVED- prefix in transaction_ref)
-  const isWaived = existingPayments.some(
+  const paymentTypeAmount   = Number(paymentType?.amount) || 0;
+  const remainingAmount     = paymentTypeAmount - totalPaid;
+  const isFullyPaid         = remainingAmount <= 0;
+  const hasPendingPayment   = existingPayments.some((p) => p.status === "pending");
+  const isWaived            = existingPayments.some(
     (p) => p.status === "approved" && p.transaction_ref?.startsWith("WAIVED-")
   );
-  const progressPercentage =
-    paymentTypeAmount > 0 ? (totalPaid / paymentTypeAmount) * 100 : 0;
+  const progressPercentage  = paymentTypeAmount > 0 ? (totalPaid / paymentTypeAmount) * 100 : 0;
 
-  // Compute current user's accumulated late fees for this payment type
+  // ── Late fee calculation ────────────────────────────────────────────────
   const paymentDeadline = paymentType?.deadline ? new Date(paymentType.deadline) : null;
-  const perDayLate = Number((paymentType as any)?.late_fee_per_day || 0);
+  const perDayLate      = Number((paymentType as any)?.late_fee_per_day || 0);
   let currentUserAccumulatedLate = 0;
   try {
     if (paymentDeadline && new Date() > paymentDeadline && perDayLate > 0) {
-      // Sum approved payments submitted on-or-before the deadline
       const totalPaidBeforeDeadline = existingPayments
         .filter(p => p.status === 'approved')
         .reduce((sum, p) => {
           try {
-            // Use submitted_at if available, otherwise fall back to created_at or reviewed_at
             const submittedStr = p.submitted_at || (p as any).created_at || p.reviewed_at;
-            const submitted = submittedStr ? new Date(submittedStr) : null;
+            const submitted    = submittedStr ? new Date(submittedStr) : null;
             if (submitted && submitted.getTime() <= paymentDeadline.getTime()) {
               return sum + (Number(p.amount) || 0);
             }
-          } catch (e) {
-            // ignore parse errors
-          }
+          } catch (_) { /* ignore */ }
           return sum;
         }, 0);
 
-      const remainingAtDeadline = Math.max(0, (Number(paymentType?.amount) || 0) - totalPaidBeforeDeadline);
-
-      // If the student had fully paid by the deadline, no late fee should apply
+      const remainingAtDeadline = Math.max(0, paymentTypeAmount - totalPaidBeforeDeadline);
       if (remainingAtDeadline <= 0) {
         currentUserAccumulatedLate = 0;
       } else {
@@ -155,21 +151,20 @@ export default function PaymentDetailPage() {
         if (daysOverdue > 0) currentUserAccumulatedLate = daysOverdue * perDayLate;
       }
     }
-  } catch (e) {
+  } catch (_) {
     currentUserAccumulatedLate = 0;
   }
 
   const currentUserOutstanding = Math.max(0, remainingAmount) + currentUserAccumulatedLate;
 
+  // ── Data fetching ───────────────────────────────────────────────────────
   useEffect(() => {
     fetchPaymentDetails();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id]);
 
   useEffect(() => {
-    if (paymentType) {
-      setAmount(paymentOption === "full" ? currentUserOutstanding : 0);
-    }
+    if (paymentType) setAmount(paymentOption === "full" ? currentUserOutstanding : 0);
   }, [paymentOption, paymentType, currentUserOutstanding]);
 
   const fetchPaymentDetails = async () => {
@@ -178,19 +173,12 @@ export default function PaymentDetailPage() {
       setLoading(true);
       const scope = getOrgScope();
 
-      // Fetch payment type details
-      let typeQ = supabase
-        .from("payment_types")
-        .select("*")
-        .eq("id", id);
+      let typeQ = supabase.from("payment_types").select("*").eq("id", id);
       if (scope) typeQ = typeQ.eq("organization_id", scope.orgId);
       const { data: typeData, error: typeError } = await typeQ.single();
-
       if (typeError) throw typeError;
-
       setPaymentType(typeData);
 
-      // Get ALL payments for this student and payment type
       let pmtQ = supabase
         .from("payments")
         .select("*")
@@ -199,7 +187,6 @@ export default function PaymentDetailPage() {
         .order("created_at", { ascending: false });
       if (scope) pmtQ = pmtQ.eq("organization_id", scope.orgId);
       const { data: paymentsData } = await pmtQ;
-
       setExistingPayments(paymentsData || []);
     } catch (error) {
       console.error("Error fetching payment details:", error);
@@ -209,219 +196,114 @@ export default function PaymentDetailPage() {
     }
   };
 
-  const handleMethodSelect = (method: PaymentMethod) => {
-    setSelectedMethod(method);
-    if (method === "cash") {
-      setStep("qr");
-    } else {
-      setStep("upload");
-    }
-  };
-
-  // Unified submit handler that accepts data directly (fixes async state issue)
-  const submitPaymentWithData = async (options: {
-    method: PaymentMethod;
-    transactionRefValue: string;
-    receiptFileValue: File | null;
-    notesValue: string;
-    paymentOptionValue: "full" | "partial";
-    amountValue: number;
-  }) => {
+  // ── Core submit function (passed into useOfflineQueue) ──────────────────
+  const submitPaymentWithData = async (options: SubmitPayload) => {
     const {
-      method,
-      transactionRefValue,
-      receiptFileValue,
-      notesValue,
-      paymentOptionValue,
-      amountValue,
+      method, transactionRefValue, receiptFileValue,
+      notesValue, paymentOptionValue, amountValue,
     } = options;
 
-    // Validate based on payment method
-    if (method !== "cash" && !receiptFileValue) {
-      toast.error("Please upload a receipt");
-      return false;
-    }
-
-    if (method !== "cash" && !transactionRefValue.trim()) {
-      toast.error("Please enter transaction reference");
-      return false;
-    }
-
-    if (paymentOptionValue === "partial" && amountValue <= 0) {
-      toast.error("Please enter a valid amount");
-      return false;
-    }
-
+    if (method !== "cash" && !receiptFileValue) { toast.error("Please upload a receipt"); return false; }
+    if (method !== "cash" && !transactionRefValue.trim()) { toast.error("Please enter transaction reference"); return false; }
+    if (paymentOptionValue === "partial" && amountValue <= 0) { toast.error("Please enter a valid amount"); return false; }
     if (paymentOptionValue === "partial" && amountValue > currentUserOutstanding) {
-      toast.error(
-        `Amount cannot exceed remaining balance of ${formatCurrency(
-          currentUserOutstanding
-        )}`
-      );
+      toast.error(`Amount cannot exceed remaining balance of ${formatCurrency(currentUserOutstanding)}`);
       return false;
     }
 
     try {
       setSubmitting(true);
+      if (!user) { toast.error("User not found"); return false; }
 
-      // Determine students to pay for
-      if (!user) {
-        toast.error("User not found");
-        return false;
-      }
-
-      // Build list of students based on selectedStudents and whether they're paying for themselves
       const students: Student[] = [];
-      
-      // Add selected other students
-      if (selectedStudents.length > 0) {
-        students.push(...selectedStudents);
-      }
-      
-      // Add current user only if includeSelf is true (from Pay for Others modal)
-      // OR if they're paying for themselves only (no selectedStudents)
+      if (selectedStudents.length > 0) students.push(...selectedStudents);
       if (includeSelf || (selectedStudents.length === 0 && !isFullyPaid)) {
         students.push({
-          id: user.id,
-          full_name: user.full_name,
-          reg_number: user.reg_number,
-          level: user.level,
-          // Attach computed outstanding (including late fees) so insertion uses correct amount
-          ...( { outstanding: currentUserOutstanding } as any ),
+          id: user.id, full_name: user.full_name,
+          reg_number: user.reg_number, level: user.level,
+          ...({ outstanding: currentUserOutstanding } as any),
         } as any);
       }
-
-      if (students.length === 0) {
-        toast.error("No students to pay for");
-        return false;
-      }
+      if (students.length === 0) { toast.error("No students to pay for"); return false; }
 
       for (const student of students) {
         let receiptUrl = "";
-
-        // Upload receipt for bank_transfer and pos (not cash)
         if (method !== "cash" && receiptFileValue) {
-          const fileExt = receiptFileValue.name.split(".").pop();
-          const fileName = `${student.id}_${Date.now()}_${Math.random()
-            .toString(36)
-            .substring(7)}.${fileExt}`;
+          const fileExt  = receiptFileValue.name.split(".").pop();
+          const fileName = `${student.id}_${Date.now()}_${Math.random().toString(36).substring(7)}.${fileExt}`;
           const filePath = `receipts/${fileName}`;
 
           const { error: uploadError } = await supabase.storage
             .from(STORAGE_BUCKETS.RECEIPTS)
             .upload(filePath, receiptFileValue);
+          if (uploadError) { toast.error(`Failed to upload receipt: ${uploadError.message}`); throw uploadError; }
 
-          if (uploadError) {
-            console.error("Upload error:", uploadError);
-            toast.error(`Failed to upload receipt: ${uploadError.message}`);
-            throw uploadError;
-          }
-
-          const { data: urlData } = supabase.storage
-            .from(STORAGE_BUCKETS.RECEIPTS)
-            .getPublicUrl(filePath);
-
+          const { data: urlData } = supabase.storage.from(STORAGE_BUCKETS.RECEIPTS).getPublicUrl(filePath);
           receiptUrl = urlData.publicUrl;
         }
 
-        // Generate transaction ref for cash if not provided
-        const finalTransactionRef =
-          method === "cash"
-            ? `CASH-QR-${student.reg_number}-${Date.now()}`
-            : `${transactionRefValue}-${student.reg_number}`;
-        // Insert payment (use per-student outstanding when paying full)
-        const amountToInsert = paymentOptionValue === 'full' ? (student as any).outstanding ?? currentUserOutstanding : amountValue;
+        const finalTransactionRef = method === "cash"
+          ? `CASH-QR-${student.reg_number}-${Date.now()}`
+          : `${transactionRefValue}-${student.reg_number}`;
 
-        // Resolve org/group for multi-tenant
+        const amountToInsert = paymentOptionValue === 'full'
+          ? (student as any).outstanding ?? currentUserOutstanding
+          : amountValue;
+
         const scope = getOrgScope();
-        let orgId = scope?.orgId || null;
+        let orgId: string | null = scope?.orgId || null;
         let groupId: string | null = null;
         if (!orgId) {
           const { data: memberRow } = await supabase
-            .from('organization_members')
-            .select('organization_id, group_id')
-            .eq('id', student.id)
-            .single();
-          if (memberRow) {
-            orgId = memberRow.organization_id;
-            groupId = memberRow.group_id;
-          }
+            .from('organization_members').select('organization_id, group_id').eq('id', student.id).single();
+          if (memberRow) { orgId = memberRow.organization_id; groupId = memberRow.group_id; }
         }
         if (orgId && !groupId) {
           const { data: memberRow } = await supabase
-            .from('organization_members')
-            .select('group_id')
-            .eq('id', student.id)
-            .single();
+            .from('organization_members').select('group_id').eq('id', student.id).single();
           groupId = memberRow?.group_id || null;
         }
 
         const paymentInsert: Record<string, unknown> = {
-            member_id: student.id,
-            payment_type_id: id,
-            amount: amountToInsert,
-            transaction_ref: finalTransactionRef,
-            receipt_url: receiptUrl || null,
-            notes: notesValue.trim() || null,
-            status: "pending",
-            payment_method: method,
-            paid_by: student.id !== user.id ? user.id : null,
+          member_id: student.id, payment_type_id: id,
+          amount: amountToInsert, transaction_ref: finalTransactionRef,
+          receipt_url: receiptUrl || null, notes: notesValue.trim() || null,
+          status: "pending", payment_method: method,
+          paid_by: student.id !== user.id ? user.id : null,
         };
-        if (orgId) paymentInsert.organization_id = orgId;
+        if (orgId)   paymentInsert.organization_id = orgId;
         if (groupId) paymentInsert.group_id = groupId;
 
         const { data: insertedPayment, error: insertError } = await supabase
-          .from("payments")
-          .insert(paymentInsert)
-          .select()
-          .single();
+          .from("payments").insert(paymentInsert).select().single();
+        if (insertError) throw insertError;
 
-        if (insertError) {
-          console.error("Insert error:", insertError);
-          throw insertError;
-        }
-
-        // Send notification to student about payment submission (use actual inserted amount)
         if (insertedPayment) {
-          const notifyAmount = paymentOptionValue === 'full' ? ((student as any).outstanding ?? currentUserOutstanding ?? amountValue) : amountValue;
-          // Non-blocking notification - don't fail payment if notification fails
+          const notifyAmount = paymentOptionValue === 'full'
+            ? ((student as any).outstanding ?? currentUserOutstanding ?? amountValue)
+            : amountValue;
           notificationService.sendPaymentPendingNotification(
-            student.id,
-            student.full_name,
-            paymentType?.title || "Payment",
-            notifyAmount,
-            insertedPayment.id
+            student.id, student.full_name, paymentType?.title || "Payment", notifyAmount, insertedPayment.id
           ).catch(err => console.warn("Student notification failed:", err));
-
-          // Notify admins/approvers about the new payment (important!)
           notificationService.notifyApproversOfNewPayment(
-            insertedPayment.id,
-            student.id,
-            notifyAmount,
-            id || ""
+            insertedPayment.id, student.id, notifyAmount, id || ""
           ).catch(err => console.warn("Approver notification failed:", err));
         }
       }
 
-      const message =
-        selectedStudents.length > 0
-          ? `Payment submitted for ${selectedStudents.length + (includeSelf ? 1 : 0)} student(s)!`
-          : "Payment submitted successfully!";
+      const message = selectedStudents.length > 0
+        ? `Payment submitted for ${selectedStudents.length + (includeSelf ? 1 : 0)} student(s)!`
+        : "Payment submitted successfully!";
 
-      // Show celebration with confetti
       setCelebrationMessage(message);
       setShowCelebration(true);
       return true;
     } catch (error: unknown) {
       console.error("Error submitting payment:", error);
-
       if (error && typeof error === "object" && "code" in error) {
         const dbError = error as { code: string; message: string };
-        if (dbError.code === "23505") {
-          toast.error("This transaction reference has already been used.");
-        } else {
-          toast.error(dbError.message || "Failed to submit payment");
-        }
+        if (dbError.code === "23505") toast.error("This transaction reference has already been used.");
+        else toast.error(dbError.message || "Failed to submit payment");
       } else {
         toast.error("Failed to submit payment");
       }
@@ -431,20 +313,22 @@ export default function PaymentDetailPage() {
     }
   };
 
-  const handleResubmitRejected = (_rejectedPayment: ExistingPayment) => {
-    // Navigate to method selection - PaymentSubmissionFlow will handle the form
-    // Note: Pre-filling is not supported in the new flow, user will need to re-enter details
-    setStep("method");
+  // ── Wrap with offline queue ─────────────────────────────────────────────
+  const { wrappedSubmit, isOnline, queuedCount, flushing } = useOfflineQueue(submitPaymentWithData);
+
+  const handleMethodSelect = (method: PaymentMethod) => {
+    setSelectedMethod(method);
+    if (method === "cash") setStep("qr");
+    else setStep("upload");
   };
 
-  // Silence unused variable warning - function is used in JSX
+  const handleResubmitRejected = (_rejectedPayment: ExistingPayment) => {
+    setStep("method");
+  };
   void handleResubmitRejected;
 
-  if (loading) {
-    return (
-      <LoadingSpinner fullScreen size="xl" text="Loading payment details..." />
-    );
-  }
+  // ── Loading / not found states ──────────────────────────────────────────
+  if (loading) return <LoadingSpinner fullScreen size="xl" text="Loading payment details..." />;
 
   if (!paymentType) {
     return (
@@ -452,47 +336,34 @@ export default function PaymentDetailPage() {
         className="min-h-screen flex items-center justify-center p-6"
         style={{ background: 'radial-gradient(ellipse at top, #1A0E09 0%, #0F0703 100%)' }}
       >
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          className="text-center max-w-md"
-        >
+        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="text-center max-w-md">
           <motion.div
-            initial={{ scale: 0.8 }}
-            animate={{ scale: 1 }}
+            initial={{ scale: 0.8 }} animate={{ scale: 1 }}
             transition={{ type: 'spring', damping: 15 }}
             className="w-20 h-20 mx-auto mb-6 rounded-2xl flex items-center justify-center"
             style={{ background: `${colors.statusUnpaid}15`, border: `1px solid ${colors.statusUnpaid}30` }}
           >
             <AlertCircle className="w-10 h-10" style={{ color: colors.statusUnpaid }} />
           </motion.div>
-          <h2 className="text-2xl font-bold text-white mb-3">
-            Payment Not Found
-          </h2>
+          <h2 className="text-2xl font-bold text-white mb-3">Payment Not Found</h2>
           <p className="text-sm mb-6" style={{ color: colors.textSecondary }}>
-            This payment type may have been removed or the link is invalid. Please check your dashboard for available payments.
+            This payment type may have been removed or the link is invalid.
           </p>
           <motion.button
             onClick={() => navigate("/dashboard")}
-            className="px-6 py-3 rounded-xl font-semibold flex items-center justify-center gap-2 mx-auto transition-all"
-            style={{
-              background: gradients.primary,
-              color: 'white',
-              boxShadow: `0 4px 20px ${colors.primary}40`,
-            }}
-            whileHover={{ scale: 1.02 }}
-            whileTap={{ scale: 0.98 }}
+            className="px-6 py-3 rounded-xl font-semibold flex items-center justify-center gap-2 mx-auto"
+            style={{ background: gradients.primary, color: 'white', boxShadow: `0 4px 20px ${colors.primary}40` }}
+            whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }}
           >
-            <ArrowLeft size={20} />
-            Back to Dashboard
+            <ArrowLeft size={20} /> Back to Dashboard
           </motion.button>
         </motion.div>
       </div>
     );
   }
+
   return (
     <PageWrapper noPadding className="py-2 sm:py-6" style={{ background: '#0A0705' }}>
-      {/* Success Celebration Modal */}
       <SuccessCelebration
         isVisible={showCelebration}
         title="Payment Submitted! 🎉"
@@ -504,77 +375,73 @@ export default function PaymentDetailPage() {
         autoCloseDuration={4000}
       />
 
-      {/* Main Container */}
       <div className="w-full max-w-4xl mx-auto px-2 sm:px-6 lg:px-8 overflow-x-hidden">
-
         <div className="w-full space-y-6 relative z-10">
-          {/* Header */}
-          <motion.div
-            initial={{ opacity: 0, y: -20 }}
-            animate={{ opacity: 1, y: 0 }}
-          >
+
+          {/* ── Offline banner ── */}
+          <OfflineBanner isOnline={isOnline} queuedCount={queuedCount} flushing={flushing} />
+
+          {/* ── Header ── */}
+          <motion.div initial={{ opacity: 0, y: -20 }} animate={{ opacity: 1, y: 0 }}>
             <button
               onClick={() => navigate("/dashboard")}
               className="flex items-center justify-center sm:justify-start gap-2 mb-4 px-3 py-2 rounded-lg transition-colors w-auto outline outline-orange-500 mt-2"
               style={{ color: colors.textSecondary }}
-              onMouseEnter={(e) =>
-                (e.currentTarget.style.color = colors.primary)
-              }
-              onMouseLeave={(e) =>
-                (e.currentTarget.style.color = colors.textSecondary)
-              }
+              onMouseEnter={(e) => (e.currentTarget.style.color = colors.primary)}
+              onMouseLeave={(e) => (e.currentTarget.style.color = colors.textSecondary)}
             >
               <ArrowLeft size={20} />
               <span className="font-medium">Back to Dashboard</span>
             </button>
           </motion.div>
 
-          {/* Payment Type Info - Enhanced */}
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.1 }}
-          >
-            <div 
+          {/* ── Deadline Countdown ── */}
+          {paymentType.deadline && !isFullyPaid && (
+            <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.05 }}>
+              <DeadlineCountdown deadline={paymentType.deadline} />
+            </motion.div>
+          )}
+
+          {/* ── Payment Type Info ── */}
+          <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }}>
+            <div
               className="rounded-2xl overflow-hidden"
-              style={{ 
+              style={{
                 background: 'linear-gradient(135deg, rgba(255, 107, 53, 0.08) 0%, rgba(255, 107, 53, 0.02) 100%)',
                 border: `1px solid ${colors.primary}20`,
               }}
             >
-              {/* Header with gradient accent */}
-              <div 
+              <div
                 className="p-5 sm:p-6"
-                style={{ 
+                style={{
                   background: `linear-gradient(135deg, ${colors.primary}15 0%, transparent 100%)`,
-                  borderBottom: `1px solid ${colors.primary}15`
+                  borderBottom: `1px solid ${colors.primary}15`,
                 }}
               >
                 <div className="flex flex-col sm:flex-row items-center sm:items-start gap-4 w-full">
                   <motion.div
                     className="w-18 h-18 sm:w-20 sm:h-20 rounded-2xl flex items-center justify-center text-4xl shrink-0 relative"
-                    style={{ 
+                    style={{
                       background: `linear-gradient(135deg, ${paymentType.color}30 0%, ${paymentType.color}10 100%)`,
                       border: `1px solid ${paymentType.color}40`,
-                      boxShadow: `0 8px 32px ${paymentType.color}20`
+                      boxShadow: `0 8px 32px ${paymentType.color}20`,
                     }}
                     whileHover={{ scale: 1.05, rotate: 5 }}
                   >
                     {paymentType.icon}
-                    <div 
+                    <div
                       className="absolute -bottom-1 -right-1 w-6 h-6 rounded-full flex items-center justify-center"
                       style={{ background: gradients.primary }}
                     >
                       <Sparkles className="w-3.5 h-3.5 text-white" />
                     </div>
                   </motion.div>
+
                   <div className="flex-1 text-center sm:text-left">
-                    <div className="flex items-center justify-center sm:justify-start gap-2 mb-2">
-                      <h1 className="text-xl sm:text-3xl font-bold text-white">
-                        {paymentType.title}
-                      </h1>
+                    <div className="flex items-center justify-center sm:justify-start gap-2 mb-2 flex-wrap">
+                      <h1 className="text-xl sm:text-3xl font-bold text-white">{paymentType.title}</h1>
                       {paymentType.allow_partial && (
-                        <span 
+                        <span
                           className="px-2 py-0.5 rounded-full text-[10px] font-semibold"
                           style={{ background: `${colors.accentMint}20`, color: colors.accentMint }}
                         >
@@ -582,14 +449,12 @@ export default function PaymentDetailPage() {
                         </span>
                       )}
                     </div>
-                    <p
-                      className="text-sm sm:text-base mb-4"
-                      style={{ color: colors.textSecondary }}
-                    >
+                    <p className="text-sm sm:text-base mb-4" style={{ color: colors.textSecondary }}>
                       {paymentType.description}
                     </p>
+
                     <div className="flex flex-wrap items-center justify-center sm:justify-start gap-3">
-                      <div 
+                      <div
                         className="flex items-center gap-2 px-3 py-2 rounded-xl"
                         style={{ background: `${colors.primary}15`, border: `1px solid ${colors.primary}30` }}
                       >
@@ -598,15 +463,11 @@ export default function PaymentDetailPage() {
                           <PrivacyMask>{formatCurrency(paymentOption === 'full' ? currentUserOutstanding : amount)}</PrivacyMask>
                         </span>
                       </div>
-                      <div 
-                        className="flex items-center gap-2 px-3 py-2 rounded-xl"
-                        style={{ background: `${colors.warning}15`, border: `1px solid ${colors.warning}30` }}
-                      >
-                        <Calendar className="w-4 h-4" style={{ color: colors.warning }} />
-                        <span className="text-sm font-medium" style={{ color: colors.warning }}>
-                          Due: {formatDate(paymentType.deadline, "long")}
-                        </span>
-                      </div>
+
+                      {/* ── Compact deadline chip ── */}
+                      {paymentType.deadline && (
+                        <DeadlineCountdown deadline={paymentType.deadline} compact />
+                      )}
                     </div>
                   </div>
                 </div>
@@ -614,28 +475,18 @@ export default function PaymentDetailPage() {
             </div>
           </motion.div>
 
-          {/* Payment Status Summary - Enhanced */}
+          {/* ── Payment Progress ── */}
           {(totalPaid > 0 || existingPayments.length > 0) && (
-            <motion.div
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 0.2 }}
-            >
-              <div 
+            <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2 }}>
+              <div
                 className="rounded-2xl overflow-hidden"
-                style={{ 
-                  background: 'rgba(255, 255, 255, 0.02)',
-                  border: '1px solid rgba(255, 255, 255, 0.08)',
-                }}
+                style={{ background: 'rgba(255, 255, 255, 0.02)', border: '1px solid rgba(255, 255, 255, 0.08)' }}
               >
-                <div 
+                <div
                   className="px-5 py-4 flex items-center gap-3"
                   style={{ borderBottom: '1px solid rgba(255, 255, 255, 0.05)' }}
                 >
-                  <div 
-                    className="w-10 h-10 rounded-xl flex items-center justify-center"
-                    style={{ background: `${colors.accentMint}15` }}
-                  >
+                  <div className="w-10 h-10 rounded-xl flex items-center justify-center" style={{ background: `${colors.accentMint}15` }}>
                     <TrendingUp className="w-5 h-5" style={{ color: colors.accentMint }} />
                   </div>
                   <div>
@@ -646,70 +497,55 @@ export default function PaymentDetailPage() {
 
                 <div className="p-4 sm:p-5">
                   <div className="grid grid-cols-3 gap-2 sm:gap-3 mb-5">
-                    <motion.div
-                      className="text-center p-2.5 sm:p-4 rounded-xl relative overflow-hidden"
-                      style={{ 
-                        background: `linear-gradient(135deg, ${colors.primary}10 0%, ${colors.primary}05 100%)`,
-                        border: `1px solid ${colors.primary}20`
-                      }}
-                      whileHover={{ scale: 1.02 }}
-                    >
-                      <div className="absolute top-0 left-0 right-0 h-1" style={{ background: gradients.primary }} />
-                      <p className="text-[10px] sm:text-xs mb-1 font-medium" style={{ color: colors.textSecondary }}>
-                        {currentUserAccumulatedLate > 0 ? 'BASE DUE' : 'TOTAL DUE'}
-                      </p>
-                      <p className="text-sm sm:text-xl font-bold text-white truncate">
-                        <PrivacyMask>{formatCurrency(paymentTypeAmount)}</PrivacyMask>
-                      </p>
-                    </motion.div>
-                    <motion.div
-                      className="text-center p-2.5 sm:p-4 rounded-xl relative overflow-hidden"
-                      style={{ 
-                        background: `linear-gradient(135deg, ${colors.statusPaid}10 0%, ${colors.statusPaid}05 100%)`,
-                        border: `1px solid ${colors.statusPaid}20`
-                      }}
-                      whileHover={{ scale: 1.02 }}
-                    >
-                      <div className="absolute top-0 left-0 right-0 h-1" style={{ background: colors.statusPaid }} />
-                      <p className="text-[10px] sm:text-xs mb-1 font-medium" style={{ color: colors.textSecondary }}>
-                        PAID
-                      </p>
-                      <p className="text-sm sm:text-xl font-bold truncate" style={{ color: colors.statusPaid }}>
-                        <PrivacyMask>{formatCurrency(totalPaid)}</PrivacyMask>
-                      </p>
-                    </motion.div>
-                    <motion.div
-                      className="text-center p-2.5 sm:p-4 rounded-xl relative overflow-hidden"
-                      style={{ 
-                        background: `linear-gradient(135deg, ${currentUserOutstanding <= 0 ? colors.statusPaid : colors.warning}10 0%, ${currentUserOutstanding <= 0 ? colors.statusPaid : colors.warning}05 100%)`,
-                        border: `1px solid ${currentUserOutstanding <= 0 ? colors.statusPaid : colors.warning}20`
-                      }}
-                      whileHover={{ scale: 1.02 }}
-                    >
-                      <div className="absolute top-0 left-0 right-0 h-1" style={{ background: currentUserOutstanding <= 0 ? colors.statusPaid : colors.warning }} />
-                      <p className="text-[10px] sm:text-xs mb-1 font-medium" style={{ color: colors.textSecondary }}>
-                        REMAINING
-                      </p>
-                      <p className="text-sm sm:text-xl font-bold truncate" style={{ color: currentUserOutstanding <= 0 ? colors.statusPaid : colors.warning }}>
-                        <PrivacyMask>{formatCurrency(Math.max(0, currentUserOutstanding))}</PrivacyMask>
-                      </p>
-                    </motion.div>
+                    {[
+                      {
+                        label: currentUserAccumulatedLate > 0 ? 'BASE DUE' : 'TOTAL DUE',
+                        value: paymentTypeAmount,
+                        color: colors.primary,
+                        gradient: gradients.primary,
+                      },
+                      { label: 'PAID', value: totalPaid, color: colors.statusPaid, gradient: colors.statusPaid },
+                      {
+                        label: 'REMAINING',
+                        value: Math.max(0, currentUserOutstanding),
+                        color: currentUserOutstanding <= 0 ? colors.statusPaid : colors.warning,
+                        gradient: currentUserOutstanding <= 0 ? colors.statusPaid : colors.warning,
+                      },
+                    ].map((card) => (
+                      <motion.div
+                        key={card.label}
+                        className="text-center p-2.5 sm:p-4 rounded-xl relative overflow-hidden"
+                        style={{
+                          background: `linear-gradient(135deg, ${card.color}10 0%, ${card.color}05 100%)`,
+                          border: `1px solid ${card.color}20`,
+                        }}
+                        whileHover={{ scale: 1.02 }}
+                      >
+                        <div className="absolute top-0 left-0 right-0 h-1" style={{ background: card.gradient }} />
+                        <p className="text-[10px] sm:text-xs mb-1 font-medium" style={{ color: colors.textSecondary }}>{card.label}</p>
+                        <p className="text-sm sm:text-xl font-bold truncate" style={{ color: card.color }}>
+                          <PrivacyMask>{formatCurrency(card.value)}</PrivacyMask>
+                        </p>
+                      </motion.div>
+                    ))}
                   </div>
 
-                  {/* Late Fee Breakdown - Only show if there are late fees */}
+                  {/* ── Late fee breakdown ── */}
                   {currentUserAccumulatedLate > 0 && (
                     <motion.div
                       initial={{ opacity: 0, height: 0 }}
                       animate={{ opacity: 1, height: 'auto' }}
                       className="mb-5 p-4 rounded-xl"
-                      style={{ 
+                      style={{
                         background: `linear-gradient(135deg, ${colors.statusUnpaid}08 0%, transparent 100%)`,
-                        border: `1px solid ${colors.statusUnpaid}20`
+                        border: `1px solid ${colors.statusUnpaid}20`,
                       }}
                     >
                       <div className="flex items-center gap-2 mb-2">
                         <AlertCircle className="w-4 h-4" style={{ color: colors.statusUnpaid }} />
-                        <span className="text-sm font-semibold" style={{ color: colors.statusUnpaid }}>Late Payment Fees Applied</span>
+                        <span className="text-sm font-semibold" style={{ color: colors.statusUnpaid }}>
+                          Late Payment Fees Applied
+                        </span>
                       </div>
                       <div className="grid grid-cols-2 gap-3 text-sm">
                         <div>
@@ -718,27 +554,41 @@ export default function PaymentDetailPage() {
                         </div>
                         <div>
                           <p className="text-xs" style={{ color: colors.textSecondary }}>Late Fees</p>
-                          <p className="font-semibold" style={{ color: colors.statusUnpaid }}>+<PrivacyMask>{formatCurrency(currentUserAccumulatedLate)}</PrivacyMask></p>
+                          <p className="font-semibold" style={{ color: colors.statusUnpaid }}>
+                            +<PrivacyMask>{formatCurrency(currentUserAccumulatedLate)}</PrivacyMask>
+                          </p>
                         </div>
                         <div className="col-span-2 pt-2 mt-2" style={{ borderTop: '1px solid rgba(255,255,255,0.1)' }}>
                           <div className="flex justify-between items-center">
                             <p className="text-xs" style={{ color: colors.textSecondary }}>Total Due (incl. late fees)</p>
-                            <p className="font-bold text-white"><PrivacyMask>{formatCurrency(paymentTypeAmount + currentUserAccumulatedLate)}</PrivacyMask></p>
+                            <p className="font-bold text-white">
+                              <PrivacyMask>{formatCurrency(paymentTypeAmount + currentUserAccumulatedLate)}</PrivacyMask>
+                            </p>
                           </div>
                         </div>
                       </div>
                       <p className="text-xs mt-3" style={{ color: colors.textSecondary }}>
-                        Late fee: <PrivacyMask>{formatCurrency(perDayLate)}</PrivacyMask>/day × {Math.floor((Date.now() - (paymentDeadline?.getTime() || 0)) / (1000 * 60 * 60 * 24))} days overdue
+                        Late fee: <PrivacyMask>{formatCurrency(perDayLate)}</PrivacyMask>/day ×{' '}
+                        {Math.floor((Date.now() - (paymentDeadline?.getTime() || 0)) / (1000 * 60 * 60 * 24))} days overdue
                       </p>
+
+                      {/* ── Late fee waiver request ── */}
+                      {user && (
+                        <LateFeeWaiverRequest
+                          paymentTypeId={id!}
+                          paymentTypeName={paymentType.title}
+                          lateFeeAmount={currentUserAccumulatedLate}
+                          memberId={user.id}
+                          memberName={user.full_name}
+                          className="mt-3"
+                        />
+                      )}
                     </motion.div>
                   )}
 
-                  {/* Enhanced Progress Bar */}
+                  {/* ── Progress bar ── */}
                   <div className="relative">
-                    <div 
-                      className="w-full h-4 rounded-full overflow-hidden"
-                      style={{ background: "rgba(255, 255, 255, 0.1)" }}
-                    >
+                    <div className="w-full h-4 rounded-full overflow-hidden" style={{ background: "rgba(255, 255, 255, 0.1)" }}>
                       <motion.div
                         initial={{ width: 0 }}
                         animate={{ width: `${Math.min(100, progressPercentage)}%` }}
@@ -746,13 +596,12 @@ export default function PaymentDetailPage() {
                         className="h-full rounded-full relative"
                         style={{ background: gradients.primary }}
                       >
-                        {/* Shimmer effect */}
-                        <div 
+                        <div
                           className="absolute inset-0 opacity-50"
-                          style={{ 
+                          style={{
                             background: 'linear-gradient(90deg, transparent 0%, rgba(255,255,255,0.3) 50%, transparent 100%)',
-                            animation: 'shimmer 2s infinite'
-                          }} 
+                            animation: 'shimmer 2s infinite',
+                          }}
                         />
                       </motion.div>
                     </div>
@@ -762,8 +611,7 @@ export default function PaymentDetailPage() {
                       </p>
                       {isFullyPaid && (
                         <div className="flex items-center gap-1.5 text-xs font-semibold" style={{ color: colors.statusPaid }}>
-                          <CheckCircle className="w-4 h-4" />
-                          Fully Paid
+                          <CheckCircle className="w-4 h-4" /> Fully Paid
                         </div>
                       )}
                     </div>
@@ -773,144 +621,44 @@ export default function PaymentDetailPage() {
             </motion.div>
           )}
 
-          {/* Existing Payments List */}
+          {/* ── Payment Timeline (replaces flat list) ── */}
           {existingPayments.length > 0 && (
-            <motion.div
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 0.3 }}
-            >
-              <GlassCard className="w-full">
-                <h3 className="text-lg font-bold text-white mb-4 text-center sm:text-left">
-                  Payment History
-                </h3>
-                <div className="space-y-3">
-                  {existingPayments.map((payment) => {
-                    const paymentIsWaived = payment.transaction_ref?.startsWith("WAIVED-");
-                    const statusColor = paymentIsWaived 
-                      ? '#6366F1' // Indigo for waived
-                      : payment.status === "approved"
-                        ? colors.statusPaid
-                        : payment.status === "rejected"
-                          ? colors.statusUnpaid
-                          : colors.warning;
-                    const statusLabel = paymentIsWaived 
-                      ? 'WAIVED' 
-                      : payment.status.toUpperCase();
-                    
-                    return (
-                    <div
-                      key={payment.id}
-                      className="p-4 rounded-lg border"
-                      style={{
-                        background: "rgba(255, 255, 255, 0.03)",
-                        borderColor: `${statusColor}40`,
-                      }}
+            <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.3 }}>
+              <GlassCard className="w-full min-w-0 overflow-hidden">
+                <PaymentTimeline
+                  payments={existingPayments}
+                  paymentTypeName={paymentType.title}
+                />
+                {/* Resubmit button for rejected payments */}
+                {existingPayments.some(p => p.status === 'rejected') && (
+                  <div className="mt-5 pt-4" style={{ borderTop: '1px solid rgba(255,255,255,0.06)' }}>
+                    <motion.button
+                      onClick={() => handleResubmitRejected(existingPayments.find(p => p.status === 'rejected')!)}
+                      className="flex items-center gap-2 px-4 py-2.5 rounded-xl font-medium text-white transition-all"
+                      style={{ background: gradients.primary, boxShadow: `0 4px 16px ${colors.primary}30` }}
+                      whileHover={{ scale: 1.02 }}
+                      whileTap={{ scale: 0.98 }}
                     >
-                      <div className="flex items-start justify-between gap-4">
-                        <div className="flex-1">
-                          <div className="flex items-center gap-2 mb-2">
-                            {payment.status === "approved" && (
-                              <CheckCircle
-                                className="w-5 h-5"
-                                style={{ color: statusColor }}
-                              />
-                            )}
-                            {payment.status === "rejected" && (
-                              <XCircle
-                                className="w-5 h-5"
-                                style={{ color: colors.statusUnpaid }}
-                              />
-                            )}
-                            {payment.status === "pending" && (
-                              <Clock
-                                className="w-5 h-5"
-                                style={{ color: colors.warning }}
-                              />
-                            )}
-                            <span 
-                              className="font-bold"
-                              style={{ 
-                                color: paymentIsWaived ? '#6366F1' : 'white',
-                                textDecoration: paymentIsWaived ? 'line-through' : 'none'
-                              }}
-                            >
-                              <PrivacyMask>{formatCurrency(payment.amount)}</PrivacyMask>
-                            </span>
-                            <span
-                              className="px-2 py-1 rounded-full text-xs font-medium"
-                              style={{
-                                background: `${statusColor}20`,
-                                color: statusColor,
-                              }}
-                            >
-                              {statusLabel}
-                            </span>
-                          </div>
-                          <p
-                            className="text-sm mb-1"
-                            style={{ color: colors.textSecondary }}
-                          >
-                            Ref: {payment.transaction_ref}
-                          </p>
-                          <p
-                            className="text-sm"
-                            style={{ color: colors.textSecondary }}
-                          >
-                            {paymentIsWaived ? 'Waived' : 'Submitted'}:{" "}
-                            {formatDate(payment.submitted_at, "long")}
-                          </p>
-                          {payment.rejection_reason && (
-                            <div
-                              className="mt-2 p-2 rounded"
-                              style={{ background: `${colors.statusUnpaid}10` }}
-                            >
-                              <p
-                                className="text-sm font-medium"
-                                style={{ color: colors.statusUnpaid }}
-                              >
-                                Rejection Reason: {payment.rejection_reason}
-                              </p>
-                            </div>
-                          )}
-                        </div>
-                        {payment.status === "rejected" && (
-                          <button
-                            onClick={() => handleResubmitRejected(payment)}
-                            className="flex items-center gap-2 px-4 py-2 rounded-lg font-medium text-white transition-all"
-                            style={{ background: gradients.primary }}
-                          >
-                            <RefreshCw className="w-4 h-4" />
-                            Resubmit
-                          </button>
-                        )}
-                      </div>
-                    </div>
-                    );
-                  })}
-                </div>
+                      <RefreshCw className="w-4 h-4" />
+                      Resubmit Rejected Payment
+                    </motion.button>
+                  </div>
+                )}
               </GlassCard>
             </motion.div>
           )}
 
-          {/* Fully Paid or Waived Message */}
+          {/* ── Fully paid / waived ── */}
           {isFullyPaid && (
-            <motion.div
-              initial={{ opacity: 0, scale: 0.9 }}
-              animate={{ opacity: 1, scale: 1 }}
-              transition={{ delay: 0.4 }}
-            >
+            <motion.div initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} transition={{ delay: 0.4 }}>
               <GlassCard className="w-full">
                 <div className="text-center p-8">
-                  <CheckCircle
-                    className="w-16 h-16 mx-auto mb-4"
-                    style={{ color: isWaived ? '#6366F1' : colors.statusPaid }}
-                  />
+                  <CheckCircle className="w-16 h-16 mx-auto mb-4" style={{ color: isWaived ? '#6366F1' : colors.statusPaid }} />
                   <h2 className="text-2xl font-bold text-white mb-2">
                     {isWaived ? 'Payment Waived! 🔓' : 'Payment Complete! 🎉'}
                   </h2>
                   <p style={{ color: colors.textSecondary }}>
-                    {isWaived 
+                    {isWaived
                       ? 'This payment has been waived by the class administration.'
                       : 'You have fully paid for this requirement.'}
                   </p>
@@ -919,33 +667,16 @@ export default function PaymentDetailPage() {
             </motion.div>
           )}
 
-          {/* Cannot Pay Message (if has pending) */}
+          {/* ── Pending review warning ── */}
           {!isFullyPaid && hasPendingPayment && (
-            <motion.div
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 0.4 }}
-            >
+            <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.4 }}>
               <GlassCard className="w-full">
-                <div
-                  className="flex items-start gap-4 p-4"
-                  style={{ background: `${colors.warning}10` }}
-                >
-                  <Info
-                    className="w-6 h-6 shrink-0 mt-1"
-                    style={{ color: colors.warning }}
-                  />
+                <div className="flex items-start gap-4 p-4" style={{ background: `${colors.warning}10` }}>
+                  <Info className="w-6 h-6 shrink-0 mt-1" style={{ color: colors.warning }} />
                   <div>
-                    <p className="font-bold text-white mb-1">
-                      Payment Pending Review
-                    </p>
-                    <p
-                      className="text-sm"
-                      style={{ color: colors.textSecondary }}
-                    >
-                      You have a payment awaiting approval. Please wait for the
-                      admin to review your submission before making another
-                      payment.
+                    <p className="font-bold text-white mb-1">Payment Pending Review</p>
+                    <p className="text-sm" style={{ color: colors.textSecondary }}>
+                      You have a payment awaiting approval. Please wait for the admin to review before making another payment.
                     </p>
                   </div>
                 </div>
@@ -953,48 +684,34 @@ export default function PaymentDetailPage() {
             </motion.div>
           )}
 
-          {/* Payment Form - Only show if not fully paid and no pending payment */}
+          {/* ── Payment form ── */}
           {!isFullyPaid && !hasPendingPayment && (
             <>
               {step === "method" && (
-                <motion.div
-                  initial={{ opacity: 0, y: 20 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ delay: 0.4 }}
-                >
+                <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.4 }}>
                   <PaymentMethodSelector
                     selectedMethod={selectedMethod}
                     onMethodSelect={handleMethodSelect}
                     onPayForOthers={() => setShowPayForOthers(true)}
                     showPayForOthers={true}
+                    paymentTypeId={id}
                   />
                 </motion.div>
               )}
 
               {step === "qr" && selectedMethod === "cash" && user && (() => {
-                // Build list of students for total calculation (include self if requested)
-                // Attach outstanding to all students in selectedStudents
-                const selectedWithOutstanding = selectedStudents.map(s => {
-                  // TODO: Replace with real outstanding calculation for each student if available
-                  // For now, use currentUserOutstanding for all (should be replaced with per-student logic)
-                  return { ...s, outstanding: currentUserOutstanding };
-                });
-                const studentsForTotal = [...selectedWithOutstanding];
+                const selectedWithOutstanding = selectedStudents.map(s => ({ ...s, outstanding: currentUserOutstanding }));
                 const isSoloPayment = selectedStudents.length === 0 && !includeSelf;
-                // Include the current user when requested or when this is a solo payment
+                const studentsForTotal = [...selectedWithOutstanding];
                 if ((includeSelf || isSoloPayment) && !studentsForTotal.some(s => s.id === user.id)) {
                   studentsForTotal.push({ id: user.id, full_name: user.full_name, reg_number: user.reg_number, level: user.level, outstanding: currentUserOutstanding } as any);
                 }
                 const effectiveStudentCount = studentsForTotal.length > 0 ? studentsForTotal.length : 1;
-                // If paying full, sum per-student outstanding when available, otherwise use entered amount
                 const totalAmount = paymentOption === 'full'
                   ? studentsForTotal.reduce((sum, s) => sum + (Number((s as any).outstanding ?? currentUserOutstanding ?? amount) || 0), 0)
                   : (effectiveStudentCount * amount);
                 return (
-                  <motion.div
-                    initial={{ opacity: 0, y: 20 }}
-                    animate={{ opacity: 1, y: 0 }}
-                  >
+                  <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}>
                     <QRCodeGenerator
                       studentId={user.id}
                       studentName={user.full_name}
@@ -1011,44 +728,45 @@ export default function PaymentDetailPage() {
                 );
               })()}
 
-              {step === "upload" &&
-                (selectedMethod === "bank_transfer" ||
-                  selectedMethod === "pos") && (
-                  <PaymentSubmissionFlow
-                    paymentMethod={selectedMethod as "bank_transfer" | "pos"}
-                    paymentType={paymentType}
-                    currentUserOutstanding={currentUserOutstanding}
-                    accumulatedLateFees={currentUserAccumulatedLate}
-                    allowPartial={paymentType.allow_partial}
-                    selectedStudents={selectedStudents}
-                    includeSelf={includeSelf}
-                    currentUser={{
-                      id: user?.id || "",
-                      full_name: user?.full_name || "",
-                      reg_number: user?.reg_number || "",
-                      level: user?.level,
-                    }}
-                    onBack={() => setStep("method")}
-                    onSubmit={async (data) => {
-                      // Submit directly with the data (fixes async state issue)
-                      await submitPaymentWithData({
-                        method: selectedMethod as PaymentMethod,
-                        transactionRefValue: data.transactionRef,
-                        receiptFileValue: data.receiptFile,
-                        notesValue: data.notes,
-                        paymentOptionValue: data.paymentOption,
-                        amountValue: data.amount,
-                      });
-                    }}
-                    submitting={submitting}
-                  />
-                )}
+              {step === "upload" && (selectedMethod === "bank_transfer" || selectedMethod === "pos") && (
+                <PaymentSubmissionFlow
+                  paymentMethod={selectedMethod as "bank_transfer" | "pos"}
+                  paymentType={paymentType}
+                  currentUserOutstanding={currentUserOutstanding}
+                  accumulatedLateFees={currentUserAccumulatedLate}
+                  allowPartial={paymentType.allow_partial}
+                  selectedStudents={selectedStudents}
+                  includeSelf={includeSelf}
+                  currentUser={{
+                    id: user?.id || "",
+                    full_name: user?.full_name || "",
+                    reg_number: user?.reg_number || "",
+                    level: user?.level,
+                  }}
+                  onBack={() => setStep("method")}
+                  onSubmit={async (data) => {
+                    // Block receipt uploads when offline
+                    if (!isOnline && data.receiptFile) {
+                      toast.error("Receipt upload requires an internet connection. Please reconnect and try again.");
+                      return;
+                    }
+                    await wrappedSubmit({
+                      method: selectedMethod as PaymentMethod,
+                      transactionRefValue: data.transactionRef,
+                      receiptFileValue:    data.receiptFile,
+                      notesValue:          data.notes,
+                      paymentOptionValue:  data.paymentOption,
+                      amountValue:         data.amount,
+                    });
+                  }}
+                  submitting={submitting}
+                />
+              )}
             </>
           )}
         </div>
       </div>
 
-      {/* Pay For Others Modal */}
       <PayForOthersModal
         isOpen={showPayForOthers}
         onClose={() => setShowPayForOthers(false)}

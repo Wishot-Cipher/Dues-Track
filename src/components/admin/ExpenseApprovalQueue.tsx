@@ -418,7 +418,10 @@ export default function ExpenseApprovalQueue() {
     try {
       const scope = getOrgScope()
       let q = supabase.from('payment_types').select('id, name').eq('is_active', true)
-      if (scope) q = q.eq('organization_id', scope.orgId)
+      if (scope) {
+        q = q.eq('organization_id', scope.orgId)
+        q = q.eq('group_id', scope.groupId)
+      }
       const { data } = await q
       setPaymentTypes(data || [])
     } catch { /* */ }
@@ -440,13 +443,19 @@ export default function ExpenseApprovalQueue() {
       let qPayments = supabase
         .from('payments').select('amount, payment_type_id, payment_types ( id, category )')
         .eq('status', 'approved').not('transaction_ref', 'like', 'WAIVED-%')
-      if (scope) qPayments = qPayments.eq('organization_id', scope.orgId)
+      if (scope) {
+        qPayments = qPayments.eq('organization_id', scope.orgId)
+        qPayments = qPayments.eq('group_id', scope.groupId)
+      }
       const { data: paymentsData } = await qPayments
 
       let qExpenses = supabase
         .from('expenses').select('amount, category, category_id, payment_type_id, payment_types ( id, category )')
         .eq('status', 'approved')
-      if (scope) qExpenses = qExpenses.eq('organization_id', scope.orgId)
+      if (scope) {
+        qExpenses = qExpenses.eq('organization_id', scope.orgId)
+        qExpenses = qExpenses.eq('group_id', scope.groupId)
+      }
       const { data: expensesData } = await qExpenses
 
       const balances = new Map<string, number>()
