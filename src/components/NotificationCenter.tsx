@@ -3,6 +3,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { Bell, X, AlertCircle, DollarSign, CheckCircle, BellOff, Sparkles, Trash2, Vote as VoteIcon, ShieldCheck } from 'lucide-react';
 import { supabase } from '@/config/supabase';
 import notificationService from '@/services/notificationService';
+import { organizationService } from '@/services/organizationService';
 import { useAppAuth as useAuth } from '@/hooks/useAppAuth';
 import { formatCurrency } from '@/utils/formatters';
 import { colors, gradients } from '@/config/colors';
@@ -27,6 +28,7 @@ interface Notification {
   message: string;
   is_read: boolean;
   created_at: string;
+  is_virtual?: boolean;
   metadata?: {
     payment_id?: string;
     payment_type_id?: string;
@@ -65,6 +67,24 @@ export const NotificationCenter = () => {
   const [showPanel, setShowPanel] = useState(false);
   const [loading, setLoading] = useState(false);
 
+  const markVirtualRead = (claimId: string) => {
+    if (!user?.id) return;
+    try {
+      localStorage.setItem(`pvx_virtual_claim_notice_read_${user.id}_${claimId}`, '1');
+    } catch {
+      // ignore storage errors
+    }
+  };
+
+  const isVirtualRead = (claimId: string): boolean => {
+    if (!user?.id) return false;
+    try {
+      return localStorage.getItem(`pvx_virtual_claim_notice_read_${user.id}_${claimId}`) === '1';
+    } catch {
+      return false;
+    }
+  };
+
   const fetchNotifications = useCallback(async () => {
     if (!user?.id) {
       console.log('🔔 NotificationCenter: No user ID, skipping fetch');
@@ -84,7 +104,6 @@ export const NotificationCenter = () => {
         .limit(20);
       if (scope) {
         q = q.eq('organization_id', scope.orgId);
-        q = q.eq('group_id', scope.groupId);
       }
       const { data, error } = await q;
 
@@ -92,11 +111,50 @@ export const NotificationCenter = () => {
         console.error('🔔 Error fetching notifications:', error);
         throw error;
       }
-      
-      console.log('🔔 Notifications loaded:', data?.length || 0, 'items');
 
-      setNotifications(data || []);
-      setUnreadCount(data?.filter(n => !n.is_read).length || 0);
+      let list = (data || []) as Notification[];
+
+      try {
+        const claims = await organizationService.listOpenClaimsForVoter(user.id);
+        if (claims.length > 0) {
+          const existingClaimIds = new Set(
+            list
+              .map((n) => {
+                if (n.related_type === 'claim_request' && n.related_id) return n.related_id;
+                if (n.link?.startsWith('/claims/')) return n.link.replace('/claims/', '');
+                if (n.link?.startsWith('/claim/')) return n.link.split('/')[2] || null;
+                return null;
+              })
+              .filter(Boolean) as string[]
+          );
+
+          const virtuals: Notification[] = claims
+            .filter((c) => !existingClaimIds.has(c.id))
+            .map((c) => ({
+              id: `claim-${c.id}`,
+              type: 'claim_vote_requested',
+              title: `Vote on a claim: ${c.full_name}`,
+              message: `${c.full_name} is claiming to be your ${c.position_title}. Confirm or reject — ${c.votes_required} votes needed.`,
+              is_read: isVirtualRead(c.id),
+              created_at: c.created_at,
+              is_virtual: true,
+              link: `/claim/${c.id}/decide`,
+              related_type: 'claim_request',
+              related_id: c.id,
+            }));
+
+          list = [...virtuals, ...list].sort((a, b) => (
+            new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+          ));
+        }
+      } catch (err) {
+        console.error('🔔 Claim fallback error:', err);
+      }
+
+      console.log('🔔 Notifications loaded:', list.length, 'items');
+
+      setNotifications(list);
+      setUnreadCount(list.filter(n => !n.is_read).length);
     } catch (error) {
       console.error('Error fetching notifications:', error);
     } finally {
@@ -204,7 +262,12 @@ export const NotificationCenter = () => {
       const ok = await notificationService.markAllAsRead(userId);
       if (!ok) throw new Error('Failed to mark all as read');
 
-      setNotifications(prev => prev.map(n => ({ ...n, is_read: true })));
+      setNotifications(prev => {
+        prev.forEach((n) => {
+          if (n.is_virtual && n.related_id) markVirtualRead(n.related_id);
+        });
+        return prev.map(n => ({ ...n, is_read: true }));
+      });
       setUnreadCount(0);
       return true;
     } catch (error) {
@@ -221,7 +284,7 @@ export const NotificationCenter = () => {
       const ok = await notificationService.deleteAllRead(userId);
       if (!ok) throw new Error('Failed to clear read notifications');
 
-      setNotifications(prev => prev.filter(n => !n.is_read));
+      setNotifications(prev => prev.filter(n => n.is_virtual || !n.is_read));
       return true;
     } catch (error) {
       console.error('Error clearing read notifications:', error);
@@ -396,7 +459,7 @@ export const NotificationCenter = () => {
                     </div>
                   </div>
                   <div className="flex items-center gap-2">
-                    {notifications.some(n => n.is_read) && (
+                    {notifications.some(n => n.is_read && !n.is_virtual) && (
                       <motion.button
                         onClick={clearReadNotifications}
                         className="text-xs px-3 py-1.5 rounded-lg font-medium transition-all flex items-center gap-1"
@@ -489,10 +552,14 @@ export const NotificationCenter = () => {
                             if (!notification.is_read) {
                               // Optimistic UI update
                               setNotifications(prev => prev.map(n => n.id === notification.id ? { ...n, is_read: true } : n));
-                              const ok = await markAsRead(notification.id);
-                              if (!ok) {
-                                // Revert if DB update failed
-                                setNotifications(prev => prev.map(n => n.id === notification.id ? { ...n, is_read: false } : n));
+                              if (notification.is_virtual && notification.related_id) {
+                                markVirtualRead(notification.related_id);
+                              } else {
+                                const ok = await markAsRead(notification.id);
+                                if (!ok) {
+                                  // Revert if DB update failed
+                                  setNotifications(prev => prev.map(n => n.id === notification.id ? { ...n, is_read: false } : n));
+                                }
                               }
                             }
 
