@@ -67,9 +67,8 @@ function codeEmailHtml(code: string, expiresInMinutes: number): string {
     </p>
   `;
   return emailLayout({
-    title: 'Console sign-in code',
-    body,
     preheader: `Your Payvexo console code is ${code}. Expires in ${expiresInMinutes} minutes.`,
+    bodyContent: body,
   });
 }
 
@@ -110,7 +109,7 @@ async function _handler(req: any, res: any) {
     return res.status(400).json({ ok: false, error: 'A valid email is required.' });
   }
 
-  const supabase = createClient(supabaseUrl, serviceRole);
+  const supabase = createClient(supabaseUrl as string, serviceRole as string);
 
   const ip = getClientIp(req);
   const ua = getUserAgent(req);
