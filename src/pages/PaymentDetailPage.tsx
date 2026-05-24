@@ -23,6 +23,7 @@ import LoadingSpinner from "@/components/ui/LoadingSpinner";
 import { formatCurrency } from "@/utils/formatters";
 import { PrivacyMask } from '@/components/ui/PrivacyMask';
 import PaymentMethodSelector from "@/components/student/PaymentMethodSelector";
+import paystackService from "@/services/paystackService";
 import QRCodeGenerator from "@/components/student/QRCodeGenerator";
 import PayForOthersModal from "@/components/student/PayForOthersModal";
 import PaymentSubmissionFlow from "@/components/student/PaymentSubmissionFlow";
@@ -103,6 +104,14 @@ export default function PaymentDetailPage() {
   const [showPayForOthers, setShowPayForOthers] = useState(false);
   const [selectedStudents, setSelectedStudents] = useState<Student[]>([]);
   const [includeSelf, setIncludeSelf] = useState(false);
+
+  // ── Paystack hosted-checkout flow (P1)
+  // Calls /api/paystack/init then redirects the browser to the
+  // authorization_url. Paystack redirects back to
+  // /:slug/payments/verify?reference=... where PaymentVerifyPage
+  // confirms the outcome.
+  const [payingViaPaystack, setPayingViaPaystack] = useState(false);
+  const [paystackError, setPaystackError] = useState<string | null>(null);
 
   const [paymentOption] = useState<"full" | "partial">("full");
   const [amount, setAmount] = useState<number>(0);
@@ -322,6 +331,31 @@ export default function PaymentDetailPage() {
     setSelectedMethod(method);
     if (method === "cash") setStep("qr");
     else setStep("upload");
+  };
+
+  // ── Paystack: init + redirect ──────────────────────────────────────────
+  const handlePayWithPaystack = async () => {
+    if (!user?.id || !id) {
+      setPaystackError('Sign in required.');
+      return;
+    }
+    setPayingViaPaystack(true);
+    setPaystackError(null);
+
+    const res = await paystackService.initialize({
+      memberId:      user.id,
+      paymentTypeId: id,
+      // omit callbackPath → server uses /<orgSlug>/payments/verify by default
+    });
+
+    if (!res.ok || !res.authorization_url) {
+      setPaystackError(res.error || 'Could not start checkout. Please try again.');
+      setPayingViaPaystack(false);
+      return;
+    }
+    // Hand off to Paystack hosted checkout. Browser will return via
+    // /:slug/payments/verify?reference=<ref>.
+    window.location.assign(res.authorization_url);
   };
 
   const handleResubmitRejected = (_rejectedPayment: ExistingPayment) => {
@@ -691,13 +725,146 @@ export default function PaymentDetailPage() {
             <>
               {step === "method" && (
                 <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.4 }}>
-                  <PaymentMethodSelector
-                    selectedMethod={selectedMethod}
-                    onMethodSelect={handleMethodSelect}
-                    onPayForOthers={() => setShowPayForOthers(true)}
-                    showPayForOthers={true}
-                    
-                  />
+                  {/* ── PRIMARY: Paystack hosted checkout ─────────────────
+                      This is the only path we surface prominently. It's
+                      how the platform earns. Bank transfer + USSD are
+                      first in the channels array (api/paystack/init.ts)
+                      so rural / non-card users land on rails they use. */}
+                  <motion.div
+                    initial={{ opacity: 0, y: 8 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    className="relative overflow-hidden rounded-3xl p-6 sm:p-7"
+                    style={{
+                      background: 'linear-gradient(135deg, rgba(48,255,172,0.14) 0%, rgba(255,104,3,0.10) 100%)',
+                      border: '1px solid rgba(48,255,172,0.32)',
+                      boxShadow: '0 12px 40px rgba(48,255,172,0.08), inset 0 1px 0 rgba(255,255,255,0.04)',
+                    }}
+                  >
+                    {/* Ambient glow */}
+                    <div
+                      className="absolute inset-0 pointer-events-none"
+                      style={{ background: 'radial-gradient(ellipse 70% 80% at 90% -5%, rgba(48,255,172,0.22), transparent 60%)' }}
+                    />
+                    <div className="absolute -top-12 -right-12 w-44 h-44 rounded-full pointer-events-none"
+                      style={{ background: 'radial-gradient(circle, rgba(48,255,172,0.18), transparent 70%)', filter: 'blur(20px)' }}
+                    />
+
+                    {/* Badges row */}
+                    <div className="relative flex items-center gap-2 mb-3 flex-wrap">
+                      <span
+                        className="text-[10px] uppercase tracking-[0.22em] font-bold inline-flex items-center gap-1"
+                        style={{ color: '#30FFAC' }}
+                      >
+                        <span className="w-1.5 h-1.5 rounded-full" style={{ background: '#30FFAC', boxShadow: '0 0 8px #30FFAC' }} />
+                        Fastest way
+                      </span>
+                      <span
+                        className="text-[10px] px-2 py-0.5 rounded-full font-bold"
+                        style={{ background: 'rgba(48,255,172,0.15)', color: '#30FFAC', border: '1px solid rgba(48,255,172,0.3)' }}
+                      >
+                        Instant receipt
+                      </span>
+                      <span
+                        className="text-[10px] px-2 py-0.5 rounded-full font-bold"
+                        style={{ background: 'rgba(255,104,3,0.15)', color: '#FFAC5F', border: '1px solid rgba(255,104,3,0.3)' }}
+                      >
+                        Bank transfer • USSD • Card
+                      </span>
+                    </div>
+
+                    <h3 className="relative text-xl sm:text-2xl font-extrabold text-white tracking-tight">
+                      Pay online — no waiting for approval
+                    </h3>
+                    <p className="relative text-xs sm:text-sm mt-2 leading-6" style={{ color: 'rgba(255,255,255,0.72)' }}>
+                      Choose bank transfer, USSD, or card. Your receipt is generated
+                      the second the bank confirms — no admin review, no upload.
+                    </p>
+
+                    {/* The button */}
+                    <button
+                      type="button"
+                      onClick={handlePayWithPaystack}
+                      disabled={payingViaPaystack}
+                      className="relative w-full mt-5 px-5 py-4 rounded-2xl text-base font-extrabold flex items-center justify-center gap-2 transition disabled:opacity-60"
+                      style={{
+                        background: payingViaPaystack
+                          ? 'rgba(48,255,172,0.20)'
+                          : 'linear-gradient(135deg, #30FFAC 0%, #00D88B 100%)',
+                        boxShadow: payingViaPaystack ? 'none' : '0 12px 36px rgba(48,255,172,0.35)',
+                        color: '#0F0703',
+                      }}
+                    >
+                      {payingViaPaystack ? (
+                        <>
+                          <span className="w-4 h-4 border-2 rounded-full animate-spin" style={{ borderColor: 'rgba(15,7,3,0.35)', borderTopColor: '#0F0703' }} />
+                          Opening secure checkout…
+                        </>
+                      ) : (
+                        <>
+                          Pay now
+                          <span className="inline-flex items-center gap-1 text-xs font-bold opacity-70">→</span>
+                        </>
+                      )}
+                    </button>
+
+                    {paystackError && (
+                      <p className="relative mt-3 text-xs flex items-start gap-1.5" style={{ color: '#ff8a8a' }}>
+                        <span>⚠</span>
+                        <span>{paystackError}</span>
+                      </p>
+                    )}
+
+                    <p className="relative mt-4 text-[10px]" style={{ color: 'rgba(255,255,255,0.45)' }}>
+                      🔒 Secured by Paystack. A small service fee is shown on the next screen.
+                    </p>
+                  </motion.div>
+
+                  {/* ── SECONDARY: collapsed "other ways" — discouraged but not hidden ──
+                      The platform's revenue depends on Paystack. Manual upload
+                      is here for users who genuinely cannot use bank transfer
+                      or USSD (extremely rare) — defaulted CLOSED so it doesn't
+                      compete with the primary CTA above. */}
+                  <details className="mt-3 group">
+                    <summary
+                      className="cursor-pointer list-none rounded-xl px-4 py-3 text-xs sm:text-sm font-medium flex items-center justify-between transition"
+                      style={{
+                        background: 'rgba(255,255,255,0.025)',
+                        border: '1px solid rgba(255,255,255,0.06)',
+                        color: 'rgba(255,255,255,0.55)',
+                      }}
+                    >
+                      <span className="flex items-center gap-2">
+                        <span style={{ opacity: 0.7 }}>I can't pay online right now</span>
+                        <span
+                          className="text-[10px] px-1.5 py-0.5 rounded font-bold"
+                          style={{ background: 'rgba(255,172,95,0.12)', color: '#FFAC5F' }}
+                        >
+                          slower
+                        </span>
+                      </span>
+                      <span className="text-xs transition group-open:rotate-180">▾</span>
+                    </summary>
+                    <div className="mt-3">
+                      <div
+                        className="mb-3 rounded-xl px-4 py-3 text-[11px] leading-5"
+                        style={{
+                          background: 'rgba(255,172,95,0.06)',
+                          border: '1px solid rgba(255,172,95,0.18)',
+                          color: 'rgba(255,255,255,0.62)',
+                        }}
+                      >
+                        <strong style={{ color: '#FFAC5F' }}>Heads up.</strong> Manual payments
+                        need an admin to review your receipt before they show as paid — usually
+                        within 24h. Paying online (above) is instant.
+                      </div>
+                      <PaymentMethodSelector
+                        selectedMethod={selectedMethod}
+                        onMethodSelect={handleMethodSelect}
+                        onPayForOthers={() => setShowPayForOthers(true)}
+                        showPayForOthers={true}
+                      />
+                    </div>
+                  </details>
                 </motion.div>
               )}
 

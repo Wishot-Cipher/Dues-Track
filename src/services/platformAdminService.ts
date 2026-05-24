@@ -143,6 +143,90 @@ export async function platformAdminLogin(email: string, password: string): Promi
 }
 
 /**
+ * Step 1 of passwordless email-code login (mig 050).
+ *
+ * Asks the server to issue a 6-digit code and email it to the
+ * given admin email. Returns the request_token the user will pair
+ * with the code in step 2. The code itself NEVER comes back to
+ * the browser — the API emails it server-side and discards it.
+ *
+ * Anti-enumeration: the server returns the same shape regardless
+ * of whether the email is a real admin. So a failed `sent:false`
+ * does NOT necessarily mean the email was wrong — it might also
+ * mean we're reusing a code issued <60s ago.
+ */
+export async function platformAdminRequestCode(email: string): Promise<{
+  ok: boolean;
+  request_token?: string;
+  expires_at?: string;
+  sent?: boolean;
+  error?: string;
+}> {
+  const normalized = email.toLowerCase().trim();
+  if (!normalized || !normalized.includes('@')) {
+    return { ok: false, error: 'A valid email is required.' };
+  }
+  try {
+    const res = await fetch('/api/console/request-code', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email: normalized }),
+    });
+    const json = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      return { ok: false, error: json?.error || `Request failed (${res.status})` };
+    }
+    return json;
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : 'Network error';
+    return { ok: false, error: msg };
+  }
+}
+
+/**
+ * Step 2 of passwordless email-code login.
+ *
+ * Exchanges (request_token, code) for a session token via the
+ * verify_admin_login_code RPC (mig 050). On success the admin is
+ * cached in sessionStorage the same way password login does, so
+ * the rest of the console code reads it unchanged.
+ */
+export async function platformAdminVerifyCode(
+  requestToken: string,
+  code: string,
+): Promise<PlatformAdmin> {
+  const trimmedCode = (code || '').replace(/\s+/g, '');
+  if (!requestToken || !trimmedCode) {
+    throw new Error('Both request token and code are required.');
+  }
+
+  const { data, error } = await supabase.rpc('verify_admin_login_code', {
+    p_request_token: requestToken,
+    p_code: trimmedCode,
+  });
+
+  if (error) {
+    // Same fallback pattern as password login — function missing
+    // means the migration hasn't been applied yet.
+    if (error.message?.includes('Could not find the function') || error.code === '42883') {
+      throw new Error('Email login is not yet enabled. Run migration 050.');
+    }
+    throw new Error(error.message || 'Verification failed');
+  }
+  if (!data || (Array.isArray(data) && data.length === 0)) {
+    // RPC returns empty when code is wrong/expired/used/locked.
+    throw new Error('That code is invalid, expired, or already used.');
+  }
+  const row = Array.isArray(data) ? data[0] : data;
+  if (!row.is_active) throw new Error('Account is deactivated');
+  if (!row.session_token) throw new Error('Server did not issue a session token.');
+
+  const admin = rowToAdmin(row as AdminRpcRow);
+  persistAdmin(admin);
+  return admin;
+}
+
+/**
  * Get the current cached platform admin (if any). This does NOT re-verify
  * the token with the server — callers should follow up with `verifySession()`
  * on mount and on tab focus.

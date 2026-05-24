@@ -80,6 +80,13 @@ const tk = {
   danger:    '#ef4444',
 };
 
+const blurMaskStyle = {
+  filter: 'blur(8px)',
+  userSelect: 'none',
+  pointerEvents: 'none',
+  display: 'inline-block',
+} as const;
+
 // ────────────────────────────────────────────────────────────────────────────
 // Helpers
 // ────────────────────────────────────────────────────────────────────────────
@@ -720,8 +727,11 @@ function HeroCard({
                     </span>
                   </div>
                 ) : (
-                  <span className="text-3xl sm:text-4xl font-extrabold text-white tracking-tight tabular-nums">
-                    {privacyOn ? '••••••' : formatCurrency(outstanding)}
+                  <span
+                    className="text-3xl sm:text-4xl font-extrabold text-white tracking-tight tabular-nums"
+                    style={privacyOn ? blurMaskStyle : undefined}
+                  >
+                    {formatCurrency(outstanding)}
                   </span>
                 )}
                 {!isAllClear && (
@@ -775,8 +785,11 @@ function HeroCard({
               </div>
             </div>
             <div className="flex items-center justify-between mt-1">
-              <span className="text-lg font-extrabold text-white tabular-nums">
-                {privacyOn ? '••••' : formatCurrency(urgent.owed)}
+              <span
+                className="text-lg font-extrabold text-white tabular-nums"
+                style={privacyOn ? blurMaskStyle : undefined}
+              >
+                {formatCurrency(urgent.owed)}
               </span>
               <motion.button
                 onClick={onPayUrgent}
@@ -908,15 +921,21 @@ function BentoTile({
         </p>
 
         <div className="mt-1 flex items-baseline gap-1.5">
-          <span className="text-xl sm:text-2xl font-extrabold text-white tracking-tight tabular-nums truncate">
-            {privacy === 'metric' ? '••••' : metric}
+          <span
+            className="text-xl sm:text-2xl font-extrabold text-white tracking-tight tabular-nums truncate"
+            style={privacy === 'metric' ? blurMaskStyle : undefined}
+          >
+            {metric}
           </span>
           <span className="text-[10px]" style={{ color: tk.textTer }}>{metricLabel}</span>
         </div>
 
         {subtitle && (
-          <p className="mt-1.5 text-[11px] leading-4 line-clamp-2" style={{ color: tk.textSec }}>
-            {privacy === 'subtitle' ? '••••' : subtitle}
+          <p
+            className="mt-1.5 text-[11px] leading-4 line-clamp-2"
+            style={{ color: tk.textSec, ...(privacy === 'subtitle' ? blurMaskStyle : {}) }}
+          >
+            {subtitle}
           </p>
         )}
 
@@ -979,8 +998,11 @@ function NewDueCard({
         {enriched.pt.deadline ? `Due ${formatDate(enriched.pt.deadline, 'short')}` : 'No deadline'}
       </p>
       <div className="mt-3 flex items-center justify-between">
-        <span className="text-base font-extrabold text-white tabular-nums">
-          {privacyOn ? '••••' : formatCurrency(Number(enriched.pt.amount || 0))}
+        <span
+          className="text-base font-extrabold text-white tabular-nums"
+          style={privacyOn ? blurMaskStyle : undefined}
+        >
+          {formatCurrency(Number(enriched.pt.amount || 0))}
         </span>
         <span
           className="text-[10px] font-bold px-2 py-0.5 rounded-full"
@@ -1084,12 +1106,18 @@ function DueRow({
       </div>
 
       <div className="text-right shrink-0">
-        <p className="text-sm font-bold text-white tabular-nums">
-          {privacyOn ? '••••' : formatCurrency(amount)}
+        <p
+          className="text-sm font-bold text-white tabular-nums"
+          style={privacyOn ? blurMaskStyle : undefined}
+        >
+          {formatCurrency(amount)}
         </p>
         {enriched.status === 'partial' && (
-          <p className="text-[10px]" style={{ color: tk.textTer }}>
-            {privacyOn ? '••••' : formatCurrency(enriched.owed)} left
+          <p
+            className="text-[10px]"
+            style={{ color: tk.textTer, ...(privacyOn ? blurMaskStyle : {}) }}
+          >
+            {formatCurrency(enriched.owed)} left
           </p>
         )}
       </div>
@@ -1149,8 +1177,11 @@ function ActivityRow({
         </p>
       </div>
       <div className="text-right shrink-0">
-        <p className="text-sm font-bold text-white tabular-nums">
-          {privacyOn ? '••••' : formatCurrency(Number(payment.amount || 0))}
+        <p
+          className="text-sm font-bold text-white tabular-nums"
+          style={privacyOn ? blurMaskStyle : undefined}
+        >
+          {formatCurrency(Number(payment.amount || 0))}
         </p>
       </div>
       <ChevronRight className="w-4 h-4 ml-1 shrink-0" style={{ color: tk.textQuat }} />

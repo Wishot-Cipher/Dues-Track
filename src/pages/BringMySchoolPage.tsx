@@ -450,39 +450,81 @@ export default function BringMySchoolPage() {
           </div>
         </Panel>
 
-        {/* ── Section 2: Your faculty + class ── */}
-        <Panel
-          title="Your faculty and class"
-          subtitle="We create the hierarchy with you in your class. Skip the faculty if your org doesn't use them."
-          icon={<GraduationCap className="w-4 h-4" />}
-        >
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <Field label="Faculty name" hint="optional">
-              <TextInput value={form.facultyName} onChange={(v) => setField('facultyName', v)} placeholder="School of Engineering" />
-            </Field>
-            <Field label="Faculty short name" hint="e.g. SOE">
-              <TextInput value={form.facultyShort} onChange={(v) => setField('facultyShort', v.toUpperCase())} placeholder="SOE" />
-            </Field>
-          </div>
+        {/* ── Section 2: Your faculty + class ──
+            Faculty subgroup only makes sense for academic orgs.
+            A church / club / NGO doesn't have a Faculty — hiding it
+            keeps the form honest. The leaf group is always required
+            (church → first ministry; club → first chapter; uni → first class). */}
+        {(() => {
+          const t = form.orgType;
+          const isAcademic = t === 'university' || t === 'polytechnic'
+            || t === 'college_of_education' || t === 'monotechnic' || t === 'seminary';
+          const sectionTitle = isAcademic
+            ? 'Your faculty and class'
+            : t === 'church'
+              ? 'Your ministry / fellowship'
+              : t === 'club' || t === 'association'
+                ? 'Your chapter / unit'
+                : 'Your first group';
+          const sectionSubtitle = isAcademic
+            ? "We create the hierarchy with you in your class. Skip the faculty if your org doesn't use them."
+            : "We'll create this as the founding group. You can add more later.";
+          const leafLabel = isAcademic
+            ? 'Your class / department name'
+            : t === 'church'
+              ? 'Ministry name'
+              : t === 'club' || t === 'association'
+                ? 'Chapter name'
+                : 'Group name';
+          const leafPlaceholder = isAcademic
+            ? 'Electrical Engineering'
+            : t === 'church'
+              ? 'Youth Ministry'
+              : t === 'club' || t === 'association'
+                ? 'Lagos Chapter'
+                : 'Founding group';
+          const levelLabel = isAcademic
+            ? 'Your level / position'
+            : 'Your role';
+          const levelPlaceholder = isAcademic ? '200L' : 'Member';
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <Field label="Your class / department name" required icon={<Layers className="w-3 h-3" />}>
-              <TextInput value={form.groupName} onChange={(v) => setField('groupName', v)} placeholder="Electrical Engineering" required />
-            </Field>
-            <Field label="Short name" hint="e.g. EEE">
-              <TextInput value={form.groupShort} onChange={(v) => setField('groupShort', v.toUpperCase())} placeholder="EEE" />
-            </Field>
-          </div>
+          return (
+            <Panel
+              title={sectionTitle}
+              subtitle={sectionSubtitle}
+              icon={<GraduationCap className="w-4 h-4" />}
+            >
+              {isAcademic && (
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <Field label="Faculty name" hint="optional">
+                    <TextInput value={form.facultyName} onChange={(v) => setField('facultyName', v)} placeholder="School of Engineering" />
+                  </Field>
+                  <Field label="Faculty short name" hint="e.g. SOE">
+                    <TextInput value={form.facultyShort} onChange={(v) => setField('facultyShort', v.toUpperCase())} placeholder="SOE" />
+                  </Field>
+                </div>
+              )}
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <Field label="Group kind" required>
-              <SelectInput value={form.groupKind} onChange={(v) => setField('groupKind', v)} options={GROUP_KINDS} />
-            </Field>
-            <Field label="Your level / position" hint="e.g. 200L, SS2, Member">
-              <TextInput value={form.userLevel} onChange={(v) => setField('userLevel', v)} placeholder="200L" />
-            </Field>
-          </div>
-        </Panel>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <Field label={leafLabel} required icon={<Layers className="w-3 h-3" />}>
+                  <TextInput value={form.groupName} onChange={(v) => setField('groupName', v)} placeholder={leafPlaceholder} required />
+                </Field>
+                <Field label="Short name" hint="e.g. EEE">
+                  <TextInput value={form.groupShort} onChange={(v) => setField('groupShort', v.toUpperCase())} placeholder="EEE" />
+                </Field>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <Field label="Group kind" required>
+                  <SelectInput value={form.groupKind} onChange={(v) => setField('groupKind', v)} options={GROUP_KINDS} />
+                </Field>
+                <Field label={levelLabel} hint={isAcademic ? 'e.g. 200L, SS2, Member' : undefined}>
+                  <TextInput value={form.userLevel} onChange={(v) => setField('userLevel', v)} placeholder={levelPlaceholder} />
+                </Field>
+              </div>
+            </Panel>
+          );
+        })()}
 
         {/* ── Section 3: Your account ── */}
         <Panel

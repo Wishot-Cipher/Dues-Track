@@ -58,6 +58,7 @@ import {
 } from '@/services/platformAdminService';
 import ConsoleUniversitiesPage from '@/pages/admin/ConsoleUniversitiesPage';
 import ConsoleRoleManagementPage from '@/pages/admin/ConsoleRoleManagementPage';
+import ConsoleEmailCodeLogin from '@/components/platform/ConsoleEmailCodeLogin';
 
 // ── Theme constants (matching app design language) ──
 const colors = {
@@ -1070,6 +1071,9 @@ function PlatformDashboard({ admin, onLogout }: { admin: PlatformAdmin; onLogout
 // ── Main Page Component ──
 export default function PlatformConsolePage() {
   const [admin, setAdmin] = useState<PlatformAdmin | null>(() => getPlatformAdmin());
+  // Toggled by the "Use password instead" link inside ConsoleEmailCodeLogin
+  // so the existing password form stays one click away during the migration.
+  const [useFallbackPassword, setUseFallbackPassword] = useState(false);
   const [verifying, setVerifying] = useState<boolean>(() => Boolean(getPlatformAdmin()));
 
   // Re-verify the cached token against the server on mount and on every
@@ -1119,7 +1123,19 @@ export default function PlatformConsolePage() {
   }
 
   if (!admin) {
-    return <PlatformLoginForm onLogin={setAdmin} />;
+    // Email-code (passwordless) is the new default. The password form
+    // is kept as a one-tap fallback while admins migrate. Once everyone
+    // has logged in via email, the fallback can be removed and mig 044's
+    // password RPC deprecated.
+    return useFallbackPassword
+      ? <PlatformLoginForm onLogin={setAdmin} />
+      : (
+          <ConsoleEmailCodeLogin
+            onLogin={setAdmin}
+            showPasswordFallback
+            onPasswordFallback={() => setUseFallbackPassword(true)}
+          />
+        );
   }
 
   return <PlatformDashboard admin={admin} onLogout={handleLogout} />;

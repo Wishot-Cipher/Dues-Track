@@ -107,7 +107,7 @@ export default function VerificationStatusBanner() {
         .select('id, position_title, bootstrap_path, votes_received, votes_required, current_layer, required_layer')
         .eq('claimant_user_id', memberId)
         .eq('organization_id', orgId)
-        .in('status', ['awaiting_votes', 'submitted', 'under_review', 'email_sent', 'votes_complete'])
+        .in('status', ['awaiting_votes', 'submitted', 'under_review'])
         .order('created_at', { ascending: false })
         .limit(1);
       const claim = (claims ?? [])[0] ?? null;
@@ -131,23 +131,17 @@ export default function VerificationStatusBanner() {
   }, [dismissKey]);
 
   useEffect(() => {
-    if (!progressKey || !pendingClaim) {
+    if (!progressKey) {
       setLastSeenVotes(null);
       return;
     }
     try {
       const stored = localStorage.getItem(progressKey);
-      if (stored === null) {
-        localStorage.setItem(progressKey, String(pendingClaim.votes_received));
-        setLastSeenVotes(pendingClaim.votes_received);
-        return;
-      }
-      const parsed = Number(stored);
-      setLastSeenVotes(Number.isFinite(parsed) ? parsed : pendingClaim.votes_received);
+      setLastSeenVotes(stored ? Number(stored) : 0);
     } catch {
-      setLastSeenVotes(pendingClaim.votes_received);
+      setLastSeenVotes(0);
     }
-  }, [progressKey, pendingClaim]);
+  }, [progressKey]);
 
   useEffect(() => {
     if (!progressKey || !pendingClaim) return;
@@ -158,7 +152,6 @@ export default function VerificationStatusBanner() {
       } catch {
         // ignore storage errors
       }
-      setLastSeenVotes(pendingClaim.votes_received);
     }
   }, [progressKey, pendingClaim, lastSeenVotes]);
 

@@ -19,6 +19,7 @@ import ProfilePage from '@/pages/ProfilePage';
 import SettingsPage from '@/pages/student/SettingsPage';
 import PaymentHistoryPage from '@/pages/student/PaymentHistoryPage';
 import PaymentDetailPage from '@/pages/PaymentDetailPage';
+import PaymentVerifyPage from '@/pages/PaymentVerifyPage';
 import AdminDashboardPage from '@/pages/admin/AdminDashboardPage';
 // NOTE: src/pages/admin/CreatePaymentTypePage.tsx is the legacy create-due page.
 // It stays on disk as a safe-revert backup but is no longer routed.
@@ -123,6 +124,8 @@ function App() {
                 <Route path="claim/:claimId/decide" element={<OrgProtectedRoute><ClaimDecisionPage /></OrgProtectedRoute>} />
                 <Route path="payments" element={<OrgProtectedRoute><PaymentHistoryPage /></OrgProtectedRoute>} />
                 <Route path="payment/:id" element={<OrgProtectedRoute><PaymentDetailPage /></OrgProtectedRoute>} />
+                {/* Paystack redirects back here after hosted checkout (mig P1) */}
+                <Route path="payments/verify" element={<PaymentVerifyPage />} />
                 <Route path="profile" element={<OrgProtectedRoute><ProfilePage /></OrgProtectedRoute>} />
                 <Route path="settings" element={<OrgProtectedRoute><SettingsPage /></OrgProtectedRoute>} />
                 <Route path="change-password" element={<OrgProtectedRoute><OrgChangePasswordPage /></OrgProtectedRoute>} />

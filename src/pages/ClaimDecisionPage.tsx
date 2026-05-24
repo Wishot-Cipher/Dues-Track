@@ -98,14 +98,24 @@ export default function ClaimDecisionPage() {
     setLoading(true);
     setError(null);
 
+    // Use maybeSingle() — when a claim is missing OR RLS hides it,
+    // PostgREST returns 0 rows; .single() throws "Cannot coerce…"
+    // which renders as a scary "Claim not found" error. maybeSingle
+    // returns null cleanly and we control the messaging.
     const { data: claimRow, error: claimErr } = await supabase
       .from('claim_requests')
       .select('id, organization_id, claimant_user_id, full_name, position_title, claimed_role, claimed_scope, claimed_group_id, claimed_unit_group_id, bootstrap_path, votes_required, votes_received, current_layer, required_layer, status, vote_deadline, created_at')
       .eq('id', claimId)
-      .single();
+      .maybeSingle();
 
-    if (claimErr || !claimRow) {
-      setError(claimErr?.message ?? 'Claim not found or no longer visible.');
+    if (claimErr) {
+      setError(claimErr.message);
+      setClaim(null);
+      setLoading(false);
+      return;
+    }
+    if (!claimRow) {
+      setError('This claim is no longer available. It may have been resolved or withdrawn.');
       setClaim(null);
       setLoading(false);
       return;

@@ -112,15 +112,6 @@ export default function ClaimSubmitPage() {
       return;
     }
 
-    try {
-      if (organization?.id && user?.id) {
-        localStorage.setItem(`pvx_claim_submitted_${organization.id}_${user.id}`, res.claim_id);
-        localStorage.setItem(`pvx_claim_progress_${res.claim_id}_${user.id}`, '0');
-      }
-    } catch {
-      // ignore storage errors
-    }
-
     setSubmitted({
       claim_id: res.claim_id,
       votes_required: res.votes_required ?? 0,
