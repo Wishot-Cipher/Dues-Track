@@ -25,25 +25,17 @@ import { useNavigate, useLocation } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   BookOpen,
-  Calendar,
   ChevronRight,
-  Eye,
-  EyeOff,
-  Layers,
-  Receipt,
-  Settings,
   Sparkles,
-  Ticket,
+  CreditCard,
   TrendingUp,
   User as UserIcon,
-  Wallet,
   AlertCircle,
-  Bell,
   Zap,
   CheckCircle2,
-  ArrowRight,
   Loader2,
   Activity,
+  History,
 } from 'lucide-react';
 import { useAppAuth as useAuth } from '@/hooks/useAppAuth';
 import { useMultiTenantAuth } from '@/hooks/useMultiTenantAuth';
@@ -51,44 +43,27 @@ import { useAppNav } from '@/hooks/useAppNav';
 import paymentService from '@/services/paymentService';
 import { formatCurrency, formatDate } from '@/utils/formatters';
 import type { Payment, PaymentType, PaymentStats } from '@/types';
-import ExpenseTransparencyDashboard from '@/components/student/ExpenseTransparencyDashboard';
-import AchievementSystem from '@/components/student/AchievementSystem';
-import VoteInbox from '@/components/claims/VoteInbox';
 import VerificationStatusBanner from '@/components/claims/VerificationStatusBanner';
 import VoteUrgencyBanner from '@/components/claims/VoteUrgencyBanner';
-
-// ────────────────────────────────────────────────────────────────────────────
-// Design tokens
-// ────────────────────────────────────────────────────────────────────────────
-const tk = {
-  bg:        '#0F0703',
-  panel:     'rgba(255,255,255,0.03)',
-  panelHov:  'rgba(255,255,255,0.05)',
-  border:    'rgba(255,255,255,0.08)',
-  borderHov: 'rgba(255,104,3,0.32)',
-  text:      '#FFFFFF',
-  textSec:   'rgba(255,255,255,0.65)',
-  textTer:   'rgba(255,255,255,0.40)',
-  textQuat:  'rgba(255,255,255,0.22)',
-  primary:   '#FF6803',
-  primaryHi: '#FFAC5F',
-  mint:      '#30FFAC',
-  blue:      '#5B9BFF',
-  purple:    '#8b5cf6',
-  pink:      '#ec4899',
-  amber:     '#F59E0B',
-  danger:    '#ef4444',
-};
-
-const blurMaskStyle = {
-  filter: 'blur(8px)',
-  userSelect: 'none',
-  pointerEvents: 'none',
-  display: 'inline-block',
-} as const;
+// ── Phase-2 dashboard redesign (matches the polished mockup) ──
+// Theme system + decorative page background + hero + the new
+// quick-actions / due-next / promo surfaces. The legacy BentoGrid
+// + "New this week" + "Your dues" list are gone — replaced by the
+// cleaner DueNextList. Sections below still pending a re-skin live
+// inside ThemedPanel so they render correctly in both modes.
+import { useTheme, getDashboardTokens } from '@/hooks/useTheme';
+import PayvexoBackground from '@/components/student/dashboard/PayvexoBackground';
+import OutstandingHero from '@/components/student/dashboard/OutstandingHero';
+import QuickActionsGrid from '@/components/student/dashboard/QuickActionsGrid';
+import DueNextList, { type DueNextItem } from '@/components/student/dashboard/DueNextList';
+import PromoBanner from '@/components/student/dashboard/PromoBanner';
 
 // ────────────────────────────────────────────────────────────────────────────
 // Helpers
+// All design tokens come from getDashboardTokens(theme) — no inline
+// dark-only palette lives here anymore. Components below either accept
+// `theme` and call getDashboardTokens themselves, or read the `dt`
+// instance computed once at the page level.
 // ────────────────────────────────────────────────────────────────────────────
 function greeting(d: Date = new Date()): string {
   const h = d.getHours();
@@ -121,10 +96,15 @@ export default function StudentDashboardPage() {
   // useAppAuth doesn't surface on its mapped Student shape.
   const { user: mtMember } = useMultiTenantAuth();
   const orgName = mtMember?.organization?.name;
-  const groupName = mtMember?.group?.name ?? user?.department;
   const memberLoginId = mtMember?.member_id ?? user?.reg_number;
   const { go, orgSlug } = useAppNav();
   const navigate = useNavigate();
+  // Theme used by the redesigned dashboard surfaces (Phase 1+2).
+  // `theme` is the resolved value ('light' | 'dark'); the toggle UI
+  // will land in Phase 3. `dt` are the tokens for the current theme —
+  // every new component below reads them so light/dark both look right.
+  const { theme } = useTheme();
+  const dt = useMemo(() => getDashboardTokens(theme), [theme]);
   const location = useLocation();
 
   // Privacy mask — hide balances at a tap (shoulder-surfing friendly)
@@ -221,21 +201,6 @@ export default function StudentDashboardPage() {
     [payments]
   );
 
-  // Dues published in the last 7 days — the "New this week" strip
-  const newThisWeek = useMemo(() => {
-    const cutoff = Date.now() - 7 * 24 * 60 * 60 * 1000;
-    return enriched
-      .filter((e) => {
-        const created = new Date(e.pt.created_at || '').getTime();
-        return !Number.isNaN(created) && created >= cutoff;
-      })
-      .sort((a, b) => {
-        const ad = new Date(a.pt.created_at || '').getTime();
-        const bd = new Date(b.pt.created_at || '').getTime();
-        return bd - ad;
-      });
-  }, [enriched]);
-
   // All dues with status — sorted: unpaid mandatory first, then partial, paid last
   const allDuesSorted = useMemo(() => {
     const rank: Record<typeof enriched[number]['status'], number> = {
@@ -250,47 +215,46 @@ export default function StudentDashboardPage() {
     });
   }, [enriched]);
 
+  // ── Items for the new DueNextList (Phase 2) ─────────────────
+  // We surface the next ~5 unpaid/partial dues. The component handles
+  // empty-state and skeletons itself.
+  const dueNextItems: DueNextItem[] = useMemo(() => {
+    return allDuesSorted
+      .filter((e) => e.status !== 'paid')
+      .slice(0, 5)
+      .map((e) => ({
+        id: e.pt.id,
+        title: e.pt.title || 'Untitled due',
+        amount: Number(e.pt.amount || 0),
+        status: e.status,
+        daysLeft: e.daysLeft,
+        isMandatory: Boolean(e.pt.is_mandatory),
+        categoryKey: (e.pt as { category?: string | null }).category ?? null,
+        paidAmount: e.approvedSum,
+      }));
+  }, [allDuesSorted]);
+
   // Hero figures
   const outstanding = Math.max(0, Number(stats.totalDue || 0));
-  const isAllClear  = outstanding === 0 && !loading;
   const unpaidCount = unpaidActive.length;
 
-  // Class % paid (rough: paymentTypes paid / total)
-  const classProgress = useMemo(() => {
-    const total = enriched.length || 1;
-    const done  = enriched.filter((e) => e.status === 'paid').length;
-    return Math.round((done / total) * 100);
-  }, [enriched]);
-
-  // Receipts count (approved payments)
+  // Receipts count (approved payments) — surfaced as the "History" tile hint
   const receiptsCount = useMemo(
     () => payments.filter((p) => p.status === 'approved').length,
     [payments]
   );
 
   return (
-    <div className="min-h-screen relative overflow-x-hidden" style={{ minHeight: '100dvh', background: tk.bg }}>
-      {/* Ambient background glow */}
-      <div className="fixed inset-0 pointer-events-none overflow-hidden">
-        <div
-          className="absolute rounded-full blur-[180px]"
-          style={{
-            width: 640, height: 640,
-            background: `radial-gradient(circle, ${tk.primary} 0%, transparent 70%)`,
-            top: '-15%', right: '-10%', opacity: 0.12,
-          }}
-        />
-        <div
-          className="absolute rounded-full blur-[160px]"
-          style={{
-            width: 480, height: 480,
-            background: `radial-gradient(circle, ${tk.mint} 0%, transparent 70%)`,
-            bottom: '5%', left: '-8%', opacity: 0.07,
-          }}
-        />
-      </div>
+    <div className="min-h-screen relative overflow-x-hidden" style={{ minHeight: '100dvh' }}>
+      {/* Theme-aware decorative background (warm peach blob upper-left,
+          secondary blob lower-right, dot grid, hand-drawn swoosh).
+          The only background layer on this page now. */}
+      <PayvexoBackground theme={theme} />
 
-      <main className="relative z-10 max-w-6xl mx-auto px-4 sm:px-6 pt-4 sm:pt-6 pb-24 space-y-4">
+      {/* Spacing rhythm: 5 between sections gives fintech breathing room
+          without feeling sparse. 6xl max-width keeps desktop legible
+          while the page stays single-column (mobile-first). */}
+      <main className="relative z-10 max-w-6xl mx-auto px-4 sm:px-6 pt-4 sm:pt-6 pb-24 space-y-5">
         {/* Welcome banner (just-joined) */}
         <AnimatePresence>
           {welcomeOrg && (
@@ -299,17 +263,19 @@ export default function StudentDashboardPage() {
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: -12 }}
               className="rounded-2xl px-4 py-3 flex items-center gap-3"
-              style={{ background: 'rgba(48,255,172,0.10)', border: '1px solid rgba(48,255,172,0.22)' }}
+              style={{
+                background: theme === 'light' ? '#E6FAEF' : 'rgba(48,255,172,0.10)',
+                border: `1px solid ${theme === 'light' ? '#B8EED4' : 'rgba(48,255,172,0.22)'}`,
+              }}
             >
-              <Sparkles className="w-5 h-5 shrink-0" style={{ color: tk.mint }} />
-              <p className="text-sm flex-1" style={{ color: 'rgba(214,255,237,0.95)' }}>
-                Welcome to <span className="text-white font-bold">{welcomeOrg || 'your organization'}</span>!
-                You're all set up.
+              <Sparkles className="w-5 h-5 shrink-0" style={{ color: dt.mint }} />
+              <p className="text-sm flex-1" style={{ color: dt.text }}>
+                Welcome to <span className="font-bold">{welcomeOrg || 'your organization'}</span>! You're all set up.
               </p>
               <button
                 onClick={() => setWelcomeOrg(null)}
-                className="text-xs font-semibold"
-                style={{ color: tk.mint }}
+                className="text-xs font-bold"
+                style={{ color: dt.mint }}
               >
                 Got it
               </button>
@@ -317,22 +283,59 @@ export default function StudentDashboardPage() {
           )}
         </AnimatePresence>
 
-        {/* ───────────── VOTE URGENCY BANNER ───────────── */}
+        {/* ───────────── VOTE URGENCY BANNER ─────────────
+            Compact at-a-glance banner that hides itself when there's
+            nothing to vote on. Replaced the duplicate full-card
+            VoteInbox below it — one signal is enough. */}
         <VoteUrgencyBanner orgSlug={orgSlug} />
 
-        {/* ───────────── HERO ───────────── */}
-        <HeroCard
-          name={firstName(user?.full_name)}
-          orgName={orgName}
-          loading={loading}
-          isAllClear={isAllClear}
-          outstanding={outstanding}
-          unpaidCount={unpaidCount}
-          urgent={urgent}
+        {/* ───────────── GREETING (fintech-style) ─────────────
+            Tiny one-line greeting + small avatar chip. The headline
+            of this page is the OutstandingHero card below — the
+            greeting is intentionally secondary. Pattern borrowed from
+            Opay / Kuda / Cash App: never compete with the balance. */}
+        <header className="flex items-center justify-between gap-3 px-1 sm:px-0">
+          <div className="min-w-0">
+            <p
+              className="text-[11px] uppercase tracking-[0.16em] font-bold"
+              style={{ color: dt.textTer }}
+            >
+              {orgName || 'Your account'}
+            </p>
+            <p
+              className="text-[15px] font-bold leading-tight mt-0.5 truncate"
+              style={{ color: dt.text }}
+            >
+              {greeting()}, <span style={{ color: dt.primary }}>{firstName(user?.full_name)}</span>
+            </p>
+          </div>
+          {/* Avatar chip — small, sharp, fintech-grade */}
+          <button
+            type="button"
+            onClick={() => go('/profile')}
+            className="shrink-0 w-10 h-10 rounded-full flex items-center justify-center text-sm font-extrabold transition-transform active:scale-95"
+            style={{
+              background: theme === 'light' ? '#FFFFFF' : 'rgba(255,255,255,0.06)',
+              color: dt.primary,
+              border: `1px solid ${dt.primaryRing}`,
+              boxShadow: theme === 'light'
+                ? `0 6px 18px -8px ${dt.primaryRing}`
+                : 'none',
+            }}
+            aria-label="Open profile"
+          >
+            {firstName(user?.full_name).charAt(0).toUpperCase()}
+          </button>
+        </header>
+
+        <OutstandingHero
+          outstandingAmount={outstanding}
+          pendingCount={unpaidCount}
+          totalCount={paymentTypes.length || unpaidCount}
           privacyOn={privacyOn}
           onTogglePrivacy={() => setPrivacyOn((v) => !v)}
-          onPayUrgent={() => urgent && go(`/payment/${urgent.pt.id}`)}
-          onSeeAllDues={() => go('/payments')}
+          ctaLabel={urgent ? 'Pay next due' : undefined}
+          onCtaClick={urgent ? () => go(`/payment/${urgent.pt.id}`) : undefined}
         />
 
         {/* ───────────── VERIFICATION STATUS BANNER ─────────────
@@ -341,213 +344,115 @@ export default function StudentDashboardPage() {
               • unverified admin (e.g. fresh founder) → "Verify your role"
               • mid-flight claim → progress bar + waiting state
             Hides when verification_layer >= 4 (fully verified). */}
-        <VerificationStatusBanner />
+        <ThemedPanel theme={theme}>
+          <VerificationStatusBanner />
+        </ThemedPanel>
 
-        {/* ───────────── VOTE INBOX ─────────────
-            Hides itself entirely when there's nothing to vote on,
-            so it's non-disruptive on the happy path. */}
-        <VoteInbox />
+        {/* VoteInbox removed in fintech-redesign — the compact
+            VoteUrgencyBanner above is the single source of truth for
+            outstanding votes. Less duplication, less noise. */}
 
-        {/* ───────────── BENTO GRID ───────────── */}
-        <section className="grid grid-cols-2 sm:grid-cols-3 gap-3 sm:gap-4">
-          {/* Dues */}
-          <BentoTile
-            icon={<Wallet className="w-5 h-5" />}
-            accent={tk.primary}
-            title="Dues"
-            metric={loading ? '…' : unpaidCount.toString()}
-            metricLabel={unpaidCount === 1 ? 'unpaid' : 'unpaid'}
-            subtitle={isAllClear ? 'All caught up' : `${formatCurrency(outstanding)} outstanding`}
-            privacy={!isAllClear && privacyOn ? 'subtitle' : 'none'}
-            onClick={() => go('/payments')}
+        {/* ───────────── DUE NEXT — highest priority below the hero ─────────────
+            This is what the member NEEDS to do next. Fintech hierarchy:
+            balance (hero) → next action (due next) → tools (quick actions).
+            Mockup-faithful: tinted icon chips, deadline pills, tap-to-pay. */}
+        <DueNextList
+          theme={theme}
+          loading={loading}
+          privacyOn={privacyOn}
+          items={dueNextItems}
+          totalCount={allDuesSorted.length}
+          onItemClick={(id) => go(`/payment/${id}`)}
+          onSeeAllClick={() => go('/payments')}
+        />
+
+        {/* ───────────── PROMO BANNER ─────────────
+            Reinforces Paystack-first behaviour: rewards paying online
+            (no waiting for manual approval). Shown only when the
+            member actually has something to pay. */}
+        {!loading && unpaidCount > 0 && (
+          <PromoBanner
+            theme={theme}
+            icon={Zap}
+            tint={dt.primary}
+            title="Pay online, get instant confirmation"
+            subtitle="Bank transfer & USSD work from any Nigerian bank."
+            actionLabel={urgent ? 'Pay now' : undefined}
+            onAction={urgent ? () => go(`/payment/${urgent.pt.id}`) : undefined}
           />
-
-          {/* Events — placeholder, coming soon */}
-          <BentoTile
-            icon={<Ticket className="w-5 h-5" />}
-            accent={tk.purple}
-            title="Events"
-            metric="Soon"
-            metricLabel="ticketing"
-            subtitle="Buy passes to lectures, parties, meetups"
-            comingSoon
-          />
-
-          {/* Receipts */}
-          <BentoTile
-            icon={<Receipt className="w-5 h-5" />}
-            accent={tk.mint}
-            title="Receipts"
-            metric={loading ? '…' : receiptsCount.toString()}
-            metricLabel={receiptsCount === 1 ? 'receipt' : 'receipts'}
-            subtitle={receiptsCount ? 'View payment history' : 'No payments yet'}
-            onClick={() => go('/payments')}
-          />
-
-          {/* Class progress */}
-          <BentoTile
-            icon={<Layers className="w-5 h-5" />}
-            accent={tk.blue}
-            title="Class"
-            metric={loading ? '…' : `${classProgress}%`}
-            metricLabel="caught up"
-            subtitle={groupName || 'Your class'}
-            onClick={() => go('/payments')}
-          >
-            <div className="mt-2 w-full h-1.5 rounded-full overflow-hidden" style={{ background: 'rgba(255,255,255,0.06)' }}>
-              <motion.div
-                className="h-full rounded-full"
-                style={{ background: `linear-gradient(90deg, ${tk.blue}, ${tk.mint})` }}
-                initial={{ width: 0 }}
-                animate={{ width: `${classProgress}%` }}
-                transition={{ duration: 0.8, ease: 'easeOut' }}
-              />
-            </div>
-          </BentoTile>
-
-          {/* Spending transparency */}
-          <BentoTile
-            icon={<TrendingUp className="w-5 h-5" />}
-            accent={tk.amber}
-            title="Spending"
-            metric="View"
-            metricLabel="transparency"
-            subtitle="See how your dues are spent"
-            onClick={() => go('/payments')}
-          />
-
-          {/* Profile */}
-          <BentoTile
-            icon={<UserIcon className="w-5 h-5" />}
-            accent={tk.pink}
-            title="Profile"
-            metric={memberLoginId?.slice(0, 8) || 'Me'}
-            metricLabel="member"
-            subtitle={user?.email || 'Update your info'}
-            onClick={() => go('/profile')}
-          />
-        </section>
-
-        {/* ───────────── NEW THIS WEEK ───────────── */}
-        {!loading && newThisWeek.length > 0 && (
-          <motion.section
-            initial={{ opacity: 0, y: 10 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.14 }}
-            className="space-y-3"
-          >
-            <header className="flex items-center justify-between px-1">
-              <div className="flex items-center gap-2">
-                <Sparkles className="w-4 h-4" style={{ color: tk.primary }} />
-                <h2 className="text-sm font-bold text-white tracking-tight">New this week</h2>
-                <span
-                  className="text-[10px] font-bold px-1.5 py-0.5 rounded-full"
-                  style={{ background: `${tk.primary}18`, color: tk.primary }}
-                >
-                  {newThisWeek.length}
-                </span>
-              </div>
-            </header>
-            <div className="flex gap-3 overflow-x-auto pb-2 -mx-1 px-1 snap-x snap-mandatory">
-              {newThisWeek.map((e, i) => (
-                <NewDueCard
-                  key={e.pt.id}
-                  enriched={e}
-                  index={i}
-                  privacyOn={privacyOn}
-                  onClick={() => go(`/payment/${e.pt.id}`)}
-                />
-              ))}
-            </div>
-          </motion.section>
         )}
 
-        {/* ───────────── YOUR DUES — detailed list ───────────── */}
-        {!loading && allDuesSorted.length > 0 && (
-          <motion.section
-            initial={{ opacity: 0, y: 10 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.18 }}
-            className="rounded-3xl overflow-hidden"
-            style={{ background: tk.panel, border: `1px solid ${tk.border}` }}
+        {/* ───────────── QUICK ACTIONS ─────────────
+            Secondary tools row. Same data shape regardless of theme;
+            tile rendering adapts (soft tints in light, glassy in dark).
+            Sits BELOW the due-next list because tools are less urgent
+            than the next thing-to-pay. */}
+        <div className="pt-1">
+          <p
+            className="text-[10px] uppercase tracking-[0.16em] font-bold px-1 mb-2"
+            style={{ color: dt.textTer }}
           >
-            <header className="flex items-center justify-between px-5 sm:px-6 py-4"
-              style={{ borderBottom: `1px solid ${tk.border}` }}>
-              <div className="flex items-center gap-2">
-                <Wallet className="w-4 h-4" style={{ color: tk.primary }} />
-                <h2 className="text-sm font-bold text-white tracking-tight">Your dues</h2>
-                <span
-                  className="text-[10px] font-bold px-1.5 py-0.5 rounded-full"
-                  style={{ background: 'rgba(255,255,255,0.06)', color: tk.textSec }}
-                >
-                  {allDuesSorted.length}
-                </span>
-              </div>
-              <span className="text-[10px] uppercase tracking-widest" style={{ color: tk.textTer }}>
-                progress
-              </span>
-            </header>
-            <div className="divide-y" style={{ borderColor: tk.border } as React.CSSProperties}>
-              {allDuesSorted.slice(0, 8).map((e, i) => (
-                <DueRow
-                  key={e.pt.id}
-                  enriched={e}
-                  index={i}
-                  privacyOn={privacyOn}
-                  onClick={() => go(`/payment/${e.pt.id}`)}
-                />
-              ))}
-            </div>
-            {allDuesSorted.length > 8 && (
-              <div className="px-5 sm:px-6 py-3 text-center" style={{ borderTop: `1px solid ${tk.border}` }}>
-                <button
-                  onClick={() => go('/payments')}
-                  className="text-xs font-semibold inline-flex items-center gap-1"
-                  style={{ color: tk.primary }}
-                >
-                  See all {allDuesSorted.length} dues
-                  <ChevronRight className="w-3.5 h-3.5" />
-                </button>
-              </div>
-            )}
-          </motion.section>
-        )}
+            Quick tools
+          </p>
+          <QuickActionsGrid
+            theme={theme}
+            tiles={[
+              {
+                icon: CreditCard,
+                label: 'Pay',
+                hint: unpaidCount ? `${unpaidCount} pending` : 'all clear',
+                tint: dt.primary,
+                onClick: () => go('/payments'),
+              },
+              {
+                icon: History,
+                label: 'History',
+                hint: receiptsCount ? `${receiptsCount} paid` : 'nothing yet',
+                tint: dt.mint,
+                onClick: () => go('/payments'),
+              },
+              {
+                icon: TrendingUp,
+                label: 'Spending',
+                hint: 'transparency',
+                tint: dt.amber,
+                onClick: () => go('/payments'),
+              },
+              {
+                icon: UserIcon,
+                label: 'Profile',
+                hint: memberLoginId?.slice(0, 6) || 'me',
+                tint: dt.purple,
+                onClick: () => go('/profile'),
+              },
+            ]}
+          />
+        </div>
 
-        {/* ───────────── TRANSPARENCY — where money goes ───────────── */}
-        <motion.section
-          initial={{ opacity: 0, y: 10 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.22 }}
-        >
-          <ExpenseTransparencyDashboard />
-        </motion.section>
-
-        {/* ───────────── ACHIEVEMENTS ───────────── */}
-        <motion.section
-          initial={{ opacity: 0, y: 10 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.26 }}
-        >
-          <AchievementSystem />
-        </motion.section>
-
-        {/* ───────────── ACTIVITY FEED ───────────── */}
+        {/* ───────────── ACTIVITY FEED ─────────────
+            Theme-aware re-skin: same data, light + dark surfaces. */}
         <motion.section
           initial={{ opacity: 0, y: 10 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.18 }}
           className="rounded-3xl overflow-hidden"
-          style={{ background: tk.panel, border: `1px solid ${tk.border}` }}
+          style={{
+            background: dt.card,
+            border: `1px solid ${dt.cardBorder}`,
+            boxShadow: theme === 'light'
+              ? '0 1px 0 rgba(255,255,255,0.7) inset, 0 6px 24px -12px rgba(15,7,3,0.08)'
+              : '0 1px 0 rgba(255,255,255,0.02) inset',
+          }}
         >
-          <header className="flex items-center justify-between px-5 sm:px-6 py-4" style={{ borderBottom: `1px solid ${tk.border}` }}>
+          <header className="flex items-center justify-between px-5 sm:px-6 py-4" style={{ borderBottom: `1px solid ${dt.cardBorder}` }}>
             <div className="flex items-center gap-2">
-              <Activity className="w-4 h-4" style={{ color: tk.primary }} />
-              <h2 className="text-sm font-bold text-white tracking-tight">Recent activity</h2>
+              <Activity className="w-4 h-4" style={{ color: dt.primary }} />
+              <h2 className="text-sm font-bold tracking-tight" style={{ color: dt.text }}>Recent activity</h2>
             </div>
             <button
               onClick={() => go('/payments')}
               className="text-xs font-semibold flex items-center gap-1 transition-colors"
-              style={{ color: tk.textSec }}
+              style={{ color: dt.textSec }}
             >
               See all
               <ChevronRight className="w-3.5 h-3.5" />
@@ -555,18 +460,18 @@ export default function StudentDashboardPage() {
           </header>
 
           {loading ? (
-            <div className="px-5 sm:px-6 py-6 flex items-center gap-3" style={{ color: tk.textTer }}>
+            <div className="px-5 sm:px-6 py-6 flex items-center gap-3" style={{ color: dt.textTer }}>
               <Loader2 className="w-4 h-4 animate-spin" />
               <span className="text-sm">Loading activity…</span>
             </div>
           ) : recentActivity.length === 0 ? (
             <div className="px-5 sm:px-6 py-10 text-center">
-              <p className="text-sm" style={{ color: tk.textSec }}>
+              <p className="text-sm" style={{ color: dt.textSec }}>
                 Nothing here yet. Your payments and notices will show up here.
               </p>
             </div>
           ) : (
-            <div className="divide-y" style={{ borderColor: tk.border } as React.CSSProperties}>
+            <div className="divide-y" style={{ borderColor: dt.cardBorder } as React.CSSProperties}>
               {recentActivity.map((p, i) => (
                 <ActivityRow
                   key={p.id || i}
@@ -576,6 +481,7 @@ export default function StudentDashboardPage() {
                   }
                   index={i}
                   privacyOn={privacyOn}
+                  theme={theme}
                   onClick={() => p.id && navigate(`/${orgSlug ?? ''}/payment/${p.id}`)}
                 />
               ))}
@@ -583,44 +489,90 @@ export default function StudentDashboardPage() {
           )}
         </motion.section>
 
-        {/* ───────────── Helper footer card ───────────── */}
+        {/* ───────────── COMING SOON: EVENT TICKETING ─────────────
+            Fintech roadmap teaser. The next big feature on the
+            platform is event ticketing for clubs/SUG events — same
+            payment rails, just a different SKU. This card creates
+            anticipation and signals momentum. Replaces the old
+            notifications-nudge footer which felt utility-store. */}
         <motion.section
-          initial={{ opacity: 0, y: 8 }}
+          initial={{ opacity: 0, y: 10 }}
           animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.25 }}
-          className="rounded-3xl p-5 sm:p-6 flex flex-col sm:flex-row gap-4 sm:items-center sm:justify-between"
+          transition={{ delay: 0.28, ease: [0.22, 1, 0.36, 1] }}
+          className="relative rounded-3xl p-5 sm:p-6 overflow-hidden"
           style={{
-            background: 'linear-gradient(135deg, rgba(255,104,3,0.08), rgba(255,255,255,0.02))',
-            border: `1px solid ${tk.border}`,
+            background: theme === 'light'
+              ? 'linear-gradient(135deg, #F5EEFE 0%, #FAF6FF 50%, #FFFFFF 100%)'
+              : 'linear-gradient(135deg, rgba(139,92,246,0.12) 0%, rgba(255,255,255,0.02) 100%)',
+            border: `1px solid ${theme === 'light' ? '#E5D9FB' : 'rgba(139,92,246,0.22)'}`,
           }}
         >
-          <div className="flex items-center gap-3">
-            <div
-              className="w-10 h-10 rounded-xl flex items-center justify-center shrink-0"
-              style={{ background: `${tk.primary}15`, border: `1px solid ${tk.primary}28` }}
-            >
-              <Bell className="w-5 h-5" style={{ color: tk.primary }} />
-            </div>
-            <div>
-              <p className="text-sm font-bold text-white">Stay on top of new dues</p>
-              <p className="text-xs mt-0.5" style={{ color: tk.textSec }}>
-                Enable push notifications so you never miss a deadline.
-              </p>
-            </div>
-          </div>
-          <motion.button
-            onClick={() => go('/settings')}
-            className="px-4 py-2 rounded-xl text-sm font-semibold text-white inline-flex items-center gap-1.5 shrink-0"
+          {/* Decorative glow blob */}
+          <div
+            className="absolute pointer-events-none rounded-full"
             style={{
-              background: 'linear-gradient(135deg, #FF6803 0%, #FFAC5F 100%)',
-              boxShadow: '0 6px 22px rgba(255,104,3,0.32)',
+              width: 220,
+              height: 220,
+              right: -60,
+              top: -60,
+              background: theme === 'light'
+                ? 'radial-gradient(circle, rgba(139,92,246,0.18) 0%, transparent 65%)'
+                : 'radial-gradient(circle, rgba(139,92,246,0.22) 0%, transparent 65%)',
+              filter: 'blur(20px)',
             }}
-            whileHover={{ scale: 1.03 }}
-            whileTap={{ scale: 0.97 }}
-          >
-            Settings
-            <Settings className="w-3.5 h-3.5" />
-          </motion.button>
+            aria-hidden
+          />
+
+          <div className="relative flex flex-col sm:flex-row gap-4 sm:items-center sm:justify-between">
+            <div className="flex items-start gap-3 min-w-0">
+              {/* Big icon chip — purple, matches the ticket category vibe */}
+              <div
+                className="w-12 h-12 rounded-2xl flex items-center justify-center shrink-0"
+                style={{
+                  background: theme === 'light' ? '#FFFFFF' : 'rgba(139,92,246,0.18)',
+                  border: `1px solid ${theme === 'light' ? '#E5D9FB' : 'rgba(139,92,246,0.32)'}`,
+                  boxShadow: theme === 'light' ? '0 8px 20px -8px rgba(139,92,246,0.32)' : 'none',
+                }}
+              >
+                <Sparkles className="w-5 h-5" style={{ color: '#8b5cf6' }} />
+              </div>
+              <div className="min-w-0">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span
+                    className="text-[10px] font-bold uppercase tracking-[0.14em] px-2 py-0.5 rounded-full"
+                    style={{
+                      background: theme === 'light' ? '#EFE3FF' : 'rgba(139,92,246,0.18)',
+                      color: '#8b5cf6',
+                    }}
+                  >
+                    Coming soon
+                  </span>
+                </div>
+                <p className="text-sm sm:text-base font-extrabold leading-tight mt-1" style={{ color: dt.text }}>
+                  Event tickets, right in your dashboard
+                </p>
+                <p className="text-xs mt-1 leading-snug" style={{ color: dt.textSec }}>
+                  Buy passes to lectures, parties & meetups — paid with the same Paystack rails you already trust.
+                </p>
+              </div>
+            </div>
+
+            {/* Subtle interest button — soft, not loud */}
+            <motion.button
+              onClick={() => go('/profile')}
+              className="self-start sm:self-center shrink-0 px-3.5 py-2 rounded-xl text-[12px] font-bold inline-flex items-center gap-1.5 transition-colors"
+              style={{
+                background: theme === 'light' ? '#FFFFFF' : 'rgba(255,255,255,0.06)',
+                color: '#8b5cf6',
+                border: `1px solid ${theme === 'light' ? '#E5D9FB' : 'rgba(139,92,246,0.28)'}`,
+              }}
+              whileHover={{ scale: 1.02 }}
+              whileTap={{ scale: 0.97 }}
+            >
+              Notify me
+              <ChevronRight className="w-3.5 h-3.5" />
+            </motion.button>
+          </div>
         </motion.section>
       </main>
     </div>
@@ -628,526 +580,68 @@ export default function StudentDashboardPage() {
 }
 
 // ════════════════════════════════════════════════════════════════════════════
-// Hero
+// ThemedPanel — thin wrapper that gives legacy sections (which still
+// render their own dark-mode UI internally) a theme-aware backdrop
+// so they're visually anchored on the light cream page. Once those
+// sections are re-skinned natively, this wrapper can go away.
 // ════════════════════════════════════════════════════════════════════════════
-function HeroCard({
-  name,
-  orgName,
-  loading,
-  isAllClear,
-  outstanding,
-  unpaidCount,
-  urgent,
-  privacyOn,
-  onTogglePrivacy,
-  onPayUrgent,
-  onSeeAllDues,
+function ThemedPanel({
+  theme,
+  delay = 0,
+  children,
 }: {
-  name: string;
-  orgName?: string;
-  loading: boolean;
-  isAllClear: boolean;
-  outstanding: number;
-  unpaidCount: number;
-  urgent: {
-    pt: PaymentType;
-    owed: number;
-    daysLeft: number | null;
-  } | null;
-  privacyOn: boolean;
-  onTogglePrivacy: () => void;
-  onPayUrgent: () => void;
-  onSeeAllDues: () => void;
+  theme: 'light' | 'dark';
+  delay?: number;
+  children: React.ReactNode;
 }) {
-  const urgentLabel = urgent?.daysLeft != null
-    ? urgent.daysLeft < 0
-      ? `${Math.abs(urgent.daysLeft)} day${Math.abs(urgent.daysLeft) === 1 ? '' : 's'} overdue`
-      : urgent.daysLeft === 0
-        ? 'Due today'
-        : urgent.daysLeft === 1
-          ? 'Due tomorrow'
-          : `Due in ${urgent.daysLeft} days`
-    : 'No deadline';
-
+  const dt = getDashboardTokens(theme);
   return (
     <motion.section
-      initial={{ opacity: 0, y: 12 }}
+      initial={{ opacity: 0, y: 10 }}
       animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.4, ease: [0.22, 1, 0.36, 1] }}
-      className="rounded-[28px] p-5 sm:p-7 relative overflow-hidden"
+      transition={{ delay }}
+      className="rounded-3xl overflow-hidden"
       style={{
-        background: 'linear-gradient(135deg, rgba(255,104,3,0.10), rgba(255,255,255,0.025))',
-        border: `1px solid ${tk.border}`,
+        background: dt.card,
+        border: `1px solid ${dt.cardBorder}`,
+        boxShadow: theme === 'light'
+          ? '0 1px 0 rgba(255,255,255,0.7) inset, 0 6px 24px -12px rgba(15,7,3,0.08)'
+          : '0 1px 0 rgba(255,255,255,0.02) inset',
       }}
     >
-      {/* Top accent line */}
-      <div
-        className="absolute top-0 inset-x-0 h-0.5"
-        style={{ background: `linear-gradient(90deg, transparent, ${tk.primary}, transparent)` }}
-      />
-      {/* Soft radial highlight */}
-      <div
-        className="absolute inset-0 pointer-events-none"
-        style={{ background: `radial-gradient(ellipse 60% 70% at 100% 0%, ${tk.primary}18, transparent 60%)` }}
-      />
-
-      <div className="relative flex flex-col sm:flex-row gap-6">
-        {/* Left: greeting + balance */}
-        <div className="flex-1 min-w-0">
-          <p className="text-[10px] uppercase tracking-[0.22em] font-semibold mb-1.5"
-            style={{ color: tk.textTer }}>
-            {orgName || 'Your organization'}
-          </p>
-          <h1 className="text-2xl sm:text-3xl font-extrabold text-white leading-tight tracking-tight">
-            {greeting()},{' '}
-            <span style={{
-              background: 'linear-gradient(135deg, #FF6803 0%, #FFAC5F 100%)',
-              WebkitBackgroundClip: 'text',
-              WebkitTextFillColor: 'transparent',
-              backgroundClip: 'text',
-            }}>
-              {name}
-            </span>
-          </h1>
-
-          <div className="mt-5 flex items-end justify-between gap-3 flex-wrap">
-            <div>
-              <p className="text-[10px] uppercase tracking-[0.22em] font-semibold mb-1"
-                style={{ color: tk.textTer }}>
-                {isAllClear ? 'Status' : 'Outstanding'}
-              </p>
-              <div className="flex items-center gap-2">
-                {loading ? (
-                  <div className="h-9 w-32 rounded-xl animate-pulse" style={{ background: 'rgba(255,255,255,0.05)' }} />
-                ) : isAllClear ? (
-                  <div className="flex items-center gap-2">
-                    <CheckCircle2 className="w-7 h-7" style={{ color: tk.mint }} />
-                    <span className="text-2xl sm:text-3xl font-extrabold text-white tracking-tight">
-                      All caught up
-                    </span>
-                  </div>
-                ) : (
-                  <span
-                    className="text-3xl sm:text-4xl font-extrabold text-white tracking-tight tabular-nums"
-                    style={privacyOn ? blurMaskStyle : undefined}
-                  >
-                    {formatCurrency(outstanding)}
-                  </span>
-                )}
-                {!isAllClear && (
-                  <button
-                    onClick={onTogglePrivacy}
-                    className="p-1.5 rounded-lg transition-colors"
-                    title={privacyOn ? 'Show amount' : 'Hide amount'}
-                    style={{ color: tk.textTer }}
-                  >
-                    {privacyOn ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                  </button>
-                )}
-              </div>
-              {!isAllClear && !loading && (
-                <p className="text-xs mt-1.5" style={{ color: tk.textSec }}>
-                  {unpaidCount} due{unpaidCount === 1 ? '' : 's'}
-                  {urgent ? ` · Next: ${urgent.pt.title}` : ''}
-                </p>
-              )}
-            </div>
-          </div>
-        </div>
-
-        {/* Right: urgent CTA card */}
-        {urgent && !loading && (
-          <motion.div
-            initial={{ opacity: 0, x: 16 }}
-            animate={{ opacity: 1, x: 0 }}
-            transition={{ delay: 0.15 }}
-            className="rounded-2xl p-4 sm:w-72 shrink-0 flex flex-col gap-3"
-            style={{
-              background: 'rgba(15,7,3,0.55)',
-              border: `1px solid ${tk.border}`,
-              backdropFilter: 'blur(8px)',
-            }}
-          >
-            <div className="flex items-center gap-2">
-              <Zap className="w-3.5 h-3.5" style={{
-                color: (urgent.daysLeft ?? 999) <= 1 ? tk.danger : tk.amber,
-              }} />
-              <span className="text-[10px] uppercase tracking-[0.18em] font-bold"
-                style={{ color: (urgent.daysLeft ?? 999) <= 1 ? tk.danger : tk.amber }}>
-                {urgentLabel}
-              </span>
-            </div>
-            <div>
-              <p className="text-sm font-bold text-white truncate">{urgent.pt.title}</p>
-              <div className="flex items-center gap-1.5 mt-1 text-[11px]" style={{ color: tk.textTer }}>
-                <Calendar className="w-3 h-3" />
-                {urgent.pt.deadline ? formatDate(urgent.pt.deadline, 'short') : 'No deadline'}
-              </div>
-            </div>
-            <div className="flex items-center justify-between mt-1">
-              <span
-                className="text-lg font-extrabold text-white tabular-nums"
-                style={privacyOn ? blurMaskStyle : undefined}
-              >
-                {formatCurrency(urgent.owed)}
-              </span>
-              <motion.button
-                onClick={onPayUrgent}
-                className="px-3.5 py-2 rounded-xl text-xs font-bold text-white inline-flex items-center gap-1.5"
-                style={{
-                  background: 'linear-gradient(135deg, #FF6803 0%, #FFAC5F 100%)',
-                  boxShadow: '0 6px 22px rgba(255,104,3,0.40)',
-                }}
-                whileHover={{ scale: 1.05 }}
-                whileTap={{ scale: 0.95 }}
-              >
-                Pay now
-                <ArrowRight className="w-3.5 h-3.5" />
-              </motion.button>
-            </div>
-          </motion.div>
-        )}
-
-        {/* If all clear, show a celebratory call-to-action */}
-        {isAllClear && !loading && (
-          <motion.button
-            onClick={onSeeAllDues}
-            initial={{ opacity: 0, x: 16 }}
-            animate={{ opacity: 1, x: 0 }}
-            transition={{ delay: 0.15 }}
-            className="rounded-2xl p-4 sm:w-64 shrink-0 flex flex-col gap-2 text-left"
-            style={{
-              background: 'rgba(48,255,172,0.06)',
-              border: '1px solid rgba(48,255,172,0.20)',
-            }}
-            whileHover={{ scale: 1.02 }}
-          >
-            <div className="flex items-center gap-2">
-              <Sparkles className="w-4 h-4" style={{ color: tk.mint }} />
-              <span className="text-[10px] uppercase tracking-[0.18em] font-bold" style={{ color: tk.mint }}>
-                Nothing pending
-              </span>
-            </div>
-            <p className="text-sm" style={{ color: 'rgba(214,255,237,0.92)' }}>
-              You're up to date with all dues. Review your history any time.
-            </p>
-            <span className="text-xs font-semibold inline-flex items-center gap-1 mt-1" style={{ color: tk.mint }}>
-              View receipts
-              <ArrowRight className="w-3 h-3" />
-            </span>
-          </motion.button>
-        )}
-      </div>
+      {children}
     </motion.section>
   );
 }
 
-// ════════════════════════════════════════════════════════════════════════════
-// Bento Tile
-// ════════════════════════════════════════════════════════════════════════════
-function BentoTile({
-  icon,
-  accent,
-  title,
-  metric,
-  metricLabel,
-  subtitle,
-  onClick,
-  comingSoon,
-  privacy,
-  children,
-}: {
-  icon: React.ReactNode;
-  accent: string;
-  title: string;
-  metric: string;
-  metricLabel: string;
-  subtitle?: string;
-  onClick?: () => void;
-  comingSoon?: boolean;
-  privacy?: 'none' | 'metric' | 'subtitle';
-  children?: React.ReactNode;
-}) {
-  const Wrapper: React.ElementType = onClick && !comingSoon ? motion.button : motion.div;
-  return (
-    <Wrapper
-      onClick={onClick && !comingSoon ? onClick : undefined}
-      initial={{ opacity: 0, y: 14 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.32, ease: [0.22, 1, 0.36, 1] }}
-      whileHover={onClick && !comingSoon ? { y: -3 } : undefined}
-      whileTap={onClick && !comingSoon ? { scale: 0.985 } : undefined}
-      className={`text-left rounded-2xl p-4 sm:p-5 relative overflow-hidden transition-all ${comingSoon ? 'cursor-default' : onClick ? 'cursor-pointer' : ''}`}
-      style={{
-        background: tk.panel,
-        border: `1px solid ${tk.border}`,
-      }}
-    >
-      {/* Soft accent halo */}
-      <div
-        className="absolute inset-0 pointer-events-none opacity-50"
-        style={{ background: `radial-gradient(ellipse 60% 80% at 100% 100%, ${accent}10, transparent 70%)` }}
-      />
-
-      <div className="relative">
-        <div className="flex items-center justify-between">
-          <div
-            className="w-10 h-10 rounded-xl flex items-center justify-center"
-            style={{
-              background: `${accent}18`,
-              color: accent,
-              border: `1px solid ${accent}28`,
-            }}
-          >
-            {icon}
-          </div>
-          {comingSoon && (
-            <span
-              className="text-[9px] font-bold uppercase tracking-widest px-2 py-1 rounded-full"
-              style={{
-                background: `${tk.purple}14`,
-                color: tk.purple,
-                border: `1px solid ${tk.purple}28`,
-              }}
-            >
-              Coming soon
-            </span>
-          )}
-        </div>
-
-        <p className="mt-4 text-[10px] uppercase tracking-[0.18em] font-semibold"
-          style={{ color: tk.textTer }}>
-          {title}
-        </p>
-
-        <div className="mt-1 flex items-baseline gap-1.5">
-          <span
-            className="text-xl sm:text-2xl font-extrabold text-white tracking-tight tabular-nums truncate"
-            style={privacy === 'metric' ? blurMaskStyle : undefined}
-          >
-            {metric}
-          </span>
-          <span className="text-[10px]" style={{ color: tk.textTer }}>{metricLabel}</span>
-        </div>
-
-        {subtitle && (
-          <p
-            className="mt-1.5 text-[11px] leading-4 line-clamp-2"
-            style={{ color: tk.textSec, ...(privacy === 'subtitle' ? blurMaskStyle : {}) }}
-          >
-            {subtitle}
-          </p>
-        )}
-
-        {children}
-      </div>
-    </Wrapper>
-  );
-}
 
 // ════════════════════════════════════════════════════════════════════════════
-// New due card — horizontal scroll item for "New this week" strip
-// ════════════════════════════════════════════════════════════════════════════
-type EnrichedDue = {
-  pt: PaymentType;
-  status: 'paid' | 'partial' | 'pending' | 'unpaid';
-  approvedSum: number;
-  owed: number;
-  daysLeft: number | null;
-};
-
-function NewDueCard({
-  enriched, index, privacyOn, onClick,
-}: {
-  enriched: EnrichedDue;
-  index: number;
-  privacyOn: boolean;
-  onClick: () => void;
-}) {
-  const accent = enriched.pt.color || tk.primary;
-  return (
-    <motion.button
-      onClick={onClick}
-      initial={{ opacity: 0, x: 12 }}
-      animate={{ opacity: 1, x: 0 }}
-      transition={{ delay: 0.05 * index, duration: 0.28 }}
-      whileHover={{ y: -3 }}
-      whileTap={{ scale: 0.98 }}
-      className="text-left rounded-2xl p-4 relative overflow-hidden snap-start shrink-0 w-[260px]"
-      style={{
-        background: `linear-gradient(135deg, ${accent}10, rgba(255,255,255,0.025))`,
-        border: `1px solid ${accent}30`,
-      }}
-    >
-      <div className="flex items-start justify-between mb-3">
-        <div
-          className="w-11 h-11 rounded-xl flex items-center justify-center text-xl"
-          style={{ background: `${accent}18`, border: `1px solid ${accent}30` }}
-        >
-          {enriched.pt.icon || '🎓'}
-        </div>
-        <span
-          className="text-[9px] font-bold uppercase tracking-widest px-2 py-1 rounded-full"
-          style={{ background: `${tk.mint}14`, color: tk.mint, border: `1px solid ${tk.mint}30` }}
-        >
-          NEW
-        </span>
-      </div>
-      <p className="text-sm font-bold text-white truncate">{enriched.pt.title}</p>
-      <p className="text-[11px] mt-0.5 truncate" style={{ color: tk.textTer }}>
-        {enriched.pt.deadline ? `Due ${formatDate(enriched.pt.deadline, 'short')}` : 'No deadline'}
-      </p>
-      <div className="mt-3 flex items-center justify-between">
-        <span
-          className="text-base font-extrabold text-white tabular-nums"
-          style={privacyOn ? blurMaskStyle : undefined}
-        >
-          {formatCurrency(Number(enriched.pt.amount || 0))}
-        </span>
-        <span
-          className="text-[10px] font-bold px-2 py-0.5 rounded-full"
-          style={{
-            background: enriched.pt.is_mandatory ? 'rgba(239,68,68,0.12)' : `${tk.mint}14`,
-            color: enriched.pt.is_mandatory ? tk.danger : tk.mint,
-            border: `1px solid ${enriched.pt.is_mandatory ? 'rgba(239,68,68,0.28)' : `${tk.mint}30`}`,
-          }}
-        >
-          {enriched.pt.is_mandatory ? 'MANDATORY' : 'OPTIONAL'}
-        </span>
-      </div>
-    </motion.button>
-  );
-}
-
-// ════════════════════════════════════════════════════════════════════════════
-// Due row — detailed list item in "Your dues" panel
-// ════════════════════════════════════════════════════════════════════════════
-function DueRow({
-  enriched, index, privacyOn, onClick,
-}: {
-  enriched: EnrichedDue;
-  index: number;
-  privacyOn: boolean;
-  onClick: () => void;
-}) {
-  const accent = enriched.pt.color || tk.primary;
-  const amount = Number(enriched.pt.amount || 0);
-  const progress = amount > 0 ? Math.min(100, (enriched.approvedSum / amount) * 100) : 0;
-
-  const statusMeta: Record<EnrichedDue['status'], { color: string; label: string }> = {
-    paid:    { color: tk.mint,    label: 'Paid' },
-    partial: { color: tk.amber,   label: `${Math.round(progress)}% paid` },
-    pending: { color: tk.blue,    label: 'Pending review' },
-    unpaid:  { color: tk.danger,  label: enriched.daysLeft != null && enriched.daysLeft < 0
-                                          ? `${Math.abs(enriched.daysLeft)} days overdue`
-                                          : 'Unpaid' },
-  };
-  const meta = statusMeta[enriched.status];
-
-  return (
-    <motion.button
-      onClick={onClick}
-      initial={{ opacity: 0, x: -6 }}
-      animate={{ opacity: 1, x: 0 }}
-      transition={{ delay: 0.03 * index, duration: 0.22 }}
-      whileHover={{ background: tk.panelHov }}
-      className="w-full flex items-center gap-4 px-5 sm:px-6 py-4 text-left transition-colors"
-    >
-      <div
-        className="w-10 h-10 rounded-xl flex items-center justify-center text-lg shrink-0"
-        style={{ background: `${accent}15`, border: `1px solid ${accent}28` }}
-      >
-        {enriched.pt.icon || '🎓'}
-      </div>
-
-      <div className="flex-1 min-w-0">
-        <div className="flex items-center gap-2 mb-1">
-          <p className="text-sm font-semibold text-white truncate">{enriched.pt.title}</p>
-          {enriched.pt.is_mandatory && (
-            <span
-              className="text-[9px] font-bold px-1.5 py-0.5 rounded-full shrink-0"
-              style={{ background: 'rgba(239,68,68,0.10)', color: tk.danger }}
-            >
-              MANDATORY
-            </span>
-          )}
-        </div>
-        <div className="flex items-center gap-2 text-[11px]" style={{ color: tk.textTer }}>
-          <span style={{ color: meta.color, fontWeight: 600 }}>{meta.label}</span>
-          {enriched.pt.deadline && (
-            <>
-              <span>·</span>
-              <Calendar className="w-3 h-3" />
-              <span>{formatDate(enriched.pt.deadline, 'short')}</span>
-            </>
-          )}
-        </div>
-        {/* Progress bar */}
-        <div
-          className="mt-2 h-1 rounded-full overflow-hidden"
-          style={{ background: 'rgba(255,255,255,0.06)' }}
-        >
-          <motion.div
-            className="h-full rounded-full"
-            style={{
-              background: enriched.status === 'paid'
-                ? `linear-gradient(90deg, ${tk.mint}, ${tk.mint})`
-                : enriched.status === 'partial'
-                  ? `linear-gradient(90deg, ${tk.amber}, ${tk.primary})`
-                  : enriched.status === 'pending'
-                    ? `linear-gradient(90deg, ${tk.blue}, ${tk.mint})`
-                    : `linear-gradient(90deg, ${tk.danger}, ${tk.amber})`,
-            }}
-            initial={{ width: 0 }}
-            animate={{ width: `${Math.max(progress, enriched.status === 'unpaid' ? 6 : 0)}%` }}
-            transition={{ duration: 0.6, delay: 0.05 * index, ease: 'easeOut' }}
-          />
-        </div>
-      </div>
-
-      <div className="text-right shrink-0">
-        <p
-          className="text-sm font-bold text-white tabular-nums"
-          style={privacyOn ? blurMaskStyle : undefined}
-        >
-          {formatCurrency(amount)}
-        </p>
-        {enriched.status === 'partial' && (
-          <p
-            className="text-[10px]"
-            style={{ color: tk.textTer, ...(privacyOn ? blurMaskStyle : {}) }}
-          >
-            {formatCurrency(enriched.owed)} left
-          </p>
-        )}
-      </div>
-      <ChevronRight className="w-4 h-4 ml-1 shrink-0" style={{ color: tk.textQuat }} />
-    </motion.button>
-  );
-}
-
-// ════════════════════════════════════════════════════════════════════════════
-// Activity row
+// Activity row — theme-aware (light + dark) status row in the
+// "Recent activity" panel. Same data shape as before; just renders
+// correctly on the cream page in light mode.
 // ════════════════════════════════════════════════════════════════════════════
 function ActivityRow({
   payment,
   payment_type_name,
   index,
   privacyOn,
+  theme,
   onClick,
 }: {
   payment: Payment;
   payment_type_name: string;
   index: number;
   privacyOn: boolean;
+  theme: 'light' | 'dark';
   onClick?: () => void;
 }) {
+  const t = getDashboardTokens(theme);
   const statusMeta: Record<string, { color: string; label: string; icon: React.ElementType }> = {
-    approved: { color: tk.mint,   label: 'Paid',     icon: CheckCircle2 },
-    pending:  { color: tk.amber,  label: 'Pending',  icon: Loader2 },
-    rejected: { color: tk.danger, label: 'Rejected', icon: AlertCircle },
+    approved: { color: t.mint,   label: 'Paid',     icon: CheckCircle2 },
+    pending:  { color: t.amber,  label: 'Pending',  icon: Loader2 },
+    rejected: { color: t.danger, label: 'Rejected', icon: AlertCircle },
   };
-  const meta = statusMeta[payment.status as string] ?? { color: tk.textTer, label: payment.status as string, icon: BookOpen };
+  const meta = statusMeta[payment.status as string] ?? { color: t.textTer, label: payment.status as string, icon: BookOpen };
   const Icon = meta.icon;
 
   return (
@@ -1156,8 +650,7 @@ function ActivityRow({
       initial={{ opacity: 0, x: -6 }}
       animate={{ opacity: 1, x: 0 }}
       transition={{ delay: 0.04 * index, duration: 0.22 }}
-      whileHover={{ background: tk.panelHov }}
-      className="w-full flex items-center gap-3 px-5 sm:px-6 py-3.5 text-left transition-colors"
+      className="w-full flex items-center gap-3 px-5 sm:px-6 py-3.5 text-left transition-colors hover:bg-black/[0.02] dark:hover:bg-white/[0.02]"
     >
       <div
         className="w-9 h-9 rounded-xl flex items-center justify-center shrink-0"
@@ -1170,21 +663,24 @@ function ActivityRow({
         <Icon className={`w-4 h-4 ${payment.status === 'pending' ? 'animate-spin' : ''}`} />
       </div>
       <div className="flex-1 min-w-0">
-        <p className="text-sm font-semibold text-white truncate">{payment_type_name}</p>
-        <p className="text-[11px] mt-0.5" style={{ color: tk.textTer }}>
+        <p className="text-sm font-semibold truncate" style={{ color: t.text }}>{payment_type_name}</p>
+        <p className="text-[11px] mt-0.5" style={{ color: t.textTer }}>
           {meta.label}
           {payment.created_at ? ` · ${formatDate(payment.created_at, 'short')}` : ''}
         </p>
       </div>
       <div className="text-right shrink-0">
         <p
-          className="text-sm font-bold text-white tabular-nums"
-          style={privacyOn ? blurMaskStyle : undefined}
+          className="text-sm font-bold tabular-nums"
+          style={{
+            color: t.text,
+            filter: privacyOn ? 'blur(6px)' : 'none',
+          }}
         >
           {formatCurrency(Number(payment.amount || 0))}
         </p>
       </div>
-      <ChevronRight className="w-4 h-4 ml-1 shrink-0" style={{ color: tk.textQuat }} />
+      <ChevronRight className="w-4 h-4 ml-1 shrink-0" style={{ color: t.textTer }} />
     </motion.button>
   );
 }

@@ -1,6 +1,14 @@
 /**
  * VoteUrgencyBanner — compact banner that surfaces pending claim votes.
- * Appears only when the user has at least one open claim to vote on.
+ *
+ * Appears only when the current member has at least one open claim
+ * to vote on. Now theme-aware (light + dark) and ships with a thin
+ * progress bar so the vote-progress is visible at a glance, not just
+ * spelled out in the subtitle.
+ *
+ * This is the SINGLE source of truth for "you have votes to cast" on
+ * the dashboard — the bigger VoteInbox card was removed to avoid
+ * the duplicate-banner problem.
  */
 
 import { useEffect, useState } from 'react';
@@ -9,14 +17,7 @@ import { motion } from 'framer-motion';
 import { ArrowRight, Vote as VoteIcon } from 'lucide-react';
 import { organizationService } from '@/services/organizationService';
 import { useMultiTenantAuth } from '@/hooks/useMultiTenantAuth';
-
-const tk = {
-  primary: '#FF6803',
-  mint: '#30FFAC',
-  border: 'rgba(255,255,255,0.10)',
-  text: '#FFFFFF',
-  textSec: 'rgba(255,255,255,0.65)',
-};
+import { useTheme, getDashboardTokens } from '@/hooks/useTheme';
 
 interface Claim {
   id: string;
@@ -30,6 +31,8 @@ export default function VoteUrgencyBanner({ orgSlug: orgSlugProp }: { orgSlug?: 
   const { user } = useMultiTenantAuth();
   const { orgSlug: orgSlugParam } = useParams<{ orgSlug: string }>();
   const navigate = useNavigate();
+  const { theme } = useTheme();
+  const dt = getDashboardTokens(theme);
 
   const orgSlug = orgSlugProp || orgSlugParam;
   const memberId = user?.id;
@@ -74,27 +77,46 @@ export default function VoteUrgencyBanner({ orgSlug: orgSlugProp }: { orgSlug?: 
     <motion.section
       initial={{ opacity: 0, y: -8 }}
       animate={{ opacity: 1, y: 0 }}
-      className="rounded-2xl px-4 py-3 flex items-center gap-3"
+      className="rounded-2xl px-4 py-4 flex items-start gap-3"
       style={{
-        background: `linear-gradient(135deg, ${tk.primary}18 0%, rgba(255,255,255,0.02) 100%)`,
-        border: `1px solid ${tk.primary}30`,
+        background: `linear-gradient(135deg, ${dt.primarySoft} 0%, ${theme === 'light' ? 'rgba(255,255,255,0.95)' : 'rgba(255,255,255,0.02)'} 100%)`,
+        border: `1px solid ${dt.cardBorder}`,
+        boxShadow: theme === 'light'
+          ? '0 10px 30px rgba(15, 7, 3, 0.06)'
+          : '0 10px 30px rgba(0, 0, 0, 0.18)',
       }}
     >
       <div
         className="w-9 h-9 rounded-xl flex items-center justify-center shrink-0"
-        style={{ background: `${tk.primary}22`, color: tk.primary }}
+        style={{ background: dt.primarySoft, color: dt.primary }}
       >
         <VoteIcon className="w-4 h-4" />
       </div>
 
-      <div className="flex-1 min-w-0">
-        <p className="text-sm font-semibold text-white truncate">
+      <div className="flex-1 min-w-0 space-y-2">
+        <p className="text-sm font-semibold truncate" style={{ color: dt.text }}>
           {top.full_name} claimed to be {top.position_title}
         </p>
-        <p className="text-[11px]" style={{ color: tk.textSec }}>
+        <p className="text-[11px]" style={{ color: dt.textSec }}>
           {top.votes_received} of {top.votes_required} confirmations • {pct}% complete
           {extra > 0 ? ` • +${extra} more` : ''}
         </p>
+
+        <div className="w-full">
+          <div
+            className="h-2 rounded-full overflow-hidden"
+            style={{ background: theme === 'light' ? 'rgba(15, 7, 3, 0.08)' : 'rgba(255, 255, 255, 0.08)' }}
+            aria-hidden="true"
+          >
+            <div
+              className="h-full rounded-full transition-all duration-500"
+              style={{
+                width: `${Math.max(6, pct)}%`,
+                background: `linear-gradient(90deg, ${dt.primary} 0%, ${dt.mint} 100%)`,
+              }}
+            />
+          </div>
+        </div>
       </div>
 
       <motion.button
@@ -102,9 +124,9 @@ export default function VoteUrgencyBanner({ orgSlug: orgSlugProp }: { orgSlug?: 
         onClick={handleReview}
         className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold"
         style={{
-          background: `linear-gradient(135deg, ${tk.mint}22 0%, ${tk.mint}10 100%)`,
-          color: tk.mint,
-          border: `1px solid ${tk.mint}40`,
+          background: `linear-gradient(135deg, ${dt.mint}22 0%, ${dt.mint}10 100%)`,
+          color: dt.mint,
+          border: `1px solid ${dt.mint}40`,
         }}
         whileHover={{ scale: 1.02 }}
         whileTap={{ scale: 0.98 }}
