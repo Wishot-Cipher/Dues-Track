@@ -166,14 +166,18 @@ export default function PaymentVerifyPage() {
     return () => window.clearTimeout(id);
   }, [uiState, verifyOnce]);
 
-  // ── Auto-redirect to the payment detail page after approval ──
+  // ── Auto-redirect to the receipt after approval ──
+  // We send the user to the dedicated ReceiptPage (not back to the
+  // payment detail) so they end the flow on a polished, share-able
+  // receipt screen — the classic fintech "Payment Successful → here
+  // is your receipt" handoff.
   useEffect(() => {
     if (uiState !== 'approved') return;
     const pid = result?.payment?.id;
     if (!pid) return;
     const id = window.setTimeout(() => {
-      navigate(`/${orgSlug}/payment/${pid}`);
-    }, 4200);
+      navigate(`/${orgSlug}/receipt/${pid}`);
+    }, 3200);
     return () => window.clearTimeout(id);
   }, [uiState, result, navigate, orgSlug]);
 
@@ -292,7 +296,7 @@ export default function PaymentVerifyPage() {
           <div className="mt-7 flex flex-col sm:flex-row items-center justify-center gap-3">
             {uiState === 'approved' && result?.payment?.id && (
               <motion.button
-                onClick={() => navigate(`/${orgSlug}/payment/${result.payment!.id}`)}
+                onClick={() => navigate(`/${orgSlug}/receipt/${result.payment!.id}`)}
                 className="px-5 py-3 rounded-2xl text-white font-bold text-sm flex items-center gap-2"
                 style={{
                   background: 'linear-gradient(135deg, #30FFAC 0%, #00D88B 100%)',

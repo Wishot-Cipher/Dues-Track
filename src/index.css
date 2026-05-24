@@ -1,14 +1,32 @@
 @import "tailwindcss";
 
+/*
+ * Theme-driven base background. The Payvexo `useTheme` hook writes
+ * `data-theme="light"` or `data-theme="dark"` on <html>. Before this
+ * fix, html/body/#root were hard-coded #0F0703 which meant "light
+ * mode" only ever changed the inner card colors — the page chrome
+ * around it stayed ember-dark, making the toggle look broken.
+ */
+:root {
+  --pvx-bg: #0F0703;          /* default ember (matches dark theme) */
+}
+html[data-theme="light"] {
+  --pvx-bg: #FFFBF7;          /* warm cream */
+}
+html[data-theme="dark"] {
+  --pvx-bg: #0F0703;
+}
+
 /* Base styles for full-screen app */
 html, body, #root {
   min-height: 100vh;
-  min-height: 100dvh; /* Dynamic viewport height for mobile */
+  min-height: 100dvh;
   width: 100%;
   margin: 0;
   padding: 0;
   overflow-x: hidden;
-  background-color: #0F0703;
+  background-color: var(--pvx-bg);
+  transition: background-color 0.2s ease;
 }
 
 html {
@@ -23,7 +41,16 @@ body {
   min-height: 100vh;
   min-height: 100dvh;
   overflow-x: hidden;
-  background-color: #0F0703;
+  background-color: var(--pvx-bg);
+}
+
+/* Light-mode chrome readability fixes for components that still use
+ * `text-white` directly (mostly OrgLayout). Scoped to the top header
+ * and the bottom nav so we don't accidentally flip text on cards that
+ * intentionally use a dark / colored background in light mode. */
+html[data-theme="light"] header.sticky .text-white,
+html[data-theme="light"] nav.fixed .text-white {
+  color: #0F0703 !important;
 }
 
 #root {

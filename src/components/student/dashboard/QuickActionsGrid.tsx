@@ -1,16 +1,23 @@
 /**
- * QuickActionsGrid — the 2×2 colored-tile grid right under the hero.
+ * QuickActionsGrid — the 4-tile quick-tools row under "Due Next".
  *
- * Visual recipe (matches the Payvexo mockup):
- *   • 4 tiles in a 2×2 grid on mobile (and 4×1 on desktop)
- *   • Each tile is its own brand-tinted card with a soft inner glow
- *   • Icon in a circular pill, tile title, tiny subtitle/metric
- *   • Subtle press feedback + hover lift
- *   • Theme-aware: light tiles in light mode, glassy tiles in dark
+ * Mature redesign (less "neon AI", more "premium fintech"):
+ *   • Tile background: near-neutral surface (white in light, glass in
+ *     dark) instead of a tinted gradient. Tints now live ONLY on the
+ *     icon chip — so the page reads calm and the icon is the accent.
+ *   • Icon chip: rounded square with the brand tint at a SOFT
+ *     opacity, paired with a tiny shadow halo in the same tint —
+ *     looks dimensional, not flat.
+ *   • Subtle border + crisp 1px inset highlight in light mode for
+ *     paper-like depth (matches Wise / Revolut card aesthetic).
+ *   • A small triangular "corner glint" SVG in the upper-right of
+ *     each tile — the kind of hand-placed detail real product cards
+ *     have. Off most of the time, only visible on hover.
  *
- * Why this specific layout: it's the fastest-tappable surface in the
- * app. The four actions cover the 80% case — Pay, History, Help,
- * Profile — and the tile sizing is sized for one-thumb reach.
+ * Theme-aware via getDashboardTokens.
+ *
+ * Reusable beyond the dashboard — any 2×2 or 4×1 quick-action row
+ * can drop this in.
  */
 
 import { motion } from 'framer-motion';
@@ -25,7 +32,7 @@ export interface QuickActionTile {
   label: string;
   /** Tiny secondary line — a count, status, etc. Optional. */
   hint?: string;
-  /** Tint color — drives the gradient + icon color. Use a brand token. */
+  /** Tint colour — drives the icon chip + corner glint. */
   tint: string;
   /** Click handler */
   onClick?: () => void;
@@ -37,8 +44,6 @@ export interface QuickActionsGridProps {
 }
 
 export default function QuickActionsGrid({ theme, tiles }: QuickActionsGridProps) {
-  const t = getDashboardTokens(theme);
-
   return (
     <div className="grid grid-cols-4 gap-2.5 sm:gap-3">
       {tiles.map((tile, i) => (
@@ -46,7 +51,6 @@ export default function QuickActionsGrid({ theme, tiles }: QuickActionsGridProps
           key={tile.label}
           tile={tile}
           theme={theme}
-          tokens={t}
           index={i}
         />
       ))}
@@ -55,20 +59,10 @@ export default function QuickActionsGrid({ theme, tiles }: QuickActionsGridProps
 }
 
 function QuickActionTileEl({
-  tile,
-  theme,
-  tokens,
-  index,
-}: {
-  tile: QuickActionTile;
-  theme: ResolvedTheme;
-  tokens: ReturnType<typeof getDashboardTokens>;
-  index: number;
-}) {
+  tile, theme, index,
+}: { tile: QuickActionTile; theme: ResolvedTheme; index: number }) {
   const Icon = tile.icon;
-
-  // Light-mode tile: soft tinted background + crisp icon chip.
-  // Dark-mode tile: glassy panel with the tinted icon chip.
+  const t = getDashboardTokens(theme);
   const isLight = theme === 'light';
 
   return (
@@ -78,38 +72,60 @@ function QuickActionTileEl({
       initial={{ opacity: 0, y: 10 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.4, delay: 0.05 + index * 0.05, ease: [0.22, 1, 0.36, 1] }}
-      whileHover={{ y: -2 }}
-      whileTap={{ scale: 0.96 }}
-      className="relative rounded-2xl p-2.5 sm:p-3 text-left overflow-hidden group"
+      whileHover={{ y: -1 }}
+      whileTap={{ scale: 0.97 }}
+      className="relative rounded-2xl p-3 sm:p-3.5 text-left overflow-hidden group"
       style={{
-        background: isLight
-          ? `linear-gradient(160deg, ${hexAlpha(tile.tint, 0.12)} 0%, ${hexAlpha(tile.tint, 0.04)} 100%)`
-          : `linear-gradient(160deg, ${hexAlpha(tile.tint, 0.16)} 0%, rgba(255,255,255,0.02) 100%)`,
-        border: `1px solid ${isLight ? hexAlpha(tile.tint, 0.18) : hexAlpha(tile.tint, 0.22)}`,
+        // Neutral surface in both themes — colour now belongs to the icon.
+        background: isLight ? '#FFFFFF' : 'rgba(255,255,255,0.035)',
+        border: `1px solid ${isLight ? 'rgba(15, 7, 3, 0.06)' : 'rgba(255,255,255,0.08)'}`,
         boxShadow: isLight
-          ? `0 1px 0 rgba(255,255,255,0.6) inset, 0 6px 20px -8px ${hexAlpha(tile.tint, 0.20)}`
-          : `0 1px 0 rgba(255,255,255,0.04) inset`,
+          ? '0 1px 0 rgba(255,255,255,0.85) inset, 0 6px 16px -10px rgba(15, 7, 3, 0.08)'
+          : '0 1px 0 rgba(255,255,255,0.03) inset',
       }}
       aria-label={tile.label + (tile.hint ? ' — ' + tile.hint : '')}
     >
-      {/* Icon chip */}
+      {/* Corner glint — subtle triangular accent upper-right. Stays at
+          very low opacity, brightens slightly on hover. The hand-placed
+          detail that separates "designed" tiles from generic ones. */}
+      <svg
+        className="absolute top-0 right-0 pointer-events-none transition-opacity duration-300 group-hover:opacity-80"
+        style={{ opacity: 0.35 }}
+        width={28} height={28} viewBox="0 0 28 28" fill="none"
+        aria-hidden
+      >
+        <path
+          d="M28 0 L28 28 L0 0 Z"
+          fill={tile.tint}
+          opacity={isLight ? 0.08 : 0.10}
+        />
+        <path
+          d="M28 0 L28 12 L16 0 Z"
+          fill={tile.tint}
+          opacity={isLight ? 0.14 : 0.16}
+        />
+      </svg>
+
+      {/* Icon chip — the only saturated element on the tile */}
       <div
-        className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl flex items-center justify-center mb-2"
+        className="relative w-9 h-9 sm:w-10 sm:h-10 rounded-xl flex items-center justify-center mb-2.5"
         style={{
-          background: isLight ? '#FFFFFF' : hexAlpha(tile.tint, 0.18),
+          background: isLight ? hexAlpha(tile.tint, 0.10) : hexAlpha(tile.tint, 0.18),
+          border: `1px solid ${hexAlpha(tile.tint, isLight ? 0.18 : 0.26)}`,
+          // Soft shadow halo in the tint colour — looks like the icon
+          // is sitting on a thin glow plate.
           boxShadow: isLight
-            ? `0 4px 14px -4px ${hexAlpha(tile.tint, 0.36)}`
+            ? `0 6px 14px -8px ${hexAlpha(tile.tint, 0.36)}`
             : 'none',
-          border: isLight ? `1px solid ${hexAlpha(tile.tint, 0.16)}` : `1px solid ${hexAlpha(tile.tint, 0.28)}`,
         }}
       >
-        <Icon size={18} color={tile.tint} />
+        <Icon size={17} color={tile.tint} strokeWidth={2.2} />
       </div>
 
       {/* Label */}
       <p
-        className="text-[12px] sm:text-[13px] font-bold leading-tight"
-        style={{ color: tokens.text }}
+        className="text-[12px] sm:text-[13px] font-bold leading-tight tracking-tight"
+        style={{ color: t.text }}
       >
         {tile.label}
       </p>
@@ -117,8 +133,8 @@ function QuickActionTileEl({
       {/* Hint */}
       {tile.hint && (
         <p
-          className="text-[10px] sm:text-[11px] font-medium leading-tight mt-0.5 truncate"
-          style={{ color: tokens.textSec }}
+          className="text-[10px] sm:text-[11px] font-semibold leading-tight mt-0.5 truncate"
+          style={{ color: t.textTer }}
         >
           {tile.hint}
         </p>
@@ -127,9 +143,7 @@ function QuickActionTileEl({
   );
 }
 
-// Tiny helper: hex (#RRGGBB) + alpha → rgba string. Used for soft
-// tints in both light and dark modes. If you pass a non-hex, returns
-// the input unchanged so brand tokens with rgba already work.
+// Tiny helper: hex (#RRGGBB) + alpha → rgba. Passes non-hex through.
 function hexAlpha(hex: string, alpha: number): string {
   if (!hex.startsWith('#') || hex.length !== 7) return hex;
   const r = parseInt(hex.slice(1, 3), 16);

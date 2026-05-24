@@ -73,6 +73,7 @@ export default function ConsoleEmailCodeLogin({
   const [requestToken, setRequestToken] = useState<string | null>(null);
   const [expiresAt, setExpiresAt] = useState<string | null>(null);
   const [requestSent, setRequestSent] = useState(false);
+  const [requestDebug, setRequestDebug] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -112,6 +113,7 @@ export default function ConsoleEmailCodeLogin({
     setRequestToken(res.request_token ?? null);
     setExpiresAt(res.expires_at ?? null);
     setRequestSent(Boolean(res.sent));
+    setRequestDebug(res.debug ?? null);
     setStep('code');
     // Focus first cell after the transition
     setTimeout(() => cellRefs.current[0]?.focus(), 320);
@@ -363,14 +365,28 @@ export default function ConsoleEmailCodeLogin({
                 {requestSent ? (
                   <p className="text-[11px] text-center" style={{ color: tk.textTer }}>
                     {typeof secondsLeft === 'number' && secondsLeft > 0
-                      ? `Code expires in ${Math.floor(secondsLeft / 60)}:${String(secondsLeft % 60).padStart(2, '0')}`
+                      ? `Code sent. Check your inbox & spam folder. Expires in ${Math.floor(secondsLeft / 60)}:${String(secondsLeft % 60).padStart(2, '0')}.`
                       : 'Code expired. Send a new one.'}
                   </p>
                 ) : (
-                  <p className="text-[11px] text-center" style={{ color: tk.textTer }}>
-                    If this email is a registered admin and a code was already sent recently,
-                    we used the existing one to avoid spamming you.
-                  </p>
+                  <div className="text-[11px] text-center space-y-2" style={{ color: tk.textTer }}>
+                    <p>
+                      If this email is a registered admin and a code was already sent recently,
+                      we used the existing one to avoid spamming you. Check your inbox &amp; spam.
+                    </p>
+                    {requestDebug && (
+                      <p
+                        className="rounded-lg px-3 py-2 inline-block max-w-[420px] text-left"
+                        style={{
+                          background: 'rgba(255,172,95,0.08)',
+                          border: '1px solid rgba(255,172,95,0.22)',
+                          color: tk.primaryHi,
+                        }}
+                      >
+                        <strong>Dev hint:</strong> {requestDebug}
+                      </p>
+                    )}
+                  </div>
                 )}
 
                 <AnimatePresence>

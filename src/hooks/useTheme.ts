@@ -53,6 +53,25 @@ function paintHtml(theme: ResolvedTheme) {
   } catch { /* noop */ }
 }
 
+// Custom in-tab event so every component that calls useTheme()
+// re-renders when ANY component updates the theme.
+//
+// Why this exists: useTheme is a plain hook (not a Context), so each
+// caller has its own useState copy. Without a broadcast channel, the
+// ThemeSwitcher would update its local state but the dashboard's
+// separate useTheme() instance would only catch up on the next page
+// refresh — which is exactly the bug we're fixing.
+//
+// The `storage` event only fires in OTHER tabs, so we can't rely on
+// it for the same-tab case. A custom event covers the same-tab case
+// and we keep the storage listener for the cross-tab case.
+const THEME_EVENT = 'pvx:theme-changed';
+
+interface ThemeChangedDetail {
+  choice: ThemeChoice;
+  theme:  ResolvedTheme;
+}
+
 export function useTheme(): {
   choice: ThemeChoice;
   theme: ResolvedTheme;
@@ -64,6 +83,31 @@ export function useTheme(): {
 
   // Paint <html> once on mount + whenever the resolved theme changes.
   useEffect(() => { paintHtml(theme); }, [theme]);
+
+  // Listen for in-tab broadcasts so every useTheme instance stays in
+  // sync without forcing the user to refresh.
+  useEffect(() => {
+    const onChange = (e: Event) => {
+      const detail = (e as CustomEvent<ThemeChangedDetail>).detail;
+      if (!detail) return;
+      setChoiceState(detail.choice);
+      setThemeState(detail.theme);
+    };
+    window.addEventListener(THEME_EVENT, onChange);
+    return () => window.removeEventListener(THEME_EVENT, onChange);
+  }, []);
+
+  // Cross-tab sync via the storage event (only fires in other tabs).
+  useEffect(() => {
+    const onStorage = (e: StorageEvent) => {
+      if (e.key !== STORAGE_KEY) return;
+      const next = readStoredChoice();
+      setChoiceState(next);
+      setThemeState(resolve(next));
+    };
+    window.addEventListener('storage', onStorage);
+    return () => window.removeEventListener('storage', onStorage);
+  }, []);
 
   // Watch system changes whenever the user has chosen 'system'.
   useEffect(() => {
@@ -77,9 +121,16 @@ export function useTheme(): {
   }, [choice]);
 
   const setTheme = useCallback((c: ThemeChoice) => {
+    const nextTheme = resolve(c);
     setChoiceState(c);
-    setThemeState(resolve(c));
+    setThemeState(nextTheme);
     try { localStorage.setItem(STORAGE_KEY, c); } catch { /* noop */ }
+    // Broadcast so every other useTheme() instance in this tab updates.
+    try {
+      window.dispatchEvent(
+        new CustomEvent<ThemeChangedDetail>(THEME_EVENT, { detail: { choice: c, theme: nextTheme } }),
+      );
+    } catch { /* noop */ }
   }, []);
 
   const toggle = useCallback(() => {
@@ -116,6 +167,11 @@ export interface DashboardTokens {
   purple:      string;
   amber:       string;
   danger:      string;
+  // Gradients — mature, fintech-grade. Use these for surfaces that
+  // want a "designed" feel rather than a flat tint.
+  gradOrange:  string;    // primary brand gradient (hero CTA)
+  gradGreen:   string;    // mature green gradient (success / "all clear" / accents)
+  gradTeal:    string;    // calm secondary gradient
   // Decorative
   blob1:       string;    // upper-left ambient blob
   blob2:       string;    // lower-right ambient blob
@@ -142,9 +198,14 @@ export function getDashboardTokens(theme: ResolvedTheme): DashboardTokens {
       purple:      '#8b5cf6',
       amber:       '#F59E0B',
       danger:      '#EF4444',
-      blob1:       'rgba(255, 222, 192, 0.55)',  // peach
-      blob2:       'rgba(255, 210, 180, 0.40)',
-      dot:         'rgba(255, 104, 3, 0.06)',
+      // Mature gradients — each one is built around two well-spaced
+      // brand stops so it feels "designed" not "filtered".
+      gradOrange:  'linear-gradient(135deg, #FF7A1E 0%, #FF6803 50%, #E55A02 100%)',
+      gradGreen:   'linear-gradient(135deg, #2DD4A0 0%, #10B981 50%, #047857 100%)',
+      gradTeal:    'linear-gradient(135deg, #5EEAD4 0%, #14B8A6 50%, #0F766E 100%)',
+      blob1:       'rgba(255, 222, 192, 0.65)',  // peach — slightly warmer
+      blob2:       'rgba(255, 210, 180, 0.48)',
+      dot:         'rgba(255, 104, 3, 0.12)',     // 2x stronger so the grid actually reads
     };
   }
   // dark
@@ -166,6 +227,11 @@ export function getDashboardTokens(theme: ResolvedTheme): DashboardTokens {
     purple:      '#8b5cf6',
     amber:       '#F59E0B',
     danger:      '#ef4444',
+    // Same gradient shapes; tuned slightly brighter for dark surfaces
+    // so they don't get lost on ember bg.
+    gradOrange:  'linear-gradient(135deg, #FF7A1E 0%, #FF6803 50%, #E55A02 100%)',
+    gradGreen:   'linear-gradient(135deg, #34F0B6 0%, #10D49B 50%, #0AAA7C 100%)',
+    gradTeal:    'linear-gradient(135deg, #7CF2DD 0%, #2DD4BF 50%, #14B8A6 100%)',
     blob1:       'rgba(255, 104, 3, 0.16)',
     blob2:       'rgba(255, 172, 95, 0.10)',
     dot:         'rgba(255, 255, 255, 0.04)',

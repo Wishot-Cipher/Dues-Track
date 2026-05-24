@@ -27,17 +27,24 @@ import { APP_NAME, APP_TAGLINE } from '@/config/constants';
 import { organizationService } from '@/services/organizationService';
 import type { SearchResult } from '@/types/multiTenant';
 import TrustBadge from '@/components/trust/TrustBadge';
+import { useTheme } from '@/hooks/useTheme';
+import ThemeSwitcher from '@/components/ThemeSwitcher';
 
-// ── Design tokens ──────────────────────────────────────────────────────────
-const tk = {
-  primary:    '#FF6803',
-  mint:       '#30FFAC',
-  bg:         '#0F0703',
-  cardBg:     'rgba(255,255,255,0.03)',
-  cardBorder: 'rgba(255,255,255,0.08)',
-  textSec:    'rgba(255,255,255,0.55)',
-  textTer:    'rgba(255,255,255,0.3)',
-};
+// ── Design tokens — theme-aware ───────────────────────────────────────────
+// Reads the resolved theme from useTheme so the same component renders
+// crisp on a cream page in light mode and on the ember canvas in dark.
+function getTk(isLight: boolean) {
+  return {
+    primary:    '#FF6803',
+    mint:       isLight ? '#10B981' : '#30FFAC',
+    bg:         isLight ? '#FFFBF7' : '#0F0703',
+    cardBg:     isLight ? '#FFFFFF' : 'rgba(255,255,255,0.03)',
+    cardBorder: isLight ? 'rgba(15, 7, 3, 0.06)' : 'rgba(255,255,255,0.08)',
+    text:       isLight ? '#0F0703' : '#FFFFFF',
+    textSec:    isLight ? 'rgba(15, 7, 3, 0.62)' : 'rgba(255,255,255,0.55)',
+    textTer:    isLight ? 'rgba(15, 7, 3, 0.38)' : 'rgba(255,255,255,0.3)',
+  };
+}
 
 const ORG_TYPE_ICONS: Record<string, React.ReactNode> = {
   university:  <GraduationCap className="w-5 h-5" />,
@@ -60,6 +67,8 @@ function CyclingWord() {
     const id = setInterval(() => setIndex((i) => (i + 1) % CYCLE_WORDS.length), 2600);
     return () => clearInterval(id);
   }, []);
+  const { theme } = useTheme();
+  const tk = getTk(theme === 'light');
 
   return (
     <span className="relative inline-block overflow-hidden" style={{ minWidth: '320px' }}>
@@ -182,6 +191,9 @@ function TiltCard({
   color: string;
   delay: number;
 }) {
+  const { theme } = useTheme();
+  const tk = getTk(theme === 'light');
+
   const ref = useRef<HTMLDivElement>(null);
   const x = useMotionValue(0);
   const y = useMotionValue(0);
@@ -261,6 +273,9 @@ function SearchResultItem({
   const [hovered, setHovered] = useState(false);
   const isSeed = result.kind === 'seed';
 
+  const { theme } = useTheme();
+  const tk = getTk(theme === 'light');
+
   const subtitleLeft = result.short_name
     ? `${result.type} · ${result.short_name}`
     : result.type;
@@ -323,6 +338,8 @@ export default function LandingPage() {
   const [slugInput, setSlugInput]       = useState('');
   const [slugValid, setSlugValid]       = useState<boolean | null>(null);
   const navigate = useNavigate();
+  const { theme } = useTheme();
+  const tk = getTk(theme === 'light');
 
   const handleSearch = async (query: string) => {
     setSearchQuery(query);
@@ -438,18 +455,21 @@ export default function LandingPage() {
           <span className="text-xl font-extrabold text-white tracking-tight">{APP_NAME}</span>
         </div>
 
-        {/* Live indicator */}
-        <div
-          className="hidden sm:flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-semibold"
-          style={{ background: 'rgba(48,255,172,0.08)', color: tk.mint, border: '1px solid rgba(48,255,172,0.15)' }}
-        >
-          <motion.span
-            className="w-1.5 h-1.5 rounded-full"
-            style={{ background: tk.mint }}
-            animate={{ opacity: [1, 0.3, 1] }}
-            transition={{ duration: 1.6, repeat: Infinity }}
-          />
-          Platform Live
+        {/* Live indicator + theme switcher */}
+        <div className="hidden sm:flex items-center gap-3">
+          <div
+            className="flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-semibold"
+            style={{ background: 'rgba(48,255,172,0.08)', color: tk.mint, border: '1px solid rgba(48,255,172,0.15)' }}
+          >
+            <motion.span
+              className="w-1.5 h-1.5 rounded-full"
+              style={{ background: tk.mint }}
+              animate={{ opacity: [1, 0.3, 1] }}
+              transition={{ duration: 1.6, repeat: Infinity }}
+            />
+            Platform Live
+          </div>
+          <ThemeSwitcher />
         </div>
       </motion.nav>
 

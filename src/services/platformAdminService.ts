@@ -160,6 +160,8 @@ export async function platformAdminRequestCode(email: string): Promise<{
   request_token?: string;
   expires_at?: string;
   sent?: boolean;
+  /** Non-production diagnostic hint when sent=false. Never present in prod. */
+  debug?: string;
   error?: string;
 }> {
   const normalized = email.toLowerCase().trim();

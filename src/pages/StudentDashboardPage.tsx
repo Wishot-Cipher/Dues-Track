@@ -31,7 +31,6 @@ import {
   TrendingUp,
   User as UserIcon,
   AlertCircle,
-  Zap,
   CheckCircle2,
   Loader2,
   Activity,
@@ -56,7 +55,8 @@ import PayvexoBackground from '@/components/student/dashboard/PayvexoBackground'
 import OutstandingHero from '@/components/student/dashboard/OutstandingHero';
 import QuickActionsGrid from '@/components/student/dashboard/QuickActionsGrid';
 import DueNextList, { type DueNextItem } from '@/components/student/dashboard/DueNextList';
-import PromoBanner from '@/components/student/dashboard/PromoBanner';
+import PayOnTimeCard from '@/components/student/dashboard/PayOnTimeCard';
+import ThemeSwitcher from '@/components/ThemeSwitcher';
 
 // ────────────────────────────────────────────────────────────────────────────
 // Helpers
@@ -289,43 +289,33 @@ export default function StudentDashboardPage() {
             VoteInbox below it — one signal is enough. */}
         <VoteUrgencyBanner orgSlug={orgSlug} />
 
-        {/* ───────────── GREETING (fintech-style) ─────────────
-            Tiny one-line greeting + small avatar chip. The headline
-            of this page is the OutstandingHero card below — the
-            greeting is intentionally secondary. Pattern borrowed from
-            Opay / Kuda / Cash App: never compete with the balance. */}
-        <header className="flex items-center justify-between gap-3 px-1 sm:px-0">
-          <div className="min-w-0">
+        {/* ───────────── GREETING (mockup-faithful, two-line) ─────────────
+            "Good afternoon," (small) then the user's full name (big,
+            bold) on a new line. The theme switcher sits to the right
+            on its own — visible affordance for light/dark/system. */}
+        <header className="flex items-start justify-between gap-3 px-1 sm:px-0">
+          <div className="min-w-0 flex-1">
             <p
-              className="text-[11px] uppercase tracking-[0.16em] font-bold"
-              style={{ color: dt.textTer }}
+              className="text-[14px] sm:text-[15px] font-medium"
+              style={{ color: dt.textSec }}
             >
-              {orgName || 'Your account'}
+              {greeting()},
             </p>
-            <p
-              className="text-[15px] font-bold leading-tight mt-0.5 truncate"
+            <h1
+              className="text-[26px] sm:text-[30px] font-extrabold leading-[1.1] tracking-tight mt-0.5"
               style={{ color: dt.text }}
             >
-              {greeting()}, <span style={{ color: dt.primary }}>{firstName(user?.full_name)}</span>
+              {user?.full_name?.trim() || firstName(user?.full_name)}
+              <span className="ml-1.5" aria-hidden>👋</span>
+            </h1>
+            <p
+              className="text-[12px] sm:text-[13px] mt-1"
+              style={{ color: dt.textTer }}
+            >
+              Stay on top of your payments.
             </p>
           </div>
-          {/* Avatar chip — small, sharp, fintech-grade */}
-          <button
-            type="button"
-            onClick={() => go('/profile')}
-            className="shrink-0 w-10 h-10 rounded-full flex items-center justify-center text-sm font-extrabold transition-transform active:scale-95"
-            style={{
-              background: theme === 'light' ? '#FFFFFF' : 'rgba(255,255,255,0.06)',
-              color: dt.primary,
-              border: `1px solid ${dt.primaryRing}`,
-              boxShadow: theme === 'light'
-                ? `0 6px 18px -8px ${dt.primaryRing}`
-                : 'none',
-            }}
-            aria-label="Open profile"
-          >
-            {firstName(user?.full_name).charAt(0).toUpperCase()}
-          </button>
+          <ThemeSwitcher className="mt-1 shrink-0" size={38} />
         </header>
 
         <OutstandingHero
@@ -366,27 +356,11 @@ export default function StudentDashboardPage() {
           onSeeAllClick={() => go('/payments')}
         />
 
-        {/* ───────────── PROMO BANNER ─────────────
-            Reinforces Paystack-first behaviour: rewards paying online
-            (no waiting for manual approval). Shown only when the
-            member actually has something to pay. */}
-        {!loading && unpaidCount > 0 && (
-          <PromoBanner
-            theme={theme}
-            icon={Zap}
-            tint={dt.primary}
-            title="Pay online, get instant confirmation"
-            subtitle="Bank transfer & USSD work from any Nigerian bank."
-            actionLabel={urgent ? 'Pay now' : undefined}
-            onAction={urgent ? () => go(`/payment/${urgent.pt.id}`) : undefined}
-          />
-        )}
-
         {/* ───────────── QUICK ACTIONS ─────────────
-            Secondary tools row. Same data shape regardless of theme;
-            tile rendering adapts (soft tints in light, glassy in dark).
-            Sits BELOW the due-next list because tools are less urgent
-            than the next thing-to-pay. */}
+          Secondary tools row. Same data shape regardless of theme;
+          tile rendering adapts (soft tints in light, glassy in dark).
+          Sits BELOW the due-next list because tools are less urgent
+          than the next thing-to-pay. */}
         <div className="pt-1">
           <p
             className="text-[10px] uppercase tracking-[0.16em] font-bold px-1 mb-2"
@@ -401,28 +375,32 @@ export default function StudentDashboardPage() {
                 icon: CreditCard,
                 label: 'Pay',
                 hint: unpaidCount ? `${unpaidCount} pending` : 'all clear',
-                tint: dt.primary,
+                // Deep brand orange — more mature than the bright #FF6803
+                tint: theme === 'light' ? '#C84600' : '#FF7A1E',
                 onClick: () => go('/payments'),
               },
               {
                 icon: History,
                 label: 'History',
                 hint: receiptsCount ? `${receiptsCount} paid` : 'nothing yet',
-                tint: dt.mint,
+                // Mature emerald — "trusted success" not "neon"
+                tint: theme === 'light' ? '#047857' : '#10D49B',
                 onClick: () => go('/payments'),
               },
               {
                 icon: TrendingUp,
                 label: 'Spending',
                 hint: 'transparency',
-                tint: dt.amber,
+                // Mature amber/gold — not the bright #F59E0B
+                tint: theme === 'light' ? '#B45309' : '#FBBF24',
                 onClick: () => go('/payments'),
               },
               {
                 icon: UserIcon,
                 label: 'Profile',
                 hint: memberLoginId?.slice(0, 6) || 'me',
-                tint: dt.purple,
+                // Deeper indigo-purple — more "fintech executive"
+                tint: theme === 'light' ? '#5B21B6' : '#A78BFA',
                 onClick: () => go('/profile'),
               },
             ]}
@@ -489,91 +467,11 @@ export default function StudentDashboardPage() {
           )}
         </motion.section>
 
-        {/* ───────────── COMING SOON: EVENT TICKETING ─────────────
-            Fintech roadmap teaser. The next big feature on the
-            platform is event ticketing for clubs/SUG events — same
-            payment rails, just a different SKU. This card creates
-            anticipation and signals momentum. Replaces the old
-            notifications-nudge footer which felt utility-store. */}
-        <motion.section
-          initial={{ opacity: 0, y: 10 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.28, ease: [0.22, 1, 0.36, 1] }}
-          className="relative rounded-3xl p-5 sm:p-6 overflow-hidden"
-          style={{
-            background: theme === 'light'
-              ? 'linear-gradient(135deg, #F5EEFE 0%, #FAF6FF 50%, #FFFFFF 100%)'
-              : 'linear-gradient(135deg, rgba(139,92,246,0.12) 0%, rgba(255,255,255,0.02) 100%)',
-            border: `1px solid ${theme === 'light' ? '#E5D9FB' : 'rgba(139,92,246,0.22)'}`,
-          }}
-        >
-          {/* Decorative glow blob */}
-          <div
-            className="absolute pointer-events-none rounded-full"
-            style={{
-              width: 220,
-              height: 220,
-              right: -60,
-              top: -60,
-              background: theme === 'light'
-                ? 'radial-gradient(circle, rgba(139,92,246,0.18) 0%, transparent 65%)'
-                : 'radial-gradient(circle, rgba(139,92,246,0.22) 0%, transparent 65%)',
-              filter: 'blur(20px)',
-            }}
-            aria-hidden
-          />
+        {/* ───────────── PAY ON TIME CARD (moved to bottom) ───────────── */}
+        <div className="pt-4">
+          <PayOnTimeCard theme={theme} firstName={firstName(user?.full_name)} />
+        </div>
 
-          <div className="relative flex flex-col sm:flex-row gap-4 sm:items-center sm:justify-between">
-            <div className="flex items-start gap-3 min-w-0">
-              {/* Big icon chip — purple, matches the ticket category vibe */}
-              <div
-                className="w-12 h-12 rounded-2xl flex items-center justify-center shrink-0"
-                style={{
-                  background: theme === 'light' ? '#FFFFFF' : 'rgba(139,92,246,0.18)',
-                  border: `1px solid ${theme === 'light' ? '#E5D9FB' : 'rgba(139,92,246,0.32)'}`,
-                  boxShadow: theme === 'light' ? '0 8px 20px -8px rgba(139,92,246,0.32)' : 'none',
-                }}
-              >
-                <Sparkles className="w-5 h-5" style={{ color: '#8b5cf6' }} />
-              </div>
-              <div className="min-w-0">
-                <div className="flex items-center gap-2 flex-wrap">
-                  <span
-                    className="text-[10px] font-bold uppercase tracking-[0.14em] px-2 py-0.5 rounded-full"
-                    style={{
-                      background: theme === 'light' ? '#EFE3FF' : 'rgba(139,92,246,0.18)',
-                      color: '#8b5cf6',
-                    }}
-                  >
-                    Coming soon
-                  </span>
-                </div>
-                <p className="text-sm sm:text-base font-extrabold leading-tight mt-1" style={{ color: dt.text }}>
-                  Event tickets, right in your dashboard
-                </p>
-                <p className="text-xs mt-1 leading-snug" style={{ color: dt.textSec }}>
-                  Buy passes to lectures, parties & meetups — paid with the same Paystack rails you already trust.
-                </p>
-              </div>
-            </div>
-
-            {/* Subtle interest button — soft, not loud */}
-            <motion.button
-              onClick={() => go('/profile')}
-              className="self-start sm:self-center shrink-0 px-3.5 py-2 rounded-xl text-[12px] font-bold inline-flex items-center gap-1.5 transition-colors"
-              style={{
-                background: theme === 'light' ? '#FFFFFF' : 'rgba(255,255,255,0.06)',
-                color: '#8b5cf6',
-                border: `1px solid ${theme === 'light' ? '#E5D9FB' : 'rgba(139,92,246,0.28)'}`,
-              }}
-              whileHover={{ scale: 1.02 }}
-              whileTap={{ scale: 0.97 }}
-            >
-              Notify me
-              <ChevronRight className="w-3.5 h-3.5" />
-            </motion.button>
-          </div>
-        </motion.section>
       </main>
     </div>
   );

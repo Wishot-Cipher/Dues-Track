@@ -17,9 +17,14 @@ import UpdateNotification from '@/components/UpdateNotification';
 import StudentDashboardPage from '@/pages/StudentDashboardPage';
 import ProfilePage from '@/pages/ProfilePage';
 import SettingsPage from '@/pages/student/SettingsPage';
-import PaymentHistoryPage from '@/pages/student/PaymentHistoryPage';
+// NOTE: src/pages/student/PaymentHistoryPage.tsx is the legacy 916-line
+// dues hub. It stays on disk as a safe-to-revert backup but is no longer
+// routed. The active /payments route uses the new mockup-faithful MyDuesPage.
 import PaymentDetailPage from '@/pages/PaymentDetailPage';
+import MakePaymentPage from '@/pages/MakePaymentPage';
+import MyDuesPage from '@/pages/MyDuesPage';
 import PaymentVerifyPage from '@/pages/PaymentVerifyPage';
+import ReceiptPage from '@/pages/ReceiptPage';
 import AdminDashboardPage from '@/pages/admin/AdminDashboardPage';
 // NOTE: src/pages/admin/CreatePaymentTypePage.tsx is the legacy create-due page.
 // It stays on disk as a safe-revert backup but is no longer routed.
@@ -122,10 +127,15 @@ function App() {
                 <Route path="dashboard" element={<OrgProtectedRoute><StudentDashboardPage /></OrgProtectedRoute>} />
                 <Route path="claim" element={<OrgProtectedRoute><ClaimSubmitPage /></OrgProtectedRoute>} />
                 <Route path="claim/:claimId/decide" element={<OrgProtectedRoute><ClaimDecisionPage /></OrgProtectedRoute>} />
-                <Route path="payments" element={<OrgProtectedRoute><PaymentHistoryPage /></OrgProtectedRoute>} />
-                <Route path="payment/:id" element={<OrgProtectedRoute><PaymentDetailPage /></OrgProtectedRoute>} />
+                <Route path="payments" element={<OrgProtectedRoute><MyDuesPage /></OrgProtectedRoute>} />
+                {/* Default Pay flow — clean Paystack-first MakePaymentPage. */}
+                <Route path="payment/:id" element={<OrgProtectedRoute><MakePaymentPage /></OrgProtectedRoute>} />
+                {/* Manual / offline fallback — bank transfer + receipt upload. */}
+                <Route path="payment/:id/manual" element={<OrgProtectedRoute><PaymentDetailPage /></OrgProtectedRoute>} />
                 {/* Paystack redirects back here after hosted checkout (mig P1) */}
                 <Route path="payments/verify" element={<PaymentVerifyPage />} />
+                {/* Post-payment receipt — also reachable from My Dues paid rows */}
+                <Route path="receipt/:paymentId" element={<OrgProtectedRoute><ReceiptPage /></OrgProtectedRoute>} />
                 <Route path="profile" element={<OrgProtectedRoute><ProfilePage /></OrgProtectedRoute>} />
                 <Route path="settings" element={<OrgProtectedRoute><SettingsPage /></OrgProtectedRoute>} />
                 <Route path="change-password" element={<OrgProtectedRoute><OrgChangePasswordPage /></OrgProtectedRoute>} />
