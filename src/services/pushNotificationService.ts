@@ -237,12 +237,13 @@ class PushNotificationService {
       
       // Use API endpoint instead of direct Supabase client
       // This bypasses RLS issues since API uses service role
-      const response = await fetch('/api/notifications/save-subscription', {
+      const response = await fetch('/api/notifications', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
+          action: 'save-subscription',
           callerId: userId,
           userId,
           endpoint: subscription.endpoint,
@@ -314,12 +315,12 @@ class PushNotificationService {
    */
   async testPush(userId: string): Promise<{ ok: boolean; message: string; details?: unknown }> {
     try {
-      const res = await fetch('/api/notifications/send-push', {
+      const res = await fetch('/api/notifications', {
         method: 'POST',
-        headers: { 
+        headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ callerId: userId, test: true }),
+        body: JSON.stringify({ action: 'send-push', callerId: userId, test: true }),
       });
 
       // In local dev (Vite), serverless endpoints don't exist — handle gracefully

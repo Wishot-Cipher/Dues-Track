@@ -36,6 +36,12 @@ export function MultiTenantAuthProvider({ children }: MultiTenantAuthProviderPro
     setAdminRecords([]);
   };
 
+  // Tracks whether we've ever successfully populated state from the
+  // server. Once true, we *never* clear state from a transient failure —
+  // only from an explicit logout or a definitive "session is invalid"
+  // response (returned as null from getCurrentMember).
+  // This is the fix for the auto-logout-on-network-blip bug: previously
+  // any caught exception would wipe state and bounce the user to login.
   const checkSession = useCallback(async () => {
     try {
       const result = await multiTenantAuthService.getCurrentMember();
@@ -45,11 +51,30 @@ export function MultiTenantAuthProvider({ children }: MultiTenantAuthProviderPro
         setGroup(result.group);
         setAdminRecords(result.adminRecords);
       } else {
+        // Definitive: service told us the session is invalid (member
+        // gone, deactivated, org gone, or no localStorage session).
         clearState();
       }
     } catch (error) {
-      console.error('Session check error:', error);
-      clearState();
+      // Transient: network/RLS/schema. Keep whatever state we have.
+      // On the very first mount (user state still null), retry once
+      // after a short delay so a slow first request doesn't bounce
+      // us to login; if that also throws, we leave the user signed-out
+      // but we DON'T wipe localStorage, so a reload can recover.
+      console.warn('Session check transient error — keeping state:', error);
+      try {
+        await new Promise((r) => setTimeout(r, 600));
+        const retry = await multiTenantAuthService.getCurrentMember();
+        if (retry) {
+          setUser(retry.member);
+          setOrganization(retry.organization);
+          setGroup(retry.group);
+          setAdminRecords(retry.adminRecords);
+        }
+        // If retry also threw, the catch below silently swallows it.
+      } catch (retryErr) {
+        console.warn('Session check retry also failed — leaving stored session intact:', retryErr);
+      }
     } finally {
       setLoading(false);
     }

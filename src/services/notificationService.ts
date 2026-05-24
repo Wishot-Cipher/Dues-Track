@@ -25,10 +25,11 @@ async function sendPushNotification(
     // Current logged-in user is the caller
     const callerId = localStorage.getItem('pvx_member_id') || localStorage.getItem('current_user_id');
     
-    const res = await fetch('/api/notifications/send-push', {
+    const res = await fetch('/api/notifications', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
+        action: 'send-push',
         callerId: callerId || userId,
         userId,
         title,
@@ -266,10 +267,10 @@ class NotificationService {
       const userId = localStorage.getItem('pvx_member_id') || localStorage.getItem('current_user_id');
       if (!userId) throw new Error('Not authenticated');
 
-      const res = await fetch('/api/notifications/mark-read', {
+      const res = await fetch('/api/notifications', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ notificationId, callerId: userId }),
+        body: JSON.stringify({ action: 'mark-read', notificationId, callerId: userId }),
       });
 
       if (!res.ok) {
@@ -316,10 +317,10 @@ class NotificationService {
         throw new Error('Not authenticated or mismatched user');
       }
 
-      const res = await fetch('/api/notifications/mark-read', {
+      const res = await fetch('/api/notifications', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ callerId: userId }),
+        body: JSON.stringify({ action: 'mark-read', callerId: userId }),
       });
 
       if (!res.ok) {

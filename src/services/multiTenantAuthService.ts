@@ -261,85 +261,112 @@ export const multiTenantAuthService = {
   },
 
   /**
-   * Get current authenticated member
+   * Get current authenticated member.
+   *
+   * IMPORTANT — session clearing semantics:
+   *   We ONLY clear localStorage when we get a *definitive* answer that
+   *   the session is no longer valid:
+   *     • localStorage has no session keys
+   *     • the member row no longer exists (deleted)
+   *     • the member row exists but is_active === false (deactivated)
+   *     • the org row no longer exists / inactive
+   *
+   *   For *transient* failures — network blips, 4xx from a single
+   *   query, RLS edge cases, missing-column schema mismatches — we
+   *   THROW. The caller (the auth hook) is then responsible for
+   *   keeping the existing session and surfacing a soft warning.
+   *
+   *   Before this change, ANY caught exception would wipe localStorage
+   *   and instantly log the user out — which is why a 400 from an
+   *   unrelated dashboard query could appear as "auto-logout".
    */
   async getCurrentMember(): Promise<MultiTenantLoginResponse | null> {
-    try {
-      const authStatus = localStorage.getItem(SESSION_KEYS.AUTH_STATUS);
-      if (authStatus !== 'active') return null;
+    const authStatus = localStorage.getItem(SESSION_KEYS.AUTH_STATUS);
+    if (authStatus !== 'active') return null;
 
-      const memberId = localStorage.getItem(SESSION_KEYS.MEMBER_ID);
-      const orgId = localStorage.getItem(SESSION_KEYS.ORG_ID);
-      if (!memberId || !orgId) return null;
+    const memberId = localStorage.getItem(SESSION_KEYS.MEMBER_ID);
+    const orgId = localStorage.getItem(SESSION_KEYS.ORG_ID);
+    if (!memberId || !orgId) return null;
 
-      // Fetch member with relations
-      const { data: member, error: memberError } = await supabase
-        .from('organization_members')
-        .select('*')
-        .eq('id', memberId)
-        .eq('organization_id', orgId)
-        .single();
+    // Fetch member with relations. maybeSingle() returns data=null (no
+    // error) when zero rows — lets us distinguish "definitely gone"
+    // from "query failed".
+    const { data: member, error: memberError } = await supabase
+      .from('organization_members')
+      .select('*')
+      .eq('id', memberId)
+      .eq('organization_id', orgId)
+      .maybeSingle();
 
-      if (memberError || !member || !member.is_active) {
-        this.clearSession();
-        return null;
-      }
-
-      // Fetch org
-      const { data: org } = await supabase
-        .from('organizations')
-        .select('*')
-        .eq('id', orgId)
-        .eq('is_active', true)
-        .single();
-
-      if (!org) {
-        this.clearSession();
-        return null;
-      }
-
-      // Fetch group
-      const { data: grp } = await supabase
-        .from('organization_groups')
-        .select('*')
-        .eq('id', member.group_id)
-        .single();
-
-      // Fetch admin records
-      const { data: adminRecords } = await supabase
-        .from('member_admins')
-        .select('*')
-        .eq('member_id', memberId)
-        .eq('is_active', true);
-
-      const admins = (adminRecords || []) as MemberAdmin[];
-      const permissions = this.aggregatePermissions(admins);
-
-      const fullMember: OrganizationMember = {
-        ...(member as OrganizationMember),
-        organization: org as Organization,
-        group: grp as OrganizationGroup,
-        admin_records: admins,
-        admin_permissions: permissions,
-      };
-
-      delete (fullMember as unknown as Record<string, unknown>).password_hash;
-
-      // Refresh session storage with group scope
-      this.saveSession(fullMember, org as Organization);
-
-      return {
-        member: fullMember,
-        organization: org as Organization,
-        group: (grp as OrganizationGroup) || { id: member.group_id },
-        adminRecords: admins,
-        mustChangePassword: member.force_password_change,
-      };
-    } catch (error) {
-      console.error('Get current member error:', error);
+    if (memberError) {
+      // Transient: network, RLS, schema. Keep the session — caller
+      // decides what to do (typically retain optimistic state).
+      throw new Error(`Session check failed: ${memberError.message || 'member fetch error'}`);
+    }
+    if (!member) {
+      // Definitive: the member row is gone.
       this.clearSession();
       return null;
     }
+    if (member.is_active === false) {
+      // Definitive: the account was deactivated.
+      this.clearSession();
+      return null;
+    }
+
+    // Fetch org
+    const { data: org, error: orgError } = await supabase
+      .from('organizations')
+      .select('*')
+      .eq('id', orgId)
+      .eq('is_active', true)
+      .maybeSingle();
+
+    if (orgError) {
+      throw new Error(`Session check failed: ${orgError.message || 'org fetch error'}`);
+    }
+    if (!org) {
+      // Definitive: the org is gone or inactive.
+      this.clearSession();
+      return null;
+    }
+
+    // Group + admin records are non-critical — never log out over them.
+    const { data: grp } = await supabase
+      .from('organization_groups')
+      .select('*')
+      .eq('id', member.group_id)
+      .maybeSingle();
+
+    const { data: adminRecords } = await supabase
+      .from('member_admins')
+      .select('*')
+      .eq('member_id', memberId)
+      .eq('is_active', true);
+
+    const admins = (adminRecords || []) as MemberAdmin[];
+    const permissions = this.aggregatePermissions(admins);
+
+    const fullMember: OrganizationMember = {
+      ...(member as OrganizationMember),
+      organization: org as Organization,
+      group: grp as OrganizationGroup,
+      admin_records: admins,
+      admin_permissions: permissions,
+    };
+
+    delete (fullMember as unknown as Record<string, unknown>).password_hash;
+
+    // Refresh session storage with group scope
+    this.saveSession(fullMember, org as Organization);
+
+    return {
+      member: fullMember,
+      organization: org as Organization,
+      group: (grp as OrganizationGroup) || { id: member.group_id },
+      adminRecords: admins,
+      mustChangePassword: member.force_password_change,
+    };
   },
 
   /**
