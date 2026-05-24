@@ -156,11 +156,36 @@ async function _handler(req: any, res: any) {
     }
   }
 
-  // ALWAYS return the same shape (anti-enumeration)
+  // ALWAYS return the same shape regardless of branch (anti-enumeration).
+  //
+  // `sent` tells the UI whether an email actually went out — but it
+  // intentionally doesn't tell the UI *why* it didn't (e.g. "email not
+  // registered"). We only surface a soft `hint` in NON-production
+  // environments so devs can debug "email shows sent but never arrives".
+  // In prod the hint is omitted and the disclaimer in the UI is the only
+  // signal — which is what we want to keep email enumeration impossible.
+  const sent = Boolean(code && isEmailConfigured());
+  const isProd = (process.env.NODE_ENV || '').toLowerCase() === 'production'
+              || (process.env.VERCEL_ENV || '') === 'production';
+
+  let debug: string | undefined;
+  if (!sent && !isProd) {
+    if (!code) {
+      // Either the email isn't a registered admin OR we returned a cached
+      // token (RPC reuses an unexpired code within 60s to prevent spam).
+      debug = data?.cached
+        ? 'Cached: an unexpired code was issued in the last 60 seconds — check your inbox for that earlier email (and your spam folder).'
+        : 'No email sent. The address you entered is not registered as a console admin, or already received a recent code.';
+    } else if (!isEmailConfigured()) {
+      debug = 'Code was generated but GMAIL_USER / GMAIL_APP_PASSWORD are missing in your env. Add them to .env.local and restart `vercel dev`.';
+    }
+  }
+
   return res.status(200).json({
     ok: true,
     request_token: requestToken,
     expires_at: expiresAt,
-    sent: Boolean(code && isEmailConfigured()),
+    sent,
+    ...(debug ? { debug } : {}),
   });
 }

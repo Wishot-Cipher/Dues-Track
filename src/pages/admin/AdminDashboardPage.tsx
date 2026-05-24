@@ -13,7 +13,6 @@ import { AdminDashboardSkeleton, PaymentCardSkeleton } from '@/components/ui/Ske
 import AnimatedCounter from '@/components/ui/AnimatedCounter';
 import { PrivacyMask, PrivacyToggle } from '@/components/ui/PrivacyMask';
 import { AdminNotificationCenter } from '@/components/admin/AdminNotificationCenter';
-import VerificationPanel from '@/components/claims/VerificationPanel';
 import {
   Users,
   Clock,
@@ -389,11 +388,6 @@ export default function AdminDashboardPage() {
       </div>
 
       <div className="max-w-7xl mx-auto space-y-6 relative z-10">
-        {/* Layer-4 Verification Panel — only renders when there are pending
-            child-exec claims for this admin to confirm. Self-hides on the
-            happy path. See Blueprint §13.7. */}
-        <VerificationPanel />
-
         {/* Header */}
         <motion.div
           initial={{ opacity: 0, y: -20 }}

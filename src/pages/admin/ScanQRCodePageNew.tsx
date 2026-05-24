@@ -562,10 +562,6 @@ export default function ScanQRCodePage() {
       const baseTimestamp = Date.now();
       const successfulPayments: string[] = [];
 
-      // Resolve scope ONCE for the whole batch — was being re-declared
-      // inside the loop after first use, which is a TDZ error.
-      const scope = getOrgScope();
-
       for (let i = 0; i < qrData.students.length; i++) {
         const studentToPay = qrData.students[i];
 
@@ -594,6 +590,7 @@ export default function ScanQRCodePage() {
 
         // Insert payment (use per-student outstanding if available)
         const amountToInsert = (studentToPay as any).outstanding ?? qrData.amountPerStudent ?? paymentType.amount;
+        const scope = getOrgScope();
         const payInsert: Record<string, unknown> = {
           member_id: studentToPay.id,
           payment_type_id: qrData.paymentTypeId,

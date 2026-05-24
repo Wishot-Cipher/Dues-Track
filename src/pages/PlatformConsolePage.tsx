@@ -1111,13 +1111,36 @@ export default function PlatformConsolePage() {
 
   if (verifying) {
     return (
-      <div className="min-h-screen flex items-center justify-center" style={{ background: '#0F0703' }}>
+      <div
+        className="min-h-screen flex items-center justify-center px-4"
+        style={{
+          background: 'radial-gradient(circle at top, rgba(255, 104, 3, 0.14) 0%, rgba(15, 7, 3, 1) 52%, rgba(8, 4, 2, 1) 100%)',
+          color: colors.textPrimary,
+        }}
+      >
         <motion.div
-          className="w-8 h-8 border-2 rounded-full"
-          style={{ borderColor: '#FF680330', borderTopColor: '#FF6803' }}
-          animate={{ rotate: 360 }}
-          transition={{ duration: 1, repeat: Infinity, ease: 'linear' }}
-        />
+          initial={{ opacity: 0, y: 12 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="w-full max-w-sm rounded-3xl p-6 text-center"
+          style={{
+            background: colors.cardBg,
+            border: `1px solid ${colors.cardBorder}`,
+            boxShadow: '0 24px 80px -24px rgba(0, 0, 0, 0.55)',
+          }}
+        >
+          <div className="w-14 h-14 mx-auto mb-4 rounded-2xl flex items-center justify-center" style={{ background: `${colors.primary}15`, border: `1px solid ${colors.primary}30` }}>
+            <motion.div
+              className="w-7 h-7 border-2 rounded-full"
+              style={{ borderColor: `${colors.primary}30`, borderTopColor: colors.primary }}
+              animate={{ rotate: 360 }}
+              transition={{ duration: 1, repeat: Infinity, ease: 'linear' }}
+            />
+          </div>
+          <h1 className="text-lg font-bold mb-1">Loading Console</h1>
+          <p className="text-xs" style={{ color: colors.textSecondary }}>
+            Verifying your session and restoring the dashboard...
+          </p>
+        </motion.div>
       </div>
     );
   }

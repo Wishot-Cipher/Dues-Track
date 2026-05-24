@@ -40,7 +40,7 @@ import {
   Sparkles,
   ArrowRight,
 } from 'lucide-react';
-import { APP_NAME, levelFieldLabel } from '@/config/constants';
+import { APP_NAME } from '@/config/constants';
 import { supabase } from '@/config/supabase';
 import { organizationService } from '@/services/organizationService';
 import { billingService } from '@/services/billingService';
@@ -609,14 +609,9 @@ export default function JoinOrganizationPage() {
                     </Field>
                   </Row>
 
-                  {(() => {
-                    const lf = levelFieldLabel(invite.organization.organization_type);
-                    return (
-                      <Field label={lf.label} hint={lf.hint}>
-                        <Input value={form.level} onChange={(v) => setForm({ ...form, level: v })} placeholder={lf.placeholder} />
-                      </Field>
-                    );
-                  })()}
+                  <Field label="Level / Year / Position" hint="optional, e.g. 200L, SS2, Member">
+                    <Input value={form.level} onChange={(v) => setForm({ ...form, level: v })} placeholder="200L" />
+                  </Field>
 
                   {/* Password mode toggle */}
                   <div

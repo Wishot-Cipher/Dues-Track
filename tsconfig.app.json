@@ -15,9 +15,9 @@
     "moduleDetection": "force",
     "noEmit": true,
     "jsx": "react-jsx",
+    "ignoreDeprecations": "6.0",
 
-    // baseUrl removed — deprecated in TS 5.0. `paths` patterns are now
-    // resolved relative to this tsconfig's directory automatically.
+    "baseUrl": ".",
     "paths": {
       "@/*": [
         "./src/*"

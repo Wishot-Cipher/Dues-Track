@@ -19,6 +19,7 @@ import {
   CheckCircle2,
   Globe,
   Search,
+  Shield,
   Sparkles,
   Users,
   X,
