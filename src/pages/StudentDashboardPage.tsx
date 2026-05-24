@@ -120,10 +120,10 @@ export default function StudentDashboardPage() {
   useEffect(() => {
     const s = location.state as { justJoined?: boolean; orgName?: string } | null;
     if (s?.justJoined) {
-      setWelcomeOrg(s.orgName ?? '');
+      setWelcomeOrg(s.orgName ?? orgName ?? '');
       window.history.replaceState({}, document.title);
     }
-  }, [location]);
+  }, [location, orgName]);
 
   // Data state
   const [loading, setLoading] = useState(true);
