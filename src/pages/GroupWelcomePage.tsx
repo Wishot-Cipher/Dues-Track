@@ -43,6 +43,7 @@ import {
 import { organizationService } from '@/services/organizationService';
 import TrustBadge from '@/components/trust/TrustBadge';
 import { APP_NAME, levelFieldLabel } from '@/config/constants';
+import { getDashboardTokens, useTheme } from '@/hooks/useTheme';
 import type {
   Organization,
   OrganizationGroup,
@@ -50,21 +51,42 @@ import type {
 } from '@/types/multiTenant';
 import { supabase } from '@/config/supabase';
 
-const tk = {
-  bg:         '#0F0703',
-  panel:      'rgba(255,255,255,0.03)',
-  panelHov:   'rgba(255,255,255,0.055)',
-  border:     'rgba(255,255,255,0.08)',
-  borderHov:  'rgba(255,104,3,0.32)',
-  text:       '#FFFFFF',
-  textSec:    'rgba(255,255,255,0.65)',
-  textTer:    'rgba(255,255,255,0.30)',
-  primary:    '#FF6803',
-  mint:       '#30FFAC',
-  blue:       '#3b82f6',
-  purple:     '#8b5cf6',
-  danger:     '#ef4444',
+type GroupWelcomeTokens = {
+  bg: string;
+  panel: string;
+  panelHov: string;
+  border: string;
+  borderHov: string;
+  text: string;
+  textSec: string;
+  textTer: string;
+  primary: string;
+  mint: string;
+  blue: string;
+  purple: string;
+  danger: string;
+  gradPrimary: string;
 };
+
+function buildGroupWelcomeTokens(theme: 'light' | 'dark'): GroupWelcomeTokens {
+  const dtk = getDashboardTokens(theme);
+  return {
+    bg: dtk.bg,
+    panel: dtk.card,
+    panelHov: dtk.cardHover,
+    border: dtk.cardBorder,
+    borderHov: dtk.primaryRing,
+    text: dtk.text,
+    textSec: dtk.textSec,
+    textTer: dtk.textTer,
+    primary: dtk.primary,
+    mint: dtk.mint,
+    blue: dtk.blue,
+    purple: dtk.purple,
+    danger: dtk.danger,
+    gradPrimary: dtk.gradOrange,
+  };
+}
 
 const SESSION_KEYS = {
   AUTH:      'pvx_auth',
@@ -74,16 +96,16 @@ const SESSION_KEYS = {
   GROUP_ID:  'pvx_group_id',
 } as const;
 
-const KIND_META: Record<string, { color: string; icon: React.ElementType; label: string }> = {
-  faculty:    { color: tk.blue,    icon: GraduationCap, label: 'Faculty' },
-  class:      { color: tk.purple,  icon: Layers,        label: 'Class' },
-  department: { color: tk.primary, icon: BookOpen,      label: 'Department' },
-  level:      { color: '#ec4899',  icon: Layers,        label: 'Level' },
-  general:    { color: tk.mint,    icon: Users,         label: 'Group' },
-  fellowship: { color: tk.blue,    icon: Users,         label: 'Fellowship' },
-};
-function kindMeta(kind?: string) {
-  return KIND_META[kind?.toLowerCase() || ''] ?? KIND_META.general;
+function kindMeta(kind: string | undefined, tk: GroupWelcomeTokens) {
+  const map: Record<string, { color: string; icon: React.ElementType; label: string }> = {
+    faculty:    { color: tk.blue,    icon: GraduationCap, label: 'Faculty' },
+    class:      { color: tk.purple,  icon: Layers,        label: 'Class' },
+    department: { color: tk.primary, icon: BookOpen,      label: 'Department' },
+    level:      { color: '#ec4899',  icon: Layers,        label: 'Level' },
+    general:    { color: tk.mint,    icon: Users,         label: 'Group' },
+    fellowship: { color: tk.blue,    icon: Users,         label: 'Fellowship' },
+  };
+  return map[kind?.toLowerCase() || ''] ?? map.general;
 }
 
 type Mode = 'choose' | 'signup';
@@ -91,6 +113,8 @@ type Mode = 'choose' | 'signup';
 export default function GroupWelcomePage() {
   const { orgSlug, groupShortName } = useParams<{ orgSlug: string; groupShortName: string }>();
   const navigate = useNavigate();
+  const { theme } = useTheme();
+  const tk = buildGroupWelcomeTokens(theme);
 
   // Explicit state machine — same pattern as FacultyDetailPage. The bug
   // before: setLoading(false) ran between the org-load and group-load awaits,
@@ -236,25 +260,25 @@ export default function GroupWelcomePage() {
   // Loading / not found
   // ─────────────────────────────────────────────────────────────────────────
   if (loadState === 'loading') {
-    return <Loader />;
+    return <Loader tk={tk} />;
   }
 
   if (loadState === 'org_not_found' || loadState === 'group_not_found' || !org || !group) {
     return (
-      <FullCenter>
+      <FullCenter tk={tk}>
         <div className="text-center max-w-md">
           <div className="w-14 h-14 mx-auto mb-5 rounded-2xl flex items-center justify-center"
             style={{ background: `${tk.primary}15` }}>
             <Layers className="w-7 h-7" style={{ color: tk.primary }} />
           </div>
-          <h1 className="text-2xl font-bold text-white mb-3 tracking-tight">Class not found</h1>
+          <h1 className="text-2xl font-bold mb-3 tracking-tight" style={{ color: tk.text }}>Class not found</h1>
           <p className="text-sm leading-6" style={{ color: tk.textSec }}>
-            We couldn't find a class at <span className="text-white font-semibold">/{orgSlug}/g/{groupShortName}</span>.
+            We couldn't find a class at <span className="font-semibold" style={{ color: tk.text }}>/{orgSlug}/g/{groupShortName}</span>.
           </p>
           <motion.button
             onClick={() => navigate(orgSlug ? `/${orgSlug}/overview` : '/')}
             className="mt-6 px-6 py-3 rounded-xl font-semibold text-sm text-white"
-            style={{ background: 'linear-gradient(135deg, #FF6803, #FFAC5F)' }}
+            style={{ background: tk.gradPrimary }}
             whileHover={{ scale: 1.02 }}
             whileTap={{ scale: 0.97 }}
           >
@@ -270,7 +294,7 @@ export default function GroupWelcomePage() {
   // ─────────────────────────────────────────────────────────────────────────
   if (success) {
     return (
-      <FullCenter>
+      <FullCenter tk={tk}>
         <motion.div
           initial={{ opacity: 0, y: 12, scale: 0.98 }}
           animate={{ opacity: 1, y: 0,  scale: 1 }}
@@ -283,17 +307,17 @@ export default function GroupWelcomePage() {
           >
             <Check className="w-7 h-7" style={{ color: tk.mint }} />
           </div>
-          <h1 className="text-2xl font-bold text-white text-center mb-3 tracking-tight">
+          <h1 className="text-2xl font-bold text-center mb-3 tracking-tight" style={{ color: tk.text }}>
             Request submitted
           </h1>
           <p className="text-sm leading-6 text-center" style={{ color: tk.textSec }}>
             Your signup is pending admin approval. You'll receive an email at{' '}
-            <span className="text-white font-semibold">{form.email}</span> once you're approved.
+            <span className="font-semibold" style={{ color: tk.text }}>{form.email}</span> once you're approved.
           </p>
           <div className="mt-5 rounded-xl px-4 py-3"
-            style={{ background: 'rgba(255,255,255,0.04)', border: `1px solid ${tk.border}` }}>
+            style={{ background: tk.panelHov, border: `1px solid ${tk.border}` }}>
             <p className="text-[10px] uppercase tracking-widest" style={{ color: tk.textTer }}>Your member ID</p>
-            <p className="text-sm font-mono font-bold text-white mt-1">{success.member_login_id}</p>
+            <p className="text-sm font-mono font-bold mt-1" style={{ color: tk.text }}>{success.member_login_id}</p>
             <p className="text-[11px] mt-1.5" style={{ color: tk.textTer }}>
               Use this with your password once approved.
             </p>
@@ -301,7 +325,7 @@ export default function GroupWelcomePage() {
           <motion.button
             onClick={() => navigate(`/${org.slug}/overview`)}
             className="w-full mt-6 px-6 py-3 rounded-xl font-semibold text-sm text-white"
-            style={{ background: 'linear-gradient(135deg, #FF6803, #FFAC5F)' }}
+            style={{ background: tk.gradPrimary }}
             whileHover={{ scale: 1.02 }}
             whileTap={{ scale: 0.97 }}
           >
@@ -315,7 +339,7 @@ export default function GroupWelcomePage() {
   // ─────────────────────────────────────────────────────────────────────────
   // Main UI
   // ─────────────────────────────────────────────────────────────────────────
-  const km = kindMeta(group.kind);
+  const km = kindMeta(group.kind, tk);
 
   return (
     <div className="min-h-screen relative overflow-x-hidden" style={{ minHeight: '100dvh', background: tk.bg }}>
@@ -340,51 +364,51 @@ export default function GroupWelcomePage() {
       </div>
 
       {/* Top bar */}
-      <nav className="relative z-10 max-w-3xl mx-auto px-5 sm:px-6 py-5 flex items-center justify-between">
+      <nav className="relative z-10 max-w-3xl mx-auto px-4 sm:px-6 py-4 sm:py-5 flex items-center justify-between gap-3">
         <button
           onClick={() => navigate(`/${org.slug}/overview`)}
-          className="flex items-center gap-2 text-sm font-medium transition-colors"
+          className="flex items-center gap-2 text-xs sm:text-sm font-medium transition-colors min-w-0"
           style={{ color: tk.textSec }}
         >
           <ArrowLeft className="w-4 h-4" />
-          Back to {org.short_name}
+          <span className="truncate">Back to {org.short_name}</span>
         </button>
         <div className="flex items-center gap-2">
           <div
             className="w-8 h-8 rounded-lg flex items-center justify-center font-extrabold text-white text-sm"
-            style={{ background: 'linear-gradient(135deg, #FF6803 0%, #FFAC5F 100%)' }}
+            style={{ background: tk.gradPrimary }}
           >
             P
           </div>
-          <span className="text-base font-bold text-white">{APP_NAME}</span>
+          <span className="hidden sm:inline text-base font-bold" style={{ color: tk.text }}>{APP_NAME}</span>
         </div>
       </nav>
 
       {/* Group hero */}
-      <header className="relative z-10 max-w-3xl mx-auto px-5 sm:px-6 pt-4 pb-6">
+      <header className="relative z-10 max-w-3xl mx-auto px-4 sm:px-6 pt-3 sm:pt-4 pb-5 sm:pb-6">
         <motion.div
           initial={{ opacity: 0, y: 12 }}
           animate={{ opacity: 1, y: 0 }}
-          className="rounded-3xl p-5 sm:p-6 relative overflow-hidden"
+          className="rounded-3xl p-4 sm:p-6 relative overflow-hidden"
           style={{
-            background: `linear-gradient(135deg, ${km.color}12, rgba(255,255,255,0.02))`,
+            background: `linear-gradient(135deg, ${km.color}12, ${tk.panel})`,
             border: `1px solid ${tk.border}`,
           }}
         >
-          <div className="flex items-start gap-4">
+          <div className="flex items-start gap-3 sm:gap-4">
             <div
-              className="shrink-0 w-14 h-14 rounded-2xl flex items-center justify-center"
+              className="shrink-0 w-12 h-12 sm:w-14 sm:h-14 rounded-2xl flex items-center justify-center"
               style={{ background: `${km.color}18`, border: `1px solid ${km.color}30` }}
             >
-              <km.icon className="w-6 h-6" style={{ color: km.color }} />
+              <km.icon className="w-5 h-5 sm:w-6 sm:h-6" style={{ color: km.color }} />
             </div>
             <div className="min-w-0 flex-1">
-              <p className="text-[9px] uppercase tracking-[0.22em] font-semibold mb-1"
+              <p className="text-[8px] sm:text-[9px] uppercase tracking-[0.18em] font-semibold mb-1 break-words"
                 style={{ color: tk.textTer }}>
                 {org.name}
                 {parentGroup && <> · {parentGroup.name}</>}
               </p>
-              <h1 className="text-2xl sm:text-3xl font-extrabold text-white leading-tight tracking-tight">
+              <h1 className="text-[1.35rem] sm:text-3xl font-extrabold leading-[1.12] tracking-tight break-words" style={{ color: tk.text, wordBreak: 'break-word' }}>
                 {group.name}
               </h1>
               <div className="flex flex-wrap items-center gap-2 mt-2">
@@ -394,7 +418,7 @@ export default function GroupWelcomePage() {
                   {km.label}
                 </span>
                 <span className="inline-flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-full font-medium"
-                  style={{ background: 'rgba(255,255,255,0.06)', color: tk.textSec }}>
+                  style={{ background: tk.panelHov, color: tk.textSec }}>
                   <Users className="w-3 h-3" />
                   {(group.member_count ?? 0).toLocaleString()} members
                 </span>
@@ -411,7 +435,7 @@ export default function GroupWelcomePage() {
       </header>
 
       {/* Main */}
-      <main className="relative z-10 max-w-3xl mx-auto px-5 sm:px-6 pb-24">
+      <main className="relative z-10 max-w-3xl mx-auto px-4 sm:px-6 pb-20 sm:pb-24">
         <AnimatePresence mode="wait">
           {mode === 'choose' ? (
             <motion.div
@@ -422,7 +446,7 @@ export default function GroupWelcomePage() {
               transition={{ duration: 0.28 }}
               className="space-y-4"
             >
-              <h2 className="text-base font-semibold text-white px-1">How would you like to continue?</h2>
+              <h2 className="text-base font-semibold px-1" style={{ color: tk.text }}>How would you like to continue?</h2>
 
               {!allowSignup && (
                 <div
@@ -439,6 +463,7 @@ export default function GroupWelcomePage() {
               {/* I'm new */}
               {allowSignup && (
                 <ChoiceCard
+                  tk={tk}
                   icon={<UserPlus className="w-5 h-5" />}
                   iconColor={tk.primary}
                   title="I'm new to this class"
@@ -451,6 +476,7 @@ export default function GroupWelcomePage() {
 
               {/* Have account */}
               <ChoiceCard
+                tk={tk}
                 icon={<LogIn className="w-5 h-5" />}
                 iconColor={tk.mint}
                 title="I have an account"
@@ -463,6 +489,7 @@ export default function GroupWelcomePage() {
 
               {/* Invite code */}
               <ChoiceCard
+                tk={tk}
                 icon={<Ticket className="w-5 h-5" />}
                 iconColor={tk.blue}
                 title="I have an invite code"
@@ -494,7 +521,7 @@ export default function GroupWelcomePage() {
               >
                 <div className="flex items-center gap-2 mb-1">
                   <Sparkles className="w-4 h-4" style={{ color: tk.primary }} />
-                  <h2 className="text-base font-bold text-white">Join {group.name}</h2>
+                  <h2 className="text-base font-bold" style={{ color: tk.text }}>Join {group.name}</h2>
                 </div>
                 <p className="text-xs leading-5 mb-5" style={{ color: tk.textSec }}>
                   Fill the form to create your account. Your data lives only in this class.
@@ -502,37 +529,37 @@ export default function GroupWelcomePage() {
 
                 <form className="space-y-4" onSubmit={handleSubmit}>
                   <Row>
-                    <Field label="Full name" required>
-                      <Input value={form.fullName} onChange={(v) => setForm({ ...form, fullName: v })} placeholder="John Doe" autoComplete="name" required />
+                    <Field tk={tk} label="Full name" required>
+                      <Input tk={tk} value={form.fullName} onChange={(v) => setForm({ ...form, fullName: v })} placeholder="John Doe" autoComplete="name" required />
                     </Field>
-                    <Field label="Member ID" required hint="matric / staff / member number">
-                      <Input value={form.memberNumber} onChange={(v) => setForm({ ...form, memberNumber: v })} placeholder="2018/1/12345" required />
-                    </Field>
-                  </Row>
-
-                  <Row>
-                    <Field label="Email" required icon={<Mail className="w-3 h-3" />}>
-                      <Input value={form.email} onChange={(v) => setForm({ ...form, email: v })} placeholder="you@example.com" type="email" autoComplete="email" required />
-                    </Field>
-                    <Field label="Phone" icon={<Phone className="w-3 h-3" />}>
-                      <Input value={form.phone} onChange={(v) => setForm({ ...form, phone: v })} placeholder="+234 800 000 0000" type="tel" autoComplete="tel" />
+                    <Field tk={tk} label="Member ID" required hint="matric / staff / member number">
+                      <Input tk={tk} value={form.memberNumber} onChange={(v) => setForm({ ...form, memberNumber: v })} placeholder="2018/1/12345" required />
                     </Field>
                   </Row>
 
                   <Row>
-                    <Field label="Password" required hint="at least 6 chars">
-                      <Input value={form.password} onChange={(v) => setForm({ ...form, password: v })} placeholder="••••••••" type="password" autoComplete="new-password" required />
+                    <Field tk={tk} label="Email" required icon={<Mail className="w-3 h-3" />}>
+                      <Input tk={tk} value={form.email} onChange={(v) => setForm({ ...form, email: v })} placeholder="you@example.com" type="email" autoComplete="email" required />
                     </Field>
-                    <Field label="Confirm password" required>
-                      <Input value={form.passwordConfirm} onChange={(v) => setForm({ ...form, passwordConfirm: v })} placeholder="••••••••" type="password" autoComplete="new-password" required />
+                    <Field tk={tk} label="Phone" icon={<Phone className="w-3 h-3" />}>
+                      <Input tk={tk} value={form.phone} onChange={(v) => setForm({ ...form, phone: v })} placeholder="+234 800 000 0000" type="tel" autoComplete="tel" />
+                    </Field>
+                  </Row>
+
+                  <Row>
+                    <Field tk={tk} label="Password" required hint="at least 6 chars">
+                      <Input tk={tk} value={form.password} onChange={(v) => setForm({ ...form, password: v })} placeholder="••••••••" type="password" autoComplete="new-password" required />
+                    </Field>
+                    <Field tk={tk} label="Confirm password" required>
+                      <Input tk={tk} value={form.passwordConfirm} onChange={(v) => setForm({ ...form, passwordConfirm: v })} placeholder="••••••••" type="password" autoComplete="new-password" required />
                     </Field>
                   </Row>
 
                   {(() => {
                     const lf = levelFieldLabel(org?.organization_type);
                     return (
-                      <Field label={lf.label} hint={lf.hint}>
-                        <Input value={form.level} onChange={(v) => setForm({ ...form, level: v })} placeholder={lf.placeholder} />
+                      <Field tk={tk} label={lf.label} hint={lf.hint}>
+                        <Input tk={tk} value={form.level} onChange={(v) => setForm({ ...form, level: v })} placeholder={lf.placeholder} />
                       </Field>
                     );
                   })()}
@@ -568,7 +595,7 @@ export default function GroupWelcomePage() {
                       disabled={!canSubmit || submitting}
                       className="px-6 py-3 rounded-2xl text-white font-bold text-sm flex items-center gap-2 disabled:opacity-40 disabled:cursor-not-allowed"
                       style={{
-                        background: 'linear-gradient(135deg, #FF6803 0%, #FFAC5F 100%)',
+                        background: tk.gradPrimary,
                         boxShadow: canSubmit && !submitting ? '0 8px 28px rgba(255,104,3,0.35)' : 'none',
                       }}
                       whileHover={canSubmit && !submitting ? { scale: 1.03 } : undefined}
@@ -594,6 +621,7 @@ export default function GroupWelcomePage() {
 // ────────────────────────────────────────────────────────────────────────────
 
 function ChoiceCard({
+  tk,
   icon,
   iconColor,
   title,
@@ -602,6 +630,7 @@ function ChoiceCard({
   onClick,
   emphasis,
 }: {
+  tk: GroupWelcomeTokens;
   icon: React.ReactNode;
   iconColor: string;
   title: string;
@@ -615,7 +644,7 @@ function ChoiceCard({
       onClick={onClick}
       whileHover={{ y: -2 }}
       whileTap={{ scale: 0.99 }}
-      className="w-full text-left rounded-2xl p-5 transition-all relative overflow-hidden"
+      className="w-full text-left rounded-2xl p-4 sm:p-5 transition-all relative overflow-hidden"
       style={{
         background: emphasis
           ? 'linear-gradient(135deg, rgba(255,104,3,0.12), rgba(255,104,3,0.04))'
@@ -623,9 +652,9 @@ function ChoiceCard({
         border: `1px solid ${emphasis ? 'rgba(255,104,3,0.32)' : tk.border}`,
       }}
     >
-      <div className="flex items-center gap-4">
+      <div className="flex items-start gap-3 sm:gap-4">
         <div
-          className="w-11 h-11 rounded-xl flex items-center justify-center shrink-0"
+          className="w-10 h-10 sm:w-11 sm:h-11 rounded-xl flex items-center justify-center shrink-0"
           style={{
             background: `${iconColor}18`,
             color: iconColor,
@@ -635,11 +664,18 @@ function ChoiceCard({
           {icon}
         </div>
         <div className="flex-1 min-w-0">
-          <h3 className="text-sm font-bold text-white">{title}</h3>
+          <h3 className="text-sm font-bold break-words" style={{ color: tk.text }}>{title}</h3>
           <p className="text-xs mt-1 leading-5" style={{ color: tk.textSec }}>{description}</p>
+          <div
+            className="sm:hidden inline-flex items-center gap-1 text-xs font-semibold mt-2"
+            style={{ color: emphasis ? tk.primary : tk.textSec }}
+          >
+            {ctaLabel}
+            <ArrowRight className="w-3.5 h-3.5" />
+          </div>
         </div>
         <div
-          className="flex items-center gap-1 text-xs font-semibold shrink-0 ml-2"
+          className="hidden sm:flex items-center gap-1 text-xs font-semibold shrink-0 ml-2"
           style={{ color: emphasis ? tk.primary : tk.textSec }}
         >
           {ctaLabel}
@@ -655,12 +691,14 @@ function Row({ children }: { children: React.ReactNode }) {
 }
 
 function Field({
+  tk,
   label,
   hint,
   required,
   icon,
   children,
 }: {
+  tk: GroupWelcomeTokens;
   label: string;
   hint?: string;
   required?: boolean;
@@ -685,8 +723,9 @@ function Field({
 }
 
 function Input({
-  value, onChange, placeholder, type = 'text', autoComplete, required,
+  tk, value, onChange, placeholder, type = 'text', autoComplete, required,
 }: {
+  tk: GroupWelcomeTokens;
   value: string;
   onChange: (v: string) => void;
   placeholder?: string;
@@ -704,7 +743,7 @@ function Input({
       placeholder={placeholder}
       className="w-full rounded-xl px-3.5 py-2.5 text-sm outline-none transition-colors"
       style={{
-        background: 'rgba(26,14,9,0.85)',
+        background: tk.panelHov,
         border: `1px solid ${tk.border}`,
         color: tk.text,
       }}
@@ -714,9 +753,9 @@ function Input({
   );
 }
 
-function Loader() {
+function Loader({ tk }: { tk: GroupWelcomeTokens }) {
   return (
-    <FullCenter>
+    <FullCenter tk={tk}>
       <motion.div
         className="w-10 h-10 border-2 rounded-full"
         style={{ borderColor: `${tk.primary}30`, borderTopColor: tk.primary }}
@@ -730,7 +769,7 @@ function Loader() {
   );
 }
 
-function FullCenter({ children }: { children: React.ReactNode }) {
+function FullCenter({ children, tk }: { children: React.ReactNode; tk: GroupWelcomeTokens }) {
   return (
     <div
       className="min-h-screen flex items-center justify-center px-5"

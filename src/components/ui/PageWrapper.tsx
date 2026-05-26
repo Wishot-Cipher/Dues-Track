@@ -1,5 +1,5 @@
 import type { ReactNode, CSSProperties } from 'react';
-import { colors } from '@/config/colors';
+import { getDashboardTokens, useTheme } from '@/hooks/useTheme';
 
 interface PageWrapperProps {
   children: ReactNode;
@@ -26,6 +26,9 @@ export default function PageWrapper({
   noPadding = false,
   centered = false,
 }: PageWrapperProps) {
+  const { theme } = useTheme();
+  const tk = getDashboardTokens(theme);
+
   return (
     <div
       className={`
@@ -37,7 +40,7 @@ export default function PageWrapper({
       style={{
         minHeight: '100dvh', // Dynamic viewport height for mobile
         width: '100%',
-        background: 'radial-gradient(ellipse at top, #1A0E09 0%, #0F0703 100%)',
+        background: tk.bgWash,
         ...style,
       }}
     >
@@ -47,8 +50,8 @@ export default function PageWrapper({
           className="fixed inset-0 opacity-20 pointer-events-none"
           style={{
             backgroundImage: `
-              linear-gradient(${colors.primary}40 1px, transparent 1px),
-              linear-gradient(90deg, ${colors.primary}40 1px, transparent 1px)
+              linear-gradient(${tk.dot} 1px, transparent 1px),
+              linear-gradient(90deg, ${tk.dot} 1px, transparent 1px)
             `,
             backgroundSize: '50px 50px',
           }}
@@ -61,7 +64,7 @@ export default function PageWrapper({
           <div
             className="absolute w-[500px] h-[500px] rounded-full blur-[120px] opacity-30 animate-pulse"
             style={{
-              background: `radial-gradient(circle, ${colors.primary} 0%, transparent 70%)`,
+              background: `radial-gradient(circle, ${tk.blob1} 0%, transparent 70%)`,
               top: '-10%',
               right: '-5%',
               animationDuration: '4s',
@@ -70,7 +73,7 @@ export default function PageWrapper({
           <div
             className="absolute w-[400px] h-[400px] rounded-full blur-[100px] opacity-20"
             style={{
-              background: `radial-gradient(circle, ${colors.accentMint} 0%, transparent 70%)`,
+              background: `radial-gradient(circle, ${tk.blob2} 0%, transparent 70%)`,
               bottom: '-5%',
               left: '-5%',
               animation: 'pulse 6s ease-in-out infinite',
@@ -85,7 +88,7 @@ export default function PageWrapper({
                 alt="ECE Background"
                 className="w-full h-full object-contain"
                 style={{
-                  filter: 'grayscale(0.5) brightness(0.8)',
+                  filter: `grayscale(0.5) brightness(${theme === 'light' ? '1.05' : '0.8'})`,
                   mixBlendMode: 'soft-light',
                 }}
               />

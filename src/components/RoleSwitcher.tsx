@@ -7,6 +7,10 @@ import { useActiveRole } from '@/hooks/useActiveRole';
 import { useUserRoles } from '@/hooks/useUserRoles';
 import type { RoleTab } from '@/hooks/useUserRoles';
 
+function isSelectableRole(role: RoleTab): role is RoleTab & { kind: 'student' | 'exec' } {
+  return role.kind !== 'pending';
+}
+
 function toActiveRole(
   role: RoleTab & { kind: 'student' | 'exec' },
   orgId?: string,
@@ -34,10 +38,7 @@ export default function RoleSwitcher() {
     fallbackGroupId: group?.id,
   });
 
-  const selectableRoles = useMemo(
-    () => roles.filter((r): r is RoleTab & { kind: 'student' | 'exec' } => r.kind !== 'pending'),
-    [roles]
-  );
+  const selectableRoles = useMemo(() => roles.filter(isSelectableRole), [roles]);
 
   useEffect(() => {
     if (loading || selectableRoles.length === 0) return;
@@ -71,12 +72,8 @@ export default function RoleSwitcher() {
             type="button"
             disabled={isPending}
             onClick={() => {
-              if (isPending) return;
-              const next = toActiveRole(
-                role as RoleTab & { kind: 'student' | 'exec' },
-                organization?.id,
-                user?.id
-              );
+              if (!isSelectableRole(role)) return;
+              const next = toActiveRole(role, organization?.id, user?.id);
               setActiveRole(next, { fallbackGroupId: group?.id });
               if (role.kind === 'student') {
                 go('/dashboard');

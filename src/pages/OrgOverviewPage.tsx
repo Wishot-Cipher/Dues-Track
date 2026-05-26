@@ -34,38 +34,65 @@ import PageWrapper from '@/components/ui/PageWrapper';
 import { APP_NAME } from '@/config/constants';
 import { organizationService } from '@/services/organizationService';
 import { useMultiTenantAuth } from '@/hooks/useMultiTenantAuth';
+import { getDashboardTokens, useTheme } from '@/hooks/useTheme';
 import type { Organization, OrganizationGroup, TrustLevel } from '@/types/multiTenant';
 import TrustBadge from '@/components/trust/TrustBadge';
 
 // ── Design tokens ─────────────────────────────────────────────────────────────
-const tk = {
-  bg:           '#0F0703',
-  cardBg:       'rgba(255,255,255,0.03)',
-  cardBgHov:    'rgba(255,255,255,0.055)',
-  cardBorder:   'rgba(255,255,255,0.08)',
-  hoverBorder:  'rgba(255,104,3,0.35)',
-  textPrimary:  '#FFFFFF',
-  textSec:      'rgba(255,255,255,0.55)',
-  textTer:      'rgba(255,255,255,0.30)',
-  primary:      '#FF6803',
-  primaryDim:   'rgba(255,104,3,0.12)',
-  primaryBorder:'rgba(255,104,3,0.25)',
-  blue:         '#3b82f6',
-  mint:         '#30FFAC',
-  danger:       '#ef4444',
+type OverviewTokens = {
+  bg: string;
+  cardBg: string;
+  cardBgHov: string;
+  cardHover: string;
+  cardBorder: string;
+  hoverBorder: string;
+  textPrimary: string;
+  textSec: string;
+  textTer: string;
+  primary: string;
+  primaryDim: string;
+  primarySoft: string;
+  primaryBorder: string;
+  blue: string;
+  mint: string;
+  danger: string;
+  gradPrimary: string;
 };
 
+function buildOverviewTokens(theme: 'light' | 'dark'): OverviewTokens {
+  const dtk = getDashboardTokens(theme);
+  return {
+    bg: dtk.bg,
+    cardBg: dtk.card,
+    cardBgHov: dtk.cardHover,
+    cardHover: dtk.cardHover,
+    cardBorder: dtk.cardBorder,
+    hoverBorder: dtk.primaryRing,
+    textPrimary: dtk.text,
+    textSec: dtk.textSec,
+    textTer: dtk.textTer,
+    primary: dtk.primary,
+    primaryDim: dtk.primarySoft,
+    primarySoft: dtk.primarySoft,
+    primaryBorder: dtk.primaryRing,
+    blue: dtk.blue,
+    mint: dtk.mint,
+    danger: dtk.danger,
+    gradPrimary: dtk.gradOrange,
+  };
+}
+
 // ── Kind -> icon + color ───────────────────────────────────────────────────────
-const KIND_META: Record<string, { color: string; icon: React.ElementType; label: string }> = {
-  faculty:    { color: tk.blue,    icon: GraduationCap, label: 'Faculty'    },
-  department: { color: tk.primary, icon: BookOpen,      label: 'Department' },
-  class:      { color: '#8b5cf6',  icon: Layers,        label: 'Class'      },
-  general:    { color: '#06b6d4',  icon: Users,         label: 'Group'      },
-  year:       { color: '#10b981',  icon: Layers,        label: 'Year'       },
-  level:      { color: '#ec4899',  icon: Layers,        label: 'Level'      },
-};
-function kindMeta(kind?: string) {
-  return KIND_META[kind?.toLowerCase() || ''] ?? { color: tk.primary, icon: Layers, label: 'Group' };
+function kindMeta(kind: string | undefined, tk: OverviewTokens) {
+  const map: Record<string, { color: string; icon: React.ElementType; label: string }> = {
+    faculty:    { color: tk.blue,    icon: GraduationCap, label: 'Faculty' },
+    department: { color: tk.primary, icon: BookOpen,      label: 'Department' },
+    class:      { color: '#8b5cf6',  icon: Layers,        label: 'Class' },
+    general:    { color: '#06b6d4',  icon: Users,         label: 'Group' },
+    year:       { color: tk.mint,    icon: Layers,        label: 'Year' },
+    level:      { color: '#ec4899',  icon: Layers,        label: 'Level' },
+  };
+  return map[kind?.toLowerCase() || ''] ?? { color: tk.primary, icon: Layers, label: 'Group' };
 }
 
 const KIND_ORDER = ['faculty', 'department', 'class', 'year', 'level', 'general'];
@@ -81,16 +108,18 @@ function SwitchDeptModal({
   targetGroup,
   currentGroupName,
   org,
+  tk,
   onSwitch,
   onStay,
 }: {
   targetGroup: OrganizationGroup;
   currentGroupName: string;
   org: Organization;
+  tk: OverviewTokens;
   onSwitch: () => void;
   onStay: () => void;
 }) {
-  const km = kindMeta(targetGroup.kind);
+  const km = kindMeta(targetGroup.kind, tk);
 
   return (
     <motion.div
@@ -109,7 +138,7 @@ function SwitchDeptModal({
 
       <motion.div
         className="relative w-full max-w-md rounded-[28px] overflow-hidden"
-        style={{ background: '#161210', border: `1px solid ${tk.cardBorder}` }}
+        style={{ background: tk.cardBg, border: `1px solid ${tk.cardBorder}` }}
         initial={{ opacity: 0, y: 32, scale: 0.96 }}
         animate={{ opacity: 1, y: 0, scale: 1 }}
         exit={{ opacity: 0, y: 20, scale: 0.96 }}
@@ -125,12 +154,12 @@ function SwitchDeptModal({
             <AlertTriangle className="w-5 h-5" style={{ color: tk.danger }} />
           </div>
 
-          <h3 className="text-xl font-bold text-white mb-2 tracking-tight">
+          <h3 className="text-xl font-bold mb-2 tracking-tight" style={{ color: tk.textPrimary }}>
             You're already signed in
           </h3>
           <p className="text-sm leading-6" style={{ color: tk.textSec }}>
             You're currently logged into{' '}
-            <span className="text-white font-semibold">{currentGroupName}</span>.
+            <span className="font-semibold" style={{ color: tk.textPrimary }}>{currentGroupName}</span>.
             Switching will sign you out of your current session.
           </p>
 
@@ -147,7 +176,7 @@ function SwitchDeptModal({
               </div>
               <div className="min-w-0 flex-1">
                 <p className="text-[10px] uppercase tracking-widest" style={{ color: tk.textTer }}>Current session</p>
-                <p className="text-sm font-semibold text-white truncate">{currentGroupName}</p>
+                <p className="text-sm font-semibold truncate" style={{ color: tk.textPrimary }}>{currentGroupName}</p>
               </div>
               <LogOut className="w-3.5 h-3.5 shrink-0" style={{ color: tk.danger }} />
             </div>
@@ -168,7 +197,7 @@ function SwitchDeptModal({
                 {targetGroup.levels?.length ? (
                   <p className="text-[10px]" style={{ color: km.color }}>Level {targetGroup.levels.join(' · ')}</p>
                 ) : null}
-                <p className="text-sm font-semibold text-white truncate">{targetGroup.name}</p>
+                <p className="text-sm font-semibold truncate" style={{ color: tk.textPrimary }}>{targetGroup.name}</p>
               </div>
               <CheckCircle2 className="w-3.5 h-3.5 shrink-0" style={{ color: km.color }} />
             </div>
@@ -204,7 +233,7 @@ function SwitchDeptModal({
 // ─────────────────────────────────────────────────────────────────────────────
 // Loading screen
 // ─────────────────────────────────────────────────────────────────────────────
-function LoadingScreen() {
+function LoadingScreen({ tk }: { tk: OverviewTokens }) {
   return (
     <PageWrapper centered noPadding className="p-4 sm:p-6 lg:p-8">
       <div className="flex flex-col items-center justify-center py-20 gap-4">
@@ -225,7 +254,7 @@ function LoadingScreen() {
 // ─────────────────────────────────────────────────────────────────────────────
 // Not found
 // ─────────────────────────────────────────────────────────────────────────────
-function NotFoundScreen({ orgSlug, onBack }: { orgSlug?: string; onBack: () => void }) {
+function NotFoundScreen({ orgSlug, onBack, tk }: { orgSlug?: string; onBack: () => void; tk: OverviewTokens }) {
   return (
     <PageWrapper centered noPadding className="p-4 sm:p-6 lg:p-8">
       <motion.div
@@ -238,14 +267,14 @@ function NotFoundScreen({ orgSlug, onBack }: { orgSlug?: string; onBack: () => v
           style={{ background: `${tk.primary}15` }}>
           <Building2 className="w-7 h-7" style={{ color: tk.primary }} />
         </div>
-        <h1 className="text-2xl font-bold text-white mb-3 tracking-tight">Organization not found</h1>
+        <h1 className="text-2xl font-bold mb-3 tracking-tight" style={{ color: tk.textPrimary }}>Organization not found</h1>
         <p className="text-sm leading-6" style={{ color: tk.textSec }}>
-          No organization at <span className="text-white font-semibold">/{orgSlug}</span>.
+          No organization at <span className="font-semibold" style={{ color: tk.textPrimary }}>/{orgSlug}</span>.
         </p>
         <motion.button
           onClick={onBack}
           className="mt-6 px-6 py-3 rounded-xl font-semibold text-sm text-white"
-          style={{ background: 'linear-gradient(135deg, #FF6803, #FFAC5F)' }}
+          style={{ background: tk.gradPrimary }}
           whileHover={{ scale: 1.02 }}
           whileTap={{ scale: 0.97 }}
         >
@@ -262,14 +291,16 @@ function NotFoundScreen({ orgSlug, onBack }: { orgSlug?: string; onBack: () => v
 function DeptRow({
   group,
   index,
+  tk,
   onClick,
 }: {
   group: OrganizationGroup;
   index: number;
+  tk: OverviewTokens;
   onClick: () => void;
 }) {
   const [hovered, setHovered] = useState(false);
-  const km = kindMeta(group.kind);
+  const km = kindMeta(group.kind, tk);
   const levelText = group.levels?.length ? group.levels.join(' · ') : '';
 
   return (
@@ -308,7 +339,7 @@ function DeptRow({
             </span>
           </div>
         )}
-        <p className="text-sm font-semibold text-white truncate leading-snug">{group.name}</p>
+        <p className="text-sm font-semibold truncate leading-snug" style={{ color: tk.textPrimary }}>{group.name}</p>
         <p className="text-[11px] font-mono uppercase tracking-wider mt-0.5 truncate" style={{ color: tk.textTer }}>
           {group.short_name}
           {group.kind && !levelText && (
@@ -335,8 +366,8 @@ function DeptRow({
 // ─────────────────────────────────────────────────────────────────────────────
 // Section header (grouped view)
 // ─────────────────────────────────────────────────────────────────────────────
-function SectionHeader({ kind, count }: { kind: string; count: number }) {
-  const km = kindMeta(kind);
+function SectionHeader({ kind, count, tk }: { kind: string; count: number; tk: OverviewTokens }) {
+  const km = kindMeta(kind, tk);
   return (
     <div className="flex items-center gap-2.5 px-4 mb-1 mt-1">
       <km.icon className="w-3.5 h-3.5 shrink-0" style={{ color: km.color }} />
@@ -361,6 +392,8 @@ export default function OrgOverviewPage() {
   const { orgSlug }  = useParams<{ orgSlug: string }>();
   const navigate     = useNavigate();
   const { isAuthenticated, user, logout } = useMultiTenantAuth();
+  const { theme } = useTheme();
+  const tk = buildOverviewTokens(theme);
 
   const [loading, setLoading]           = useState(true);
   const [org, setOrg]                   = useState<Organization | null>(null);
@@ -484,8 +517,8 @@ export default function OrgOverviewPage() {
     });
   };
 
-  if (loading)  return <LoadingScreen />;
-  if (!org)     return <NotFoundScreen orgSlug={orgSlug} onBack={() => navigate('/')} />;
+  if (loading)  return <LoadingScreen tk={tk} />;
+  if (!org)     return <NotFoundScreen orgSlug={orgSlug} onBack={() => navigate('/')} tk={tk} />;
 
   const groupLabel       = org.group_label       || 'Group';
   const groupLabelPlural = org.group_label_plural || 'Groups';
@@ -502,7 +535,7 @@ export default function OrgOverviewPage() {
           <motion.div
             className="rounded-[28px] p-5 sm:p-7 relative overflow-hidden"
             style={{
-              background: 'linear-gradient(135deg, rgba(255,104,3,0.10), rgba(255,255,255,0.02))',
+              background: `linear-gradient(135deg, ${tk.primaryDim}, ${tk.cardBg})`,
               border: `1px solid ${tk.cardBorder}`,
             }}
             initial={{ opacity: 0, y: 14 }}
@@ -510,7 +543,7 @@ export default function OrgOverviewPage() {
             transition={{ duration: 0.38, ease: [0.22, 1, 0.36, 1] }}
           >
             <div className="absolute inset-0 pointer-events-none"
-              style={{ background: 'radial-gradient(ellipse 50% 60% at 95% 10%, rgba(255,104,3,0.14), transparent)' }} />
+              style={{ background: `radial-gradient(ellipse 50% 60% at 95% 10%, ${tk.primary}24, transparent)` }} />
 
             <div className="relative flex flex-col sm:flex-row sm:items-center gap-5 justify-between">
               <div className="flex items-center gap-4 min-w-0">
@@ -521,8 +554,8 @@ export default function OrgOverviewPage() {
                       alt={org.name}
                       className="w-12 h-12 sm:w-14 sm:h-14 rounded-2xl object-cover"
                       style={{
-                        background: '#1A0E09',
-                        border: '1px solid rgba(255,255,255,0.08)',
+                        background: tk.bg,
+                        border: `1px solid ${tk.cardBorder}`,
                         boxShadow: '0 6px 20px rgba(0,0,0,0.32)',
                       }}
                       onError={(e) => {
@@ -537,7 +570,7 @@ export default function OrgOverviewPage() {
                   <div
                     className="w-12 h-12 sm:w-14 sm:h-14 rounded-2xl flex items-center justify-center text-white font-extrabold text-lg sm:text-xl"
                     style={{
-                      background: 'linear-gradient(135deg, #FF6803, #FFAC5F)',
+                      background: tk.gradPrimary,
                       boxShadow: '0 6px 20px rgba(255,104,3,0.32)',
                       display: org.logo_url ? 'none' : 'flex',
                     }}
@@ -546,14 +579,14 @@ export default function OrgOverviewPage() {
                   </div>
                   <span
                     className="absolute -bottom-1 -right-1 w-3.5 h-3.5 rounded-full border-2"
-                    style={{ background: '#22c55e', borderColor: '#0F0703' }}
+                    style={{ background: tk.mint, borderColor: tk.bg }}
                   />
                 </div>
                 <div className="min-w-0">
                   <p className="text-[9px] uppercase tracking-[0.22em] font-semibold mb-0.5" style={{ color: tk.textTer }}>
                     Organization Access
                   </p>
-                  <h1 className="text-xl sm:text-2xl font-extrabold text-white leading-tight tracking-tight truncate">
+                  <h1 className="text-xl sm:text-2xl font-extrabold leading-tight tracking-tight truncate" style={{ color: tk.textPrimary }}>
                     {org.name}
                   </h1>
                   <div className="flex flex-wrap items-center gap-2 mt-1.5">
@@ -563,13 +596,13 @@ export default function OrgOverviewPage() {
                       showTooltip
                     />
                     <span className="inline-flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-full font-medium capitalize"
-                      style={{ background: 'rgba(255,255,255,0.06)', color: tk.textSec }}>
+                      style={{ background: tk.cardBgHov, color: tk.textSec }}>
                       <Globe className="w-3 h-3" /> {org.organization_type}
                     </span>
                     {isAuthenticated && user && (
                       <>
                         <span className="inline-flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-full font-medium"
-                          style={{ background: 'rgba(48,255,172,0.10)', color: '#30FFAC', border: '1px solid rgba(48,255,172,0.20)' }}>
+                          style={{ background: `${tk.mint}1A`, color: tk.mint, border: `1px solid ${tk.mint}33` }}>
                           <CheckCircle2 className="w-3 h-3" /> Signed in
                         </span>
                         <motion.button
@@ -607,14 +640,14 @@ export default function OrgOverviewPage() {
                   style={{ background: tk.cardBg, border: `1px solid ${tk.cardBorder}`, minWidth: 72 }}>
                   <div className="absolute top-0 inset-x-0 h-0.5" style={{ background: tk.primary }} />
                   <p className="text-[9px] uppercase tracking-wider" style={{ color: tk.textTer }}>{groupLabelPlural}</p>
-                  <p className="text-xl font-bold text-white mt-1">{groups.length}</p>
+                  <p className="text-xl font-bold mt-1" style={{ color: tk.textPrimary }}>{groups.length}</p>
                 </div>
                 {kinds.length > 1 && (
                   <div className="rounded-xl px-4 py-2.5 text-center relative overflow-hidden"
                     style={{ background: tk.cardBg, border: `1px solid ${tk.cardBorder}`, minWidth: 72 }}>
                     <div className="absolute top-0 inset-x-0 h-0.5" style={{ background: tk.blue }} />
                     <p className="text-[9px] uppercase tracking-wider" style={{ color: tk.textTer }}>Types</p>
-                    <p className="text-xl font-bold text-white mt-1">{kinds.length}</p>
+                    <p className="text-xl font-bold mt-1" style={{ color: tk.textPrimary }}>{kinds.length}</p>
                   </div>
                 )}
               </div>
@@ -638,7 +671,7 @@ export default function OrgOverviewPage() {
                 style={{ borderBottom: `1px solid ${tk.cardBorder}` }}
               >
                 <div className="flex-1">
-                  <h2 className="text-base font-bold text-white tracking-tight">
+                  <h2 className="text-base font-bold tracking-tight" style={{ color: tk.textPrimary }}>
                     Select a {groupLabel.toLowerCase()}
                   </h2>
                   <p className="text-[11px] mt-0.5" style={{ color: tk.textTer }}>
@@ -652,10 +685,11 @@ export default function OrgOverviewPage() {
                     value={searchQuery}
                     onChange={e => { setSearchQuery(e.target.value); setShowAll(false); }}
                     placeholder={`Search ${groupLabelPlural.toLowerCase()}…`}
-                    className="w-full pl-9 pr-8 py-2.5 rounded-xl text-sm text-white outline-none transition-all"
+                    className="w-full pl-9 pr-8 py-2.5 rounded-xl text-sm outline-none transition-all"
                     style={{
-                      background: 'rgba(255,255,255,0.05)',
+                      background: tk.cardBgHov,
                       border: `1px solid ${tk.cardBorder}`,
+                      color: tk.textPrimary,
                       caretColor: tk.primary,
                     }}
                     onFocus={e => { e.currentTarget.style.borderColor = `${tk.primary}50`; e.currentTarget.style.boxShadow = `0 0 0 3px ${tk.primary}12`; }}
@@ -686,7 +720,7 @@ export default function OrgOverviewPage() {
                   <Filter className="w-3.5 h-3.5 shrink-0 mr-1" style={{ color: tk.textTer }} />
                   {['all', ...kinds].map(k => {
                     const active = activeKind === k;
-                    const km2    = k === 'all' ? null : kindMeta(k);
+                    const km2    = k === 'all' ? null : kindMeta(k, tk);
                     return (
                       <button
                         key={k}
@@ -698,7 +732,7 @@ export default function OrgOverviewPage() {
                           border:      `1px solid ${active ? (km2 ? `${km2.color}30` : tk.primaryBorder) : 'transparent'}`,
                         }}
                       >
-                        {k === 'all' ? `All (${groups.length})` : `${kindMeta(k).label}s`}
+                        {k === 'all' ? `All (${groups.length})` : `${kindMeta(k, tk).label}s`}
                       </button>
                     );
                   })}
@@ -714,10 +748,10 @@ export default function OrgOverviewPage() {
                       const visible = showAll ? items : items.slice(0, INITIAL_SHOW);
                       return (
                         <div key={kind} data-faculty-list={kind === 'faculty' ? 'true' : undefined}>
-                          <SectionHeader kind={kind} count={items.length} />
+                          <SectionHeader kind={kind} count={items.length} tk={tk} />
                           <div className="space-y-0.5">
                             {visible.map(group => (
-                              <DeptRow key={group.id} group={group} index={rowIndex++} onClick={() => handleGroupClick(group)} />
+                              <DeptRow key={group.id} group={group} index={rowIndex++} tk={tk} onClick={() => handleGroupClick(group)} />
                             ))}
                           </div>
                         </div>
@@ -727,7 +761,7 @@ export default function OrgOverviewPage() {
                       <button
                         onClick={() => setShowAll(v => !v)}
                         className="w-full py-3 rounded-xl text-xs font-semibold transition-all mt-2"
-                        style={{ background: 'rgba(255,255,255,0.04)', color: tk.textSec, border: `1px solid ${tk.cardBorder}` }}
+                        style={{ background: tk.cardBgHov, color: tk.textSec, border: `1px solid ${tk.cardBorder}` }}
                       >
                         {showAll
                           ? 'Show less'
@@ -742,8 +776,8 @@ export default function OrgOverviewPage() {
                   visibleFlat.length === 0 ? (
                     <motion.div className="py-14 text-center" initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
                       <Building2 className="w-8 h-8 mx-auto mb-3 opacity-20" style={{ color: tk.textTer }} />
-                      <p className="text-sm font-semibold text-white">
-                        {searchQuery ? `No results for "${searchQuery}"` : `No ${kindMeta(activeKind).label.toLowerCase()}s`}
+                      <p className="text-sm font-semibold" style={{ color: tk.textPrimary }}>
+                        {searchQuery ? `No results for "${searchQuery}"` : `No ${kindMeta(activeKind, tk).label.toLowerCase()}s`}
                       </p>
                       <p className="text-xs mt-1 mb-5" style={{ color: tk.textTer }}>
                         Try a different search term or clear the filter.
@@ -751,7 +785,7 @@ export default function OrgOverviewPage() {
                       <motion.button
                         onClick={goToJoinOrg}
                         className="px-5 py-2.5 rounded-xl text-sm text-white font-semibold"
-                        style={{ background: 'linear-gradient(135deg, #FF6803, #FFAC5F)' }}
+                        style={{ background: tk.gradPrimary }}
                         whileHover={{ scale: 1.02 }}
                         whileTap={{ scale: 0.97 }}
                       >
@@ -762,14 +796,14 @@ export default function OrgOverviewPage() {
                     <>
                       <div className="space-y-0.5">
                         {visibleFlat.map((group, i) => (
-                          <DeptRow key={group.id} group={group} index={i} onClick={() => handleGroupClick(group)} />
+                          <DeptRow key={group.id} group={group} index={i} tk={tk} onClick={() => handleGroupClick(group)} />
                         ))}
                       </div>
                       {filtered.length > INITIAL_SHOW && (
                         <button
                           onClick={() => setShowAll(v => !v)}
                           className="w-full mt-3 py-3 rounded-xl text-xs font-semibold transition-all"
-                          style={{ background: 'rgba(255,255,255,0.04)', color: tk.textSec, border: `1px solid ${tk.cardBorder}` }}
+                          style={{ background: tk.cardBgHov, color: tk.textSec, border: `1px solid ${tk.cardBorder}` }}
                         >
                           {showAll ? 'Show less' : `Show ${filtered.length - INITIAL_SHOW} more`}
                         </button>
@@ -792,17 +826,17 @@ export default function OrgOverviewPage() {
               {isAuthenticated && user && (
                 <div
                   className="px-5 py-4 flex items-center gap-3"
-                  style={{ borderBottom: `1px solid ${tk.cardBorder}`, background: 'rgba(48,255,172,0.05)' }}
+                  style={{ borderBottom: `1px solid ${tk.cardBorder}`, background: `${tk.mint}0D` }}
                 >
                   <div
                     className="w-8 h-8 rounded-xl flex items-center justify-center shrink-0"
-                    style={{ background: 'rgba(48,255,172,0.12)' }}
+                    style={{ background: `${tk.mint}1F` }}
                   >
-                    <CheckCircle2 className="w-4 h-4" style={{ color: '#30FFAC' }} />
+                    <CheckCircle2 className="w-4 h-4" style={{ color: tk.mint }} />
                   </div>
                   <div className="min-w-0 flex-1">
-                    <p className="text-[10px] uppercase tracking-widest" style={{ color: '#30FFAC' }}>Signed in as</p>
-                    <p className="text-sm font-semibold text-white truncate">
+                    <p className="text-[10px] uppercase tracking-widest" style={{ color: tk.mint }}>Signed in as</p>
+                    <p className="text-sm font-semibold truncate" style={{ color: tk.textPrimary }}>
                       {(user as any)?.full_name || (user as any)?.member_id || 'Member'}
                     </p>
                   </div>
@@ -815,7 +849,7 @@ export default function OrgOverviewPage() {
                     style={{ background: tk.primaryDim }}>
                     <Users className="w-4 h-4" style={{ color: tk.primary }} />
                   </div>
-                  <h3 className="text-sm font-bold text-white">Need help?</h3>
+                  <h3 className="text-sm font-bold" style={{ color: tk.textPrimary }}>Need help?</h3>
                   <p className="mt-1.5 text-xs leading-5" style={{ color: tk.textSec }}>
                     Can't find your {groupLabel.toLowerCase()}? You can create one or ask your admin.
                   </p>
@@ -837,8 +871,8 @@ export default function OrgOverviewPage() {
                   <motion.button
                     onClick={goToJoinOrg}
                     className="w-full px-4 py-3 rounded-xl text-xs font-semibold flex items-center justify-between"
-                    style={{ background: 'rgba(255,255,255,0.04)', color: tk.textSec, border: `1px solid ${tk.cardBorder}` }}
-                    whileHover={{ scale: 1.02, color: '#fff' }}
+                    style={{ background: tk.cardBgHov, color: tk.textSec, border: `1px solid ${tk.cardBorder}` }}
+                    whileHover={{ scale: 1.02, color: tk.textPrimary }}
                     whileTap={{ scale: 0.97 }}
                   >
                     <span>Add a {groupLabel.toLowerCase()} to a faculty</span>
@@ -872,6 +906,7 @@ export default function OrgOverviewPage() {
             targetGroup={switchTarget}
             currentGroupName={currentGroupName}
             org={org}
+            tk={tk}
             onSwitch={handleSwitchConfirm}
             onStay={() => setSwitchTarget(null)}
           />

@@ -1,10 +1,10 @@
 import { useState, useEffect } from 'react';
 import { Lock, User, AlertCircle, Info } from 'lucide-react';
-import { colors } from '@/config/colors';
 import CustomButton from '@/components/ui/CustomButton';
 import Input from '@/components/ui/Input';
 import Logo from '@/components/ui/Logo';
 import { useAuth } from '@/hooks/useAuth';
+import { getDashboardTokens, useTheme } from '@/hooks/useTheme';
 import { useNavigate, Link } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import PageWrapper from '@/components/ui/PageWrapper';
@@ -15,6 +15,8 @@ export default function LoginPage() {
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const { login, isAuthenticated, user, needsPasswordChange } = useAuth();
+  const { theme } = useTheme();
+  const tk = getDashboardTokens(theme);
   const navigate = useNavigate();
 
   // Redirect if already logged in
@@ -78,18 +80,18 @@ export default function LoginPage() {
               animate={{ opacity: 1 }}
               transition={{ delay: 0.4 }}
             >
-              Welcome Back to<br />
-              <span style={{ color: colors.primary }}>ECE 200L</span>
+              Welcome Back<br />
+              <span style={{ color: tk.primary }}>Member Portal</span>
             </motion.h2>
             
             <motion.p 
               className="text-lg" 
-              style={{ color: colors.textSecondary }}
+              style={{ color: tk.textSec }}
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               transition={{ delay: 0.5 }}
             >
-              Track your payments, view history, and stay updated with your organization's finances.
+              Track payments, view history, and stay updated with your organization's finances.
             </motion.p>
           </div>
 
@@ -110,9 +112,9 @@ export default function LoginPage() {
               >
                 <div
                   className="w-2 h-2 rounded-full"
-                  style={{ background: colors.primary }}
+                  style={{ background: tk.primary }}
                 />
-                <p style={{ color: colors.textSecondary }}>{feature}</p>
+                <p style={{ color: tk.textSec }}>{feature}</p>
               </motion.div>
             ))}
           </div>
@@ -133,7 +135,7 @@ export default function LoginPage() {
             transition={{ delay: 0.2 }}
           >
             <Logo size="xl" showText={true} variant="light" className="flex-col items-center text-center" />
-            <p className="text-sm mt-2" style={{ color: colors.textSecondary }}>
+            <p className="text-sm mt-2" style={{ color: tk.textSec }}>
               Payment Management
             </p>
           </motion.div>
@@ -142,31 +144,31 @@ export default function LoginPage() {
           <motion.div
             className="relative backdrop-blur-xl rounded-3xl p-6 sm:p-8 border"
             style={{
-              background: 'rgba(15, 7, 3, 0.6)',
-              borderColor: 'rgba(255, 104, 3, 0.2)',
+              background: theme === 'light' ? 'rgba(255,255,255,0.88)' : 'rgba(15, 7, 3, 0.6)',
+              borderColor: tk.primaryRing,
               boxShadow: `
-                0 0 0 1px rgba(255, 104, 3, 0.1),
-                0 20px 50px -12px rgba(0, 0, 0, 0.8),
-                inset 0 1px 0 0 rgba(255, 255, 255, 0.05)
+                0 0 0 1px ${theme === 'light' ? 'rgba(15, 7, 3, 0.06)' : 'rgba(255, 104, 3, 0.1)'},
+                0 20px 50px -12px ${theme === 'light' ? 'rgba(15, 7, 3, 0.15)' : 'rgba(0, 0, 0, 0.8)'},
+                inset 0 1px 0 0 ${theme === 'light' ? 'rgba(255, 255, 255, 0.45)' : 'rgba(255, 255, 255, 0.05)'}
               `,
             }}
           >
-            <h2 className="text-2xl font-bold mb-6">Sign In</h2>
+            <h2 className="text-2xl font-bold mb-6" style={{ color: tk.text }}>Sign In</h2>
 
             {/* Info Banner */}
             <motion.div
               className="flex items-start gap-3 p-4 rounded-xl mb-6"
               style={{
-                background: `${colors.accentMint}10`,
-                border: `1px solid ${colors.accentMint}30`,
+                background: `${tk.mint}12`,
+                border: `1px solid ${tk.mint}40`,
               }}
               initial={{ opacity: 0, y: -10 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: 0.5 }}
             >
-              <Info size={18} style={{ color: colors.accentMint, marginTop: 2 }} />
-              <p className="text-xs leading-relaxed" style={{ color: colors.accentMint }}>
-                First time? Use your registration number as both username and password. You'll be prompted to change it.
+              <Info size={18} style={{ color: tk.mint, marginTop: 2 }} />
+              <p className="text-xs leading-relaxed" style={{ color: tk.mint }}>
+                First time? Use your login ID as both username and password. You'll be prompted to change it.
               </p>
             </motion.div>
 
@@ -176,16 +178,16 @@ export default function LoginPage() {
                 <motion.div
                   className="flex items-start gap-3 p-4 rounded-xl mb-6"
                   style={{
-                    background: `${colors.statusUnpaid}15`,
-                    border: `1px solid ${colors.statusUnpaid}40`,
+                    background: `${tk.danger}14`,
+                    border: `1px solid ${tk.danger}40`,
                   }}
                   initial={{ opacity: 0, scale: 0.95 }}
                   animate={{ opacity: 1, scale: 1 }}
                   exit={{ opacity: 0, scale: 0.95 }}
                   transition={{ duration: 0.3 }}
                 >
-                  <AlertCircle size={20} style={{ color: colors.statusUnpaid, marginTop: 2 }} />
-                  <p className="text-sm leading-relaxed" style={{ color: colors.statusUnpaid }}>
+                  <AlertCircle size={20} style={{ color: tk.danger, marginTop: 2 }} />
+                  <p className="text-sm leading-relaxed" style={{ color: tk.danger }}>
                     {error}
                   </p>
                 </motion.div>
@@ -206,11 +208,11 @@ export default function LoginPage() {
                 transition={{ delay: 0.7 }}
               >
                 <Input
-                  label="Registration Number"
+                  label="Login ID / Registration Number"
                   type="text"
                   value={regNumber}
                   onChange={(e) => setRegNumber(e.target.value)}
-                  placeholder="e.g., 2024/274804"
+                  placeholder="e.g., 2024/274804 or member ID"
                   required
                   icon={<User size={20} />}
                   fullWidth
@@ -235,7 +237,7 @@ export default function LoginPage() {
                   autoComplete="current-password"
                 />
                 <div className="text-right mt-2">
-                  <Link to="/forgot-password" className="text-sm underline hover:no-underline" style={{ color: colors.primary }}>
+                  <Link to="/forgot-password" className="text-sm underline hover:no-underline" style={{ color: tk.primary }}>
                     Forgot password?
                   </Link>
                 </div>
@@ -266,12 +268,12 @@ export default function LoginPage() {
               animate={{ opacity: 1 }}
               transition={{ delay: 1.0 }}
             >
-              <p className="text-xs" style={{ color: colors.textSecondary }}>
+              <p className="text-xs" style={{ color: tk.textSec }}>
                 Having trouble logging in?{' '}
                 <button
                   type="button"
                   className="underline hover:no-underline transition-all"
-                  style={{ color: colors.accentMint }}
+                  style={{ color: tk.mint }}
                   onClick={() => {
                     setError('');
                     const helpEl = document.getElementById('login-help-info');
@@ -287,26 +289,26 @@ export default function LoginPage() {
                   className="flex items-start gap-3 p-3 rounded-xl mt-3"
                   style={{
                     display: 'none',
-                    background: `${colors.accentMint}10`,
-                    border: `1px solid ${colors.accentMint}25`,
+                    background: `${tk.mint}12`,
+                    border: `1px solid ${tk.mint}33`,
                   }}
                   initial={{ opacity: 0, y: -5 }}
                   animate={{ opacity: 1, y: 0 }}
                 >
-                  <Info size={16} style={{ color: colors.accentMint, marginTop: 2, flexShrink: 0 }} />
-                  <p className="text-xs leading-relaxed" style={{ color: colors.accentMint }}>
-                    Please contact your class representative for login assistance. Your default password is your registration number.
+                  <Info size={16} style={{ color: tk.mint, marginTop: 2, flexShrink: 0 }} />
+                  <p className="text-xs leading-relaxed" style={{ color: tk.mint }}>
+                    Please contact your organization representative for login assistance. Your default password is usually your login ID.
                   </p>
                 </motion.div>
               </AnimatePresence>
-              <p className="text-[10px]" style={{ color: colors.textSecondary }}>
+              <p className="text-[10px]" style={{ color: tk.textSec }}>
                 Developed by{' '}
                 <a 
                   href="https://x.com/wishotstudio?s=21" 
                   target="_blank" 
                   rel="noopener noreferrer"
                   className="font-bold hover:underline"
-                  style={{ color: colors.primary }}
+                  style={{ color: tk.primary }}
                 >
                   Dev_Wishot
                 </a>

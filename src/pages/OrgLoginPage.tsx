@@ -19,8 +19,8 @@ import {
   Layers,
   Info,
 } from 'lucide-react';
-import { colors } from '@/config/colors';
 import { useMultiTenantAuth } from '@/hooks/useMultiTenantAuth';
+import { getDashboardTokens, useTheme } from '@/hooks/useTheme';
 import { useNavigate, useParams, Link, useSearchParams, useLocation } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import PageWrapper from '@/components/ui/PageWrapper';
@@ -29,32 +29,44 @@ import type { Organization, OrganizationGroup } from '@/types/multiTenant';
 import { APP_NAME } from '@/config/constants';
 
 // ── Token sheet — read core tokens from the central design system
-const tk = {
-  // surfaces (map to theme tokens)
-  pageBase:   colors.secondary,
-  leftPanel:  colors.secondaryLight,
-  rightPanel: colors.secondaryLighter,
-  inputBg:    'rgba(255,255,255,0.045)',
-  inputBgHov: 'rgba(255,255,255,0.07)',
-
-  // borders
-  borderFaint:  colors.borderLight,
-  borderMid:    colors.borderMedium,
-
-  // text
-  textPrimary:   colors.textPrimary,
-  textSecondary: colors.textSecondary,
-  textTertiary:  colors.textTertiary,
-
-  // accent — read primary from config
-  accent:     colors.primary,
-  accentDim:  colors.borderPrimary,
-  accentBorder: colors.borderPrimary,
+type LoginTokens = {
+  pageBase: string;
+  leftPanel: string;
+  rightPanel: string;
+  inputBg: string;
+  inputBgHov: string;
+  borderFaint: string;
+  borderMid: string;
+  textPrimary: string;
+  textSecondary: string;
+  textTertiary: string;
+  accent: string;
+  accentDim: string;
+  accentBorder: string;
 };
 
+function buildLoginTokens(theme: 'light' | 'dark'): LoginTokens {
+  const dtk = getDashboardTokens(theme);
+  return {
+    pageBase: dtk.bg,
+    leftPanel: theme === 'light' ? '#FFF5EA' : '#120904',
+    rightPanel: theme === 'light' ? '#FFFFFF' : '#1A0E09',
+    inputBg: theme === 'light' ? 'rgba(15,7,3,0.04)' : 'rgba(255,255,255,0.045)',
+    inputBgHov: theme === 'light' ? 'rgba(15,7,3,0.06)' : 'rgba(255,255,255,0.07)',
+    borderFaint: dtk.cardBorder,
+    borderMid: dtk.primaryRing,
+    textPrimary: dtk.text,
+    textSecondary: dtk.textSec,
+    textTertiary: dtk.textTer,
+    accent: dtk.primary,
+    accentDim: dtk.primarySoft,
+    accentBorder: dtk.primaryRing,
+  };
+}
+
 // ── Helpers ───────────────────────────────────────────────────────────────────
-function orgAccent(org: Organization | null) {
-  return org?.primary_color || colors.primary;
+function orgAccent(org: Organization | null, fallback: string) {
+  return org?.primary_color || fallback;
 }
 
 function lighten(hex: string): string {
@@ -75,7 +87,7 @@ function hexToRgb(hex: string): string {
 }
 
 // ── Loading ───────────────────────────────────────────────────────────────────
-function LoadingScreen() {
+function LoadingScreen({ tk }: { tk: LoginTokens }) {
   return (
     <PageWrapper centered noPadding>
       <div className="flex flex-col items-center gap-4">
@@ -94,7 +106,7 @@ function LoadingScreen() {
 }
 
 // ── Not-found ─────────────────────────────────────────────────────────────────
-function NotFoundScreen({ orgSlug }: { orgSlug?: string }) {
+function NotFoundScreen({ orgSlug, tk }: { orgSlug?: string; tk: LoginTokens }) {
   return (
     <PageWrapper centered noPadding className="p-6">
       <motion.div
@@ -176,13 +188,14 @@ function LeftArt({ color }: { color: string }) {
 
 // ── Group chip ────────────────────────────────────────────────────────────────
 function GroupChip({
-  group, org, orgSlug,
+  group, org, orgSlug, tk,
 }: {
   group: OrganizationGroup | undefined;
   org: Organization | null;
   orgSlug?: string;
+  tk: LoginTokens;
 }) {
-  const color = orgAccent(org);
+  const color = orgAccent(org, tk.accent);
   if (!group) return null;
   const levelText = group.levels?.length ? `Level ${group.levels.join(' · ')}` : '';
 
@@ -227,7 +240,7 @@ function GroupChip({
 // ── Text input base ────────────────────────────────────────────────────────────
 function TextInput({
   label, value, onChange, placeholder, disabled, icon: Icon, type = 'text',
-  autoComplete, rightSlot,
+  autoComplete, rightSlot, tk,
 }: {
   label: string;
   value: string;
@@ -238,6 +251,7 @@ function TextInput({
   type?: string;
   autoComplete?: string;
   rightSlot?: React.ReactNode;
+  tk: LoginTokens;
 }) {
   const [focused, setFocused] = useState(false);
   return (
@@ -281,10 +295,11 @@ function TextInput({
 
 // ── Password input ────────────────────────────────────────────────────────────
 function PasswordInput({
-  label, value, onChange, placeholder, disabled,
+  label, value, onChange, placeholder, disabled, tk,
 }: {
   label: string; value: string; onChange: (v: string) => void;
   placeholder: string; disabled?: boolean;
+  tk: LoginTokens;
 }) {
   const [show, setShow] = useState(false);
   const [focused, setFocused] = useState(false);
@@ -356,6 +371,8 @@ export default function OrgLoginPage() {
   const [selectedGroup, setSelectedGroup] = useState<OrganizationGroup | undefined>();
 
   const { login, isAuthenticated, user, needsPasswordChange } = useMultiTenantAuth();
+  const { theme } = useTheme();
+  const tk = buildLoginTokens(theme);
   const navigate = useNavigate();
 
   const fromLocation   = (location.state as { from?: { pathname: string; search?: string } } | null)?.from;
@@ -429,10 +446,10 @@ export default function OrgLoginPage() {
     }
   };
 
-  if (orgLoading)  return <LoadingScreen />;
-  if (orgNotFound) return <NotFoundScreen orgSlug={orgSlug} />;
+  if (orgLoading)  return <LoadingScreen tk={tk} />;
+  if (orgNotFound) return <NotFoundScreen orgSlug={orgSlug} tk={tk} />;
 
-  const color         = orgAccent(org);
+  const color         = orgAccent(org, tk.accent);
   const rgb           = hexToRgb(color);
   const memberLabel   = org?.member_label  || 'Member';
   const groupLabel    = org?.group_label   || 'Department';
@@ -687,7 +704,7 @@ export default function OrgLoginPage() {
 
             {/* Group chip */}
             <div className="mb-7">
-              <GroupChip group={selectedGroup} org={org} orgSlug={orgSlug} />
+              <GroupChip group={selectedGroup} org={org} orgSlug={orgSlug} tk={tk} />
             </div>
 
             {/* Error */}
@@ -725,6 +742,7 @@ export default function OrgLoginPage() {
                 disabled={loading}
                 icon={User}
                 autoComplete="username"
+                tk={tk}
               />
 
               <div>
@@ -734,6 +752,7 @@ export default function OrgLoginPage() {
                   onChange={setPassword}
                   placeholder="Enter your password"
                   disabled={loading}
+                  tk={tk}
                 />
                 <div className="flex justify-end mt-2">
                   <Link
