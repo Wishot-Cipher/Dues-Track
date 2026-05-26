@@ -495,10 +495,12 @@ export interface MemberAdmin {
   // Scope
   organization_id: string;
   group_id?: string;                         // NULL = org-level admin
+  scope_level?: 'org' | 'unit' | 'group';
 
   // Role
   role: AdminRole;
   custom_role_name?: string;                 // For custom roles: "Welfare Secretary"
+  role_label?: string;                       // Friendly label set during verification
 
   // Granular Permissions
   can_create_payments: boolean;
@@ -512,6 +514,10 @@ export interface MemberAdmin {
 
   // Status
   is_active: boolean;
+  verification_status?: string;
+  verification_method?: string;
+  verification_layer?: number;
+  verified_at?: string;
 
   // Audit
   created_at: string;

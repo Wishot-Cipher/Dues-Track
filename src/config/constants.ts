@@ -149,6 +149,29 @@ export function getClaimRoleOptions(type: OrganizationType | string | null | und
   return [...list, { value: 'custom', label: 'Other / custom' }];
 }
 
+/**
+ * Org-scope roles are restricted to the highest executive role.
+ * This keeps org-wide voting reserved for the SUG/lead exec level.
+ */
+export function getOrgScopeRoleOptions(type: OrganizationType | string | null | undefined): ClaimRoleOption[] {
+  switch (type) {
+    case 'university':
+    case 'school':
+      return [{ value: 'president', label: 'SUG President' }];
+    case 'church':
+      return [{ value: 'pastor', label: 'Lead Pastor' }];
+    case 'cooperative':
+      return [{ value: 'chairman', label: 'Chairman' }];
+    case 'ngo':
+      return [{ value: 'director', label: 'Director' }];
+    case 'club':
+    case 'association':
+      return [{ value: 'president', label: 'President' }];
+    default:
+      return [{ value: 'president', label: 'President' }];
+  }
+}
+
 // User roles
 export const USER_ROLES = {
   STUDENT: 'student',

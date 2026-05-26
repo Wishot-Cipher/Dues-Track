@@ -7,7 +7,8 @@
  * One URL, two possible actions — chosen by what the viewer is allowed
  * to do (re-checked server-side by the RPCs):
  *
- *   • Peer voter (any org member, not the claimant): Confirm / Reject / Skip
+ *   • Peer voter (eligible member in target scope, not the claimant):
+ *     Confirm / Reject / Skip
  *     → cast_claim_vote_v2
  *   • Verified parent-org exec (layer >= 4): the authoritative confirm action
  *     → confirm_claim_by_parent_exec / reject_claim_by_parent_exec
@@ -29,18 +30,26 @@ import { supabase } from '@/config/supabase';
 import { organizationService } from '@/services/organizationService';
 import { useMultiTenantAuth } from '@/hooks/useMultiTenantAuth';
 import { useToast } from '@/hooks/useToast';
+import { useTheme, getDashboardTokens } from '@/hooks/useTheme';
+import PayvexoBackground from '@/components/student/dashboard/PayvexoBackground';
 
-const tk = {
-  bg:        '#0F0703',
-  panel:     'rgba(255,255,255,0.03)',
-  border:    'rgba(255,255,255,0.08)',
-  text:      '#FFFFFF',
-  textSec:   'rgba(255,255,255,0.65)',
-  textTer:   'rgba(255,255,255,0.40)',
-  primary:   '#FF6803',
-  mint:      '#30FFAC',
-  amber:     '#F59E0B',
-  danger:    '#ef4444',
+type ClaimTheme = {
+  bg: string;
+  panel: string;
+  border: string;
+  text: string;
+  textSec: string;
+  textTer: string;
+  primary: string;
+  mint: string;
+  amber: string;
+  danger: string;
+  gradOrange: string;
+  primarySoft: string;
+  inputBg: string;
+  inputBorder: string;
+  inputBorderHov: string;
+  isLight: boolean;
 };
 
 interface ClaimRow {
@@ -79,6 +88,26 @@ export default function ClaimDecisionPage() {
   const navigate = useNavigate();
   const { user, organization } = useMultiTenantAuth();
   const toast = useToast();
+  const { theme } = useTheme();
+  const t = getDashboardTokens(theme);
+  const tk: ClaimTheme = {
+    bg: t.bg,
+    panel: t.card,
+    border: t.cardBorder,
+    text: t.text,
+    textSec: t.textSec,
+    textTer: t.textTer,
+    primary: t.primary,
+    mint: t.mint,
+    amber: t.amber,
+    danger: t.danger,
+    gradOrange: t.gradOrange,
+    primarySoft: t.primarySoft,
+    inputBg: theme === 'light' ? '#FFFFFF' : 'rgba(26,14,9,0.85)',
+    inputBorder: theme === 'light' ? 'rgba(15, 7, 3, 0.12)' : t.cardBorder,
+    inputBorderHov: t.primaryRing,
+    isLight: theme === 'light',
+  };
 
   const [claim, setClaim] = useState<ClaimRow | null>(null);
   const [myVote, setMyVote] = useState<MyVote | null>(null);
@@ -244,7 +273,7 @@ export default function ClaimDecisionPage() {
   // ── Render gates ──
   if (loading) {
     return (
-      <Centered>
+      <Centered theme={theme}>
         <Loader2 className="w-8 h-8 animate-spin" style={{ color: tk.primary }} />
       </Centered>
     );
@@ -252,16 +281,16 @@ export default function ClaimDecisionPage() {
 
   if (!user || !organization) {
     return (
-      <Centered>
+      <Centered theme={theme}>
         <div className="text-center max-w-md">
-          <h1 className="text-2xl font-bold text-white mb-3">Sign in first</h1>
+          <h1 className="text-2xl font-bold mb-3" style={{ color: tk.text }}>Sign in first</h1>
           <p className="text-sm leading-6 mb-6" style={{ color: tk.textSec }}>
             You must be signed in to act on a claim.
           </p>
           <motion.button
             onClick={() => navigate(orgSlug ? `/${orgSlug}/login` : '/')}
             className="px-6 py-3 rounded-xl font-semibold text-sm text-white"
-            style={{ background: 'linear-gradient(135deg, #FF6803, #FFAC5F)' }}
+            style={{ background: tk.gradOrange }}
             whileHover={{ scale: 1.02 }}
             whileTap={{ scale: 0.97 }}
           >
@@ -274,17 +303,17 @@ export default function ClaimDecisionPage() {
 
   if (!claim) {
     return (
-      <Centered>
+      <Centered theme={theme}>
         <div className="text-center max-w-md">
           <AlertCircle className="w-12 h-12 mx-auto mb-4" style={{ color: tk.amber }} />
-          <h1 className="text-xl font-bold text-white mb-2">Claim not found</h1>
+          <h1 className="text-xl font-bold mb-2" style={{ color: tk.text }}>Claim not found</h1>
           <p className="text-sm leading-6 mb-6" style={{ color: tk.textSec }}>
             {error ?? "This claim has been removed or you don't have access to view it."}
           </p>
           <motion.button
             onClick={() => navigate(`/${orgSlug}/dashboard`)}
             className="px-6 py-3 rounded-xl font-semibold text-sm text-white"
-            style={{ background: 'linear-gradient(135deg, #FF6803, #FFAC5F)' }}
+            style={{ background: tk.gradOrange }}
           >
             Back to dashboard
           </motion.button>
@@ -294,17 +323,8 @@ export default function ClaimDecisionPage() {
   }
 
   return (
-    <div className="min-h-screen relative overflow-x-hidden" style={{ minHeight: '100dvh', background: tk.bg }}>
-      <div className="fixed inset-0 pointer-events-none overflow-hidden">
-        <div
-          className="absolute rounded-full blur-[160px]"
-          style={{
-            width: 560, height: 560,
-            background: `radial-gradient(circle, ${tk.primary} 0%, transparent 70%)`,
-            top: '-12%', right: '-10%', opacity: 0.12,
-          }}
-        />
-      </div>
+    <div className="min-h-screen relative overflow-x-hidden" style={{ minHeight: '100dvh' }}>
+      <PayvexoBackground theme={theme} />
 
       <nav className="relative z-10 max-w-2xl mx-auto px-5 sm:px-6 py-5 flex items-center justify-between">
         <button
@@ -317,34 +337,37 @@ export default function ClaimDecisionPage() {
 
       <header className="relative z-10 max-w-2xl mx-auto px-5 sm:px-6 pt-2 pb-6">
         <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-semibold mb-4"
-          style={{ background: `${tk.primary}14`, color: tk.primary, border: `1px solid ${tk.primary}28` }}>
+          style={{ background: tk.primarySoft, color: tk.primary, border: `1px solid ${tk.primary}28` }}>
           {confirmerCap.can_confirm ? <ShieldCheck className="w-3.5 h-3.5" /> : <VoteIcon className="w-3.5 h-3.5" />}
           {confirmerCap.can_confirm ? 'Parent-exec confirmation' : 'Peer vote requested'}
         </div>
-        <h1 className="text-2xl sm:text-3xl font-extrabold text-white tracking-tight">
+        <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight" style={{ color: tk.text }}>
           <span style={{ color: tk.primary }}>{claim.full_name}</span>{' '}
-          <span className="font-normal text-white/70">claims to be your</span>{' '}
-          <span>{claim.position_title}</span>
+          <span className="font-normal" style={{ color: tk.textSec }}>claims to be your</span>{' '}
+          <span style={{ color: tk.text }}>{claim.position_title}</span>
         </h1>
         <p className="text-sm mt-3" style={{ color: tk.textSec }}>
           {claim.bootstrap_path
-            ? <>This is a bootstrap claim — once <span className="text-white font-semibold">{claim.votes_required}</span> members confirm, they're verified and money unlocks for everyone.</>
+            ? <>This is a bootstrap claim — once <span className="font-semibold" style={{ color: tk.text }}>{claim.votes_required}</span> members confirm, they're verified and money unlocks for everyone.</>
             : <>Peer votes strengthen the signal. The verified parent exec gives the final yes — that's the moment money unlocks.</>}
         </p>
       </header>
 
       <main className="relative z-10 max-w-2xl mx-auto px-5 sm:px-6 pb-24 space-y-5">
         {/* Progress panel */}
-        <Panel title="Verification progress" icon={<Hourglass className="w-4 h-4" />}>
+        <Panel title="Verification progress" icon={<Hourglass className="w-4 h-4" />} tk={tk}>
           <div className="flex items-center justify-between mb-2">
             <span className="text-xs uppercase tracking-widest" style={{ color: tk.textTer }}>
               Peer confirmations
             </span>
-            <span className="text-sm font-bold text-white">
-              {claim.votes_received} <span className="text-white/40">/</span> {claim.votes_required}
+            <span className="text-sm font-bold" style={{ color: tk.text }}>
+              {claim.votes_received} <span style={{ color: tk.textTer }}>/</span> {claim.votes_required}
             </span>
           </div>
-          <div className="h-1.5 rounded-full overflow-hidden" style={{ background: 'rgba(255,255,255,0.06)' }}>
+          <div
+            className="h-1.5 rounded-full overflow-hidden"
+            style={{ background: tk.isLight ? 'rgba(15,7,3,0.08)' : 'rgba(255,255,255,0.06)' }}
+          >
             <motion.div
               className="h-full rounded-full"
               style={{ background: `linear-gradient(90deg, ${tk.primary}, ${tk.mint})` }}
@@ -354,24 +377,24 @@ export default function ClaimDecisionPage() {
             />
           </div>
           <div className="grid grid-cols-2 gap-3 mt-4 text-xs">
-            <Stat label="Scope" value={claim.claimed_scope} />
-            <Stat label="Status" value={claim.status.replace(/_/g, ' ')} />
-            <Stat label="Trust layer" value={`${claim.current_layer} of ${claim.required_layer}`} />
-            <Stat label="Path" value={claim.bootstrap_path ? 'Bootstrap' : 'Standard'} />
+            <Stat label="Scope" value={claim.claimed_scope} tk={tk} />
+            <Stat label="Status" value={claim.status.replace(/_/g, ' ')} tk={tk} />
+            <Stat label="Trust layer" value={`${claim.current_layer} of ${claim.required_layer}`} tk={tk} />
+            <Stat label="Path" value={claim.bootstrap_path ? 'Bootstrap' : 'Standard'} tk={tk} />
           </div>
         </Panel>
 
         {/* Read-only states */}
         {isResolved && (
-          <Panel title="This claim is closed" icon={<CheckCircle2 className="w-4 h-4" />}>
+          <Panel title="This claim is closed" icon={<CheckCircle2 className="w-4 h-4" />} tk={tk}>
             <p className="text-sm" style={{ color: tk.textSec }}>
-              Status: <span className="text-white font-semibold">{claim.status.replace(/_/g, ' ')}</span>. No more action is needed.
+              Status: <span className="font-semibold" style={{ color: tk.text }}>{claim.status.replace(/_/g, ' ')}</span>. No more action is needed.
             </p>
           </Panel>
         )}
 
         {isSelfClaim && !isResolved && (
-          <Panel title="This is your own claim" icon={<Hourglass className="w-4 h-4" />}>
+          <Panel title="This is your own claim" icon={<Hourglass className="w-4 h-4" />} tk={tk}>
             <p className="text-sm" style={{ color: tk.textSec }}>
               You'll be notified automatically when it crosses the threshold. Share your org with members so they can vote.
             </p>
@@ -379,19 +402,19 @@ export default function ClaimDecisionPage() {
         )}
 
         {myVote && !isSelfClaim && !isResolved && (
-          <Panel title="You've already voted" icon={<CheckCircle2 className="w-4 h-4" />}>
+          <Panel title="You've already voted" icon={<CheckCircle2 className="w-4 h-4" />} tk={tk}>
             <p className="text-sm" style={{ color: tk.textSec }}>
-              Your vote: <span className="text-white font-semibold capitalize">{myVote.vote}</span>. You can change it below.
+              Your vote: <span className="font-semibold capitalize" style={{ color: tk.text }}>{myVote.vote}</span>. You can change it below.
             </p>
           </Panel>
         )}
 
         {/* Peer-vote actions — hidden when self-claim or resolved */}
         {!isSelfClaim && !isResolved && (
-          <Panel title="Your vote" icon={<VoteIcon className="w-4 h-4" />}>
+          <Panel title="Your vote" icon={<VoteIcon className="w-4 h-4" />} tk={tk}>
             <p className="text-xs mb-4" style={{ color: tk.textSec }}>
-              Do you recognise <span className="text-white font-semibold">{claim.full_name}</span> as your{' '}
-              <span className="text-white font-semibold">{claim.position_title}</span>?
+              Do you recognise <span className="font-semibold" style={{ color: tk.text }}>{claim.full_name}</span> as your{' '}
+              <span className="font-semibold" style={{ color: tk.text }}>{claim.position_title}</span>?
             </p>
             <div className="flex items-center gap-2 flex-wrap">
               <ActionButton
@@ -400,6 +423,7 @@ export default function ClaimDecisionPage() {
                 icon={<ThumbsUp className="w-4 h-4" />}
                 busy={busy === 'confirm'}
                 disabled={!!busy}
+                tk={tk}
                 onClick={() => handlePeerVote('confirm')}
               />
               <ActionButton
@@ -408,6 +432,7 @@ export default function ClaimDecisionPage() {
                 icon={<ThumbsDown className="w-4 h-4" />}
                 busy={busy === 'reject'}
                 disabled={!!busy}
+                tk={tk}
                 onClick={() => handlePeerVote('reject')}
               />
               <ActionButton
@@ -416,6 +441,7 @@ export default function ClaimDecisionPage() {
                 icon={<XIcon className="w-4 h-4" />}
                 busy={busy === 'abstain'}
                 disabled={!!busy}
+                tk={tk}
                 onClick={() => handlePeerVote('abstain')}
               />
             </div>
@@ -424,7 +450,7 @@ export default function ClaimDecisionPage() {
 
         {/* Parent-exec confirmation block */}
         {confirmerCap.can_confirm && !isResolved && (
-          <Panel title="Parent-exec confirmation" icon={<ShieldCheck className="w-4 h-4" />}>
+          <Panel title="Parent-exec confirmation" icon={<ShieldCheck className="w-4 h-4" />} tk={tk}>
             <p className="text-xs mb-4" style={{ color: tk.textSec }}>
               As a verified parent-org exec, your confirmation is the trust anchor.
               Confirming unlocks money flow for the claimant.
@@ -436,6 +462,7 @@ export default function ClaimDecisionPage() {
                 icon={<ShieldCheck className="w-4 h-4" />}
                 busy={busy === 'parent_confirm'}
                 disabled={!!busy}
+                tk={tk}
                 onClick={handleParentConfirm}
               />
               <ActionButton
@@ -444,6 +471,7 @@ export default function ClaimDecisionPage() {
                 icon={<ThumbsDown className="w-4 h-4" />}
                 busy={busy === 'parent_reject'}
                 disabled={!!busy || (showRejectReason && !rejectReason.trim())}
+                tk={tk}
                 onClick={handleParentReject}
               />
             </div>
@@ -464,7 +492,7 @@ export default function ClaimDecisionPage() {
                     placeholder="e.g. This person is not the actual class rep."
                     rows={3}
                     className="w-full mt-1.5 rounded-xl px-3 py-2 text-sm outline-none"
-                    style={{ background: 'rgba(26,14,9,0.85)', border: `1px solid ${tk.border}`, color: tk.text }}
+                    style={{ background: tk.inputBg, border: `1px solid ${tk.inputBorder}`, color: tk.text }}
                   />
                 </motion.div>
               )}
@@ -501,7 +529,7 @@ export default function ClaimDecisionPage() {
 // Small presentational helpers
 // ─────────────────────────────────────────────────────────────────────
 
-function Panel({ title, icon, children }: { title: string; icon?: React.ReactNode; children: React.ReactNode }) {
+function Panel({ title, icon, children, tk }: { title: string; icon?: React.ReactNode; children: React.ReactNode; tk: ClaimTheme }) {
   return (
     <motion.section
       initial={{ opacity: 0, y: 8 }}
@@ -509,7 +537,7 @@ function Panel({ title, icon, children }: { title: string; icon?: React.ReactNod
       className="rounded-3xl p-5 sm:p-6"
       style={{ background: tk.panel, border: `1px solid ${tk.border}` }}
     >
-      <h2 className="flex items-center gap-2 text-base font-bold text-white mb-4">
+      <h2 className="flex items-center gap-2 text-base font-bold mb-4" style={{ color: tk.text }}>
         {icon && (
           <span className="w-7 h-7 rounded-lg flex items-center justify-center"
             style={{ background: `${tk.primary}15`, color: tk.primary }}>{icon}</span>
@@ -521,17 +549,23 @@ function Panel({ title, icon, children }: { title: string; icon?: React.ReactNod
   );
 }
 
-function Stat({ label, value }: { label: string; value: string | number }) {
+function Stat({ label, value, tk }: { label: string; value: string | number; tk: ClaimTheme }) {
   return (
-    <div className="rounded-xl px-3 py-2" style={{ background: 'rgba(255,255,255,0.02)', border: `1px solid ${tk.border}` }}>
+    <div
+      className="rounded-xl px-3 py-2"
+      style={{
+        background: tk.isLight ? '#FFFFFF' : 'rgba(255,255,255,0.02)',
+        border: `1px solid ${tk.border}`,
+      }}
+    >
       <p className="text-[10px] uppercase tracking-widest mb-0.5" style={{ color: tk.textTer }}>{label}</p>
-      <p className="text-sm font-bold text-white capitalize">{value}</p>
+      <p className="text-sm font-bold capitalize" style={{ color: tk.text }}>{value}</p>
     </div>
   );
 }
 
 function ActionButton({
-  tone, label, icon, busy, disabled, onClick,
+  tone, label, icon, busy, disabled, onClick, tk,
 }: {
   tone: 'primary' | 'mint' | 'danger' | 'muted';
   label: string;
@@ -539,12 +573,13 @@ function ActionButton({
   busy: boolean;
   disabled: boolean;
   onClick: () => void;
+  tk: ClaimTheme;
 }) {
   const tones = {
-    primary: { bg: 'linear-gradient(135deg, #FF6803, #FFAC5F)', color: '#FFFFFF', border: 'transparent' },
+    primary: { bg: tk.gradOrange, color: '#FFFFFF', border: 'transparent' },
     mint:    { bg: `linear-gradient(135deg, ${tk.mint}22 0%, ${tk.mint}10 100%)`, color: tk.mint, border: `${tk.mint}40` },
     danger:  { bg: 'rgba(239,68,68,0.10)', color: tk.danger, border: 'rgba(239,68,68,0.32)' },
-    muted:   { bg: 'rgba(255,255,255,0.04)', color: tk.textSec, border: tk.border },
+    muted:   { bg: tk.isLight ? '#F5F1ED' : 'rgba(255,255,255,0.04)', color: tk.textSec, border: tk.border },
   }[tone];
   return (
     <motion.button
@@ -561,10 +596,11 @@ function ActionButton({
   );
 }
 
-function Centered({ children }: { children: React.ReactNode }) {
+function Centered({ children, theme }: { children: React.ReactNode; theme: 'light' | 'dark' }) {
   return (
-    <div className="min-h-screen flex items-center justify-center px-5" style={{ background: tk.bg, minHeight: '100dvh' }}>
-      <div className="w-full max-w-md flex flex-col items-center">{children}</div>
+    <div className="min-h-screen relative flex items-center justify-center px-5" style={{ minHeight: '100dvh' }}>
+      <PayvexoBackground theme={theme} />
+      <div className="relative z-10 w-full max-w-md flex flex-col items-center">{children}</div>
     </div>
   );
 }

@@ -9,6 +9,7 @@ import OrgLayout from '@/components/layout/OrgLayout';
 import OfflineIndicator from '@/components/OfflineIndicator';
 import InstallPWA from '@/components/InstallPWA';
 import UpdateNotification from '@/components/UpdateNotification';
+import { useTheme } from '@/hooks/useTheme';
 
 // Pages
 // NOTE: src/pages/DashboardPage.tsx is the legacy student dashboard. It is
@@ -64,6 +65,8 @@ import ForgotPasswordPage from '@/pages/student/ForgotPasswordPage';
 import ResetPasswordPage from '@/pages/student/ResetPasswordPage';
 
 function App() {
+  // Ensure html[data-theme] is applied on every route, not only theme-aware pages.
+  useTheme();
   return (
     <BrowserRouter>
       <ToastProvider>

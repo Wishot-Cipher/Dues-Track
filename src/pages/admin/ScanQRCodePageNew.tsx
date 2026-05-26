@@ -561,6 +561,7 @@ export default function ScanQRCodePage() {
     try {
       const baseTimestamp = Date.now();
       const successfulPayments: string[] = [];
+      const scope = getOrgScope();
 
       for (let i = 0; i < qrData.students.length; i++) {
         const studentToPay = qrData.students[i];
@@ -590,7 +591,6 @@ export default function ScanQRCodePage() {
 
         // Insert payment (use per-student outstanding if available)
         const amountToInsert = (studentToPay as any).outstanding ?? qrData.amountPerStudent ?? paymentType.amount;
-        const scope = getOrgScope();
         const payInsert: Record<string, unknown> = {
           member_id: studentToPay.id,
           payment_type_id: qrData.paymentTypeId,

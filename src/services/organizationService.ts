@@ -381,11 +381,9 @@ export const organizationService = {
   /**
    * Submit a claim to be an exec on the caller's org.
    *
-   * Per mig 039 `submit_claim_request`. Inserts the claim, notifies
-   * every eligible member, and returns the claim id + computed
-   * vote threshold. After this, the UI takes the user to a
-   * "Waiting for votes" status screen and shows the claim to other
-   * members in their NotificationCenter as "Vote on a claim".
+   * Per mig 042 `submit_claim_v2` (layered trust). Inserts the claim,
+   * computes bootstrap_path + required_layer, notifies peers and
+   * parent execs, and returns the claim id + threshold info.
    */
   async submitClaim(input: {
     callerMemberId: string;
@@ -404,8 +402,10 @@ export const organizationService = {
     claim_id?: string;
     votes_required?: number;
     vote_deadline?: string;
+    bootstrap_path?: boolean;
+    required_layer?: number;
   }> {
-    const { data, error } = await supabase.rpc('submit_claim_request', {
+    const { data, error } = await supabase.rpc('submit_claim_v2', {
       p_caller_member_id:    input.callerMemberId,
       p_claimed_role:        input.claimedRole,
       p_claimed_scope:       input.claimedScope,
@@ -424,15 +424,37 @@ export const organizationService = {
     return (data ?? { ok: false, error: 'Empty response' }) as {
       ok: boolean; error?: string; claim_id?: string;
       votes_required?: number; vote_deadline?: string;
+      bootstrap_path?: boolean; required_layer?: number;
     };
   },
 
+  // Back-compat alias used by older claim pages.
+  async submitClaimV2(input: {
+    callerMemberId: string;
+    claimedRole: string;
+    claimedScope: 'org' | 'unit' | 'group';
+    claimedGroupId: string | null;
+    positionTitle: string;
+    phone?: string;
+    personalEmail?: string;
+    institutionalEmail?: string;
+    documentUrls?: string[];
+    method?: 'email' | 'member_vote' | 'document';
+  }): Promise<{
+    ok: boolean;
+    error?: string;
+    claim_id?: string;
+    votes_required?: number;
+    vote_deadline?: string;
+    bootstrap_path?: boolean;
+    required_layer?: number;
+  }> {
+    return this.submitClaim(input);
+  },
+
   /**
-   * Cast a vote on a pending claim (mig 039 `cast_claim_vote`).
-   * The RPC also auto-runs finalize_claim_if_ready, so when the
-   * threshold is met the claimant is promoted to a verified admin
-   * in the same call. The response includes a nested `finalize`
-   * object describing what happened.
+   * Cast a vote on a pending claim (legacy mig 039 `cast_claim_vote`).
+   * Kept for older UIs; new flows use cast_claim_vote_v2.
    */
   async castClaimVote(input: {
     claimId: string;
@@ -467,6 +489,126 @@ export const organizationService = {
     };
   },
 
+  // Back-compat alias used by VoteInbox / ClaimDecisionPage.
+  async castClaimVoteV2(input: {
+    claimId: string;
+    voterMemberId: string;
+    vote: 'confirm' | 'reject' | 'abstain';
+    comment?: string;
+  }): Promise<{
+    ok: boolean;
+    error?: string;
+    promoted?: boolean;
+    votes_received?: number;
+    votes_required?: number;
+    bootstrap_path?: boolean;
+    current_layer?: number;
+    admin_id?: string;
+  }> {
+    const { data, error } = await supabase.rpc('cast_claim_vote_v2', {
+      p_claim_id: input.claimId,
+      p_voter_member_id: input.voterMemberId,
+      p_vote: input.vote,
+      p_comment: input.comment ?? null,
+    });
+    if (error) {
+      console.error('castClaimVoteV2 RPC error', error);
+      return { ok: false, error: error.message };
+    }
+    return (data ?? { ok: false, error: 'Empty response' }) as {
+      ok: boolean;
+      error?: string;
+      promoted?: boolean;
+      votes_received?: number;
+      votes_required?: number;
+      bootstrap_path?: boolean;
+      current_layer?: number;
+      admin_id?: string;
+    };
+  },
+
+  // Parent-exec confirmation path (layer 4 authority).
+  async confirmClaimByParentExec(input: {
+    claimId: string;
+    confirmerMemberId: string;
+  }): Promise<{ ok: boolean; error?: string }> {
+    const { data, error } = await supabase.rpc('confirm_claim_by_parent_exec', {
+      p_claim_id: input.claimId,
+      p_confirmer_member_id: input.confirmerMemberId,
+    });
+    if (error) {
+      console.error('confirmClaimByParentExec RPC error', error);
+      return { ok: false, error: error.message };
+    }
+    return (data ?? { ok: false, error: 'Empty response' }) as { ok: boolean; error?: string };
+  },
+
+  async rejectClaimByParentExec(input: {
+    claimId: string;
+    confirmerMemberId: string;
+    reason?: string;
+  }): Promise<{ ok: boolean; error?: string }> {
+    const { data, error } = await supabase.rpc('reject_claim_by_parent_exec', {
+      p_claim_id: input.claimId,
+      p_confirmer_member_id: input.confirmerMemberId,
+      p_reason: input.reason ?? null,
+    });
+    if (error) {
+      console.error('rejectClaimByParentExec RPC error', error);
+      return { ok: false, error: error.message };
+    }
+    return (data ?? { ok: false, error: 'Empty response' }) as { ok: boolean; error?: string };
+  },
+
+  // Claims that require a parent exec decision.
+  async listPendingConfirmationsForExec(callerMemberId: string): Promise<Array<{
+    id: string;
+    full_name: string;
+    position_title: string;
+    claimed_role: string;
+    claimed_scope: string;
+    institutional_email: string | null;
+    votes_received: number;
+    votes_required: number;
+    current_layer: number;
+    bootstrap_path: boolean;
+    created_at: string;
+  }>> {
+    const { data: me } = await supabase
+      .from('organization_members')
+      .select('organization_id')
+      .eq('id', callerMemberId)
+      .maybeSingle();
+    if (!me?.organization_id) return [];
+
+    const { data, error } = await supabase
+      .from('claim_requests')
+      .select('id, full_name, position_title, claimed_role, claimed_scope, institutional_email, votes_received, votes_required, current_layer, bootstrap_path, created_at')
+      .eq('organization_id', me.organization_id)
+      .eq('status', 'awaiting_votes')
+      .neq('claimant_user_id', callerMemberId)
+      .order('created_at', { ascending: false });
+
+    if (error) {
+      console.error('listPendingConfirmationsForExec error', error);
+      return [];
+    }
+
+    return (data ?? []) as Array<{
+      id: string;
+      full_name: string;
+      position_title: string;
+      claimed_role: string;
+      claimed_scope: string;
+      institutional_email: string | null;
+      votes_received: number;
+      votes_required: number;
+      current_layer: number;
+      bootstrap_path: boolean;
+      created_at: string;
+    }>;
+  },
+
   /**
    * List pending claims the caller can vote on (their org +
    * awaiting_votes + caller is in the target scope + caller is
@@ -495,6 +637,27 @@ export const organizationService = {
       .maybeSingle();
     if (!me?.organization_id) return [];
 
+    const voterGroupId = me.group_id ?? null;
+    let voterParentId: string | null = null;
+    let voterGrandparentId: string | null = null;
+
+    if (voterGroupId) {
+      const { data: groupRow } = await supabase
+        .from('organization_groups')
+        .select('parent_group_id')
+        .eq('id', voterGroupId)
+        .maybeSingle();
+      voterParentId = groupRow?.parent_group_id ?? null;
+      if (voterParentId) {
+        const { data: parentRow } = await supabase
+          .from('organization_groups')
+          .select('parent_group_id')
+          .eq('id', voterParentId)
+          .maybeSingle();
+        voterGrandparentId = parentRow?.parent_group_id ?? null;
+      }
+    }
+
     const { data, error } = await supabase
       .from('claim_requests')
       .select('id, organization_id, claimant_user_id, full_name, position_title, claimed_role, claimed_scope, claimed_group_id, claimed_unit_group_id, votes_required, votes_received, vote_deadline, created_at')
@@ -507,8 +670,24 @@ export const organizationService = {
       console.error('listOpenClaimsForVoter error', error);
       return [];
     }
+    const scoped = (data ?? []).filter((c) => {
+      if (c.claimed_scope === 'org') return true;
+      if (c.claimed_scope === 'group') {
+        if (!voterGroupId) return false;
+        return c.claimed_group_id === voterGroupId
+          || c.claimed_group_id === voterParentId;
+      }
+      if (c.claimed_scope === 'unit') {
+        if (!voterGroupId) return false;
+        return c.claimed_unit_group_id === voterGroupId
+          || c.claimed_unit_group_id === voterParentId
+          || c.claimed_unit_group_id === voterGrandparentId;
+      }
+      return false;
+    });
+
     // Filter out claims the caller has already voted on
-    const ids = (data ?? []).map((c) => c.id);
+    const ids = scoped.map((c) => c.id);
     if (ids.length === 0) return [];
     const { data: voted } = await supabase
       .from('claim_votes')
@@ -516,7 +695,7 @@ export const organizationService = {
       .eq('voter_member_id', callerMemberId)
       .in('claim_request_id', ids);
     const votedSet = new Set((voted ?? []).map((v) => v.claim_request_id));
-    return (data ?? []).filter((c) => !votedSet.has(c.id)) as Array<{
+    return scoped.filter((c) => !votedSet.has(c.id)) as Array<{
       id: string; organization_id: string; claimant_user_id: string;
       full_name: string; position_title: string; claimed_role: string;
       claimed_scope: string; claimed_group_id: string | null;

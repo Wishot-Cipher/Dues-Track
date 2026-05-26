@@ -36,14 +36,21 @@ import {
   Heart,
   Wallet,
   CalendarDays,
+  LayoutGrid,
+  X as XIcon,
 } from 'lucide-react';
+// import Footer from '@/components/Footer';
 import { colors, glows, glass } from '@/config/colors';
-// import { APP_NAME } from '@/config/constants';
+import { isAcademicOrgType } from '@/config/constants';
 import { useMultiTenantAuth } from '@/hooks/useMultiTenantAuth';
+import { useActiveRole } from '@/hooks/useActiveRole';
+import { useTheme } from '@/hooks/useTheme';
 import { supabase } from '@/config/supabase';
 import LoadingSpinner from '@/components/ui/LoadingSpinner';
 import { NotificationCenter } from '@/components/NotificationCenter';
 import { organizationService } from '@/services/organizationService';
+import RoleSwitcher from '@/components/RoleSwitcher';
+import RoleSwitcherSheet from '@/components/RoleSwitcherSheet';
 
 /* ─────────────────────── types ─────────────────────── */
 interface NavItem {
@@ -60,16 +67,39 @@ interface NavItem {
 export default function OrgLayout() {
   const { orgSlug } = useParams<{ orgSlug: string }>();
   const { user, organization, group, loading, isAuthenticated, isAnyAdmin, logout } = useMultiTenantAuth();
+  // Theme — read the resolved theme so the layout chrome (background,
+  // borders) matches whatever the dashboard page is rendering. Without
+  // this, the chrome stays dark and "light mode" looks broken even
+  // though the page itself rendered in light.
+  const { theme } = useTheme();
+  const isLight = theme === 'light';
+  const { activeRole } = useActiveRole({
+    orgId: organization?.id,
+    memberId: user?.id,
+    fallbackGroupId: group?.id,
+  });
+  const isExecContext = activeRole?.kind === 'exec';
   const groupPrimary = group?.levels && group.levels.length > 0 ? organizationService.canonicalizeLevel(group.levels[0]) : null;
   const navigate = useNavigate();
   const location = useLocation();
   const [showProfileMenu, setShowProfileMenu] = useState(false);
   const [showAdminSubmenu, setShowAdminSubmenu] = useState(false);
   const [showLogoutModal, setShowLogoutModal] = useState(false);
+  const [showMoreSheet, setShowMoreSheet] = useState(false);
   const profileRef = useRef<HTMLDivElement>(null);
   const [fetchedLevel, setFetchedLevel] = useState<string | null>(null);
 
   const currentSlug = organization?.slug;
+
+  // Hide the bottom nav + content padding on focused checkout-style
+  // routes. The Pay flow and Paystack verify return are single-task
+  // screens — like a checkout sheet — so navigation chrome at the
+  // bottom would just cover the sticky CTA. Pattern: Stripe/Paystack
+  // hosted checkouts.
+  const hideBottomNav =
+    /^\/[^/]+\/payment\/[^/]+(\/manual)?\/?$/.test(location.pathname) ||
+    /^\/[^/]+\/payments\/verify\/?$/.test(location.pathname) ||
+    /^\/[^/]+\/receipt\/[^/]+\/?$/.test(location.pathname);
 
   // Redirect to login if not authenticated
   useEffect(() => {
@@ -100,6 +130,7 @@ export default function OrgLayout() {
   useEffect(() => {
     setShowAdminSubmenu(false);
     setShowProfileMenu(false);
+    setShowMoreSheet(false);
   }, [location.pathname]);
 
   // If the mapped `user` lacks `level`, try to fetch it from organization_members.
@@ -143,10 +174,12 @@ export default function OrgLayout() {
   const isActive = (path: string) => location.pathname === `${basePath}${path}`;
   const isActivePrefix = (prefix: string) => location.pathname.startsWith(`${basePath}${prefix}`);
   const admin = isAnyAdmin();
-  const isAcademicOrg = organization.organization_type === 'university' || organization.organization_type === 'school';
+  const showAdmin = admin && isExecContext;
+  const isAcademicOrg = isAcademicOrgType(organization.organization_type);
   const groupNavLabel = isAcademicOrg
     ? 'Faculties & Departments'
     : (organization.group_label_plural || 'Groups');
+  const homePath = isExecContext ? '/admin/dashboard' : '/dashboard';
 
   /* ──── Navigation Items ──── */
   const memberNav: NavItem[] = [
@@ -154,7 +187,7 @@ export default function OrgLayout() {
     { path: '/payments', label: organization.payment_label || 'Payments', icon: <CreditCard size={20} />, section: 'member' },
   ];
 
-  const adminNav: NavItem[] = admin ? [
+  const adminNav: NavItem[] = showAdmin ? [
     { path: '/admin/dashboard', label: 'Overview', icon: <PieChart size={20} />, section: 'admin' },
     { path: '/admin/members', label: organization.member_label_plural || 'Members', icon: <Users size={20} />, section: 'admin' },
     { path: '/admin/groups', label: groupNavLabel, icon: <Building2 size={20} />, section: 'admin', hideOnMobile: true },
@@ -168,16 +201,47 @@ export default function OrgLayout() {
     { path: '/admin/billing', label: 'Billing', icon: <Wallet size={20} />, section: 'admin', hideOnMobile: true },
   ] : [];
 
-  // Bottom tab items (mobile) — limited to 5 for thumb reach
-  const bottomTabItems: NavItem[] = [
-    { path: '/dashboard', label: 'Home', icon: <LayoutDashboard size={22} />, section: 'member' },
-    { path: '/payments', label: organization.payment_label || 'Fee', icon: <CreditCard size={22} />, section: 'member' },
-    ...(admin ? [
-      { path: '/admin/dashboard', label: 'Admin', icon: <Shield size={22} />, section: 'admin' as const },
-      { path: '/admin/members', label: organization.member_label_plural || 'Students', icon: <Users size={22} />, section: 'admin' as const },
-      { path: '/admin/billing', label: 'Billing', icon: <Wallet size={22} />, section: 'admin' as const },
-    ] : []),
+  // Bottom tab items (mobile) — fintech "2 + FAB + 2" pattern.
+  // The mockup shows Home / Dues on the left, a big orange center FAB,
+  // then Receipts / Profile on the right. The FAB opens the "More"
+  // sheet, which is where any extra-or-admin routes live.
+  //
+  // For non-admins we want 4 plain tabs (Home, Dues, Receipts, Profile).
+  // For admins the right two tabs become Admin / Members so the FAB
+  // is the way to reach secondary admin pages.
+  const memberTabs: NavItem[] = [
+    { path: '/dashboard', label: 'Home',    icon: <LayoutDashboard size={22} />, section: 'member' },
+    { path: '/payments',  label: organization.payment_label || 'Dues',
+      icon: <CreditCard size={22} />, section: 'member' },
   ];
+  const memberTrailingTabs: NavItem[] = [
+    { path: '/payments', label: 'Receipts',
+      icon: <Receipt size={22} />, section: 'member' },
+    { path: '/profile',  label: 'Profile',
+      icon: <UserCog size={22} />, section: 'member' },
+  ];
+  const execTabsLeft: NavItem[] = [
+    { path: '/admin/dashboard', label: 'Overview', icon: <PieChart size={22} />, section: 'admin' },
+    { path: '/admin/members', label: organization.member_label_plural || 'Members', icon: <Users size={22} />, section: 'admin' },
+  ];
+  const execTabsRight: NavItem[] = [
+    { path: '/admin/review', label: 'Review', icon: <ClipboardCheck size={22} />, section: 'admin' },
+    { path: '/admin/manage-dues', label: organization.payment_label || 'Dues', icon: <Receipt size={22} />, section: 'admin' },
+  ];
+  const leftTabs = isExecContext ? execTabsLeft : memberTabs;
+  const rightTabs = isExecContext ? execTabsRight : memberTrailingTabs;
+
+  // Routes that overflow the 4-tab bottom bar — surfaced via the
+  // sheet that opens when the center FAB is tapped.
+  // For admins: all secondary admin routes.
+  // For members: useful shortcuts (settings, password, sign-out).
+  const moreSheetItems: NavItem[] = showAdmin
+    ? adminNav.filter(item => !['/admin/dashboard', '/admin/members', '/admin/review', '/admin/manage-dues'].includes(item.path))
+    : [
+        { path: '/profile',         label: 'My Profile',     icon: <Building2 size={20} />, section: 'member' },
+        { path: '/settings',        label: 'Settings',       icon: <Settings size={20} />,  section: 'member' },
+        { path: '/change-password', label: 'Change Password', icon: <UserCog size={20} />,  section: 'member' },
+      ];
 
   const handleLogout = async () => {
     setShowLogoutModal(false);
@@ -189,13 +253,22 @@ export default function OrgLayout() {
   const firstName = user.full_name?.split(' ')[0] || 'User';
 
   return (
-    <div className="min-h-screen flex flex-col" style={{ background: colors.secondary }}>
+    <div
+      className="min-h-screen flex flex-col"
+      style={{ background: isLight ? '#FFFBF7' : colors.secondary }}
+    >
       {/* ═══════════ TOP BAR ═══════════ */}
       <header
         className="sticky top-0 z-50"
         style={{
-          ...glass.light,
-          borderBottom: `1px solid rgba(255, 104, 3, 0.08)`,
+          ...(isLight
+            ? {
+                background: 'rgba(255, 251, 247, 0.85)',
+                backdropFilter: 'saturate(180%) blur(20px)',
+                WebkitBackdropFilter: 'saturate(180%) blur(20px)',
+              }
+            : glass.light),
+          borderBottom: `1px solid ${isLight ? 'rgba(15, 7, 3, 0.06)' : 'rgba(255, 104, 3, 0.08)'}`,
         }}
       >
         {/* Subtle top glow line */}
@@ -206,10 +279,10 @@ export default function OrgLayout() {
           }}
         />
 
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 h-16 flex items-center justify-between">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 h-16 flex items-center gap-4">
           {/* ── Left: Logo + Org Name ── */}
           <Link
-            to={`${basePath}/dashboard`}
+            to={`${basePath}${homePath}`}
             className="flex items-center gap-3 group"
           >
             {organization.logo_url ? (
@@ -274,111 +347,116 @@ export default function OrgLayout() {
             </div>
           </Link>
 
-          {/* ── Center: Desktop Navigation ── */}
-          <nav className="hidden lg:flex items-center gap-1 relative">
-            {memberNav.map(item => (
-              <NavLink key={item.path} item={item} basePath={basePath} isActive={isActive(item.path)} />
-            ))}
+          {/* ── Center: Role switcher + Desktop Navigation ── */}
+          <div className="hidden lg:flex items-center gap-4 flex-1 justify-center">
+            <RoleSwitcher />
+            <nav className="flex items-center gap-1 relative">
+              {!isExecContext && memberNav.map(item => (
+                <NavLink key={item.path} item={item} basePath={basePath} isActive={isActive(item.path)} />
+              ))}
 
-            {admin && (
-              <>
-                <div className="w-px h-6 mx-2" style={{ background: colors.borderLight }} />
-                
-                {/* Admin nav group */}
-                <div className="relative">
-                  <button
-                    onClick={() => setShowAdminSubmenu(prev => !prev)}
-                    className="flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-medium transition-all"
-                    style={{
-                      color: isActivePrefix('/admin') ? colors.primary : colors.textSecondary,
-                      background: isActivePrefix('/admin') ? `${colors.primary}12` : 'transparent',
-                    }}
-                  >
-                    <Shield size={18} />
-                    <span>Admin</span>
-                    <motion.div animate={{ rotate: showAdminSubmenu ? 180 : 0 }} transition={{ duration: 0.2 }}>
-                      <ChevronDown size={14} />
-                    </motion.div>
-                    {admin && (
+              {showAdmin && (
+                <>
+                  <div className="w-px h-6 mx-2" style={{ background: colors.borderLight }} />
+                  
+                  {/* Admin nav group */}
+                  <div className="relative">
+                    <button
+                      onClick={() => setShowAdminSubmenu(prev => !prev)}
+                      className="flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-medium transition-all"
+                      style={{
+                        color: isActivePrefix('/admin') ? colors.primary : colors.textSecondary,
+                        background: isActivePrefix('/admin') ? `${colors.primary}12` : 'transparent',
+                      }}
+                    >
+                      <Shield size={18} />
+                      <span>Admin</span>
+                      <motion.div animate={{ rotate: showAdminSubmenu ? 180 : 0 }} transition={{ duration: 0.2 }}>
+                        <ChevronDown size={14} />
+                      </motion.div>
                       <span
                         className="absolute -top-1 -right-1 w-2 h-2 rounded-full"
                         style={{ background: colors.accentMint, boxShadow: glows.mint.replace('30px', '8px') }}
                       />
-                    )}
-                  </button>
+                    </button>
 
-                  <AnimatePresence>
-                    {showAdminSubmenu && (
-                      <>
-                        <div className="fixed inset-0 z-40" onClick={() => setShowAdminSubmenu(false)} />
-                        <motion.div
-                          initial={{ opacity: 0, y: -8, scale: 0.96 }}
-                          animate={{ opacity: 1, y: 0, scale: 1 }}
-                          exit={{ opacity: 0, y: -8, scale: 0.96 }}
-                          transition={{ duration: 0.15, ease: 'easeOut' }}
-                          className="absolute top-full mt-2 left-0 w-60 rounded-2xl overflow-hidden z-50"
-                          style={{
-                            ...glass.strong,
-                            boxShadow: `0 20px 60px rgba(0,0,0,0.6), ${glows.amber.replace('30px', '12px').replace('0.5', '0.1')}`,
-                          }}
-                        >
-                          <div className="p-1.5">
-                            {adminNav.map(item => (
-                              <Link
-                                key={item.path}
-                                to={`${basePath}${item.path}`}
-                                className="flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-sm transition-all"
-                                style={{
-                                  color: isActive(item.path) ? '#fff' : colors.textSecondary,
-                                  background: isActive(item.path) ? `${colors.primary}20` : 'transparent',
-                                }}
-                                onClick={() => setShowAdminSubmenu(false)}
-                              >
-                                <span style={{ color: isActive(item.path) ? colors.primary : colors.textTertiary }}>
-                                  {item.icon}
-                                </span>
-                                {item.label}
-                                {isActive(item.path) && (
-                                  <motion.div layoutId="admin-check" className="ml-auto">
-                                    <CheckCircle2 size={14} style={{ color: colors.primary }} />
-                                  </motion.div>
-                                )}
-                              </Link>
-                            ))}
-                          </div>
-                        </motion.div>
-                      </>
-                    )}
-                  </AnimatePresence>
-                </div>
-              </>
-            )}
-          </nav>
+                    <AnimatePresence>
+                      {showAdminSubmenu && (
+                        <>
+                          <div className="fixed inset-0 z-40" onClick={() => setShowAdminSubmenu(false)} />
+                          <motion.div
+                            initial={{ opacity: 0, y: -8, scale: 0.96 }}
+                            animate={{ opacity: 1, y: 0, scale: 1 }}
+                            exit={{ opacity: 0, y: -8, scale: 0.96 }}
+                            transition={{ duration: 0.15, ease: 'easeOut' }}
+                            className="absolute top-full mt-2 left-0 w-60 rounded-2xl overflow-hidden z-50"
+                            style={{
+                              ...glass.strong,
+                              boxShadow: `0 20px 60px rgba(0,0,0,0.6), ${glows.amber.replace('30px', '12px').replace('0.5', '0.1')}`,
+                            }}
+                          >
+                            <div className="p-1.5">
+                              {adminNav.map(item => (
+                                <Link
+                                  key={item.path}
+                                  to={`${basePath}${item.path}`}
+                                  className="flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-sm transition-all"
+                                  style={{
+                                    color: isActive(item.path) ? '#fff' : colors.textSecondary,
+                                    background: isActive(item.path) ? `${colors.primary}20` : 'transparent',
+                                  }}
+                                  onClick={() => setShowAdminSubmenu(false)}
+                                >
+                                  <span style={{ color: isActive(item.path) ? colors.primary : colors.textTertiary }}>
+                                    {item.icon}
+                                  </span>
+                                  {item.label}
+                                  {isActive(item.path) && (
+                                    <motion.div layoutId="admin-check" className="ml-auto">
+                                      <CheckCircle2 size={14} style={{ color: colors.primary }} />
+                                    </motion.div>
+                                  )}
+                                </Link>
+                              ))}
+                            </div>
+                          </motion.div>
+                        </>
+                      )}
+                    </AnimatePresence>
+                  </div>
+                </>
+              )}
+            </nav>
+          </div>
 
           {/* ── Right: Actions ── */}
           <div className="flex items-center gap-1 sm:gap-2">
             {/* Notification bell with full panel */}
-            <div className="relative">
+            {/* <div className="relative">
               <NotificationCenter />
-            </div>
+            </div> */}
 
-            {/* Profile Dropdown */}
-            <div ref={profileRef} className="relative">
+            {/* Profile Dropdown — theme-aware */}
+            <div ref={profileRef} className="relative" style={{ paddingLeft: '0.9rem' }}>
               <button
                 onClick={() => setShowProfileMenu(prev => !prev)}
-                className="flex items-center gap-2.5 pl-2 pr-3 py-1.5 rounded-2xl transition-all"
+                className="flex items-center gap-2.5 py-1 rounded-full transition-all pl-1.5 pr-1.5 sm:pr-2.5"
                 style={{
-                  background: showProfileMenu ? 'rgba(255,255,255,0.08)' : 'transparent',
+                  background: showProfileMenu
+                    ? (isLight ? 'rgba(15,7,3,0.05)' : 'rgba(255,255,255,0.08)')
+                    : 'transparent',
                 }}
               >
                 {/* Avatar */}
                 <div className="relative">
                   <div
-                    className="w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold transition-all"
+                    className="w-9 h-9 rounded-full flex items-center justify-center text-sm font-extrabold transition-all"
                     style={{
-                      background: `linear-gradient(135deg, ${colors.primary}60, ${colors.primary}30)`,
+                      background: `linear-gradient(135deg, ${colors.primary}, ${colors.primary}aa)`,
                       color: '#fff',
-                      boxShadow: showProfileMenu ? `0 0 0 2px ${colors.primary}` : `0 0 0 2px rgba(255,255,255,0.1)`,
+                      boxShadow: showProfileMenu
+                        ? `0 0 0 2px ${colors.primary}, 0 8px 18px -6px ${colors.primary}66`
+                        : `0 0 0 2px ${isLight ? 'rgba(15,7,3,0.06)' : 'rgba(255,255,255,0.10)'}, 0 4px 10px -4px ${colors.primary}55`,
                     }}
                   >
                     {userInitial}
@@ -387,16 +465,33 @@ export default function OrgLayout() {
                   <span
                     className="absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full border-2"
                     style={{
-                      background: colors.accentGreen,
-                      borderColor: colors.secondaryLight,
-                      boxShadow: `0 0 6px ${colors.accentGreen}80`,
+                      background: '#10B981',
+                      borderColor: isLight ? '#FFFFFF' : colors.secondaryLight,
+                      boxShadow: '0 0 6px rgba(16, 185, 129, 0.55)',
                     }}
                   />
                 </div>
 
+                <div className="sm:hidden text-left">
+                  <p
+                    className="text-[10px] font-semibold uppercase tracking-wide truncate"
+                    style={{
+                      color: isExecContext ? colors.primary : (isLight ? 'rgba(15,7,3,0.6)' : colors.textSecondary),
+                      maxWidth: '90px',
+                    }}
+                  >
+                    {activeRole?.label || (isExecContext ? 'Exec' : 'Student')}
+                  </p>
+                </div>
+
                 <div className="hidden sm:block text-left">
-                  <p className="text-sm font-medium text-white leading-tight">{firstName}</p>
-                  {admin && (
+                  <p
+                    className="text-sm font-bold leading-tight"
+                    style={{ color: isLight ? '#0F0703' : '#FFFFFF' }}
+                  >
+                    {firstName}
+                  </p>
+                  {showAdmin && (
                     <p className="text-[10px] font-semibold tracking-wide uppercase" style={{ color: colors.primary }}>
                       Admin
                     </p>
@@ -408,7 +503,10 @@ export default function OrgLayout() {
                   transition={{ duration: 0.2 }}
                   className="hidden sm:block"
                 >
-                  <ChevronDown size={14} style={{ color: colors.textTertiary }} />
+                  <ChevronDown
+                    size={14}
+                    style={{ color: isLight ? 'rgba(15,7,3,0.45)' : colors.textTertiary }}
+                  />
                 </motion.div>
               </button>
 
@@ -421,34 +519,63 @@ export default function OrgLayout() {
                     transition={{ duration: 0.15, ease: 'easeOut' }}
                     className="absolute right-0 top-full mt-2 w-64 rounded-2xl overflow-hidden z-50"
                     style={{
-                      ...glass.strong,
-                      boxShadow: `0 20px 60px rgba(0,0,0,0.6), ${glows.amber.replace('30px', '12px').replace('0.5', '0.1')}`,
+                      // Theme-aware dropdown surface. In light mode it's
+                      // a true white card with a crisp shadow + 1px
+                      // border. In dark mode it stays glassy ember.
+                      ...(isLight
+                        ? {
+                            background: '#FFFFFF',
+                            backdropFilter: 'saturate(180%) blur(20px)',
+                            WebkitBackdropFilter: 'saturate(180%) blur(20px)',
+                          }
+                        : glass.strong),
+                      border: `1px solid ${isLight ? 'rgba(15, 7, 3, 0.06)' : colors.borderLight}`,
+                      boxShadow: isLight
+                        ? '0 20px 50px -16px rgba(15, 7, 3, 0.18), 0 4px 12px -2px rgba(15, 7, 3, 0.06)'
+                        : `0 20px 60px rgba(0,0,0,0.6), ${glows.amber.replace('30px', '12px').replace('0.5', '0.1')}`,
                     }}
                   >
                     {/* Profile header */}
-                    <div className="p-4" style={{ borderBottom: `1px solid ${colors.borderLight}` }}>
+                    <div
+                      className="p-4"
+                      style={{
+                        borderBottom: `1px solid ${isLight ? 'rgba(15, 7, 3, 0.06)' : colors.borderLight}`,
+                      }}
+                    >
                       <div className="flex items-center gap-3">
                         <div
                           className="w-11 h-11 rounded-full flex items-center justify-center text-sm font-bold shrink-0"
                           style={{
-                            background: `linear-gradient(135deg, ${colors.primary}60, ${colors.primary}30)`,
+                            background: `linear-gradient(135deg, ${colors.primary}, ${colors.primary}aa)`,
                             color: '#fff',
-                            boxShadow: glows.amber.replace('30px', '12px').replace('0.5', '0.2'),
+                            boxShadow: `0 8px 18px -6px ${colors.primary}66`,
                           }}
                         >
                           {userInitial}
                         </div>
                         <div className="min-w-0">
-                          <p className="text-sm font-semibold text-white truncate">{user.full_name}</p>
-                          <p className="text-xs truncate" style={{ color: colors.textTertiary }}>{user.member_id}</p>
+                          <p
+                            className="text-sm font-bold truncate"
+                            style={{ color: isLight ? '#0F0703' : '#FFFFFF' }}
+                          >
+                            {user.full_name}
+                          </p>
+                          <p
+                            className="text-xs truncate"
+                            style={{ color: isLight ? 'rgba(15,7,3,0.55)' : colors.textTertiary }}
+                          >
+                            {user.member_id}
+                          </p>
                           {(user.level || groupPrimary || fetchedLevel) && (
-                            <p className="text-[10px] font-medium truncate" style={{ color: colors.primary }}>{user.level || groupPrimary || fetchedLevel}</p>
+                            <p className="text-[10px] font-semibold truncate mt-0.5" style={{ color: colors.primary }}>
+                              {user.level || groupPrimary || fetchedLevel}
+                            </p>
                           )}
-                          {admin && (
+                          {showAdmin && (
                             <span
-                              className="inline-flex items-center gap-1 mt-1 px-2 py-0.5 rounded-full text-[10px] font-bold tracking-wide uppercase"
+                              className="inline-flex items-center gap-1 mt-1.5 px-2 py-0.5 rounded-full text-[10px] font-bold tracking-wide uppercase"
                               style={{
-                                background: `${colors.primary}20`,
+                                background: `${colors.primary}18`,
                                 color: colors.primary,
                                 border: `1px solid ${colors.primary}30`,
                               }}
@@ -468,23 +595,31 @@ export default function OrgLayout() {
                         icon={<Building2 size={16} />}
                         label="My Profile"
                         onClose={() => setShowProfileMenu(false)}
+                        isLight={isLight}
                       />
                       <ProfileMenuItem
                         to={`${basePath}/settings`}
                         icon={<Settings size={16} />}
                         label="Settings"
                         onClose={() => setShowProfileMenu(false)}
+                        isLight={isLight}
                       />
                       <ProfileMenuItem
                         to={`${basePath}/change-password`}
                         icon={<UserCog size={16} />}
                         label="Change Password"
                         onClose={() => setShowProfileMenu(false)}
+                        isLight={isLight}
                       />
                     </div>
 
                     {/* Logout */}
-                    <div className="px-1.5 pb-1.5" style={{ borderTop: `1px solid ${colors.borderLight}` }}>
+                    <div
+                      className="px-1.5 pb-1.5"
+                      style={{
+                        borderTop: `1px solid ${isLight ? 'rgba(15, 7, 3, 0.06)' : colors.borderLight}`,
+                      }}
+                    >
                       <button
                         onClick={() => { setShowProfileMenu(false); setShowLogoutModal(true); }}
                         className="w-full flex items-center gap-3 px-3.5 py-2.5 mt-1 rounded-xl text-sm font-medium transition-all hover:bg-red-500/10"
@@ -498,21 +633,37 @@ export default function OrgLayout() {
                 )}
               </AnimatePresence>
             </div>
+             <div className="relative">
+              <NotificationCenter />
+            </div>
           </div>
         </div>
       </header>
-
+  
       {/* ═══════════ MAIN CONTENT ═══════════ */}
-      <main className="flex-1 pb-20 lg:pb-0">
+      {/* Bottom padding lifts content above the mobile tab bar. On
+          focused checkout routes we hide the tab bar entirely, so we
+          drop the padding too. */}
+      <main className={`flex-1 ${hideBottomNav ? '' : 'pb-20 lg:pb-0'}`}>
         <Outlet />
       </main>
 
-      {/* ═══════════ MOBILE BOTTOM TAB BAR ═══════════ */}
+      {/* ═══════════ MOBILE BOTTOM TAB BAR ═══════════
+          Hidden on focused checkout routes so the sticky Pay button
+          isn't covered. */}
+      {!hideBottomNav && (
       <nav
         className="fixed bottom-0 left-0 right-0 z-50 lg:hidden"
         style={{
-          ...glass.strong,
-          borderTop: `1px solid rgba(255, 104, 3, 0.08)`,
+          ...(isLight
+            ? {
+                background: 'rgba(255, 251, 247, 0.92)',
+                backdropFilter: 'saturate(180%) blur(22px)',
+                WebkitBackdropFilter: 'saturate(180%) blur(22px)',
+                boxShadow: '0 -12px 30px -12px rgba(15, 7, 3, 0.08)',
+              }
+            : glass.strong),
+          borderTop: `1px solid ${isLight ? 'rgba(15, 7, 3, 0.06)' : 'rgba(255, 104, 3, 0.08)'}`,
           paddingBottom: 'env(safe-area-inset-bottom, 0px)',
         }}
       >
@@ -524,61 +675,156 @@ export default function OrgLayout() {
           }}
         />
 
-        <div className="flex items-center justify-around px-2 h-16">
-          {bottomTabItems.map(item => {
-            const active = item.path === '/admin/dashboard'
-              ? isActivePrefix('/admin') && !isActive('/admin/members') && !isActive('/admin/billing')
-              : isActive(item.path);
-            return (
-              <Link
+        {/* Layout: 2 tabs left │ center FAB │ 2 tabs right.
+            FAB sits ABOVE the bar (slightly raised), grid-icon, brand
+            orange, glow halo — matches the Lucy Nwakwo mockup. Tapping
+            it opens the "More" sheet which contains secondary routes. */}
+        <div className="relative h-16">
+          {/* Left side tabs */}
+          <div className="absolute inset-y-0 left-0 right-1/2 flex items-center justify-around pr-10">
+            {leftTabs.map((item) => (
+              <BottomTab
                 key={item.path}
-                to={`${basePath}${item.path}`}
-                className="relative flex flex-col items-center justify-center gap-0.5 py-1 px-3 rounded-2xl transition-all"
-                style={{ minWidth: '60px' }}
-              >
-                {/* Active glow background */}
-                {active && (
-                  <motion.div
-                    layoutId="bottomTabGlow"
-                    className="absolute inset-0 rounded-2xl"
-                    style={{
-                      background: `${colors.primary}12`,
-                      boxShadow: `0 0 20px ${colors.primary}15`,
-                    }}
-                    transition={{ type: 'spring', stiffness: 400, damping: 30 }}
-                  />
-                )}
-                
-                <span
-                  className="relative z-10 transition-colors"
-                  style={{ color: active ? colors.primary : colors.textTertiary }}
-                >
-                  {item.icon}
-                </span>
-                <span
-                  className="relative z-10 text-[10px] font-medium transition-colors"
-                  style={{ color: active ? colors.primary : colors.textTertiary }}
-                >
-                  {item.label}
-                </span>
+                item={item}
+                basePath={basePath}
+                active={isActive(item.path)}
+              />
+            ))}
+          </div>
 
-                {/* Active dot indicator */}
-                {active && (
-                  <motion.span
-                    layoutId="bottomTabDot"
-                    className="absolute -top-0.5 w-1 h-1 rounded-full"
-                    style={{
-                      background: colors.primary,
-                      boxShadow: `0 0 8px ${colors.primary}`,
-                    }}
-                    transition={{ type: 'spring', stiffness: 400, damping: 30 }}
-                  />
-                )}
-              </Link>
-            );
-          })}
+          {/* Right side tabs */}
+          <div className="absolute inset-y-0 right-0 left-1/2 flex items-center justify-around pl-10">
+            {rightTabs.map((item) => {
+              const isAdminTab = item.path === '/admin/dashboard';
+              const active = isAdminTab
+                ? isActivePrefix('/admin') && !isActive('/admin/members')
+                : isActive(item.path);
+              return (
+                <BottomTab
+                  key={item.path}
+                  item={item}
+                  basePath={basePath}
+                  active={active}
+                />
+              );
+            })}
+          </div>
+
+          {/* Center FAB — raised, brand orange, opens the More sheet */}
+          <div className="absolute left-1/2 -translate-x-1/2 -top-5 z-10">
+            <motion.button
+              type="button"
+              onClick={() => setShowMoreSheet(true)}
+              whileTap={{ scale: 0.92 }}
+              whileHover={{ scale: 1.04 }}
+              className="w-14 h-14 rounded-full flex items-center justify-center text-white"
+              style={{
+                background: `linear-gradient(135deg, ${colors.primary} 0%, ${colors.primary}dd 100%)`,
+                boxShadow: `0 12px 28px -8px ${colors.primary}, 0 4px 10px -2px rgba(0,0,0,0.35)`,
+                border: '4px solid ' + (isLight ? '#FFFBF7' : '#0F0703'),
+              }}
+              aria-label="Open quick actions"
+            >
+              <LayoutGrid size={22} />
+            </motion.button>
+            {/* Tiny dot indicator when sheet is open */}
+            {showMoreSheet && (
+              <span
+                className="absolute -bottom-1 left-1/2 -translate-x-1/2 w-1.5 h-1.5 rounded-full"
+                style={{ background: colors.primary, boxShadow: `0 0 8px ${colors.primary}` }}
+              />
+            )}
+          </div>
         </div>
       </nav>
+      )}
+
+      {/* ═══════════ MOBILE MORE SHEET ═══════════ */}
+      <AnimatePresence>
+        {showMoreSheet && (
+          <>
+            <motion.div
+              className="fixed inset-0 z-90 lg:hidden"
+              style={{ background: 'rgba(0,0,0,0.55)', backdropFilter: 'blur(6px)' }}
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setShowMoreSheet(false)}
+            />
+            <motion.div
+              className="fixed left-0 right-0 bottom-0 z-95 lg:hidden rounded-t-3xl overflow-hidden"
+              style={{
+                ...glass.strong,
+                borderTop: `1px solid rgba(255,104,3,0.18)`,
+                paddingBottom: 'calc(env(safe-area-inset-bottom, 0px) + 12px)',
+                maxHeight: '80vh',
+              }}
+              initial={{ y: '100%' }}
+              animate={{ y: 0 }}
+              exit={{ y: '100%' }}
+              transition={{ type: 'spring', stiffness: 380, damping: 38 }}
+            >
+              {/* Drag handle */}
+              <div className="flex justify-center pt-3 pb-1">
+                <span
+                  className="block w-10 h-1 rounded-full"
+                  style={{ background: 'rgba(255,255,255,0.18)' }}
+                />
+              </div>
+
+              {/* Header */}
+              <div className="px-5 pt-2 pb-3 flex items-center justify-between">
+                <div>
+                  <p className="text-[10px] uppercase tracking-[0.18em] font-bold" style={{ color: colors.primary }}>
+                    {isExecContext ? 'Admin tools' : 'Quick actions'}
+                  </p>
+                  <h3 className="text-base font-bold text-white">More</h3>
+                </div>
+                <button
+                  onClick={() => setShowMoreSheet(false)}
+                  className="w-9 h-9 rounded-xl flex items-center justify-center"
+                  style={{ background: 'rgba(255,255,255,0.05)' }}
+                  aria-label="Close"
+                >
+                  <XIcon className="w-4 h-4" style={{ color: colors.textSecondary }} />
+                </button>
+              </div>
+
+              {/* Role switcher (mobile) */}
+              <RoleSwitcherSheet onSelect={() => setShowMoreSheet(false)} />
+
+              {/* Items */}
+              <div className="px-3 pb-3 overflow-y-auto" style={{ maxHeight: 'calc(80vh - 80px)' }}>
+                <div className="grid grid-cols-2 gap-2">
+                  {moreSheetItems.map(item => (
+                    <Link
+                      key={item.path}
+                      to={`${basePath}${item.path}`}
+                      onClick={() => setShowMoreSheet(false)}
+                      className="flex items-center gap-3 px-3.5 py-3 rounded-2xl transition-all"
+                      style={{
+                        background: isActive(item.path) ? `${colors.primary}18` : 'rgba(255,255,255,0.03)',
+                        border: `1px solid ${isActive(item.path) ? `${colors.primary}30` : colors.borderLight}`,
+                      }}
+                    >
+                      <span
+                        className="w-8 h-8 rounded-lg flex items-center justify-center shrink-0"
+                        style={{
+                          background: isActive(item.path) ? `${colors.primary}22` : 'rgba(255,255,255,0.04)',
+                          color: isActive(item.path) ? colors.primary : colors.textSecondary,
+                        }}
+                      >
+                        {item.icon}
+                      </span>
+                      <span className="text-xs font-semibold text-white truncate">{item.label}</span>
+                    </Link>
+                  ))}
+                </div>
+              </div>
+            </motion.div>
+          </>
+        )}
+      </AnimatePresence>
 
       {/* ═══════════ LOGOUT CONFIRMATION MODAL ═══════════ */}
       <AnimatePresence>
@@ -679,6 +925,42 @@ export default function OrgLayout() {
 
 /* ─────────────────── Sub-components ─────────────────── */
 
+/** Bottom tab — a single tab in the mobile 2+FAB+2 nav bar.
+ *  Active state: brand-orange icon + label + tiny top-dot. Inactive:
+ *  textTertiary so the inactive row stays calm. */
+function BottomTab({
+  item, basePath, active,
+}: { item: NavItem; basePath: string; active: boolean }) {
+  return (
+    <Link
+      to={`${basePath}${item.path}`}
+      className="relative flex flex-col items-center justify-center gap-0.5 py-1 px-2 transition-all"
+      style={{ minWidth: '52px' }}
+    >
+      <span
+        className="relative z-10 transition-colors"
+        style={{ color: active ? colors.primary : colors.textTertiary }}
+      >
+        {item.icon}
+      </span>
+      <span
+        className="relative z-10 text-[10px] font-semibold transition-colors"
+        style={{ color: active ? colors.primary : colors.textTertiary }}
+      >
+        {item.label}
+      </span>
+      {active && (
+        <motion.span
+          layoutId="bottomTabDot"
+          className="absolute -top-0.5 w-1 h-1 rounded-full"
+          style={{ background: colors.primary, boxShadow: `0 0 8px ${colors.primary}` }}
+          transition={{ type: 'spring', stiffness: 400, damping: 30 }}
+        />
+      )}
+    </Link>
+  );
+}
+
 /** Desktop nav link with animated active indicator */
 function NavLink({ item, basePath, isActive }: { item: NavItem; basePath: string; isActive: boolean }) {
   return (
@@ -710,16 +992,28 @@ function NavLink({ item, basePath, isActive }: { item: NavItem; basePath: string
   );
 }
 
-/** Profile dropdown menu item */
-function ProfileMenuItem({ to, icon, label, onClose }: { to: string; icon: React.ReactNode; label: string; onClose: () => void }) {
+/** Profile dropdown menu item — theme-aware */
+function ProfileMenuItem({
+  to, icon, label, onClose, isLight = false,
+}: {
+  to: string;
+  icon: React.ReactNode;
+  label: string;
+  onClose: () => void;
+  isLight?: boolean;
+}) {
   return (
     <Link
       to={to}
       onClick={onClose}
-      className="flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-sm transition-all hover:bg-white/5"
-      style={{ color: colors.textSecondary }}
+      className={`flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-sm font-medium transition-all ${
+        isLight ? 'hover:bg-black/[0.04]' : 'hover:bg-white/5'
+      }`}
+      style={{
+        color: isLight ? '#1F1B1A' : colors.textSecondary,
+      }}
     >
-      <span style={{ color: colors.textTertiary }}>{icon}</span>
+      <span style={{ color: isLight ? 'rgba(15,7,3,0.55)' : colors.textTertiary }}>{icon}</span>
       {label}
     </Link>
   );
