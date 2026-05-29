@@ -197,7 +197,7 @@ export default function EventsSection({
         {showAll && (
           <button
             type="button"
-            onClick={() => navigate(showAllHref)}
+            onClick={() => showAllHref && navigate(showAllHref)}
             className="text-xs font-bold rounded-full px-3 py-1.5 transition-colors"
             style={{ color: t.primary, background: isLight ? '#FFF4EB' : 'rgba(255,104,3,0.12)' }}
           >
