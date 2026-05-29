@@ -528,6 +528,11 @@ export default function OrgMembersPage() {
 
     setInviteLoading(true);
     try {
+      const createdBy = adminRecord.id || user.id;
+      if (!createdBy) {
+        throw new Error('Missing invite creator');
+      }
+
       const expiryMap: Record<string, number | null> = {
         '1d': 1, '7d': 7, '30d': 30, 'never': null,
       };
@@ -538,11 +543,11 @@ export default function OrgMembersPage() {
 
       const invite = await organizationService.createInvite({
         organization_id: organization.id,
-        group_id: group?.id || null,
+        group_id: group?.id || undefined,
         invite_type: 'bulk',
         max_uses: inviteMaxUses,
-        expires_at: expires_at || null,
-        created_by: adminRecord?.id || user?.id,
+        expires_at,
+        created_by: createdBy,
       });
 
       if (!invite || !invite.invite_code) throw new Error('Invite creation failed');

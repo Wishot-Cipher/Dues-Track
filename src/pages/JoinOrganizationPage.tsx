@@ -33,6 +33,7 @@ import {
   EyeOff,
   AlertCircle,
   Ticket,
+  tk,
   Globe,
   Mail,
   Phone,
@@ -462,6 +463,7 @@ export default function JoinOrganizationPage() {
                 <div className="flex items-center justify-center gap-1.5 sm:gap-2.5">
                   {codeChars.map((c, i) => (
                     <CodeCell
+                      tk={tk}
                       key={i}
                       value={c}
                       filled={Boolean(c)}
@@ -616,16 +618,18 @@ export default function JoinOrganizationPage() {
 
                 <div className="space-y-4">
                   <Row>
-                    <Field label="Full name" required>
+                    <Field tk={tk} label="Full name" required>
                       <Input
+                        tk={tk}
                         value={form.full_name}
                         onChange={(v) => setForm({ ...form, full_name: v })}
                         placeholder="Jane Doe"
                         autoComplete="name"
                       />
                     </Field>
-                    <Field label="Login ID / Member number" required hint="matric / staff / member">
+                    <Field tk={tk} label="Login ID / Member number" required hint="matric / staff / member">
                       <Input
+                        tk={tk}
                         value={form.member_id}
                         onChange={(v) => setForm({ ...form, member_id: v })}
                         placeholder={
@@ -638,16 +642,16 @@ export default function JoinOrganizationPage() {
                   </Row>
 
                   <Row>
-                    <Field label="Email" icon={<Mail className="w-3 h-3" />} hint="optional">
-                      <Input value={form.email} onChange={(v) => setForm({ ...form, email: v })} placeholder="you@example.com" type="email" autoComplete="email" />
+                    <Field tk={tk} label="Email" icon={<Mail className="w-3 h-3" />} hint="optional">
+                      <Input tk={tk} value={form.email} onChange={(v) => setForm({ ...form, email: v })} placeholder="you@example.com" type="email" autoComplete="email" />
                     </Field>
-                    <Field label="Phone" icon={<Phone className="w-3 h-3" />} hint="optional">
-                      <Input value={form.phone} onChange={(v) => setForm({ ...form, phone: v })} placeholder="+234 800 000 0000" type="tel" autoComplete="tel" />
+                    <Field tk={tk} label="Phone" icon={<Phone className="w-3 h-3" />} hint="optional">
+                      <Input tk={tk} value={form.phone} onChange={(v) => setForm({ ...form, phone: v })} placeholder="+234 800 000 0000" type="tel" autoComplete="tel" />
                     </Field>
                   </Row>
 
-                  <Field label="Level / Year / Position" hint="optional, e.g. 200L, SS2, Member">
-                    <Input value={form.level} onChange={(v) => setForm({ ...form, level: v })} placeholder="200L" />
+                  <Field tk={tk} label="Level / Year / Position" hint="optional, e.g. 200L, SS2, Member">
+                    <Input tk={tk} value={form.level} onChange={(v) => setForm({ ...form, level: v })} placeholder="200L" />
                   </Field>
 
                   {/* Password mode toggle */}
@@ -694,9 +698,10 @@ export default function JoinOrganizationPage() {
                         className="overflow-hidden"
                       >
                         <Row>
-                          <Field label="Password" required hint="min 6 chars">
+                          <Field tk={tk} label="Password" required hint="min 6 chars">
                             <div className="relative">
                               <Input
+                                tk={tk}
                                 value={form.password}
                                 onChange={(v) => setForm({ ...form, password: v })}
                                 placeholder="••••••••"
@@ -713,8 +718,9 @@ export default function JoinOrganizationPage() {
                               </button>
                             </div>
                           </Field>
-                          <Field label="Confirm" required>
+                          <Field tk={tk} label="Confirm" required>
                             <Input
+                              tk={tk}
                               value={form.password_confirm}
                               onChange={(v) => setForm({ ...form, password_confirm: v })}
                               placeholder="••••••••"
@@ -814,14 +820,17 @@ export default function JoinOrganizationPage() {
 // Code cell — 1 character, focused/filled styling, separator divider
 // ────────────────────────────────────────────────────────────────────────────
 function CodeCell({
+  tk,
   value,
   filled,
+  focused,
   separator,
   inputRef,
   onChange,
   onKeyDown,
   onPaste,
 }: {
+  tk: JoinTokens;
   value: string;
   filled: boolean;
   focused: boolean;
@@ -893,12 +902,14 @@ function Row({ children }: { children: React.ReactNode }) {
 }
 
 function Field({
+  tk,
   label,
   hint,
   required,
   icon,
   children,
 }: {
+  tk: JoinTokens;
   label: string;
   hint?: string;
   required?: boolean;
@@ -923,12 +934,14 @@ function Field({
 }
 
 function Input({
+  tk,
   value,
   onChange,
   placeholder,
   type = 'text',
   autoComplete,
 }: {
+  tk: JoinTokens;
   value: string;
   onChange: (v: string) => void;
   placeholder?: string;

@@ -861,7 +861,7 @@ export interface MultiTenantAuthContextType {
   loading: boolean;
 
   // Auth actions
-  login: (memberId: string, password: string, orgSlug?: string) => Promise<{
+  login: (memberId: string, password: string, orgSlug?: string, groupId?: string) => Promise<{
     member: OrganizationMember;
     mustChangePassword: boolean;
   }>;

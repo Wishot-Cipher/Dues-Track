@@ -14,8 +14,6 @@ interface PushNotificationPromptProps {
 
 export function PushNotificationPrompt({ mode = 'banner', onDismiss }: PushNotificationPromptProps) {
   const { user } = useAuth();
-  const { theme } = useTheme();
-  const tk = getDashboardTokens(theme);
   const toast = useToast();
   const [isSupported, setIsSupported] = useState(false);
   const [isSubscribed, setIsSubscribed] = useState(false);
