@@ -65,6 +65,15 @@ interface PaymentRow {
   transaction_ref?: string | null;
 }
 
+interface TierRow {
+  id: string;
+  name: string;
+  description: string | null;
+  price: number;
+  quantity: number | null;
+  sold_count: number;
+}
+
 // ── Helpers ────────────────────────────────────────────────────────
 function iconForCategory(key?: string | null) {
   const k = (key || '').toLowerCase();
@@ -98,6 +107,8 @@ export default function MakePaymentPage() {
 
   const [pt, setPt] = useState<PaymentTypeRow | null>(null);
   const [myPayments, setMyPayments] = useState<PaymentRow[]>([]);
+  const [tiers, setTiers] = useState<TierRow[]>([]);
+  const [selectedTierId, setSelectedTierId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
 
   // Paystack flow state
@@ -118,6 +129,23 @@ export default function MakePaymentPage() {
         const { data: ptRow, error: ptErr } = await ptQ.maybeSingle();
         if (ptErr) throw ptErr;
         if (!cancelled) setPt(ptRow as PaymentTypeRow | null);
+
+        // Events: load the ticket tiers so the buyer can choose one.
+        if ((ptRow as PaymentTypeRow | null)?.category === 'event') {
+          const { data: tierRows } = await supabase
+            .from('event_ticket_tiers')
+            .select('id, name, description, price, quantity, sold_count')
+            .eq('payment_type_id', id)
+            .eq('is_active', true)
+            .order('sort_order', { ascending: true });
+          if (!cancelled) {
+            const list = (tierRows || []) as TierRow[];
+            setTiers(list);
+            // default to the first tier that isn't sold out
+            const firstAvailable = list.find(t => t.quantity == null || t.sold_count < t.quantity) || list[0] || null;
+            setSelectedTierId(firstAvailable?.id ?? null);
+          }
+        }
 
         let payQ = supabase
           .from('payments')
@@ -145,9 +173,16 @@ export default function MakePaymentPage() {
     () => myPayments.filter(p => p.status === 'approved').reduce((s, p) => s + Number(p.amount || 0), 0),
     [myPayments],
   );
+  const isEvent     = (pt?.category || '').toLowerCase() === 'event';
+  const selectedTier = useMemo(() => tiers.find(t => t.id === selectedTierId) || null, [tiers, selectedTierId]);
+  const tierSoldOut = (t: TierRow) => t.quantity != null && t.sold_count >= t.quantity;
+  const eventSoldOut = tiers.length > 0 && tiers.every(tierSoldOut);
+
   const dueAmount   = Number(pt?.amount || 0);
-  const outstanding = Math.max(0, dueAmount - approvedSum);
-  const fullyPaid   = outstanding <= 0;
+  const approvedOutstanding = Math.max(0, dueAmount - approvedSum);
+  // Events have no "outstanding" — you buy a ticket at the chosen tier price.
+  const outstanding = isEvent ? Number(selectedTier?.price ?? dueAmount) : approvedOutstanding;
+  const fullyPaid   = isEvent ? false : approvedOutstanding <= 0;
   const hasPending  = myPayments.some(p => p.status === 'pending');
   const daysLeft    = daysFromNow(pt?.deadline ?? null);
 
@@ -165,9 +200,19 @@ export default function MakePaymentPage() {
       setError('You need to be signed in to pay.');
       return;
     }
-    if (fullyPaid) {
+    if (!isEvent && fullyPaid) {
       toast.success("You've already paid this due in full.");
       return;
+    }
+    if (isEvent) {
+      if (tiers.length > 0 && !selectedTierId) {
+        setError('Please choose a ticket type.');
+        return;
+      }
+      if (selectedTier && tierSoldOut(selectedTier)) {
+        setError(`"${selectedTier.name}" is sold out. Pick another type.`);
+        return;
+      }
     }
     setSubmitting(true);
     setError(null);
@@ -175,6 +220,7 @@ export default function MakePaymentPage() {
     const res = await paystackService.initialize({
       memberId:      user.id,
       paymentTypeId: id,
+      tierId:        isEvent ? selectedTierId : undefined,
       // server defaults callbackPath to /<orgSlug>/payments/verify
     });
 
@@ -185,7 +231,7 @@ export default function MakePaymentPage() {
     }
 
     window.location.assign(res.authorization_url);
-  }, [user?.id, id, fullyPaid, toast]);
+  }, [user?.id, id, fullyPaid, toast, isEvent, tiers, selectedTierId, selectedTier]);
 
   // ── Render ───────────────────────────────────────────────────────
   return (
@@ -298,6 +344,60 @@ export default function MakePaymentPage() {
                 </div>
               </div>
             </section>
+
+            {/* Ticket type selector (events only) */}
+            {isEvent && tiers.length > 0 && (
+              <section>
+                <p
+                  className="text-[12px] uppercase tracking-[0.14em] font-bold mb-2 px-1"
+                  style={{ color: t.textTer }}
+                >
+                  Choose your ticket
+                </p>
+                <div className="space-y-2">
+                  {tiers.map((tier) => {
+                    const sold = tierSoldOut(tier);
+                    const active = tier.id === selectedTierId;
+                    const left = tier.quantity != null ? Math.max(0, tier.quantity - tier.sold_count) : null;
+                    return (
+                      <button
+                        key={tier.id}
+                        type="button"
+                        disabled={sold}
+                        onClick={() => setSelectedTierId(tier.id)}
+                        className="w-full rounded-2xl px-4 py-3 flex items-center gap-3 text-left transition-all disabled:opacity-50"
+                        style={{
+                          background: t.card,
+                          border: `1.5px solid ${active ? t.primary : t.cardBorder}`,
+                          boxShadow: active ? `0 8px 22px -12px ${t.primary}` : 'none',
+                        }}
+                      >
+                        <div
+                          className="w-5 h-5 rounded-full flex items-center justify-center shrink-0"
+                          style={{
+                            border: `2px solid ${active ? t.primary : t.cardBorder}`,
+                            background: active ? t.primary : 'transparent',
+                          }}
+                        >
+                          {active && <CheckCircle2 size={12} color="#fff" />}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <p className="text-[14px] font-bold truncate" style={{ color: t.text }}>{tier.name}</p>
+                          {(tier.description || left != null || sold) && (
+                            <p className="text-[11px] mt-0.5" style={{ color: sold ? t.amber : t.textSec }}>
+                              {sold ? 'Sold out' : tier.description || (left != null ? `${left} left` : '')}
+                            </p>
+                          )}
+                        </div>
+                        <p className="text-[14px] font-extrabold tabular-nums shrink-0" style={{ color: t.text }}>
+                          {formatNaira(Number(tier.price))}
+                        </p>
+                      </button>
+                    );
+                  })}
+                </div>
+              </section>
+            )}
 
             {/* Pay with — premium payment-method card. The big visual
                 draw is the credit-card "chip" graphic on the left
@@ -459,7 +559,7 @@ export default function MakePaymentPage() {
       </main>
 
       {/* ── Sticky bottom CTA ───────────────────────────────── */}
-      {!loading && pt && !fullyPaid && (
+      {!loading && pt && (isEvent ? !eventSoldOut : !fullyPaid) && (
         <div
           className="fixed bottom-0 left-0 right-0 z-40 px-4 sm:px-6 pb-5 pt-3"
           style={{
@@ -491,7 +591,7 @@ export default function MakePaymentPage() {
                 </>
               ) : (
                 <>
-                  Pay {formatNaira(outstanding)}
+                  {isEvent ? 'Buy ticket · ' : 'Pay '}{formatNaira(outstanding)}
                   <ArrowRight size={16} />
                 </>
               )}

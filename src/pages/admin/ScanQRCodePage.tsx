@@ -29,6 +29,7 @@ import {
 } from "lucide-react";
 import { Html5Qrcode } from "html5-qrcode";
 import Footer from "@/components/Footer";
+import { getDashboardTokens, useTheme } from '@/hooks/useTheme';
 
 // New multi-student QR format
 interface NewQRData {
@@ -122,6 +123,8 @@ const checkIOSCameraPermission = async (): Promise<boolean> => {
 export default function ScanQRCodePage() {
   const navigate = useNavigate();
   const { user, hasPermission } = useAuth();
+  const { theme } = useTheme();
+  const tk = getDashboardTokens(theme);
   const toast = useToast();
 
   const [scanning, setScanning] = useState(true);
@@ -1557,7 +1560,7 @@ const switchCamera = async (newCameraId: string) => {
     <div
       className="min-h-screen py-6 px-4 relative overflow-hidden"
       style={{
-        background: "radial-gradient(ellipse at top, #1A0E09 0%, #0F0703 100%)",
+        background: tk.bgWash,
       }}
     >
       {/* Background Grid Pattern */}

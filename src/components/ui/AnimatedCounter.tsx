@@ -6,6 +6,7 @@ interface AnimatedCounterProps {
   duration?: number
   formatFn?: (value: number) => string
   className?: string
+  style?: React.CSSProperties
   prefix?: string
   suffix?: string
 }
@@ -15,6 +16,7 @@ export default function AnimatedCounter({
   duration = 1.5,
   formatFn,
   className = '',
+  style,
   prefix = '',
   suffix = ''
 }: AnimatedCounterProps) {
@@ -62,7 +64,7 @@ export default function AnimatedCounter({
   }, [value, isVisible, spring])
 
   return (
-    <span ref={ref} className={className}>
+    <span ref={ref} className={className} style={style}>
       {prefix}
       <motion.span>{display}</motion.span>
       {suffix}
@@ -76,19 +78,22 @@ interface CurrencyCounterProps {
   currency?: string
   duration?: number
   className?: string
+  style?: React.CSSProperties
 }
 
 export function CurrencyCounter({
   value,
   currency = '₦',
   duration = 1.5,
-  className = ''
+  className = '',
+  style,
 }: CurrencyCounterProps) {
   return (
     <AnimatedCounter
       value={value}
       duration={duration}
       className={className}
+      style={style}
       prefix={currency}
       formatFn={(val) => val.toLocaleString()}
     />
@@ -100,18 +105,21 @@ interface PercentageCounterProps {
   value: number
   duration?: number
   className?: string
+  style?: React.CSSProperties
 }
 
 export function PercentageCounter({
   value,
   duration = 1.5,
-  className = ''
+  className = '',
+  style,
 }: PercentageCounterProps) {
   return (
     <AnimatedCounter
       value={value}
       duration={duration}
       className={className}
+      style={style}
       suffix="%"
     />
   )

@@ -11,6 +11,7 @@ import { colors } from '@/config/colors';
 import Footer from '@/components/Footer';
 import { formatCurrency, formatDate } from '@/utils/formatters';
 import { PrivacyMask } from '@/components/ui/PrivacyMask';
+import { getDashboardTokens, useTheme } from '@/hooks/useTheme';
 import {
   ArrowLeft, Users, Wallet, TrendingUp, Filter, Search, Download,
   ChevronLeft, ChevronRight, Sparkles, PieChart, CheckCircle, XCircle,
@@ -57,6 +58,8 @@ export default function AdminCollectedPage() {
   const { go: navigate } = useAppNav();
   const { success: showSuccess, error: showError } = useToast();
   const { group, settings } = useOrganization();
+  const { theme } = useTheme();
+  const tk = getDashboardTokens(theme);
 
   // ── Date range state (ISO date strings "YYYY-MM-DD" or empty) ──
   const [rangeStart, setRangeStart] = useState<string>('');
@@ -405,7 +408,7 @@ export default function AdminCollectedPage() {
 
   return (
     <div className="min-h-screen py-6 px-4" style={{
-      background: 'radial-gradient(ellipse at top, #1A0E09 0%, #0F0703 100%)',
+      background: tk.bgWash,
     }}>
       {/* Background Grid */}
       <div className="absolute inset-0 opacity-20 pointer-events-none" style={{
@@ -427,10 +430,10 @@ export default function AdminCollectedPage() {
         <motion.div initial={{ opacity: 0, y: -20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.5 }}>
           <GlassCard className="relative overflow-hidden">
             <div className="absolute top-0 right-0 w-64 h-64 opacity-5 pointer-events-none">
-              <BarChart3 className="w-full h-full" style={{ color: colors.statusPaid }} />
+              <BarChart3 className="w-full h-full" style={{ color: tk.mint }} />
             </div>
             <div className="absolute top-0 left-0 w-full h-1"
-              style={{ background: `linear-gradient(90deg, ${colors.statusPaid}, ${colors.primary}, transparent)` }} />
+              style={{ background: `linear-gradient(90deg, ${tk.mint}, ${tk.primary}, transparent)` }} />
 
             <div className="relative z-10">
               <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 mb-6">
@@ -439,7 +442,7 @@ export default function AdminCollectedPage() {
                     whileHover={{ x: -4 }}
                     onClick={() => navigate('/admin/dashboard')}
                     className="flex items-center justify-center sm:justify-start gap-2 w-fit px-4 py-2 rounded-xl transition-all"
-                    style={{ background: `${colors.primary}15`, border: `1px solid ${colors.primary}30`, color: colors.primary }}
+                    style={{ background: tk.primarySoft, border: `1px solid ${tk.primaryRing}`, color: tk.primary }}
                   >
                     <ArrowLeft className="w-4 h-4" />
                     <span className="font-medium">Back</span>
@@ -449,20 +452,20 @@ export default function AdminCollectedPage() {
                     <motion.div
                       initial={{ scale: 0.9 }} animate={{ scale: 1 }}
                       className="w-14 h-14 rounded-xl flex items-center justify-center shrink-0 shadow-lg"
-                      style={{ background: `linear-gradient(135deg, ${colors.statusPaid}30, ${colors.statusPaid}10)`, border: `1px solid ${colors.statusPaid}40`, boxShadow: `0 4px 15px ${colors.statusPaid}20` }}
+                      style={{ background: `linear-gradient(135deg, ${tk.mint}30, ${tk.mint}10)`, border: `1px solid ${tk.mint}40`, boxShadow: `0 4px 15px ${tk.mint}20` }}
                     >
-                      <PieChart className="w-7 h-7" style={{ color: colors.statusPaid }} />
+                      <PieChart className="w-7 h-7" style={{ color: tk.mint }} />
                     </motion.div>
                     <div>
                       <motion.div
                         initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} transition={{ delay: 0.1 }}
                         className="inline-flex items-center gap-2 px-3 py-1 rounded-full text-xs font-semibold mb-2"
-                        style={{ background: `linear-gradient(135deg, ${colors.statusPaid}30, ${colors.statusPaid}10)`, border: `1px solid ${colors.statusPaid}40`, color: colors.statusPaid }}
+                        style={{ background: `linear-gradient(135deg, ${tk.mint}30, ${tk.mint}10)`, border: `1px solid ${tk.mint}40`, color: tk.mint }}
                       >
                         <Sparkles className="w-3 h-3" /> COLLECTION OVERVIEW
                       </motion.div>
-                      <h1 className="text-xl sm:text-2xl lg:text-3xl font-bold text-white">Payment Collection</h1>
-                      <p className="text-xs sm:text-sm" style={{ color: colors.textSecondary }}>Detailed breakdown of student payments</p>
+                      <h1 className="text-xl sm:text-2xl lg:text-3xl font-bold" style={{ color: tk.text }}>Payment Collection</h1>
+                      <p className="text-xs sm:text-sm" style={{ color: tk.textSec }}>Detailed breakdown of student payments</p>
                     </div>
                   </div>
                 </div>
@@ -490,9 +493,9 @@ export default function AdminCollectedPage() {
                     onClick={() => setShowCharts(!showCharts)}
                     className="flex items-center gap-2 px-4 py-2.5 rounded-xl transition-all"
                     style={{
-                      background: showCharts ? `${colors.primary}20` : 'rgba(255,255,255,0.05)',
-                      border: `1px solid ${showCharts ? colors.primary : 'rgba(255,255,255,0.1)'}`,
-                      color: showCharts ? colors.primary : colors.textSecondary,
+                      background: showCharts ? tk.primarySoft : (theme === 'light' ? 'rgba(15, 7, 3, 0.04)' : 'rgba(255,255,255,0.05)'),
+                      border: `1px solid ${showCharts ? tk.primaryRing : tk.cardBorder}`,
+                      color: showCharts ? tk.primary : tk.textSec,
                     }}
                   >
                     <LineChart className="w-4 h-4" />
@@ -506,10 +509,10 @@ export default function AdminCollectedPage() {
                       onClick={() => setShowExportMenu(!showExportMenu)}
                       disabled={exporting}
                       className="flex items-center justify-center gap-2 px-5 py-3 rounded-xl transition-all text-sm font-semibold disabled:opacity-50"
-                      style={{ background: `linear-gradient(135deg, ${colors.statusPaid}, ${colors.accentMint})`, boxShadow: `0 4px 15px ${colors.statusPaid}40`, color: 'white' }}
+                      style={{ background: tk.gradOrange, boxShadow: `0 4px 15px ${tk.primary}40`, color: tk.text }}
                     >
                       {exporting
-                        ? <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                        ? <div className="w-4 h-4 border-2 border-t-transparent rounded-full animate-spin" style={{ borderColor: tk.text, borderTopColor: 'transparent' }} />
                         : <Download className="w-4 h-4" />}
                       <span>Export</span>
                       <ChevronDown className={`w-4 h-4 transition-transform ${showExportMenu ? 'rotate-180' : ''}`} />
@@ -524,34 +527,34 @@ export default function AdminCollectedPage() {
                             animate={{ opacity: 1, y: 0, scale: 1 }}
                             exit={{ opacity: 0, y: -10, scale: 0.95 }}
                             className="fixed sm:absolute left-4 right-4 sm:left-auto sm:right-0 bottom-4 sm:bottom-auto sm:top-full sm:mt-2 w-auto sm:w-56 rounded-xl overflow-hidden shadow-2xl z-50"
-                            style={{ background: 'linear-gradient(135deg, rgba(30,20,15,0.98), rgba(20,12,8,0.98))', border: '1px solid rgba(255,255,255,0.15)', backdropFilter: 'blur(20px)' }}
+                            style={{ background: theme === 'light' ? 'rgba(255,255,255,0.98)' : 'linear-gradient(135deg, rgba(30,20,15,0.98), rgba(20,12,8,0.98))', border: `1px solid ${tk.cardBorder}`, backdropFilter: 'blur(20px)' }}
                           >
                             <div className="p-2">
-                              <p className="px-3 py-1.5 text-xs font-medium" style={{ color: colors.textSecondary }}>Export Format</p>
+                              <p className="px-3 py-1.5 text-xs font-medium" style={{ color: tk.textSec }}>Export Format</p>
                               <motion.button
-                                whileHover={{ x: 4, background: 'rgba(255,255,255,0.05)' }}
+                                whileHover={{ x: 4, background: theme === 'light' ? 'rgba(15, 7, 3, 0.04)' : 'rgba(255,255,255,0.05)' }}
                                 onClick={() => { setShowExportMenu(false); exportToPDF(); }}
                                 className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg"
                               >
-                                <div className="w-8 h-8 rounded-lg flex items-center justify-center" style={{ background: `${colors.statusUnpaid}20` }}>
-                                  <FileText className="w-4 h-4" style={{ color: colors.statusUnpaid }} />
+                                <div className="w-8 h-8 rounded-lg flex items-center justify-center" style={{ background: `${tk.danger}20` }}>
+                                  <FileText className="w-4 h-4" style={{ color: tk.danger }} />
                                 </div>
                                 <div className="text-left">
-                                  <span className="text-sm font-medium text-white">PDF Report</span>
-                                  <p className="text-xs" style={{ color: colors.textSecondary }}>Full financial summary</p>
+                                  <span className="text-sm font-medium" style={{ color: tk.text }}>PDF Report</span>
+                                  <p className="text-xs" style={{ color: tk.textSec }}>Full financial summary</p>
                                 </div>
                               </motion.button>
                               <motion.button
-                                whileHover={{ x: 4, background: 'rgba(255,255,255,0.05)' }}
+                                whileHover={{ x: 4, background: theme === 'light' ? 'rgba(15, 7, 3, 0.04)' : 'rgba(255,255,255,0.05)' }}
                                 onClick={() => { setShowExportMenu(false); exportToCSV(); }}
                                 className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg"
                               >
-                                <div className="w-8 h-8 rounded-lg flex items-center justify-center" style={{ background: `${colors.accentMint}20` }}>
-                                  <FileSpreadsheet className="w-4 h-4" style={{ color: colors.accentMint }} />
+                                <div className="w-8 h-8 rounded-lg flex items-center justify-center" style={{ background: `${tk.mint}20` }}>
+                                  <FileSpreadsheet className="w-4 h-4" style={{ color: tk.mint }} />
                                 </div>
                                 <div className="text-left">
-                                  <span className="text-sm font-medium text-white">CSV Spreadsheet</span>
-                                  <p className="text-xs" style={{ color: colors.textSecondary }}>For data analysis</p>
+                                  <span className="text-sm font-medium" style={{ color: tk.text }}>CSV Spreadsheet</span>
+                                  <p className="text-xs" style={{ color: tk.textSec }}>For data analysis</p>
                                 </div>
                               </motion.button>
                             </div>
@@ -569,35 +572,35 @@ export default function AdminCollectedPage() {
                   {
                     delay: 0.1, label: filteredTotals.isDateFiltered ? 'Collected (Filtered)' : 'Total Collected',
                     value: <PrivacyMask><p className="text-lg sm:text-2xl font-bold text-white"><AnimatedCounter value={filteredTotals.isDateFiltered ? filteredTotals.totalCollected : totalCollected} prefix="₦" /></p></PrivacyMask>,
-                    sub: <p className="text-[10px] sm:text-xs mt-1" style={{ color: colors.statusPaid }}><AnimatedCounter value={studentsToFilter.reduce((sum, s) => sum + s.payment_count, 0)} /> payments</p>,
-                    icon: <Wallet className="w-full h-full" style={{ color: colors.statusPaid }} />, bg: 'rgba(255,255,255,0.03)', border: 'rgba(255,255,255,0.05)',
+                    sub: <p className="text-[10px] sm:text-xs mt-1" style={{ color: tk.mint }}><AnimatedCounter value={studentsToFilter.reduce((sum, s) => sum + s.payment_count, 0)} /> payments</p>,
+                    icon: <Wallet className="w-full h-full" style={{ color: tk.mint }} />, bg: theme === 'light' ? '#FFFFFF' : 'rgba(255,255,255,0.03)', border: tk.cardBorder,
                   },
                   {
                     delay: 0.15, label: 'Total Expenses',
-                    value: <PrivacyMask><p className="text-lg sm:text-2xl font-bold" style={{ color: totalExpenses > 0 ? colors.statusFailed : colors.textSecondary }}><AnimatedCounter value={totalExpenses} prefix="₦" /></p></PrivacyMask>,
-                    sub: <p className="text-[10px] sm:text-xs mt-1" style={{ color: colors.textSecondary }}>{totalExpenses > 0 ? 'Approved' : 'None yet'}</p>,
-                    icon: <TrendingUp className="w-full h-full" style={{ color: colors.statusFailed }} />, bg: `${colors.statusFailed}08`, border: `${colors.statusFailed}15`,
+                    value: <PrivacyMask><p className="text-lg sm:text-2xl font-bold" style={{ color: totalExpenses > 0 ? tk.danger : tk.textSec }}><AnimatedCounter value={totalExpenses} prefix="₦" /></p></PrivacyMask>,
+                    sub: <p className="text-[10px] sm:text-xs mt-1" style={{ color: tk.textSec }}>{totalExpenses > 0 ? 'Approved' : 'None yet'}</p>,
+                    icon: <TrendingUp className="w-full h-full" style={{ color: tk.danger }} />, bg: `${tk.danger}08`, border: `${tk.danger}15`,
                   },
                   {
                     delay: 0.2, label: 'Net Balance',
-                    value: <PrivacyMask><p className="text-lg sm:text-2xl font-bold" style={{ color: netBalance >= 0 ? colors.statusPaid : colors.statusFailed }}><AnimatedCounter value={netBalance} prefix="₦" /></p></PrivacyMask>,
-                    sub: <p className="text-[10px] sm:text-xs mt-1" style={{ color: colors.textSecondary }}>Available</p>,
-                    icon: <Wallet className="w-full h-full" style={{ color: netBalance >= 0 ? colors.statusPaid : colors.statusFailed }} />,
-                    bg: netBalance >= 0 ? `${colors.statusPaid}08` : `${colors.statusFailed}08`,
-                    border: `${netBalance >= 0 ? colors.statusPaid : colors.statusFailed}15`,
+                    value: <PrivacyMask><p className="text-lg sm:text-2xl font-bold" style={{ color: netBalance >= 0 ? tk.mint : tk.danger }}><AnimatedCounter value={netBalance} prefix="₦" /></p></PrivacyMask>,
+                    sub: <p className="text-[10px] sm:text-xs mt-1" style={{ color: tk.textSec }}>Available</p>,
+                    icon: <Wallet className="w-full h-full" style={{ color: netBalance >= 0 ? tk.mint : tk.danger }} />,
+                    bg: netBalance >= 0 ? `${tk.mint}08` : `${tk.danger}08`,
+                    border: `${netBalance >= 0 ? tk.mint : tk.danger}15`,
                   },
                   {
                     delay: 0.25, label: filteredTotals.isDateFiltered ? 'Students in Range' : 'Paid Students',
-                    value: <p className="text-lg sm:text-2xl font-bold text-white"><AnimatedCounter value={filteredTotals.totalStudentsPaid} /></p>,
-                    sub: <p className="text-[10px] sm:text-xs mt-1" style={{ color: colors.statusPaid }}>{filteredTotals.isDateFiltered ? 'With Payments' : 'Completed'}</p>,
-                    icon: <CheckCircle className="w-full h-full" style={{ color: colors.statusPaid }} />, bg: `${colors.statusPaid}08`, border: `${colors.statusPaid}15`,
+                    value: <p className="text-lg sm:text-2xl font-bold" style={{ color: tk.text }}><AnimatedCounter value={filteredTotals.totalStudentsPaid} /></p>,
+                    sub: <p className="text-[10px] sm:text-xs mt-1" style={{ color: tk.mint }}>{filteredTotals.isDateFiltered ? 'With Payments' : 'Completed'}</p>,
+                    icon: <CheckCircle className="w-full h-full" style={{ color: tk.mint }} />, bg: `${tk.mint}08`, border: `${tk.mint}15`,
                   },
                 ].map((card, i) => (
                   <motion.div key={i} initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} transition={{ delay: card.delay }}
                     className="p-4 rounded-xl relative overflow-hidden"
                     style={{ background: card.bg, border: `1px solid ${card.border}` }}>
                     <div className="absolute top-0 right-0 w-12 h-12 opacity-10">{card.icon}</div>
-                    <p className="text-[10px] sm:text-xs font-medium mb-1" style={{ color: colors.textSecondary }}>{card.label}</p>
+                    <p className="text-[10px] sm:text-xs font-medium mb-1" style={{ color: tk.textSec }}>{card.label}</p>
                     {card.value}
                     {card.sub}
                   </motion.div>
@@ -607,11 +610,11 @@ export default function AdminCollectedPage() {
                 {!filteredTotals.isDateFiltered && (
                   <motion.div initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} transition={{ delay: 0.3 }}
                     className="p-4 rounded-xl relative overflow-hidden"
-                    style={{ background: `${colors.statusFailed}08`, border: `1px solid ${colors.statusFailed}15` }}>
-                    <div className="absolute top-0 right-0 w-12 h-12 opacity-10"><XCircle className="w-full h-full" style={{ color: colors.statusFailed }} /></div>
-                    <p className="text-[10px] sm:text-xs font-medium mb-1" style={{ color: colors.textSecondary }}>Unpaid Students</p>
-                    <p className="text-lg sm:text-2xl font-bold" style={{ color: colors.statusFailed }}><AnimatedCounter value={totalStudentsUnpaid} /></p>
-                    <p className="text-[10px] sm:text-xs mt-1" style={{ color: colors.textSecondary }}>Pending</p>
+                    style={{ background: `${tk.danger}08`, border: `1px solid ${tk.danger}15` }}>
+                    <div className="absolute top-0 right-0 w-12 h-12 opacity-10"><XCircle className="w-full h-full" style={{ color: tk.danger }} /></div>
+                    <p className="text-[10px] sm:text-xs font-medium mb-1" style={{ color: tk.textSec }}>Unpaid Students</p>
+                    <p className="text-lg sm:text-2xl font-bold" style={{ color: tk.danger }}><AnimatedCounter value={totalStudentsUnpaid} /></p>
+                    <p className="text-[10px] sm:text-xs mt-1" style={{ color: tk.textSec }}>Pending</p>
                   </motion.div>
                 )}
               </div>
@@ -636,14 +639,14 @@ export default function AdminCollectedPage() {
         {/* Category Breakdown */}
         <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.4 }}>
           <GlassCard className="relative overflow-hidden">
-            <div className="absolute top-0 left-0 w-full h-1" style={{ background: `linear-gradient(90deg, ${colors.primary}, ${colors.accentMint}, transparent)` }} />
+            <div className="absolute top-0 left-0 w-full h-1" style={{ background: `linear-gradient(90deg, ${tk.primary}, ${tk.mint}, transparent)` }} />
             <div className="flex items-center gap-3 mb-4">
-              <div className="w-10 h-10 rounded-xl flex items-center justify-center" style={{ background: `${colors.primary}15`, border: `1px solid ${colors.primary}30` }}>
-                <BarChart3 className="w-5 h-5" style={{ color: colors.primary }} />
+              <div className="w-10 h-10 rounded-xl flex items-center justify-center" style={{ background: tk.primarySoft, border: `1px solid ${tk.primaryRing}` }}>
+                <BarChart3 className="w-5 h-5" style={{ color: tk.primary }} />
               </div>
               <div>
-                <h2 className="text-xl font-bold text-white">Category Breakdown</h2>
-                <p className="text-xs" style={{ color: colors.textSecondary }}>Click to filter by category</p>
+                <h2 className="text-xl font-bold" style={{ color: tk.text }}>Category Breakdown</h2>
+                <p className="text-xs" style={{ color: tk.textSec }}>Click to filter by category</p>
               </div>
             </div>
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
@@ -655,43 +658,43 @@ export default function AdminCollectedPage() {
                   onClick={() => setCategoryFilter(cat.category)}
                   className={`p-4 rounded-xl text-left transition-all relative overflow-hidden ${categoryFilter === cat.category ? 'ring-2 shadow-xl' : ''}`}
                   style={{
-                    background: categoryFilter === cat.category ? `linear-gradient(135deg, ${colors.primary}30, ${colors.primary}10)` : 'rgba(255,255,255,0.03)',
+                    background: categoryFilter === cat.category ? `linear-gradient(135deg, ${tk.primary}30, ${tk.primary}10)` : (theme === 'light' ? '#FFFFFF' : 'rgba(255,255,255,0.03)'),
                     borderWidth: '1px', borderStyle: 'solid',
-                    borderColor: categoryFilter === cat.category ? colors.primary : 'rgba(255,255,255,0.1)',
-                    boxShadow: categoryFilter === cat.category ? `0 4px 20px ${colors.primary}30` : 'none',
+                    borderColor: categoryFilter === cat.category ? tk.primary : tk.cardBorder,
+                    boxShadow: categoryFilter === cat.category ? `0 4px 20px ${tk.primary}30` : 'none',
                   }}
                 >
-                  <div className="absolute top-0 right-0 w-16 h-16 opacity-5 pointer-events-none"><TrendingUp className="w-full h-full" style={{ color: colors.primary }} /></div>
-                  <p className="text-xs sm:text-sm font-semibold capitalize mb-1" style={{ color: categoryFilter === cat.category ? colors.primary : colors.textSecondary }}>
+                  <div className="absolute top-0 right-0 w-16 h-16 opacity-5 pointer-events-none"><TrendingUp className="w-full h-full" style={{ color: tk.primary }} /></div>
+                  <p className="text-xs sm:text-sm font-semibold capitalize mb-1" style={{ color: categoryFilter === cat.category ? tk.primary : tk.textSec }}>
                     {cat.category.replace(/_/g, ' ')}
                   </p>
                   <div className="flex items-center gap-2 mt-1">
-                    <PrivacyMask><p className="text-lg sm:text-xl font-bold text-white">{formatCurrency(cat.total_collected)}</p></PrivacyMask>
+                    <PrivacyMask><p className="text-lg sm:text-xl font-bold" style={{ color: tk.text }}>{formatCurrency(cat.total_collected)}</p></PrivacyMask>
                     {totalCollected > 0 && (
-                      <span className="text-[10px] sm:text-xs px-1.5 py-0.5 rounded-full" style={{ background: 'rgba(255,255,255,0.08)', color: colors.textSecondary }}>
+                      <span className="text-[10px] sm:text-xs px-1.5 py-0.5 rounded-full" style={{ background: tk.cardBorder, color: tk.textSec }}>
                         {Math.round((cat.total_collected / totalCollected) * 100)}%
                       </span>
                     )}
                   </div>
                   {cat.total_collected > 0 && (
-                    <div className="w-full h-1.5 rounded-full overflow-hidden mt-2" style={{ background: 'rgba(255,255,255,0.1)' }}>
+                    <div className="w-full h-1.5 rounded-full overflow-hidden mt-2" style={{ background: tk.cardBorder }}>
                       <div className="h-full rounded-full transition-all duration-500" style={{
                         width: `${Math.min(100, Math.round((cat.total_expenses / cat.total_collected) * 100))}%`,
-                        background: cat.total_expenses > cat.total_collected ? colors.statusFailed : cat.total_expenses > cat.total_collected * 0.8 ? '#FBBF24' : colors.statusPaid,
+                        background: cat.total_expenses > cat.total_collected ? tk.danger : cat.total_expenses > cat.total_collected * 0.8 ? tk.amber : tk.mint,
                       }} />
                     </div>
                   )}
                   {cat.total_expenses > 0 && (
-                    <p className="flex items-center gap-1 text-[10px] sm:text-xs mt-1.5" style={{ color: colors.statusFailed }}>
-                      <span className="w-1.5 h-1.5 rounded-full" style={{ background: colors.statusFailed }} />
+                    <p className="flex items-center gap-1 text-[10px] sm:text-xs mt-1.5" style={{ color: tk.danger }}>
+                      <span className="w-1.5 h-1.5 rounded-full" style={{ background: tk.danger }} />
                       -<PrivacyMask>{formatCurrency(cat.total_expenses)}</PrivacyMask> spent
                     </p>
                   )}
-                  <p className="font-semibold flex items-center gap-1 text-[10px] sm:text-xs mt-1" style={{ color: cat.net_balance >= 0 ? colors.statusPaid : colors.statusFailed }}>
-                    <span className="w-1.5 h-1.5 rounded-full" style={{ background: cat.net_balance >= 0 ? colors.statusPaid : colors.statusFailed }} />
+                  <p className="font-semibold flex items-center gap-1 text-[10px] sm:text-xs mt-1" style={{ color: cat.net_balance >= 0 ? tk.mint : tk.danger }}>
+                    <span className="w-1.5 h-1.5 rounded-full" style={{ background: cat.net_balance >= 0 ? tk.mint : tk.danger }} />
                     <PrivacyMask>{formatCurrency(cat.net_balance)}</PrivacyMask> available
                   </p>
-                  <div className="mt-3 text-xs font-medium px-2 py-1 rounded-lg inline-block" style={{ background: `${colors.primary}10`, color: colors.primary }}>
+                  <div className="mt-3 text-xs font-medium px-2 py-1 rounded-lg inline-block" style={{ background: tk.primarySoft, color: tk.primary }}>
                     {cat.payment_count} payment{cat.payment_count !== 1 ? 's' : ''}
                   </div>
                 </motion.button>
@@ -710,8 +713,8 @@ export default function AdminCollectedPage() {
                   type="text" placeholder="Search by student name or reg number..."
                   value={searchTerm}
                   onChange={(e) => { setSearchTerm(e.target.value); setCurrentPage(1); }}
-                  className="w-full pl-10 pr-4 py-2.5 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:ring-2 transition-all"
-                  style={{ background: 'rgba(255,255,255,0.05)', borderWidth: '1px', borderStyle: 'solid', borderColor: 'rgba(255,255,255,0.1)' }}
+                  className="w-full pl-10 pr-4 py-2.5 rounded-lg focus:outline-none focus:ring-2 transition-all"
+                  style={{ background: theme === 'light' ? '#FFFFFF' : 'rgba(255,255,255,0.05)', borderWidth: '1px', borderStyle: 'solid', borderColor: tk.cardBorder, color: tk.text }}
                 />
               </div>
 

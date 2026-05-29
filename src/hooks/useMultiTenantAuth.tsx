@@ -97,10 +97,10 @@ export function MultiTenantAuthProvider({ children }: MultiTenantAuthProviderPro
   }, [checkSession]);
 
   // ── Login ──
-  const login = useCallback(async (memberId: string, password: string, orgSlug?: string) => {
+  const login = useCallback(async (memberId: string, password: string, orgSlug?: string, groupId?: string) => {
     if (!orgSlug) throw new Error('Organization is required');
 
-    const result = await multiTenantAuthService.login(memberId, password, orgSlug);
+    const result = await multiTenantAuthService.login(memberId, password, orgSlug, groupId);
 
     setUser(result.member);
     setOrganization(result.organization);

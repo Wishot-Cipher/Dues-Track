@@ -11,6 +11,7 @@ import GlassCard from "@/components/ui/GlassCard";
 import { formatCurrency, formatDate } from "@/utils/formatters";
 import { PrivacyMask } from '@/components/ui/PrivacyMask';
 import AnimatedCounter from "@/components/ui/AnimatedCounter";
+import { getDashboardTokens, useTheme } from '@/hooks/useTheme';
 // AdminNotificationCenter removed - using push notifications instead
 import {
   CheckCircle,
@@ -60,6 +61,8 @@ export default function AdminReviewPage() {
   const { user, hasPermission } = useAuth();
   const { go: navigate } = useAppNav();
   const { success: showSuccess, error: showError } = useToast();
+  const { theme } = useTheme();
+  const tk = getDashboardTokens(theme);
   const [payments, setPayments] = useState<PendingPayment[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedPayment, setSelectedPayment] = useState<PendingPayment | null>(
@@ -329,7 +332,7 @@ export default function AdminReviewPage() {
     <div
       className="min-h-screen py-4 sm:py-6 relative overflow-x-hidden"
       style={{
-        background: "radial-gradient(ellipse at top, #1A0E09 0%, #0F0703 100%)",
+        background: tk.bgWash,
       }}
     >
       {/* Background Grid Pattern */}
@@ -430,9 +433,10 @@ export default function AdminReviewPage() {
                 <h1 className="text-2xl sm:text-3xl font-bold text-white mb-2">
                   Review Submissions
                 </h1>
+                
                 <p
                   className="text-sm sm:text-base flex items-center justify-center sm:justify-start gap-2"
-                  style={{ color: colors.textSecondary }}
+                  style={{ color: tk.textSec }}
                 >
                   <Filter className="w-4 h-4" />
                   Approve or reject pending payment submissions
@@ -486,8 +490,8 @@ export default function AdminReviewPage() {
             />
             
             <div className="flex items-center gap-3 mb-4">
-              <Filter className="w-5 h-5" style={{ color: colors.textSecondary }} />
-              <span className="text-sm font-medium" style={{ color: colors.textSecondary }}>Filter by status</span>
+              <Filter className="w-5 h-5" style={{ color: tk.textSec }} />
+              <span className="text-sm font-medium" style={{ color: tk.textSec }}>Filter by status</span>
             </div>
             
             <div className="flex flex-wrap gap-2">
@@ -525,11 +529,11 @@ export default function AdminReviewPage() {
                     background:
                       filter === value
                         ? `linear-gradient(135deg, ${color}30, ${color}10)`
-                        : "rgba(255, 255, 255, 0.03)",
+                        : (theme === 'light' ? '#FFFFFF' : "rgba(255, 255, 255, 0.03)"),
                     border: `1px solid ${
-                      filter === value ? color + "60" : "rgba(255, 255, 255, 0.1)"
+                      filter === value ? color + "60" : tk.cardBorder
                     }`,
-                    color: filter === value ? color : colors.textSecondary,
+                    color: filter === value ? color : tk.textSec,
                     boxShadow: filter === value ? `0 2px 10px ${color}20` : 'none'
                   }}
                 >
@@ -541,7 +545,7 @@ export default function AdminReviewPage() {
                     <span className="px-1.5 py-0.5 rounded-md text-xs font-bold"
                           style={{ 
                             background: filter === value ? `${color}40` : 'rgba(255, 255, 255, 0.1)',
-                            color: filter === value ? 'white' : colors.textSecondary
+                            color: filter === value ? '#FFFFFF' : tk.textSec
                           }}>
                       {count}
                     </span>
@@ -563,7 +567,7 @@ export default function AdminReviewPage() {
                   borderTopColor: "transparent",
                 }}
               />
-              <p className="text-sm" style={{ color: colors.textSecondary }}>Loading payments...</p>
+              <p className="text-sm" style={{ color: tk.textSec }}>Loading payments...</p>
             </div>
           </div>
         ) : paginatedPayments.length === 0 ? (
@@ -574,12 +578,12 @@ export default function AdminReviewPage() {
                   className="w-16 h-16 mx-auto mb-4"
                   style={{ color: colors.statusPaid }}
                 />
-                <p className="text-xl text-white mb-2">
+                <p className="text-xl mb-2" style={{ color: tk.text }}>
                   {filter === "all"
                     ? "All Caught Up!"
                     : `No ${filter} payments`}
                 </p>
-                <p style={{ color: colors.textSecondary }}>
+                <p style={{ color: tk.textSec }}>
                   No pending payments to review
                 </p>
               </div>
@@ -598,41 +602,41 @@ export default function AdminReviewPage() {
                   <thead>
                     <tr
                       className="border-b"
-                      style={{ borderColor: "rgba(255, 255, 255, 0.1)" }}
+                      style={{ borderColor: tk.cardBorder }}
                     >
                       <th
                         className="text-left py-4 px-4 text-sm font-semibold"
-                        style={{ color: colors.textSecondary }}
+                        style={{ color: tk.textSec }}
                       >
                         STUDENT
                       </th>
                       <th
                         className="text-left py-4 px-4 text-sm font-semibold"
-                        style={{ color: colors.textSecondary }}
+                        style={{ color: tk.textSec }}
                       >
                         PAYMENT TYPE
                       </th>
                       <th
                         className="text-left py-4 px-4 text-sm font-semibold"
-                        style={{ color: colors.textSecondary }}
+                        style={{ color: tk.textSec }}
                       >
                         AMOUNT
                       </th>
                       <th
                         className="text-left py-4 px-4 text-sm font-semibold"
-                        style={{ color: colors.textSecondary }}
+                        style={{ color: tk.textSec }}
                       >
                         SUBMITTED
                       </th>
                       <th
                         className="text-left py-4 px-4 text-sm font-semibold"
-                        style={{ color: colors.textSecondary }}
+                        style={{ color: tk.textSec }}
                       >
                         TRANSACTION REF
                       </th>
                       <th
                         className="text-right py-4 px-4 text-sm font-semibold"
-                        style={{ color: colors.textSecondary }}
+                        style={{ color: tk.textSec }}
                       >
                         ACTIONS
                       </th>
@@ -645,8 +649,8 @@ export default function AdminReviewPage() {
                         initial={{ opacity: 0, x: -20 }}
                         animate={{ opacity: 1, x: 0 }}
                         transition={{ delay: index * 0.05 }}
-                        className="border-b hover:bg-white/5 transition-colors"
-                        style={{ borderColor: "rgba(255, 255, 255, 0.05)" }}
+                        className="border-b transition-colors"
+                        style={{ borderColor: tk.cardBorder }}
                       >
                         <td className="py-4 px-4">
                           <div className="flex items-center gap-3">
@@ -660,12 +664,12 @@ export default function AdminReviewPage() {
                               />
                             </div>
                             <div>
-                              <p className="text-white font-medium">
+                              <p className="font-medium" style={{ color: tk.text }}>
                                 {payment.member.full_name}
                               </p>
                               <p
                                 className="text-sm"
-                                style={{ color: colors.textSecondary }}
+                                style={{ color: tk.textSec }}
                               >
                                 {payment.member.member_id} •{" "}
                                 {payment.member.level}
@@ -674,18 +678,18 @@ export default function AdminReviewPage() {
                           </div>
                         </td>
                         <td className="py-4 px-4">
-                          <p className="text-white font-medium">
+                          <p className="font-medium" style={{ color: tk.text }}>
                             {payment.payment_types.title}
                           </p>
                           <p
                             className="text-sm capitalize"
-                            style={{ color: colors.textSecondary }}
+                            style={{ color: tk.textSec }}
                           >
                             {payment.payment_types.category.replace("_", " ")}
                           </p>
                         </td>
                         <td className="py-4 px-4">
-                          <p className="text-white font-semibold text-lg">
+                          <p className="font-semibold text-lg" style={{ color: tk.text }}>
                             <PrivacyMask>{formatCurrency(payment.amount)}</PrivacyMask>
                           </p>
                         </td>
@@ -693,15 +697,15 @@ export default function AdminReviewPage() {
                           <div className="flex items-center gap-2">
                             <Clock
                               className="w-4 h-4"
-                              style={{ color: colors.textSecondary }}
+                              style={{ color: tk.textSec }}
                             />
-                            <p className="text-white text-sm">
+                            <p className="text-sm" style={{ color: tk.text }}>
                               {formatDate(payment.created_at, "short")}
                             </p>
                           </div>
                         </td>
                         <td className="py-4 px-4">
-                          <p className="text-white font-mono text-sm">
+                          <p className="font-mono text-sm" style={{ color: tk.text }}>
                             {payment.transaction_ref}
                           </p>
                         </td>

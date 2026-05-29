@@ -11,6 +11,7 @@ import { formatNaira } from '@/utils/printStyles'
 import ConfirmDialog from '@/components/ui/ConfirmDialog'
 import { PrivacyMask } from '@/components/ui/PrivacyMask'
 import { getOrgScope } from '@/utils/orgScope'
+import { getDashboardTokens, useTheme } from '@/hooks/useTheme'
 
 interface PublicContribution {
   id: string
@@ -37,6 +38,8 @@ type StatusFilter = 'all' | 'pending' | 'verified' | 'rejected'
 export default function PublicContributionsPage() {
   const { hasPermission, user } = useAuth()
   const { go: navigate, path } = useAppNav();
+  const { theme } = useTheme()
+  const tk = getDashboardTokens(theme)
   const toast = useToast()
   
   const [contributions, setContributions] = useState<PublicContribution[]>([])
@@ -253,7 +256,7 @@ export default function PublicContributionsPage() {
   })
 
   return (
-    <div className="min-h-screen py-6 px-4" style={{ background: 'radial-gradient(ellipse at top, #1A0E09 0%, #0F0703 100%)' }}>
+    <div className="min-h-screen py-6 px-4" style={{ background: tk.bgWash }}>
       <div className="max-w-6xl mx-auto">
         {/* Header - Mobile Responsive */}
         <motion.div 

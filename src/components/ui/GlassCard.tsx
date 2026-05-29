@@ -1,6 +1,6 @@
 import React, { useState } from 'react'
 import type { CSSProperties, MouseEventHandler, ReactNode } from 'react'
-import { glass } from '@/config/colors'
+import { getDashboardTokens, useTheme } from '@/hooks/useTheme'
 
 type Intensity = 'light' | 'medium' | 'strong'
 
@@ -20,6 +20,8 @@ const GlassCard: React.FC<GlassCardProps> = ({
   intensity = 'light',
 }) => {
   const [isHovered, setIsHovered] = useState(false)
+  const { theme } = useTheme()
+  const tokens = getDashboardTokens(theme)
 
   // disable hover effects on touch devices to avoid layout shifts when tapping
   const isTouchDevice =
@@ -27,16 +29,34 @@ const GlassCard: React.FC<GlassCardProps> = ({
       'ontouchstart' in window || (navigator.maxTouchPoints ?? 0) > 0)
 
 
-  // glass may come from your config; keep it flexible
-  const glassMap = glass as Record<Intensity, CSSProperties | undefined>
-  const glassStyles = glassMap[intensity] ?? glassMap.light ?? ({} as CSSProperties)
+  const baseStylesByIntensity: Record<Intensity, CSSProperties> = {
+    light: {
+      background: tokens.card,
+      border: `1px solid ${tokens.cardBorder}`,
+      boxShadow: '0 8px 32px rgba(15, 7, 3, 0.06)',
+    },
+    medium: {
+      background: theme === 'light' ? '#FFF9F2' : 'rgba(255, 255, 255, 0.04)',
+      border: `1px solid ${theme === 'light' ? 'rgba(15, 7, 3, 0.08)' : tokens.cardBorder}`,
+      boxShadow: '0 12px 48px rgba(15, 7, 3, 0.10)',
+    },
+    strong: {
+      background: theme === 'light' ? '#FFFFFF' : 'rgba(255, 255, 255, 0.06)',
+      border: `1px solid ${tokens.primaryRing}`,
+      boxShadow: `0 20px 60px ${theme === 'light' ? 'rgba(255, 104, 3, 0.10)' : 'rgba(255, 104, 3, 0.22)'}`,
+    },
+  }
+
+  const glassStyles = baseStylesByIntensity[intensity]
 
   const hoverStyles: CSSProperties =
     hover && isHovered
       ? {
-          background: 'rgba(32, 20, 13, 0.8)',
-          borderColor: 'rgba(255, 104, 3, 0.3)',
-          boxShadow: '0 12px 48px 0 rgba(255, 104, 3, 0.3)',
+          background: theme === 'light' ? '#FFF7EE' : 'rgba(32, 20, 13, 0.8)',
+          borderColor: tokens.primaryRing,
+          boxShadow: theme === 'light'
+            ? '0 12px 48px 0 rgba(255, 104, 3, 0.12)'
+            : '0 12px 48px 0 rgba(255, 104, 3, 0.3)',
           transform: 'translateY(-4px)',
         }
       : (glassStyles as CSSProperties)

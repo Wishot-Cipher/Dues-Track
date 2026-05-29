@@ -47,21 +47,55 @@ import { billingService } from '@/services/billingService';
 import notificationService from '@/services/notificationService';
 import { useMultiTenantAuth } from '@/hooks/useMultiTenantAuth';
 import TrustBadge from '@/components/trust/TrustBadge';
+import { getDashboardTokens, useTheme } from '@/hooks/useTheme';
 import type { TrustLevel } from '@/types/multiTenant';
 
-const tk = {
-  bg:        '#0F0703',
-  panel:     'rgba(255,255,255,0.03)',
-  panelHov:  'rgba(255,255,255,0.05)',
-  border:    'rgba(255,255,255,0.08)',
-  borderHov: 'rgba(255,104,3,0.32)',
-  text:      '#FFFFFF',
-  textSec:   'rgba(255,255,255,0.65)',
-  textTer:   'rgba(255,255,255,0.32)',
-  primary:   '#FF6803',
-  mint:      '#30FFAC',
-  danger:    '#ef4444',
+type JoinTokens = {
+  bg: string;
+  panel: string;
+  panelHov: string;
+  border: string;
+  borderHov: string;
+  text: string;
+  textSec: string;
+  textTer: string;
+  textTertiary: string;
+  primary: string;
+  mint: string;
+  danger: string;
+  inputBg: string;
+  inputBgHov: string;
+  pageBase: string;
+  leftPanel: string;
+  rightPanel: string;
+  borderFaint: string;
+  borderMid: string;
 };
+
+function buildJoinTokens(theme: 'light' | 'dark'): JoinTokens {
+  const dtk = getDashboardTokens(theme);
+  return {
+    bg: dtk.bg,
+    panel: dtk.card,
+    panelHov: dtk.cardHover,
+    border: dtk.cardBorder,
+    borderHov: dtk.primaryRing,
+    text: dtk.text,
+    textSec: dtk.textSec,
+    textTer: dtk.textTer,
+    textTertiary: dtk.textTer,
+    primary: dtk.primary,
+    mint: dtk.mint,
+    danger: dtk.danger,
+    inputBg: dtk.card,
+    inputBgHov: dtk.cardHover,
+    pageBase: dtk.bgWash,
+    leftPanel: dtk.bgWash,
+    rightPanel: dtk.card,
+    borderFaint: dtk.cardBorder,
+    borderMid: dtk.primaryRing,
+  };
+}
 
 interface InviteInfo {
   id: string;
@@ -90,6 +124,8 @@ export default function JoinOrganizationPage() {
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
   const { login } = useMultiTenantAuth();
+  const { theme } = useTheme();
+  const tk = buildJoinTokens(theme);
 
   const [step, setStep] = useState<'code' | 'form' | 'success'>('code');
   const [loading, setLoading] = useState(false);
@@ -382,12 +418,12 @@ export default function JoinOrganizationPage() {
         </button>
         <div className="flex items-center gap-2">
           <div
-            className="w-8 h-8 rounded-lg flex items-center justify-center font-extrabold text-white text-sm"
+            className="w-8 h-8 rounded-lg flex items-center justify-center font-extrabold text-sm"
             style={{ background: 'linear-gradient(135deg, #FF6803 0%, #FFAC5F 100%)' }}
           >
             P
           </div>
-          <span className="text-base font-bold text-white">{APP_NAME}</span>
+          <span className="text-base font-bold" style={{ color: tk.text }}>{APP_NAME}</span>
         </div>
       </nav>
 
@@ -413,7 +449,7 @@ export default function JoinOrganizationPage() {
                   <Ticket className="w-3.5 h-3.5" />
                   Invite code
                 </motion.div>
-                <h1 className="text-3xl sm:text-4xl font-extrabold text-white tracking-tight mb-3 leading-tight">
+                <h1 className="text-3xl sm:text-4xl font-extrabold tracking-tight mb-3 leading-tight" style={{ color: tk.text }}>
                   Got an invite?
                 </h1>
                 <p className="text-sm sm:text-base leading-7 max-w-md mx-auto" style={{ color: tk.textSec }}>
@@ -449,7 +485,7 @@ export default function JoinOrganizationPage() {
                       style={{ background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.25)' }}
                     >
                       <AlertCircle className="w-5 h-5 shrink-0" style={{ color: tk.danger, marginTop: 1 }} />
-                      <p className="text-sm leading-6" style={{ color: 'rgba(254,202,202,0.95)' }}>{error}</p>
+                      <p className="text-sm leading-6" style={{ color: tk.text }}>{error}</p>
                     </motion.div>
                   )}
                 </AnimatePresence>
@@ -458,7 +494,7 @@ export default function JoinOrganizationPage() {
                   <button
                     type="button"
                     onClick={clearCode}
-                    className="text-xs font-medium transition-colors hover:text-white"
+                    className="text-xs font-medium transition-colors"
                     style={{ color: tk.textTer }}
                   >
                     Clear
@@ -467,9 +503,10 @@ export default function JoinOrganizationPage() {
                   <motion.button
                     onClick={() => validateCode(codeJoined)}
                     disabled={loading || codeJoined.length < 4}
-                    className="px-6 py-3 rounded-2xl text-white font-bold text-sm flex items-center gap-2 disabled:opacity-40 disabled:cursor-not-allowed"
+                    className="px-6 py-3 rounded-2xl font-bold text-sm flex items-center gap-2 disabled:opacity-40 disabled:cursor-not-allowed"
                     style={{
                       background: 'linear-gradient(135deg, #FF6803 0%, #FFAC5F 100%)',
+                      color: tk.text,
                       boxShadow: loading || codeJoined.length < 4 ? 'none' : '0 8px 28px rgba(255,104,3,0.4)',
                     }}
                     whileHover={!loading && codeJoined.length >= 4 ? { scale: 1.03 } : undefined}
@@ -533,7 +570,7 @@ export default function JoinOrganizationPage() {
                     <img src={invite.organization.logo_url} alt="" className="w-14 h-14 rounded-2xl object-cover shrink-0" />
                   ) : (
                     <div
-                      className="w-14 h-14 rounded-2xl flex items-center justify-center text-white text-lg font-bold shrink-0"
+                      className="w-14 h-14 rounded-2xl flex items-center justify-center text-lg font-bold shrink-0"
                       style={{ background: `linear-gradient(135deg, ${orgAccent} 0%, ${orgAccent}99 100%)` }}
                     >
                       {invite.organization.short_name?.slice(0, 1) || 'O'}
@@ -543,7 +580,7 @@ export default function JoinOrganizationPage() {
                     <p className="text-[9px] uppercase tracking-[0.22em] font-semibold mb-1" style={{ color: tk.textTer }}>
                       You're joining
                     </p>
-                    <h2 className="text-lg sm:text-xl font-extrabold text-white leading-tight truncate">
+                    <h2 className="text-lg sm:text-xl font-extrabold leading-tight truncate" style={{ color: tk.text }}>
                       {invite.organization.name}
                     </h2>
                     <div className="flex flex-wrap items-center gap-1.5 mt-1.5">
@@ -571,7 +608,7 @@ export default function JoinOrganizationPage() {
               >
                 <div className="flex items-center gap-2 mb-1">
                   <Sparkles className="w-4 h-4" style={{ color: tk.primary }} />
-                  <h2 className="text-base font-bold text-white">Set up your account</h2>
+                  <h2 className="text-base font-bold" style={{ color: tk.text }}>Set up your account</h2>
                 </div>
                 <p className="text-xs leading-5 mb-5" style={{ color: tk.textSec }}>
                   This is what you'll use to sign in. Your data lives only in this organization.
@@ -630,7 +667,7 @@ export default function JoinOrganizationPage() {
                           transition: 'all 0.18s',
                         }}
                       >
-                        {form.use_id_as_password && <Check className="w-3 h-3 text-white" strokeWidth={3} />}
+                        {form.use_id_as_password && <Check className="w-3 h-3" style={{ color: tk.text }} strokeWidth={3} />}
                       </div>
                       <input
                         type="checkbox"
@@ -639,7 +676,7 @@ export default function JoinOrganizationPage() {
                         className="sr-only"
                       />
                       <div className="flex-1">
-                        <p className="text-sm font-semibold text-white">Use my member ID as my first password</p>
+                        <p className="text-sm font-semibold" style={{ color: tk.text }}>Use my member ID as my first password</p>
                         <p className="text-[11px] mt-0.5" style={{ color: tk.textSec }}>
                           We'll force you to change it on first login. Recommended for now.
                         </p>
@@ -700,7 +737,7 @@ export default function JoinOrganizationPage() {
                         style={{ background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.25)' }}
                       >
                         <AlertCircle className="w-5 h-5 shrink-0" style={{ color: tk.danger, marginTop: 1 }} />
-                        <p className="text-sm leading-6" style={{ color: 'rgba(254,202,202,0.95)' }}>{error}</p>
+                        <p className="text-sm leading-6" style={{ color: tk.text }}>{error}</p>
                       </motion.div>
                     )}
                   </AnimatePresence>
@@ -712,9 +749,10 @@ export default function JoinOrganizationPage() {
                     <motion.button
                       onClick={handleSubmit}
                       disabled={loading}
-                      className="px-6 py-3 rounded-2xl text-white font-bold text-sm flex items-center gap-2 disabled:opacity-40"
+                      className="px-6 py-3 rounded-2xl font-bold text-sm flex items-center gap-2 disabled:opacity-40"
                       style={{
                         background: 'linear-gradient(135deg, #FF6803 0%, #FFAC5F 100%)',
+                        color: tk.text,
                         boxShadow: loading ? 'none' : '0 8px 28px rgba(255,104,3,0.4)',
                       }}
                       whileHover={!loading ? { scale: 1.03 } : undefined}
@@ -749,14 +787,14 @@ export default function JoinOrganizationPage() {
                 >
                   <Check className="w-8 h-8" style={{ color: tk.mint }} strokeWidth={3} />
                 </motion.div>
-                <h2 className="text-2xl font-extrabold text-white mb-2 tracking-tight">Welcome aboard.</h2>
+                <h2 className="text-2xl font-extrabold mb-2 tracking-tight" style={{ color: tk.text }}>Welcome aboard.</h2>
                 <p className="text-sm leading-6 mb-6" style={{ color: tk.textSec }}>
                   Your account is ready. Sign in to {invite?.organization.name} to get started.
                 </p>
                 <motion.button
                   onClick={() => navigate(`/${invite?.organization.slug || orgSlug}/login`)}
-                  className="w-full px-6 py-3.5 rounded-2xl text-white font-bold text-sm flex items-center justify-center gap-2"
-                  style={{ background: 'linear-gradient(135deg, #FF6803 0%, #FFAC5F 100%)', boxShadow: '0 8px 28px rgba(255,104,3,0.4)' }}
+                  className="w-full px-6 py-3.5 rounded-2xl font-bold text-sm flex items-center justify-center gap-2"
+                  style={{ background: 'linear-gradient(135deg, #FF6803 0%, #FFAC5F 100%)', color: tk.text, boxShadow: '0 8px 28px rgba(255,104,3,0.4)' }}
                   whileHover={{ scale: 1.02 }}
                   whileTap={{ scale: 0.97 }}
                 >
@@ -819,7 +857,7 @@ function CodeCell({
           style={{
             background: filled ? 'rgba(255,104,3,0.10)' : 'rgba(26,14,9,0.85)',
             border: `1.5px solid ${filled ? 'rgba(255,104,3,0.35)' : 'rgba(255,255,255,0.10)'}`,
-            color: '#FFFFFF',
+            color: tk.text,
             caretColor: '#FF6803',
             boxShadow: filled ? '0 4px 12px rgba(255,104,3,0.15)' : 'none',
           }}
@@ -842,7 +880,7 @@ function CodeCell({
           />
         )}
       </motion.div>
-      {separator && <span className="px-1" style={{ color: 'rgba(255,255,255,0.25)' }}>•</span>}
+      {separator && <span className="px-1" style={{ color: tk.textTer }}>•</span>}
     </>
   );
 }
@@ -870,14 +908,14 @@ function Field({
   return (
     <label className="block">
       <div className="flex items-center justify-between mb-1.5">
-        <span className="text-[11px] font-semibold uppercase tracking-wider" style={{ color: 'rgba(255,255,255,0.65)' }}>
+        <span className="text-[11px] font-semibold uppercase tracking-wider" style={{ color: tk.textSec }}>
           {icon}
           <span className="ml-1.5 inline-block align-middle">
             {label}
             {required && <span style={{ color: '#FF6803' }}> *</span>}
           </span>
         </span>
-        {hint && <span className="text-[10px]" style={{ color: 'rgba(255,255,255,0.32)' }}>{hint}</span>}
+        {hint && <span className="text-[10px]" style={{ color: tk.textTer }}>{hint}</span>}
       </div>
       {children}
     </label>
@@ -907,11 +945,11 @@ function Input({
       className="w-full rounded-xl px-3.5 py-2.5 text-sm outline-none transition-colors"
       style={{
         background: 'rgba(26,14,9,0.85)',
-        border: '1px solid rgba(255,255,255,0.10)',
-        color: '#FFFFFF',
+        border: `1px solid ${tk.border}`,
+        color: tk.text,
       }}
       onFocus={(e) => { e.currentTarget.style.borderColor = 'rgba(255,104,3,0.40)'; }}
-      onBlur={(e) => { e.currentTarget.style.borderColor = 'rgba(255,255,255,0.10)'; }}
+      onBlur={(e) => { e.currentTarget.style.borderColor = tk.border; }}
     />
   );
 }

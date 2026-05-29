@@ -14,6 +14,7 @@ import { getOrgScope } from '@/utils/orgScope';
 import { organizationService } from '@/services/organizationService';
 import { formatCurrency, formatDate } from "@/utils/formatters";
 import Footer from "@/components/Footer";
+import { getDashboardTokens, useTheme } from '@/hooks/useTheme';
 
 const CATEGORIES = [
   { value: "dues", label: "Dues", icon: "🎓" },
@@ -77,6 +78,8 @@ const NIGERIAN_BANKS = [
 export default function CreatePaymentTypePage() {
   const { user, hasPermission } = useAuth();
   const { go: navigate } = useAppNav();
+  const { theme } = useTheme();
+  const tk = getDashboardTokens(theme);
   const toast = useToast();
   const [loading, setLoading] = useState(false);
   type PaymentFormData = {
@@ -241,7 +244,7 @@ export default function CreatePaymentTypePage() {
     <div
       className="min-h-screen relative overflow-hidden"
       style={{
-        background: "radial-gradient(ellipse at top, #1A0E09 0%, #0F0703 100%)",
+        background: tk.bgWash,
       }}
     >
       {/* Background Grid Pattern */}

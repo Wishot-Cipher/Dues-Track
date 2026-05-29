@@ -33,6 +33,7 @@ import {
 import LoadingSpinner from '@/components/ui/LoadingSpinner';
 import Footer from "@/components/Footer";
 import notificationService from "@/services/notificationService";
+import { getDashboardTokens, useTheme } from '@/hooks/useTheme';
 
 interface Student {
   id: string;
@@ -58,6 +59,8 @@ export default function WaivePaymentPage() {
   const { go: navigate } = useAppNav();
   const { user, hasPermission } = useAuth();
   const { success, error: showError } = useToast();
+  const { theme } = useTheme();
+  const tk = getDashboardTokens(theme);
   const [loading, setLoading] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [searchResults, setSearchResults] = useState<Student[]>([]);
@@ -336,7 +339,7 @@ export default function WaivePaymentPage() {
     <div
       className="min-h-screen pb-20 relative overflow-hidden"
       style={{
-        background: "radial-gradient(ellipse at top, #1A0E09 0%, #0F0703 100%)",
+        background: tk.bgWash,
       }}
     >
       {/* Background Grid Pattern */}

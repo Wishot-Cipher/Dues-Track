@@ -28,6 +28,7 @@ import { exportStudentsToPDF } from '@/utils/htmlPrintExports';
 import { useSubscriptionLimits } from '@/hooks/useSubscriptionLimits';
 import { useAppNav } from '@/hooks/useAppNav';
 import { useOrganization } from '@/hooks/useOrganization';
+import { getDashboardTokens, useTheme } from '@/hooks/useTheme';
 
 const DEFAULT_PASSWORD = 'Change@123';
 
@@ -70,6 +71,8 @@ interface NewMember {
 
 export default function OrgMembersPage() {
   useParams<{ orgSlug: string }>();
+  const { theme } = useTheme();
+  const tk = getDashboardTokens(theme);
   const { user, organization, group, hasPermission, adminRecord } = useMultiTenantAuth();
   const { canCreate, planName, refresh: refreshLimits } = useSubscriptionLimits();
   const { go: navigateTo } = useAppNav();
@@ -533,24 +536,18 @@ export default function OrgMembersPage() {
         ? new Date(Date.now() + days * 24 * 60 * 60 * 1000).toISOString()
         : undefined;
 
-      const { data, error } = await supabase
-        .from('organization_invites')
-        .insert({
-          organization_id: organization.id,
-          group_id: group?.id || null,
-          invite_type: 'bulk' as const,
-          max_uses: inviteMaxUses,
-          invite_code: Math.random().toString(36).substring(2, 10).toUpperCase(),
-          is_active: true,
-          expires_at: expires_at || null,
-          created_by: adminRecord.id,
-        })
-        .select()
-        .single();
+      const invite = await organizationService.createInvite({
+        organization_id: organization.id,
+        group_id: group?.id || null,
+        invite_type: 'bulk',
+        max_uses: inviteMaxUses,
+        expires_at: expires_at || null,
+        created_by: adminRecord?.id || user?.id,
+      });
 
-      if (error) throw error;
+      if (!invite || !invite.invite_code) throw new Error('Invite creation failed');
 
-      const code = (data as { invite_code: string }).invite_code;
+      const code = invite.invite_code;
       const baseUrl = window.location.origin;
       const link = `${baseUrl}/${organization.slug}/join?code=${code}`;
       setInviteCode(code);
@@ -937,7 +934,7 @@ export default function OrgMembersPage() {
 
   return (
     <div className="min-h-screen py-4 sm:py-6 pb-24 lg:pb-6 relative overflow-x-hidden" style={{
-      background: 'radial-gradient(ellipse at top, #1A0E09 0%, #0F0703 100%)',
+      background: tk.bgWash,
     }}>
       {/* Background Grid Pattern */}
       <div

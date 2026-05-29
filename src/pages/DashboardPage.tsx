@@ -48,12 +48,15 @@ import { useSettings } from '@/contexts/SettingsContext';
 import haptics from '@/lib/haptics';
 import usePullToRefresh from '@/hooks/usePullToRefresh';
 import PullToRefreshIndicator from '@/components/ui/PullToRefreshIndicator';
+import { getDashboardTokens, useTheme } from '@/hooks/useTheme';
 
 export default function DashboardPage() {
   const { user, logout, hasPermission } = useAuth();
   const { features, loading: featuresLoading } = useStudentFeatures();
   const { settings } = useSettings();
   const { go, orgSlug } = useAppNav();
+  const { theme } = useTheme();
+  const tk = getDashboardTokens(theme);
   const location = useLocation();
   const [showProfileMenu, setShowProfileMenu] = useState(false);
   const [showMobileMenu, setShowMobileMenu] = useState(false);
@@ -364,7 +367,7 @@ background:linear-gradient(135deg,#FF6803,#FFAC5F);color:white;font-size:14px}
     <div 
       className="min-h-screen relative overflow-x-hidden"
       style={{
-        background: 'radial-gradient(ellipse at top, #1A0E09 0%, #0F0703 100%)',
+        background: tk.bgWash,
         minHeight: '100dvh',
       }}
     >
@@ -373,8 +376,8 @@ background:linear-gradient(135deg,#FF6803,#FFAC5F);color:white;font-size:14px}
         className="absolute inset-0 opacity-20 pointer-events-none"
         style={{
           backgroundImage: `
-            linear-gradient(${colors.primary}40 1px, transparent 1px),
-            linear-gradient(90deg, ${colors.primary}40 1px, transparent 1px)
+            linear-gradient(${theme === 'light' ? 'rgba(255, 104, 3, 0.12)' : 'rgba(255, 104, 3, 0.25)'} 1px, transparent 1px),
+            linear-gradient(90deg, ${theme === 'light' ? 'rgba(255, 104, 3, 0.12)' : 'rgba(255, 104, 3, 0.25)'} 1px, transparent 1px)
           `,
           backgroundSize: '50px 50px',
         }}
@@ -385,7 +388,7 @@ background:linear-gradient(135deg,#FF6803,#FFAC5F);color:white;font-size:14px}
         <div
           className="absolute w-[500px] h-[500px] rounded-full blur-[120px] opacity-30 animate-pulse"
           style={{
-            background: `radial-gradient(circle, ${colors.primary} 0%, transparent 70%)`,
+            background: `radial-gradient(circle, ${tk.primary} 0%, transparent 70%)`,
             top: '-10%',
             right: '-5%',
             animationDuration: '4s',
@@ -394,7 +397,7 @@ background:linear-gradient(135deg,#FF6803,#FFAC5F);color:white;font-size:14px}
         <div
           className="absolute w-[400px] h-[400px] rounded-full blur-[100px] opacity-20"
           style={{
-            background: `radial-gradient(circle, ${colors.accentMint} 0%, transparent 70%)`,
+            background: `radial-gradient(circle, ${tk.mint} 0%, transparent 70%)`,
             bottom: '-5%',
             left: '-5%',
             animation: 'pulse 6s ease-in-out infinite',
@@ -422,9 +425,9 @@ background:linear-gradient(135deg,#FF6803,#FFAC5F);color:white;font-size:14px}
       <motion.nav 
         className="border-b sticky top-0 z-40"
         style={{ 
-          background: 'rgba(15, 7, 3, 0.95)',
+          background: theme === 'light' ? 'rgba(255, 251, 247, 0.95)' : 'rgba(15, 7, 3, 0.95)',
           backdropFilter: 'blur(20px)',
-          borderColor: 'rgba(255, 104, 3, 0.2)',
+          borderColor: tk.primaryRing,
         }}
         initial={{ y: -100 }}
         animate={{ y: 0 }}
@@ -433,12 +436,12 @@ background:linear-gradient(135deg,#FF6803,#FFAC5F);color:white;font-size:14px}
         <div className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8">
           <div className="flex items-center justify-between h-[72px] sm:h-16">
             {/* Logo */}
-            <div className="flex items-center gap-2.5 p-1.5 rounded-xl" style={{ background: 'rgba(255, 104, 3, 0.06)' }}>
+            <div className="flex items-center gap-2.5 p-1.5 rounded-xl" style={{ background: tk.primarySoft }}>
               <LogoCompact />
                <div className="hidden sm:block leading-tight pr-2">
-                <h1 className="text-base font-extrabold text-white tracking-tight">Pay<span style={{ color: colors.primary }}>vexo</span></h1>
+                <h1 className="text-base font-extrabold tracking-tight" style={{ color: tk.text }}>Pay<span style={{ color: tk.primary }}>vexo</span></h1>
                 {user?.level && (
-                  <p className="text-[10px] font-semibold tracking-wider uppercase" style={{ color: colors.primary }}>{user.level}</p>
+                  <p className="text-[10px] font-semibold tracking-wider uppercase" style={{ color: tk.primary }}>{user.level}</p>
                 )}
                 </div> 
             </div>
@@ -458,20 +461,20 @@ background:linear-gradient(135deg,#FF6803,#FFAC5F);color:white;font-size:14px}
                 <motion.button
                   onClick={() => setShowProfileMenu(!showProfileMenu)}
                   className="flex items-center gap-3 px-3 py-2 rounded-xl transition-colors"
-                  style={{ background: 'rgba(255, 255, 255, 0.05)' }}
-                  whileHover={{ background: 'rgba(255, 255, 255, 0.1)' }}
+                  style={{ background: theme === 'light' ? 'rgba(15, 7, 3, 0.04)' : 'rgba(255, 255, 255, 0.05)' }}
+                  whileHover={{ background: theme === 'light' ? 'rgba(15, 7, 3, 0.08)' : 'rgba(255, 255, 255, 0.1)' }}
                 >
                   <div
                     className="w-8 h-8 rounded-full flex items-center justify-center text-sm font-semibold"
-                    style={{ background: gradients.primary }}
+                    style={{ background: tk.gradOrange }}
                   >
                     {user?.full_name?.charAt(0) || 'U'}
                   </div>
                   <div className="text-left">
-                    <p className="text-sm font-medium text-white">{user?.full_name}</p>
-                    <p className="text-xs" style={{ color: colors.textSecondary }}>{user?.reg_number}</p>
+                    <p className="text-sm font-medium" style={{ color: tk.text }}>{user?.full_name}</p>
+                    <p className="text-xs" style={{ color: tk.textSec }}>{user?.reg_number}</p>
                   </div>
-                  <ChevronDown className="w-4 h-4" style={{ color: colors.textSecondary }} />
+                  <ChevronDown className="w-4 h-4" style={{ color: tk.textSec }} />
                 </motion.button>
 
                 {/* Dropdown Menu */}
@@ -479,9 +482,9 @@ background:linear-gradient(135deg,#FF6803,#FFAC5F);color:white;font-size:14px}
                   <motion.div
                     className="absolute right-0 mt-2 w-56 rounded-xl border overflow-hidden z-50"
                     style={{
-                      background: 'rgba(15, 7, 3, 0.95)',
+                      background: theme === 'light' ? 'rgba(255, 255, 255, 0.98)' : 'rgba(15, 7, 3, 0.95)',
                       backdropFilter: 'blur(20px)',
-                      borderColor: 'rgba(255, 104, 3, 0.2)',
+                      borderColor: tk.primaryRing,
                     }}
                     initial={{ opacity: 0, y: -10 }}
                     animate={{ opacity: 1, y: 0 }}
@@ -490,8 +493,8 @@ background:linear-gradient(135deg,#FF6803,#FFAC5F);color:white;font-size:14px}
                       <button
                         onClick={() => go('/profile')}
                         className="w-full flex items-center gap-3 px-3 py-2 rounded-lg transition-colors text-left"
-                        style={{ color: colors.textPrimary }}
-                        onMouseEnter={(e) => e.currentTarget.style.background = 'rgba(255, 255, 255, 0.1)'}
+                        style={{ color: tk.text }}
+                        onMouseEnter={(e) => e.currentTarget.style.background = theme === 'light' ? 'rgba(15, 7, 3, 0.06)' : 'rgba(255, 255, 255, 0.1)'}
                         onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
                       >
                         <User size={18} />
@@ -501,21 +504,21 @@ background:linear-gradient(135deg,#FF6803,#FFAC5F);color:white;font-size:14px}
                       <button
                         onClick={() => go('/settings')}
                         className="w-full flex items-center gap-3 px-3 py-2 rounded-lg transition-colors text-left"
-                        style={{ color: colors.textPrimary }}
-                        onMouseEnter={(e) => e.currentTarget.style.background = 'rgba(255, 255, 255, 0.1)'}
+                        style={{ color: tk.text }}
+                        onMouseEnter={(e) => e.currentTarget.style.background = theme === 'light' ? 'rgba(15, 7, 3, 0.06)' : 'rgba(255, 255, 255, 0.1)'}
                         onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
                       >
                         <Settings size={18} />
                         <span>Settings</span>
                       </button>
 
-                      <div className="my-1 border-t" style={{ borderColor: 'rgba(255, 255, 255, 0.1)' }} />
+                      <div className="my-1 border-t" style={{ borderColor: tk.cardBorder }} />
 
                       <button
                         onClick={confirmLogout}
                         className="w-full flex items-center gap-3 px-3 py-2 rounded-lg transition-colors text-left"
-                        style={{ color: colors.statusUnpaid }}
-                        onMouseEnter={(e) => e.currentTarget.style.background = 'rgba(255, 68, 68, 0.1)'}
+                        style={{ color: tk.danger }}
+                        onMouseEnter={(e) => e.currentTarget.style.background = 'rgba(239, 68, 68, 0.1)'}
                         onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
                       >
                         <LogOut size={18} />
@@ -536,14 +539,14 @@ background:linear-gradient(135deg,#FF6803,#FFAC5F);color:white;font-size:14px}
               <motion.button
                 onClick={() => setShowMobileMenu(!showMobileMenu)}
                 className="p-2 rounded-xl transition-colors"
-                style={{ background: 'rgba(255, 255, 255, 0.05)' }}
-                whileHover={{ background: 'rgba(255, 255, 255, 0.1)' }}
+                style={{ background: theme === 'light' ? 'rgba(15, 7, 3, 0.04)' : 'rgba(255, 255, 255, 0.05)' }}
+                whileHover={{ background: theme === 'light' ? 'rgba(15, 7, 3, 0.08)' : 'rgba(255, 255, 255, 0.1)' }}
                 whileTap={{ scale: 0.95 }}
               >
                 {showMobileMenu ? (
-                  <CloseIcon className="w-5 h-5" style={{ color: colors.textPrimary }} />
+                  <CloseIcon className="w-5 h-5" style={{ color: tk.text }} />
                 ) : (
-                  <Menu className="w-5 h-5" style={{ color: colors.textPrimary }} />
+                  <Menu className="w-5 h-5" style={{ color: tk.text }} />
                 )}
               </motion.button>
             </div>
@@ -554,30 +557,30 @@ background:linear-gradient(135deg,#FF6803,#FFAC5F);color:white;font-size:14px}
         {showMobileMenu && (
           <motion.div
             className="md:hidden border-t"
-            style={{ borderColor: 'rgba(255, 104, 3, 0.2)' }}
+            style={{ borderColor: tk.primaryRing }}
             initial={{ opacity: 0, height: 0 }}
             animate={{ opacity: 1, height: 'auto' }}
             exit={{ opacity: 0, height: 0 }}
           >
             <div className="px-4 py-4 space-y-1">
               {/* User Info */}
-              <div className="flex items-center gap-3 pb-3 border-b" style={{ borderColor: 'rgba(255, 255, 255, 0.1)' }}>
+              <div className="flex items-center gap-3 pb-3 border-b" style={{ borderColor: tk.cardBorder }}>
                 <div
                   className="w-10 h-10 rounded-full flex items-center justify-center text-sm font-semibold"
-                  style={{ background: gradients.primary }}
+                  style={{ background: tk.gradOrange }}
                 >
                   {user?.full_name?.charAt(0) || 'U'}
                 </div>
                 <div>
-                  <p className="text-sm font-medium text-white">{user?.full_name}</p>
-                  <p className="text-xs" style={{ color: colors.textSecondary }}>{user?.reg_number}</p>
-                  <p className="text-xs" style={{ color: colors.textSecondary }}>{user?.level}</p>
+                  <p className="text-sm font-medium" style={{ color: tk.text }}>{user?.full_name}</p>
+                  <p className="text-xs" style={{ color: tk.textSec }}>{user?.reg_number}</p>
+                  <p className="text-xs" style={{ color: tk.textSec }}>{user?.level}</p>
                 </div>
               </div>
 
               {/* Mobile Dashboard Switcher */}
               {(user?.admins && user.admins.length > 0) && (
-                <div className="pb-3 border-b mb-2" style={{ borderColor: 'rgba(255, 255, 255, 0.1)' }}>
+                <div className="pb-3 border-b mb-2" style={{ borderColor: tk.cardBorder }}>
                   <DashboardSwitcher variant="compact" />
                 </div>
               )}
@@ -588,8 +591,8 @@ background:linear-gradient(135deg,#FF6803,#FFAC5F);color:white;font-size:14px}
                   setShowMobileMenu(false);
                 }}
                 className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg transition-colors text-left"
-                style={{ color: colors.textPrimary }}
-                onMouseEnter={(e) => e.currentTarget.style.background = 'rgba(255, 255, 255, 0.1)'}
+                style={{ color: tk.text }}
+                onMouseEnter={(e) => e.currentTarget.style.background = theme === 'light' ? 'rgba(15, 7, 3, 0.06)' : 'rgba(255, 255, 255, 0.1)'}
                 onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
               >
                 <User size={18} />
@@ -599,21 +602,21 @@ background:linear-gradient(135deg,#FF6803,#FFAC5F);color:white;font-size:14px}
               <button
                 onClick={() => { go('/settings'); setShowMobileMenu(false); }}
                 className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg transition-colors text-left"
-                style={{ color: colors.textPrimary }}
-                onMouseEnter={(e) => e.currentTarget.style.background = 'rgba(255, 255, 255, 0.1)'}
+                style={{ color: tk.text }}
+                onMouseEnter={(e) => e.currentTarget.style.background = theme === 'light' ? 'rgba(15, 7, 3, 0.06)' : 'rgba(255, 255, 255, 0.1)'}
                 onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
               >
                 <Settings size={18} />
                 <span>Settings</span>
               </button>
 
-              <div className="my-1 border-t" style={{ borderColor: 'rgba(255, 255, 255, 0.1)' }} />
+              <div className="my-1 border-t" style={{ borderColor: tk.cardBorder }} />
 
               <button
                 onClick={confirmLogout}
                 className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg transition-colors text-left"
-                style={{ color: colors.statusUnpaid }}
-                onMouseEnter={(e) => e.currentTarget.style.background = 'rgba(255, 68, 68, 0.1)'}
+                style={{ color: tk.danger }}
+                onMouseEnter={(e) => e.currentTarget.style.background = 'rgba(239, 68, 68, 0.1)'}
                 onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
               >
                 <LogOut size={18} />
@@ -642,7 +645,7 @@ background:linear-gradient(135deg,#FF6803,#FFAC5F);color:white;font-size:14px}
           transition={{ delay: 0.2 }}
         >
           <div className="flex items-center justify-between gap-3">
-            <h2 className="text-2xl sm:text-3xl lg:text-4xl font-bold text-white mb-2">
+            <h2 className="text-2xl sm:text-3xl lg:text-4xl font-bold mb-2" style={{ color: tk.text }}>
               {(() => {
                 const hour = new Date().getHours();
                 if (hour < 12) return 'Good morning';
@@ -652,7 +655,7 @@ background:linear-gradient(135deg,#FF6803,#FFAC5F);color:white;font-size:14px}
             </h2>
             <PrivacyToggle />
           </div>
-          <p className="text-sm sm:text-base" style={{ color: colors.textSecondary }}>
+          <p className="text-sm sm:text-base" style={{ color: tk.textSec }}>
             Here's your payment overview and recent activity
           </p>
         </motion.div>
@@ -728,7 +731,7 @@ background:linear-gradient(135deg,#FF6803,#FFAC5F);color:white;font-size:14px}
                   <button
                     onClick={() => setShowDismissed(!showDismissed)}
                     className="flex items-center gap-1.5 text-xs font-medium transition-all hover:opacity-80"
-                    style={{ color: colors.textSecondary }}
+                    style={{ color: tk.textSec }}
                   >
                     {showDismissed ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
                     {showDismissed ? 'Hide' : 'Show'} Skipped ({dismissedUnpaidDues.length})
@@ -747,8 +750,8 @@ background:linear-gradient(135deg,#FF6803,#FFAC5F);color:white;font-size:14px}
               ) : (
                 <div className="space-y-4">
                   {mandatoryUnpaidDues.length === 0 && optionalUnpaidDues.length === 0 && dismissedUnpaidDues.length > 0 && (
-                    <div className="p-4 rounded-2xl border text-sm" style={{ background: 'rgba(255, 255, 255, 0.03)', borderColor: 'rgba(255, 255, 255, 0.08)', color: colors.textSecondary }}>
-                      You have skipped all optional dues. Open <span style={{ color: colors.primary, fontWeight: 600 }}>Show Skipped</span> to restore any of them.
+                    <div className="p-4 rounded-2xl border text-sm" style={{ background: tk.card, borderColor: tk.cardBorder, color: tk.textSec }}>
+                      You have skipped all optional dues. Open <span style={{ color: tk.primary, fontWeight: 600 }}>Show Skipped</span> to restore any of them.
                     </div>
                   )}
 

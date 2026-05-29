@@ -6,6 +6,7 @@
 import { type ReactNode } from 'react';
 import { Navigate, useLocation, useParams } from 'react-router-dom';
 import { useMultiTenantAuth } from '@/hooks/useMultiTenantAuth';
+import { multiTenantAuthService } from '@/services/multiTenantAuthService';
 import type { AggregatedPermissions } from '@/types/multiTenant';
 import LoadingSpinner from '@/components/ui/LoadingSpinner';
 
@@ -13,12 +14,20 @@ interface OrgProtectedRouteProps {
   children: ReactNode;
   requireAdmin?: boolean;
   requiredPermission?: keyof AggregatedPermissions;
+  /**
+   * When true, the admin/permission check additionally requires a TRUSTED
+   * (verified) admin record — a pending founder/exec is rejected. Use on every
+   * money-touching route so the client never exposes an action the server
+   * (create_due_with_scope_check) will reject.
+   */
+  requireVerified?: boolean;
 }
 
 const OrgProtectedRoute = ({
   children,
   requireAdmin = false,
   requiredPermission,
+  requireVerified = false,
 }: OrgProtectedRouteProps) => {
   const { orgSlug } = useParams<{ orgSlug: string }>();
   const { user, loading, needsPasswordChange, isProfileComplete, hasPermission, isAnyAdmin } = useMultiTenantAuth();
@@ -49,13 +58,17 @@ const OrgProtectedRoute = ({
     return <Navigate to={`${basePath}/complete-profile`} replace />;
   }
 
-  // Permission check
+  // Permission check (verification-aware: money routes require a trusted admin)
   if (requiredPermission) {
-    if (!hasPermission(requiredPermission)) {
+    const ok = requireVerified
+      ? multiTenantAuthService.hasVerifiedPermission(user, requiredPermission)
+      : hasPermission(requiredPermission);
+    if (!ok) {
       return <Navigate to={`${basePath}/dashboard`} replace />;
     }
   } else if (requireAdmin) {
-    if (!isAnyAdmin()) {
+    const ok = requireVerified ? multiTenantAuthService.isVerifiedAdmin(user) : isAnyAdmin();
+    if (!ok) {
       return <Navigate to={`${basePath}/dashboard`} replace />;
     }
   }

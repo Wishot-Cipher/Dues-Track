@@ -24,6 +24,7 @@ import { useAppNav } from '@/hooks/useAppNav';
 import { useSettings } from '@/contexts/SettingsContext';
 import { notificationSound } from '@/utils/notificationSound';
 import { getOrgScope } from '@/utils/orgScope';
+import { getDashboardTokens, useTheme } from '@/hooks/useTheme';
 
 interface PendingPayment {
   id: string;
@@ -50,6 +51,8 @@ export const AdminNotificationCenter = () => {
   const { user } = useAuth();
   const { go: navigate } = useAppNav();
   const { playNotificationSound } = useSettings();
+  const { theme } = useTheme();
+  const tk = getDashboardTokens(theme);
   const [pendingPayments, setPendingPayments] = useState<PendingPayment[]>([]);
   const [stats, setStats] = useState<DashboardStats>({
     pendingCount: 0,
@@ -287,13 +290,13 @@ export const AdminNotificationCenter = () => {
         onClick={handleOpenPanel}
         className="relative p-2.5 rounded-xl transition-all duration-300"
         style={{
-          background: showPanel ? `${colors.primary}20` : 'rgba(255, 255, 255, 0.05)',
-          border: `1px solid ${showPanel ? colors.primary + '40' : 'rgba(255, 255, 255, 0.1)'}`,
+          background: showPanel ? tk.primarySoft : (theme === 'light' ? 'rgba(15, 7, 3, 0.04)' : 'rgba(255, 255, 255, 0.05)'),
+          border: `1px solid ${showPanel ? tk.primaryRing : tk.cardBorder}`,
         }}
         whileHover={{ scale: 1.05 }}
         whileTap={{ scale: 0.95 }}
       >
-        <Bell className="w-5 h-5" style={{ color: showPanel ? colors.primary : colors.textPrimary }} />
+        <Bell className="w-5 h-5" style={{ color: showPanel ? tk.primary : tk.text }} />
         <AnimatePresence>
           {totalBadgeCount > 0 && (
             <motion.div
@@ -350,9 +353,9 @@ export const AdminNotificationCenter = () => {
                     <div className="flex items-center gap-3">
                       <div
                         className="w-11 h-11 rounded-xl flex items-center justify-center"
-                        style={{ background: gradients.primary }}
+                        style={{ background: tk.gradOrange }}
                       >
-                        <Bell className="w-5 h-5 text-white" />
+                        <Bell className="w-5 h-5" style={{ color: theme === 'light' ? '#FFFFFF' : tk.text }} />
                       </div>
                       <div>
                         <h3 className="text-lg font-bold text-white">Activity Center</h3>

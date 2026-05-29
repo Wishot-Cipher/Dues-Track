@@ -2,15 +2,7 @@ import { motion } from 'framer-motion';
 import type { LucideIcon } from 'lucide-react';
 import GlassCard  from '../ui/GlassCard';
 import AnimatedCounter, { CurrencyCounter } from '../ui/AnimatedCounter';
-
-const colors = {
-  primary: '#6366f1',
-  accentMint: '#34d399',
-  statusPaid: '#10b981',
-  warning: '#f59e0b',
-  statusUnpaid: '#ef4444',
-  textSecondary: 'rgba(255, 255, 255, 0.6)',
-};
+import { getDashboardTokens, useTheme } from '@/hooks/useTheme';
 
 interface StatCardProps {
   title: string;
@@ -35,6 +27,9 @@ export function StatCard({
   loading = false,
   masked = false
 }: StatCardProps) {
+  const { theme } = useTheme();
+  const tk = getDashboardTokens(theme);
+
   // Parse currency value if it's a formatted string like "₦15,000"
   const numericValue = typeof value === 'string' 
     ? Number(value.replace(/[₦,]/g, '')) 
@@ -49,13 +44,13 @@ export function StatCard({
       <GlassCard>
         <div className="flex items-center justify-between">
           <div>
-            <p className="text-xs sm:text-sm mb-1 sm:mb-2" style={{ color: colors.textSecondary }}>
+            <p className="text-xs sm:text-sm mb-1 sm:mb-2" style={{ color: tk.textSec }}>
               {title}
             </p>
             {loading ? (
               <div 
                 className="h-8 sm:h-9 w-24 sm:w-32 rounded-lg animate-pulse"
-                style={{ background: 'rgba(255, 104, 3, 0.1)' }}
+                style={{ background: tk.primarySoft }}
               />
             ) : (
               <div style={masked ? { filter: 'blur(8px)', userSelect: 'none', pointerEvents: 'none' } : undefined}>
@@ -63,16 +58,18 @@ export function StatCard({
                   isCurrency || typeof value === 'string' && value.includes('₦') ? (
                     <CurrencyCounter 
                       value={numericValue} 
-                      className="text-xl sm:text-2xl md:text-3xl font-bold text-white"
+                      className="text-xl sm:text-2xl md:text-3xl font-bold"
+                      style={{ color: tk.text }}
                     />
                   ) : (
                     <AnimatedCounter 
                       value={numericValue} 
-                      className="text-xl sm:text-2xl md:text-3xl font-bold text-white"
+                      className="text-xl sm:text-2xl md:text-3xl font-bold"
+                      style={{ color: tk.text }}
                     />
                   )
                 ) : (
-                  <p className="text-xl sm:text-2xl md:text-3xl font-bold text-white">{value}</p>
+                  <p className="text-xl sm:text-2xl md:text-3xl font-bold" style={{ color: tk.text }}>{value}</p>
                 )}
               </div>
             )}

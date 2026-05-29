@@ -5,6 +5,7 @@ import { colors, gradients } from '@/config/colors';
 import { useAppAuth as useAuth } from '@/hooks/useAppAuth';
 import { useToast } from '@/hooks/useToast';
 import pushNotificationService from '@/services/pushNotificationService';
+import { getDashboardTokens, useTheme } from '@/hooks/useTheme';
 
 interface PushNotificationPromptProps {
   mode?: 'banner' | 'inline' | 'settings';
@@ -13,6 +14,8 @@ interface PushNotificationPromptProps {
 
 export function PushNotificationPrompt({ mode = 'banner', onDismiss }: PushNotificationPromptProps) {
   const { user } = useAuth();
+  const { theme } = useTheme();
+  const tk = getDashboardTokens(theme);
   const toast = useToast();
   const [isSupported, setIsSupported] = useState(false);
   const [isSubscribed, setIsSubscribed] = useState(false);
@@ -279,6 +282,8 @@ function SettingsView({
   onDisable: () => void;
 }) {
   const { user } = useAuth();
+  const { theme } = useTheme();
+  const tk = getDashboardTokens(theme);
   const toast = useToast();
   const [testing, setTesting] = useState(false);
 
@@ -336,9 +341,9 @@ function SettingsView({
           {isSubscribed ? (
             <BellRing className="w-[18px] h-[18px]" style={{ color: '#22c55e' }} />
           ) : !isSupported ? (
-            <BellOff className="w-[18px] h-[18px]" style={{ color: colors.textSecondary }} />
+            <BellOff className="w-[18px] h-[18px]" style={{ color: tk.textSec }} />
           ) : (
-            <Bell className="w-[18px] h-[18px]" style={{ color: colors.primary }} />
+            <Bell className="w-[18px] h-[18px]" style={{ color: tk.primary }} />
           )}
           {isSubscribed && (
             <motion.div

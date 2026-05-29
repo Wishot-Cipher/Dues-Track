@@ -12,6 +12,7 @@ import Modal from '@/components/ui/Modal'
 import ProfessionalDropdown from '@/components/ui/ProfessionalDropdown'
 import LoadingSpinner from '@/components/ui/LoadingSpinner'
 import { PrivacyMask } from '@/components/ui/PrivacyMask'
+import { getDashboardTokens, useTheme } from '@/hooks/useTheme'
 
 interface BankDetails {
   bank_name: string
@@ -46,6 +47,8 @@ const NIGERIAN_BANKS = [
 export default function DonationSettingsPage() {
   const toast = useToast()
   const { go: navigate, path } = useAppNav();
+  const { theme } = useTheme()
+  const tk = getDashboardTokens(theme)
   
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
@@ -233,7 +236,7 @@ export default function DonationSettingsPage() {
   }
 
   return (
-    <div className="min-h-screen py-6 px-4" style={{ background: 'radial-gradient(ellipse at top, #1A0E09 0%, #0F0703 100%)' }}>
+    <div className="min-h-screen py-6 px-4" style={{ background: tk.bgWash }}>
       <div className="max-w-4xl mx-auto">
         {/* Header - Mobile Responsive */}
         <motion.div 

@@ -10,6 +10,7 @@ import { useAppNav } from '@/hooks/useAppNav';
 import { useSettings } from '@/contexts/SettingsContext';
 import { getOrgScope } from '@/utils/orgScope';
 import { notificationSound } from '@/utils/notificationSound';
+import { getDashboardTokens, useTheme } from '@/hooks/useTheme';
 
 interface Notification {
   id: string;
@@ -49,6 +50,8 @@ export const NotificationCenter = () => {
   const { user } = useAuth();
   const { go: navigate } = useAppNav();
   const { playNotificationSound } = useSettings();
+  const { theme } = useTheme();
+  const tk = getDashboardTokens(theme);
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [unreadCount, setUnreadCount] = useState(0);
   const [showPanel, setShowPanel] = useState(false);
@@ -239,8 +242,8 @@ export const NotificationCenter = () => {
         );
       default:
         return (
-          <div className="w-10 h-10 rounded-xl flex items-center justify-center" style={{ background: `${colors.primary}20` }}>
-            <Bell className={iconClass} style={{ color: colors.primary }} />
+          <div className="w-10 h-10 rounded-xl flex items-center justify-center" style={{ background: tk.primarySoft }}>
+            <Bell className={iconClass} style={{ color: tk.primary }} />
           </div>
         );
     }
@@ -287,13 +290,13 @@ export const NotificationCenter = () => {
         }}
         className="relative p-2.5 rounded-xl transition-all duration-300"
         style={{
-          background: showPanel ? `${colors.primary}20` : 'rgba(255, 255, 255, 0.05)',
-          border: `1px solid ${showPanel ? colors.primary + '40' : 'rgba(255, 255, 255, 0.1)'}`,
+          background: showPanel ? tk.primarySoft : (theme === 'light' ? 'rgba(15, 7, 3, 0.04)' : 'rgba(255, 255, 255, 0.05)'),
+          border: `1px solid ${showPanel ? tk.primaryRing : tk.cardBorder}`,
         }}
         whileHover={{ scale: 1.05 }}
         whileTap={{ scale: 0.95 }}
       >
-        <Bell className="w-5 h-5" style={{ color: showPanel ? colors.primary : colors.textPrimary }} />
+        <Bell className="w-5 h-5" style={{ color: showPanel ? tk.primary : tk.text }} />
         <AnimatePresence>
           {unreadCount > 0 && (
             <motion.div
@@ -350,9 +353,9 @@ export const NotificationCenter = () => {
                   <div className="flex items-center gap-3">
                     <div 
                       className="w-9 h-9 rounded-xl flex items-center justify-center"
-                      style={{ background: `${colors.primary}15` }}
+                      style={{ background: tk.primarySoft }}
                     >
-                      <Bell className="w-4.5 h-4.5" style={{ color: colors.primary }} />
+                      <Bell className="w-4.5 h-4.5" style={{ color: tk.primary }} />
                     </div>
                     <div>
                       <h3 className="text-base font-bold text-white">Notifications</h3>
@@ -426,9 +429,9 @@ export const NotificationCenter = () => {
                   >
                     <div 
                       className="w-16 h-16 rounded-2xl flex items-center justify-center mb-4"
-                      style={{ background: 'rgba(255, 255, 255, 0.05)' }}
+                      style={{ background: theme === 'light' ? 'rgba(15, 7, 3, 0.05)' : 'rgba(255, 255, 255, 0.05)' }}
                     >
-                      <BellOff className="w-8 h-8" style={{ color: colors.textSecondary }} />
+                      <BellOff className="w-8 h-8" style={{ color: tk.textSec }} />
                     </div>
                     <p className="text-sm font-medium text-white mb-1">No notifications yet</p>
                     <p className="text-xs text-center" style={{ color: colors.textSecondary }}>

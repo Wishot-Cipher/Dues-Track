@@ -11,7 +11,9 @@
 
 import crypto from 'crypto';
 import { createClient } from '@supabase/supabase-js';
-import { verifyMember } from '../_lib/auth.js';
+import { verifyMember, verifyAdmin } from '../_lib/auth.js';
+
+const TRUSTED_VERIFICATION = ['email_verified', 'document_verified', 'admin_verified', 'member_confirmed'];
 
 // Body parser disabled so we can verify webhook HMAC from the raw body.
 export const config = {
@@ -58,16 +60,19 @@ function parseJson(raw: string): any {
   }
 }
 
-// ── Fee math (matches Blueprint §8.3) ────────────────────────
-const DEFAULT_FEE_PERCENT = 1.5;   // 1.5%
-const DEFAULT_FEE_FLAT_KOBO = 0;   // 0 kobo (org may override)
-const DEFAULT_FEE_MIN_KOBO = 5000; // ₦50
-const DEFAULT_FEE_CAP_KOBO = 50000; // ₦500
+// ── Fee math ─────────────────────────────────────────────────
+// Model B: flat 2% of dues, floored at ₦50, capped at ₦500. Simple to explain
+// to students ("2% service fee") and fair across due sizes. Org config on the
+// organizations row overrides these per-org; these are the system fallback.
+const DEFAULT_FEE_PERCENT = 2.0;    // 2%
+const DEFAULT_FEE_FLAT_KOBO = 0;    // no flat component
+const DEFAULT_FEE_MIN_KOBO = 5000;  // ₦50 floor
+const DEFAULT_FEE_CAP_KOBO = 50000; // ₦500 cap
 function computeFeeKobo(
   duesKobo: number,
   cfg: { percent?: number; flat?: number; min?: number; cap?: number; mode?: string },
 ): number {
-  const mode = (cfg.mode || 'hybrid').toLowerCase();
+  const mode = (cfg.mode || 'percent').toLowerCase();
   const percent = typeof cfg.percent === 'number' ? cfg.percent : DEFAULT_FEE_PERCENT;
   const flat    = typeof cfg.flat    === 'number' ? cfg.flat    : DEFAULT_FEE_FLAT_KOBO;
   const min     = typeof cfg.min     === 'number' ? cfg.min     : DEFAULT_FEE_MIN_KOBO;
@@ -113,6 +118,10 @@ export default async function handler(req: any, res: any) {
       return handleVerify(req, res, body);
     case 'webhook':
       return handleWebhook(req, res, rawBody);
+    case 'banks':
+      return handleListBanks(req, res);
+    case 'subaccount':
+      return handleSubaccount(req, res, body);
     default:
       return res.status(404).json({ ok: false, error: `Unknown Paystack route: ${subPath}` });
   }
@@ -149,7 +158,7 @@ async function handleInitCore(req: any, res: any, body: any) {
 
   const supabase = createClient(supabaseUrl, serviceRole);
 
-  const { memberId, paymentTypeId, callbackPath } = body || {};
+  const { memberId, paymentTypeId, callbackPath, tierId } = body || {};
   const auth = await verifyMember(supabase, memberId);
   if (!auth.valid || !auth.data) {
     return res.status(auth.status || 401).json({ ok: false, error: auth.error || 'Auth failed' });
@@ -190,7 +199,30 @@ async function handleInitCore(req: any, res: any, body: any) {
     return res.status(500).json({ ok: false, error: 'Could not resolve organization.' });
   }
 
-  const duesKobo = Math.round(Number(pt.amount) * 100);
+  // Events: the price comes from the chosen ticket tier, not pt.amount.
+  let baseNaira = Number(pt.amount);
+  let resolvedTierId: string | null = null;
+  if (pt.category === 'event') {
+    const { data: tiers } = await supabase
+      .from('event_ticket_tiers')
+      .select('id, name, price, quantity, sold_count, is_active')
+      .eq('payment_type_id', pt.id)
+      .eq('is_active', true);
+    const tierList = tiers || [];
+    if (tierList.length > 0) {
+      const chosen = tierId ? tierList.find((t: any) => t.id === tierId) : null;
+      if (!chosen) {
+        return res.status(400).json({ ok: false, error: 'Please choose a ticket type.' });
+      }
+      if (chosen.quantity != null && Number(chosen.sold_count) >= Number(chosen.quantity)) {
+        return res.status(400).json({ ok: false, error: `"${chosen.name}" is sold out.` });
+      }
+      baseNaira = Number(chosen.price);
+      resolvedTierId = chosen.id;
+    }
+  }
+
+  const duesKobo = Math.round(baseNaira * 100);
   if (!duesKobo || duesKobo < 100) {
     return res.status(400).json({ ok: false, error: 'Invalid payment amount.' });
   }
@@ -210,7 +242,8 @@ async function handleInitCore(req: any, res: any, body: any) {
     group_id:            member.group_id,
     member_id:           member.id,
     payment_type_id:     pt.id,
-    amount:              Number(pt.amount),
+    event_tier_id:       resolvedTierId,
+    amount:              baseNaira,
     dues_amount_kobo:    duesKobo,
     platform_fee_kobo:   feeKobo,
     total_charged_kobo:  totalKobo,
@@ -269,7 +302,14 @@ async function handleInitCore(req: any, res: any, body: any) {
   };
 
   if (org.paystack_subaccount_code) {
+    // Split payment: the org's dues settle to THEIR bank (subaccount); the
+    // platform keeps exactly the service fee via transaction_charge. The org
+    // bears Paystack's own processing cost out of their slice (bearer).
+    // Without a subaccount the whole charge lands in the platform account —
+    // so an org must register its bank before it can truly collect.
     paystackBody.subaccount = org.paystack_subaccount_code;
+    paystackBody.transaction_charge = feeKobo;
+    paystackBody.bearer = 'subaccount';
   }
 
   let psRes: Response;
@@ -287,7 +327,7 @@ async function handleInitCore(req: any, res: any, body: any) {
     return res.status(502).json({ ok: false, error: 'Could not reach Paystack.' });
   }
 
-  const psJson = await psRes.json().catch(() => ({} as any));
+  const psJson: any = await psRes.json().catch(() => ({}));
   if (!psRes.ok || psJson?.status !== true) {
     return res.status(502).json({
       ok: false,
@@ -368,7 +408,7 @@ async function handleVerify(req: any, res: any, body: any) {
     return res.status(502).json({ ok: false, error: 'Could not reach Paystack.' });
   }
 
-  const psJson = await psRes.json().catch(() => ({} as any));
+  const psJson: any = await psRes.json().catch(() => ({}));
   if (!psRes.ok || psJson?.status !== true) {
     return res.status(502).json({
       ok: false,
@@ -412,6 +452,9 @@ async function handleVerify(req: any, res: any, body: any) {
 
       void settledKobo;
     }
+
+    // If this was an event purchase, mint the ticket (idempotent; no-ops for dues)
+    await supabase.rpc('issue_event_ticket', { p_payment_id: paymentRow.id });
 
     return res.status(200).json({
       ok: true,
@@ -553,6 +596,9 @@ async function handleChargeSuccess(supabase: any, reference: string, data: any) 
       console.error('[paystack/webhook] earning insert err', earningErr);
     }
   }
+
+  // Mint an event ticket if this payment was for an event (idempotent; no-ops for dues)
+  await supabase.rpc('issue_event_ticket', { p_payment_id: paymentRow.id });
 }
 
 async function handleChargeFailed(
@@ -586,4 +632,141 @@ async function handleChargeFailed(
       webhook_verified:    true,
     })
     .eq('id', paymentRow.id);
+}
+
+// ── /banks — list Nigerian banks for the payout-setup dropdown ─
+async function handleListBanks(req: any, res: any) {
+  if (req.method !== 'GET') return res.status(405).json({ ok: false, error: 'Method not allowed' });
+  if (!paystackSecret) return res.status(500).json({ ok: false, error: 'Server config error: PAYSTACK_SECRET_KEY missing' });
+  try {
+    const r = await fetch('https://api.paystack.co/bank?country=nigeria&currency=NGN&perPage=100', {
+      headers: { Authorization: `Bearer ${paystackSecret}` },
+    });
+    const j: any = await r.json().catch(() => ({}));
+    if (!r.ok || j?.status !== true) {
+      return res.status(502).json({ ok: false, error: j?.message || 'Could not load banks.' });
+    }
+    const banks = (j.data || []).map((b: any) => ({ name: b.name, code: b.code }));
+    return res.status(200).json({ ok: true, banks });
+  } catch {
+    return res.status(502).json({ ok: false, error: 'Could not reach Paystack.' });
+  }
+}
+
+// ── /subaccount — resolve the org's bank account + create/update
+//    its Paystack subaccount so dues settle to the org's own bank.
+//    Until this is set, all charges land in the platform account.
+async function handleSubaccount(req: any, res: any, body: any) {
+  if (req.method !== 'POST') return res.status(405).json({ ok: false, error: 'Method not allowed' });
+  if (!supabaseUrl || !serviceRole) return res.status(500).json({ ok: false, error: 'Server config error: Supabase env missing' });
+  if (!paystackSecret) return res.status(500).json({ ok: false, error: 'Server config error: PAYSTACK_SECRET_KEY missing' });
+
+  const supabase = createClient(supabaseUrl, serviceRole);
+  const { memberId, bankCode, accountNumber, businessName } = body || {};
+
+  // Caller must be an admin with settings permission...
+  const auth = await verifyAdmin(supabase, memberId, 'can_manage_settings');
+  if (!auth.valid || !auth.data) {
+    return res.status(auth.status || 401).json({ ok: false, error: auth.error || 'Admin access required' });
+  }
+  const orgId = auth.data.organization_id;
+
+  // ...and that admin must be VERIFIED (trusted) — a pending exec can't set payout.
+  const { data: verifiedRow } = await supabase
+    .from('member_admins')
+    .select('id')
+    .eq('member_id', auth.data.id)
+    .eq('organization_id', orgId)
+    .eq('is_active', true)
+    .in('verification_status', TRUSTED_VERIFICATION)
+    .limit(1)
+    .maybeSingle();
+  if (!verifiedRow) {
+    return res.status(403).json({ ok: false, error: 'Only a verified exec can set up the payout account.' });
+  }
+
+  if (!bankCode || !accountNumber || String(accountNumber).replace(/\D/g, '').length < 10) {
+    return res.status(400).json({ ok: false, error: 'A valid bank and 10-digit account number are required.' });
+  }
+  const acctNum = String(accountNumber).replace(/\D/g, '');
+
+  // 1) Resolve the account → confirm it's real + get the account name
+  let resolveJson: any;
+  try {
+    const rr = await fetch(
+      `https://api.paystack.co/bank/resolve?account_number=${encodeURIComponent(acctNum)}&bank_code=${encodeURIComponent(bankCode)}`,
+      { headers: { Authorization: `Bearer ${paystackSecret}` } },
+    );
+    resolveJson = await rr.json().catch(() => ({}));
+    if (!rr.ok || resolveJson?.status !== true) {
+      return res.status(400).json({ ok: false, error: resolveJson?.message || 'Could not verify that account number with the selected bank.' });
+    }
+  } catch {
+    return res.status(502).json({ ok: false, error: 'Could not reach Paystack to verify the account.' });
+  }
+  const accountName = resolveJson?.data?.account_name || null;
+
+  // 2) Org context (business name + any existing subaccount)
+  const { data: org } = await supabase
+    .from('organizations')
+    .select('id, name, paystack_subaccount_code')
+    .eq('id', orgId)
+    .maybeSingle();
+  const subBusinessName = (businessName && String(businessName).trim()) || org?.name || accountName || 'Payvexo Org';
+
+  // 3) Create or update the subaccount (percentage_charge 0 — the platform
+  //    keeps its fee via transaction_charge on each payment, not here)
+  const payload = {
+    business_name: subBusinessName,
+    settlement_bank: bankCode,
+    account_number: acctNum,
+    percentage_charge: 0,
+  };
+
+  let saJson: any;
+  try {
+    const existing = org?.paystack_subaccount_code;
+    const url = existing
+      ? `https://api.paystack.co/subaccount/${encodeURIComponent(existing)}`
+      : 'https://api.paystack.co/subaccount';
+    const sr = await fetch(url, {
+      method: existing ? 'PUT' : 'POST',
+      headers: { Authorization: `Bearer ${paystackSecret}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    saJson = await sr.json().catch(() => ({}));
+    if (!sr.ok || saJson?.status !== true) {
+      return res.status(502).json({ ok: false, error: saJson?.message || 'Could not create the payout account.' });
+    }
+  } catch {
+    return res.status(502).json({ ok: false, error: 'Could not reach Paystack to create the payout account.' });
+  }
+
+  const subaccountCode = saJson?.data?.subaccount_code;
+
+  // 4) Persist on the org
+  const { error: updErr } = await supabase
+    .from('organizations')
+    .update({
+      paystack_subaccount_code: subaccountCode,
+      paystack_settlement_bank: bankCode,
+      paystack_account_number: acctNum,
+      paystack_account_name: accountName,
+      paystack_business_name: subBusinessName,
+      paystack_verified: true,
+      updated_at: new Date().toISOString(),
+    })
+    .eq('id', orgId);
+  if (updErr) {
+    console.error('[paystack/subaccount] org update error', updErr);
+    return res.status(500).json({ ok: false, error: 'Payout account created but could not be saved. Contact support.' });
+  }
+
+  return res.status(200).json({
+    ok: true,
+    subaccount_code: subaccountCode,
+    account_name: accountName,
+    bank_code: bankCode,
+    account_number: acctNum,
+  });
 }

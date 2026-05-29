@@ -40,6 +40,7 @@ import ExpensesPage from '@/pages/admin/ExpensesPage';
 import PublicContributionsPage from '@/pages/admin/PublicContributionsPage';
 import DonationSettingsPage from '@/pages/admin/DonationSettingsPage';
 import BillingPage from '@/pages/admin/BillingPage';
+import PayoutSetupPage from '@/pages/admin/PayoutSetupPage';
 import OrgGroupsPage from '@/pages/admin/OrgGroupsPage';
 import OrgAcademicCalendarPage from '@/pages/admin/OrgAcademicCalendarPage';
 import ContributePage from '@/pages/ContributePage';
@@ -51,6 +52,7 @@ import BringMySchoolPage from '@/pages/BringMySchoolPage';
 import OrgLoginPage from '@/pages/OrgLoginPage';
 import OrgCompleteProfilePage from '@/pages/OrgCompleteProfilePage';
 import OrgChangePasswordPage from '@/pages/OrgChangePasswordPage';
+import VerifyEmailPage from '@/pages/VerifyEmailPage';
 import JoinOrganizationPage from '@/pages/JoinOrganizationPage';
 import OrgOverviewPage from '@/pages/OrgOverviewPage';
 import FacultyDetailPage from '@/pages/FacultyDetailPage';
@@ -143,22 +145,26 @@ function App() {
                 <Route path="settings" element={<OrgProtectedRoute><SettingsPage /></OrgProtectedRoute>} />
                 <Route path="change-password" element={<OrgProtectedRoute><OrgChangePasswordPage /></OrgProtectedRoute>} />
                 <Route path="complete-profile" element={<OrgProtectedRoute><OrgCompleteProfilePage /></OrgProtectedRoute>} />
+                <Route path="verify-email" element={<OrgProtectedRoute><VerifyEmailPage /></OrgProtectedRoute>} />
 
-                {/* Admin pages */}
-                <Route path="admin/dashboard" element={<OrgProtectedRoute requireAdmin><AdminDashboardPage /></OrgProtectedRoute>} />
-                <Route path="admin/members" element={<OrgProtectedRoute requiredPermission="can_manage_members"><OrgMembersPage /></OrgProtectedRoute>} />
-                <Route path="admin/groups" element={<OrgProtectedRoute requiredPermission="can_manage_members"><OrgGroupsPage /></OrgProtectedRoute>} />
-                <Route path="admin/academic-calendar" element={<OrgProtectedRoute requireAdmin><OrgAcademicCalendarPage /></OrgProtectedRoute>} />
-                <Route path="admin/create-payment" element={<OrgProtectedRoute requiredPermission="can_create_payments"><CreateDuePage /></OrgProtectedRoute>} />
-                <Route path="admin/manage-dues" element={<OrgProtectedRoute requiredPermission="can_create_payments"><ManageDuesPage /></OrgProtectedRoute>} />
-                <Route path="admin/review" element={<OrgProtectedRoute requiredPermission="can_approve_payments"><AdminReviewPage /></OrgProtectedRoute>} />
-                <Route path="admin/expenses" element={<OrgProtectedRoute requiredPermission="can_manage_expenses"><ExpensesPage /></OrgProtectedRoute>} />
-                <Route path="admin/collected" element={<OrgProtectedRoute requireAdmin><AdminCollectedPage /></OrgProtectedRoute>} />
-                <Route path="admin/waive-payment" element={<OrgProtectedRoute requireAdmin><WaivePaymentPage /></OrgProtectedRoute>} />
-                <Route path="admin/scan-qr" element={<OrgProtectedRoute requiredPermission="can_approve_payments"><ScanQRCodePage /></OrgProtectedRoute>} />
-                <Route path="admin/contributions" element={<OrgProtectedRoute requiredPermission="can_approve_payments"><PublicContributionsPage /></OrgProtectedRoute>} />
-                <Route path="admin/donation-settings" element={<OrgProtectedRoute requiredPermission="can_approve_payments"><DonationSettingsPage /></OrgProtectedRoute>} />
-                <Route path="admin/billing" element={<OrgProtectedRoute requireAdmin><BillingPage /></OrgProtectedRoute>} />
+                {/* Admin pages — every admin route requires a VERIFIED admin.
+                    A pending/unverified founder is bounced to the member dashboard
+                    until they verify (e.g. via school email). */}
+                <Route path="admin/dashboard" element={<OrgProtectedRoute requireAdmin requireVerified><AdminDashboardPage /></OrgProtectedRoute>} />
+                <Route path="admin/members" element={<OrgProtectedRoute requiredPermission="can_manage_members" requireVerified><OrgMembersPage /></OrgProtectedRoute>} />
+                <Route path="admin/groups" element={<OrgProtectedRoute requiredPermission="can_manage_members" requireVerified><OrgGroupsPage /></OrgProtectedRoute>} />
+                <Route path="admin/academic-calendar" element={<OrgProtectedRoute requireAdmin requireVerified><OrgAcademicCalendarPage /></OrgProtectedRoute>} />
+                <Route path="admin/create-payment" element={<OrgProtectedRoute requiredPermission="can_create_payments" requireVerified><CreateDuePage /></OrgProtectedRoute>} />
+                <Route path="admin/manage-dues" element={<OrgProtectedRoute requiredPermission="can_create_payments" requireVerified><ManageDuesPage /></OrgProtectedRoute>} />
+                <Route path="admin/review" element={<OrgProtectedRoute requiredPermission="can_approve_payments" requireVerified><AdminReviewPage /></OrgProtectedRoute>} />
+                <Route path="admin/expenses" element={<OrgProtectedRoute requiredPermission="can_manage_expenses" requireVerified><ExpensesPage /></OrgProtectedRoute>} />
+                <Route path="admin/collected" element={<OrgProtectedRoute requireAdmin requireVerified><AdminCollectedPage /></OrgProtectedRoute>} />
+                <Route path="admin/waive-payment" element={<OrgProtectedRoute requireAdmin requireVerified><WaivePaymentPage /></OrgProtectedRoute>} />
+                <Route path="admin/scan-qr" element={<OrgProtectedRoute requiredPermission="can_approve_payments" requireVerified><ScanQRCodePage /></OrgProtectedRoute>} />
+                <Route path="admin/contributions" element={<OrgProtectedRoute requiredPermission="can_approve_payments" requireVerified><PublicContributionsPage /></OrgProtectedRoute>} />
+                <Route path="admin/donation-settings" element={<OrgProtectedRoute requiredPermission="can_approve_payments" requireVerified><DonationSettingsPage /></OrgProtectedRoute>} />
+                <Route path="admin/billing" element={<OrgProtectedRoute requireAdmin requireVerified><BillingPage /></OrgProtectedRoute>} />
+                <Route path="admin/payout" element={<OrgProtectedRoute requiredPermission="can_manage_settings requireVerified"><PayoutSetupPage /></OrgProtectedRoute>} />
               </Route>
 
               {/* ============================================ */}

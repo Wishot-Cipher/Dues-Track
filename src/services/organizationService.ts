@@ -1738,10 +1738,33 @@ export const organizationService = {
     created_by: string;
   }): Promise<OrganizationInvite | null> {
     try {
+      // Ensure `created_by` references an existing `member_admins.id` when possible.
+      let createdByAdminId: string | null = null;
+      if (inviteData.created_by) {
+        // 1) If caller passed an admin id directly, verify it exists
+        const { data: adminById } = await supabase
+          .from('member_admins')
+          .select('id')
+          .eq('id', inviteData.created_by)
+          .maybeSingle();
+        if (adminById && adminById.id) {
+          createdByAdminId = adminById.id;
+        } else {
+          // 2) If they passed a member id, try to find the admin row for that member
+          const { data: adminByMember } = await supabase
+            .from('member_admins')
+            .select('id')
+            .eq('member_id', inviteData.created_by)
+            .maybeSingle();
+          if (adminByMember && adminByMember.id) createdByAdminId = adminByMember.id;
+        }
+      }
+
       const { data, error } = await supabase
         .from('organization_invites')
         .insert({
           ...inviteData,
+          created_by: createdByAdminId,
           invite_code: Math.random().toString(36).substring(2, 10).toUpperCase(),
           max_uses: inviteData.max_uses || (inviteData.invite_type === 'bulk' ? 100 : 1),
           is_active: true,

@@ -18,6 +18,8 @@
 export interface PaystackInitInput {
   paymentTypeId: string;
   memberId: string;
+  /** For events: the chosen ticket tier (drives the price). */
+  tierId?: string | null;
   /**
    * Override where Paystack redirects after payment. Path only —
    * the API joins it with the configured app URL. Defaults to
@@ -66,6 +68,20 @@ export interface PaystackVerifyResult {
   };
 }
 
+export interface PaystackBank {
+  name: string;
+  code: string;
+}
+
+export interface SubaccountResult {
+  ok: boolean;
+  error?: string;
+  subaccount_code?: string;
+  account_name?: string;
+  bank_code?: string;
+  account_number?: string;
+}
+
 export const paystackService = {
   /**
    * Start a Paystack transaction. Returns the hosted-checkout URL —
@@ -80,6 +96,7 @@ export const paystackService = {
         body: JSON.stringify({
           memberId:       input.memberId,
           paymentTypeId:  input.paymentTypeId,
+          tierId:         input.tierId ?? undefined,
           callbackPath:   input.callbackPath,
         }),
       });
@@ -110,6 +127,50 @@ export const paystackService = {
     } catch (e) {
       const message = e instanceof Error ? e.message : 'Network error';
       return { ok: false, error: message };
+    }
+  },
+
+  /**
+   * List Nigerian banks for the payout-setup dropdown.
+   */
+  async listBanks(): Promise<{ ok: boolean; banks: PaystackBank[]; error?: string }> {
+    try {
+      const res = await fetch('/api/paystack/banks');
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok || !json?.ok) return { ok: false, banks: [], error: json?.error || `HTTP ${res.status}` };
+      return { ok: true, banks: json.banks || [] };
+    } catch (e) {
+      return { ok: false, banks: [], error: e instanceof Error ? e.message : 'Network error' };
+    }
+  },
+
+  /**
+   * Set up (or update) the org's payout account: resolves the bank account,
+   * creates a Paystack subaccount, and stores it on the org so dues split to
+   * the org's bank automatically. Server requires a VERIFIED admin.
+   */
+  async setupSubaccount(input: {
+    memberId: string;
+    bankCode: string;
+    accountNumber: string;
+    businessName?: string;
+  }): Promise<SubaccountResult> {
+    try {
+      const res = await fetch('/api/paystack/subaccount', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          memberId: input.memberId,
+          bankCode: input.bankCode,
+          accountNumber: input.accountNumber,
+          businessName: input.businessName,
+        }),
+      });
+      const json = (await res.json().catch(() => ({}))) as SubaccountResult;
+      if (!res.ok || !json?.ok) return { ok: false, error: json?.error || `HTTP ${res.status}` };
+      return json;
+    } catch (e) {
+      return { ok: false, error: e instanceof Error ? e.message : 'Network error' };
     }
   },
 };

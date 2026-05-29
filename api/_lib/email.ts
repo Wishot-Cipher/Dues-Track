@@ -536,6 +536,34 @@ export function welcomeEmail(data: {
 
 
 /**
+ * 9. SCHOOL-EMAIL VERIFICATION — OTP to verify an exec holds an institutional email
+ */
+export function schoolEmailVerifyEmail(data: {
+  memberName: string
+  orgName: string
+  code: string
+}): string {
+  const { memberName, orgName, code } = data
+
+  return emailLayout({
+    preheader: `Your ${orgName} verification code is ${code}`,
+    orgName,
+    bodyContent: [
+      heading('Verify your school email', `Confirm you can collect for ${orgName}.`),
+      greeting(memberName),
+      paragraph(`Enter this code in Payvexo to verify your role at <strong style="color: ${brand.white};">${orgName}</strong>. This unlocks creating dues, events and payouts.`),
+      codeBlock(code),
+      alertBox(
+        `<strong>This code expires in 15 minutes.</strong> If you didn't request it, you can ignore this email — nothing changes.`,
+        'warning'
+      ),
+    ].join(''),
+    footerExtra: 'You received this because someone requested role verification for your account on Payvexo.',
+  })
+}
+
+
+/**
  * 8. ADMIN RESET PASSWORD — sent when an admin resets a member's password
  */
 export function adminResetPasswordEmail(data: {

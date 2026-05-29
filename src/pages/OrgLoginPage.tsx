@@ -417,17 +417,7 @@ export default function OrgLoginPage() {
     setError('');
     setLoading(true);
     try {
-      const result = await login(memberId, password, orgSlug);
-
-      if (
-        selectedGroup?.id &&
-        result.member.group_id &&
-        result.member.group_id !== selectedGroup.id
-      ) {
-        setError(`This account belongs to a different ${org?.group_label?.toLowerCase() || 'department'}. Please choose the correct one.`);
-        setLoading(false);
-        return;
-      }
+      const result = await login(memberId, password, orgSlug, selectedGroup?.id);
 
       if (!result.member.group_id) {
         navigate(`/${orgSlug}/join`, {
@@ -721,7 +711,7 @@ export default function OrgLoginPage() {
                   exit={{ opacity: 0, y: -6 }}
                 >
                   <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" style={{ color: '#ef4444' }} />
-                  <p className="text-sm" style={{ color: '#f87171' }}>{error}</p>
+                  <p className="text-sm" style={{ color: tk.textSecondary }}>{error}</p>
                 </motion.div>
               )}
             </AnimatePresence>

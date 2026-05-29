@@ -7,11 +7,30 @@ if (!supabaseUrl || !supabaseAnonKey) {
   throw new Error('Missing Supabase environment variables. Please check your .env.local file.')
 }
 
+// Custom-auth session token. Minted server-side at /api/auth/login and stored
+// here; sent on every Supabase request so Postgres RLS sees auth.uid() =
+// the member's id. Returns null (→ anon) when there is no valid session.
+const JWT_STORAGE_KEY = 'pvx_jwt'
+
+export function getStoredAccessToken(): string | null {
+  try {
+    const token = localStorage.getItem(JWT_STORAGE_KEY)
+    if (!token) return null
+    const parts = token.split('.')
+    if (parts.length !== 3) return null
+    const payload = JSON.parse(atob(parts[1].replace(/-/g, '+').replace(/_/g, '/')))
+    // Treat an expired token as no session so requests fall back to anon
+    if (typeof payload.exp === 'number' && payload.exp * 1000 <= Date.now()) return null
+    return token
+  } catch {
+    return null
+  }
+}
+
 export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
-  auth: {
-    persistSession: true,
-    autoRefreshToken: true,
-  },
+  // When accessToken is provided, supabase-js uses it for every request and
+  // disables its own GoTrue session management (we run custom auth instead).
+  accessToken: async () => getStoredAccessToken(),
   realtime: {
     params: {
       eventsPerSecond: 10,

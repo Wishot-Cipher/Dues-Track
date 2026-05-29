@@ -14,6 +14,7 @@ import { getOrgScope } from '@/utils/orgScope'
 import { formatDate } from '@/utils/formatters'
 import Footer from '@/components/Footer'
 import DashboardSwitcher from '@/components/DashboardSwitcher'
+import { getDashboardTokens, useTheme } from '@/hooks/useTheme'
 import { 
   CreditCard, 
   Edit3, 
@@ -81,6 +82,8 @@ const ICONS = [
 
 export default function ManageDuesPage() {
   const { go: navigate, orgSlug } = useAppNav();
+  const { theme } = useTheme()
+  const tk = getDashboardTokens(theme)
   const { hasPermission } = useAuth()
   const { success, error: showError } = useToast()
   const [paymentTypes, setPaymentTypes] = useState<PaymentType[]>([])
@@ -286,7 +289,7 @@ export default function ManageDuesPage() {
 
   if (!canManageDues) {
     return (
-      <div className="min-h-screen relative overflow-hidden" style={{ background: 'radial-gradient(ellipse at top, #1A0E09 0%, #0F0703 100%)' }}>
+      <div className="min-h-screen relative overflow-hidden" style={{ background: tk.bgWash }}>
         <div className="relative z-10 max-w-4xl mx-auto px-4 py-8">
           <GlassCard className="p-6">
             <div className="text-center py-8">
@@ -305,7 +308,7 @@ export default function ManageDuesPage() {
   }
 
   return (
-    <div className="min-h-screen relative overflow-hidden" style={{ background: 'radial-gradient(ellipse at top, #1A0E09 0%, #0F0703 100%)' }}>
+    <div className="min-h-screen relative overflow-hidden" style={{ background: tk.bgWash }}>
       {/* Background Grid Pattern */}
       <div
         className="absolute inset-0 opacity-20 pointer-events-none"

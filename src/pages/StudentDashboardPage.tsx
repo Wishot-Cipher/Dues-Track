@@ -283,6 +283,29 @@ export default function StudentDashboardPage() {
           )}
         </AnimatePresence>
 
+        {/* ───────────── PENDING-EXEC VERIFY PROMPT ─────────────
+            A founder/exec whose role isn't verified yet is bounced out of
+            /admin/*; this banner shows them the way to unlock it. */}
+        {mtMember?.admin_records?.some(
+          (a) => a.is_active &&
+            !['email_verified', 'document_verified', 'admin_verified', 'member_confirmed'].includes(a.verification_status || '')
+        ) && (
+          <button
+            onClick={() => go('/verify-email')}
+            className="w-full mb-3 rounded-2xl px-4 py-3 flex items-center gap-3 text-left"
+            style={{ background: 'rgba(255,104,3,0.10)', border: '1px solid rgba(255,104,3,0.30)' }}
+          >
+            <AlertCircle className="w-5 h-5 shrink-0" style={{ color: '#FF6803' }} />
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-bold" style={{ color: '#FF6803' }}>Verify your role to unlock admin</p>
+              <p className="text-xs" style={{ color: 'rgba(255,255,255,0.65)' }}>
+                Confirm your school email to create dues, events &amp; payouts.
+              </p>
+            </div>
+            <ChevronRight className="w-4 h-4 shrink-0" style={{ color: '#FF6803' }} />
+          </button>
+        )}
+
         {/* ───────────── VOTE URGENCY BANNER ─────────────
             Compact at-a-glance banner that hides itself when there's
             nothing to vote on. Replaced the duplicate full-card

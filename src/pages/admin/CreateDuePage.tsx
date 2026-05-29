@@ -155,6 +155,13 @@ interface FormState {
   event_venue: string;
   event_cover_url: string;
   event_max_attendees: string;
+  tiers: TierInput[];
+}
+
+interface TierInput {
+  name: string;
+  price: string;
+  quantity: string; // '' = unlimited
 }
 
 const EMPTY: FormState = {
@@ -166,6 +173,7 @@ const EMPTY: FormState = {
   accepts_paystack: true, accepts_manual: true,
   bank_name: '', account_name: '', account_number: '',
   event_date: '', event_venue: '', event_cover_url: '', event_max_attendees: '',
+  tiers: [{ name: 'Regular', price: '', quantity: '' }],
 };
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -262,24 +270,42 @@ export default function CreateDuePage() {
 
   const isEvent = form.category === 'event';
 
+  // ── Ticket tier handlers (events) ──
+  const addTier = () =>
+    setForm((f) => ({ ...f, tiers: [...f.tiers, { name: '', price: '', quantity: '' }] }));
+  const removeTier = (i: number) =>
+    setForm((f) => ({ ...f, tiers: f.tiers.filter((_, idx) => idx !== i) }));
+  const setTier = (i: number, k: keyof TierInput, v: string) =>
+    setForm((f) => ({ ...f, tiers: f.tiers.map((t, idx) => (idx === i ? { ...t, [k]: v } : t)) }));
+
+  const validTiers = useMemo(
+    () => form.tiers.filter((t) => t.name.trim().length > 0 && t.price !== '' && Number(t.price) >= 0),
+    [form.tiers],
+  );
+
   // ── Validation ──
   const validation = useMemo(() => {
     const errors: string[] = [];
     if (form.title.trim().length < 2) errors.push('Title is too short.');
-    if (!form.amount || Number(form.amount) <= 0) errors.push('Amount must be greater than zero.');
-    if (form.accepts_manual && (!form.bank_name || !form.account_number)) {
-      errors.push('Manual payments need bank name and account number.');
-    }
-    if (!form.accepts_paystack && !form.accepts_manual) {
-      errors.push('Enable at least one payment method.');
-    }
-    if (isEvent && !form.event_date) errors.push('Events need a date.');
-    if (isEvent && !form.event_venue) errors.push('Events need a venue.');
-    if (form.allow_partial && Number(form.minimum_partial_amount || 0) <= 0) {
-      errors.push('Set the minimum partial amount.');
+
+    if (isEvent) {
+      if (!form.event_date) errors.push('Events need a date.');
+      if (!form.event_venue) errors.push('Events need a venue.');
+      if (validTiers.length === 0) errors.push('Add at least one ticket type with a price.');
+    } else {
+      if (!form.amount || Number(form.amount) <= 0) errors.push('Amount must be greater than zero.');
+      if (form.accepts_manual && (!form.bank_name || !form.account_number)) {
+        errors.push('Manual payments need bank name and account number.');
+      }
+      if (!form.accepts_paystack && !form.accepts_manual) {
+        errors.push('Enable at least one payment method.');
+      }
+      if (form.allow_partial && Number(form.minimum_partial_amount || 0) <= 0) {
+        errors.push('Set the minimum partial amount.');
+      }
     }
     return errors;
-  }, [form, isEvent]);
+  }, [form, isEvent, validTiers]);
 
   const targetingValid =
     targetScope === 'org' ||
@@ -305,27 +331,33 @@ export default function CreateDuePage() {
       return;
     }
 
-    // Build the payload that maps to mig 035's payload JSON
+    // For events, the price comes from the cheapest ticket tier; events are
+    // online-only (Paystack) so a ticket can be auto-issued, and never mandatory.
+    const eventBaseAmount = isEvent
+      ? Math.min(...validTiers.map((t) => Number(t.price)))
+      : Number(form.amount);
+
+    // Build the payload that maps to the create_due_with_scope_check payload JSON
     const payload: Record<string, unknown> = {
       title:                  form.title.trim(),
       description:            form.description.trim() || null,
       category:               form.category,
-      amount:                 Number(form.amount),
+      amount:                 eventBaseAmount,
       icon:                   form.icon,
       color:                  form.color,
       deadline:               form.deadline || null,
-      late_fee_per_day:       form.late_fee_per_day || null,
-      is_mandatory:           form.is_mandatory,
-      allow_partial:          form.allow_partial,
-      minimum_partial_amount: form.allow_partial ? form.minimum_partial_amount : null,
+      late_fee_per_day:       isEvent ? null : (form.late_fee_per_day || null),
+      is_mandatory:           isEvent ? false : form.is_mandatory,
+      allow_partial:          isEvent ? false : form.allow_partial,
+      minimum_partial_amount: !isEvent && form.allow_partial ? form.minimum_partial_amount : null,
       is_public:              form.is_public,
       target_levels:          form.target_levels.length ? form.target_levels : null,
       target_sections:        form.target_sections.length ? form.target_sections : null,
-      bank_name:              form.accepts_manual ? form.bank_name : null,
-      account_name:           form.accepts_manual ? form.account_name : null,
-      account_number:         form.accepts_manual ? form.account_number : null,
-      accepts_paystack:       form.accepts_paystack,
-      accepts_manual:         form.accepts_manual,
+      bank_name:              !isEvent && form.accepts_manual ? form.bank_name : null,
+      account_name:           !isEvent && form.accepts_manual ? form.account_name : null,
+      account_number:         !isEvent && form.accepts_manual ? form.account_number : null,
+      accepts_paystack:       isEvent ? true : form.accepts_paystack,
+      accepts_manual:         isEvent ? false : form.accepts_manual,
     };
 
     if (isEvent) {
@@ -333,6 +365,11 @@ export default function CreateDuePage() {
       payload.event_venue         = form.event_venue || null;
       payload.event_cover_url     = form.event_cover_url || null;
       payload.event_max_attendees = form.event_max_attendees || null;
+      payload.tiers = validTiers.map((t) => ({
+        name: t.name.trim(),
+        price: Number(t.price),
+        quantity: t.quantity === '' ? null : Number(t.quantity),
+      }));
     }
 
     const res = await organizationService.createDueWithScope({
@@ -514,6 +551,7 @@ export default function CreateDuePage() {
               </Field>
             </Row>
 
+            {!isEvent && (
             <Field label="Amount" required hint="in your org currency">
               <div className="space-y-2">
                 <Input
@@ -542,6 +580,7 @@ export default function CreateDuePage() {
                 </div>
               </div>
             </Field>
+            )}
 
             <Row>
               <Field label="Deadline" hint="optional">
@@ -559,27 +598,31 @@ export default function CreateDuePage() {
             </Row>
 
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+              {!isEvent && (
+                <ToggleCard
+                  label="Mandatory"
+                  description="Members must pay"
+                  checked={form.is_mandatory}
+                  onChange={(v) => setField('is_mandatory', v)}
+                />
+              )}
+              {!isEvent && (
+                <ToggleCard
+                  label="Allow partial"
+                  description="Pay in installments"
+                  checked={form.allow_partial}
+                  onChange={(v) => setField('allow_partial', v)}
+                />
+              )}
               <ToggleCard
-                label="Mandatory"
-                description="Members must pay"
-                checked={form.is_mandatory}
-                onChange={(v) => setField('is_mandatory', v)}
-              />
-              <ToggleCard
-                label="Allow partial"
-                description="Pay in installments"
-                checked={form.allow_partial}
-                onChange={(v) => setField('allow_partial', v)}
-              />
-              <ToggleCard
-                label="Public link"
-                description="Shareable URL"
+                label={isEvent ? 'Public sale' : 'Public link'}
+                description={isEvent ? 'Anyone can buy via link' : 'Shareable URL'}
                 checked={form.is_public}
                 onChange={(v) => setField('is_public', v)}
               />
             </div>
 
-            {form.allow_partial && (
+            {!isEvent && form.allow_partial && (
               <Field label="Minimum partial amount" required>
                 <Input value={form.minimum_partial_amount} onChange={(v) => setField('minimum_partial_amount', v.replace(/[^0-9.]/g, ''))} placeholder="1000" />
               </Field>
@@ -618,6 +661,51 @@ export default function CreateDuePage() {
                       <Input value={form.event_max_attendees} onChange={(v) => setField('event_max_attendees', v.replace(/[^0-9]/g, ''))} placeholder="200" />
                     </Field>
                   </Row>
+
+                  {/* ── Ticket types (tiers) ── */}
+                  <div className="mt-1">
+                    <div className="flex items-center justify-between mb-2">
+                      <label className="text-xs font-semibold" style={{ color: tk.textSec }}>Ticket types</label>
+                      <button type="button" onClick={addTier} className="text-xs font-bold" style={{ color: tk.purple }}>
+                        + Add type
+                      </button>
+                    </div>
+                    <div className="space-y-2">
+                      {form.tiers.map((t, i) => (
+                        <div
+                          key={i}
+                          className="flex flex-wrap items-end gap-2 rounded-xl p-2.5"
+                          style={{ background: 'rgba(255,255,255,0.03)', border: `1px solid ${tk.border}` }}
+                        >
+                          <div className="flex-1 min-w-[120px]">
+                            <label className="block text-[10px] mb-1" style={{ color: tk.textTer }}>Name</label>
+                            <Input value={t.name} onChange={(v) => setTier(i, 'name', v)} placeholder="Regular / VIP" />
+                          </div>
+                          <div className="w-24">
+                            <label className="block text-[10px] mb-1" style={{ color: tk.textTer }}>Price ₦</label>
+                            <Input value={t.price} onChange={(v) => setTier(i, 'price', v.replace(/[^0-9.]/g, ''))} placeholder="2000" />
+                          </div>
+                          <div className="w-20">
+                            <label className="block text-[10px] mb-1" style={{ color: tk.textTer }}>Qty</label>
+                            <Input value={t.quantity} onChange={(v) => setTier(i, 'quantity', v.replace(/[^0-9]/g, ''))} placeholder="∞" />
+                          </div>
+                          {form.tiers.length > 1 && (
+                            <button
+                              type="button"
+                              onClick={() => removeTier(i)}
+                              className="text-xs font-semibold px-2 py-2.5"
+                              style={{ color: tk.danger }}
+                            >
+                              Remove
+                            </button>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                    <p className="text-[10px] mt-2" style={{ color: tk.textTer }}>
+                      Leave Qty empty for unlimited. Buyers choose a type at checkout and get a QR ticket.
+                    </p>
+                  </div>
                 </Panel>
               </motion.div>
             )}

@@ -35,6 +35,7 @@ import {
   HandCoins,
   Heart,
   Wallet,
+  Banknote,
   CalendarDays,
   LayoutGrid,
   X as XIcon,
@@ -199,6 +200,7 @@ export default function OrgLayout() {
     { path: '/admin/scan-qr', label: 'Scan QR', icon: <QrCode size={20} />, section: 'admin', hideOnMobile: true },
     { path: '/admin/contributions', label: 'Contributions', icon: <Heart size={20} />, section: 'admin', hideOnMobile: true },
     { path: '/admin/billing', label: 'Billing', icon: <Wallet size={20} />, section: 'admin', hideOnMobile: true },
+    { path: '/admin/payout', label: 'Payout Account', icon: <Banknote size={20} />, section: 'admin', hideOnMobile: true },
   ] : [];
 
   // Bottom tab items (mobile) — fintech "2 + FAB + 2" pattern.

@@ -30,6 +30,7 @@ import {
 } from "lucide-react";
 import { Html5Qrcode, Html5QrcodeScannerState } from "html5-qrcode";
 import Footer from "@/components/Footer";
+import { getDashboardTokens, useTheme } from '@/hooks/useTheme';
 
 // QR Data interfaces
 interface QRData {
@@ -67,6 +68,8 @@ export default function ScanQRCodePage() {
   const { go: navigate } = useAppNav();
   const location = useLocation();
   const { user, hasPermission } = useAuth();
+  const { theme } = useTheme();
+  const tk = getDashboardTokens(theme);
   const toast = useToast();
 
   // Main state
@@ -855,7 +858,7 @@ export default function ScanQRCodePage() {
     <div
       className="min-h-screen py-6 px-4"
       style={{
-        background: "radial-gradient(ellipse at top, #1A0E09 0%, #0F0703 100%)",
+        background: tk.bgWash,
       }}
     >
       <div className="max-w-lg mx-auto space-y-6">

@@ -13,6 +13,7 @@ import { AdminDashboardSkeleton, PaymentCardSkeleton } from '@/components/ui/Ske
 import AnimatedCounter from '@/components/ui/AnimatedCounter';
 import { PrivacyMask, PrivacyToggle } from '@/components/ui/PrivacyMask';
 import { AdminNotificationCenter } from '@/components/admin/AdminNotificationCenter';
+import { getDashboardTokens, useTheme } from '@/hooks/useTheme';
 import {
   Users,
   Clock,
@@ -75,6 +76,8 @@ interface RecentPayment {
 export default function AdminDashboardPage() {
   const { go: navigate, orgSlug } = useAppNav();
   const { hasPermission } = useAuth();
+  const { theme } = useTheme();
+  const tk = getDashboardTokens(theme);
   const isMultiTenant = !!orgSlug;
   
   // Debug: Check permissions
@@ -337,7 +340,8 @@ export default function AdminDashboardPage() {
 
   return (
     <div className="min-h-screen py-6 px-4 relative overflow-hidden"  style={{
-        background: 'radial-gradient(ellipse at top, #1A0E09 0%, #0F0703 100%)',
+        background: tk.bgWash,
+        color: tk.text,
       }}
     >
       {/* Background Grid Pattern */}
@@ -345,8 +349,8 @@ export default function AdminDashboardPage() {
         className="absolute inset-0 opacity-20 pointer-events-none"
         style={{
           backgroundImage: `
-            linear-gradient(${colors.primary}40 1px, transparent 1px),
-            linear-gradient(90deg, ${colors.primary}40 1px, transparent 1px)
+            linear-gradient(${theme === 'light' ? 'rgba(255, 104, 3, 0.12)' : 'rgba(255, 104, 3, 0.25)'} 1px, transparent 1px),
+            linear-gradient(90deg, ${theme === 'light' ? 'rgba(255, 104, 3, 0.12)' : 'rgba(255, 104, 3, 0.25)'} 1px, transparent 1px)
           `,
           backgroundSize: '50px 50px',
         }}
@@ -357,7 +361,7 @@ export default function AdminDashboardPage() {
         <div
           className="absolute w-[500px] h-[500px] rounded-full blur-[120px] opacity-30 animate-pulse"
           style={{
-            background: `radial-gradient(circle, ${colors.primary} 0%, transparent 70%)`,
+            background: `radial-gradient(circle, ${tk.primary} 0%, transparent 70%)`,
             top: '-10%',
             right: '-5%',
             animationDuration: '4s',
@@ -366,7 +370,7 @@ export default function AdminDashboardPage() {
         <div
           className="absolute w-[400px] h-[400px] rounded-full blur-[100px] opacity-20"
           style={{
-            background: `radial-gradient(circle, ${colors.accentMint} 0%, transparent 70%)`,
+            background: `radial-gradient(circle, ${tk.mint} 0%, transparent 70%)`,
             bottom: '-5%',
             left: '-5%',
             animation: 'pulse 6s ease-in-out infinite',
@@ -396,11 +400,11 @@ export default function AdminDashboardPage() {
           <GlassCard className="relative overflow-hidden">
             {/* Header Decorative Elements */}
             <div className="absolute top-0 right-0 w-64 h-64 opacity-5 pointer-events-none">
-              <Shield className="w-full h-full" style={{ color: colors.primary }} />
+              <Shield className="w-full h-full" style={{ color: tk.primary }} />
             </div>
             <div 
               className="absolute top-0 left-0 w-full h-1"
-              style={{ background: gradients.primary }}
+              style={{ background: tk.gradOrange }}
             />
             
             <div className="relative z-10 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
@@ -423,21 +427,21 @@ export default function AdminDashboardPage() {
                     transition={{ delay: 0.1 }}
                     className="inline-flex items-center gap-2 px-3 py-1 rounded-full text-xs font-semibold mb-3"
                     style={{ 
-                      background: `linear-gradient(135deg, ${colors.primary}30, ${colors.primary}10)`,
-                      border: `1px solid ${colors.primary}40`,
-                      color: colors.primary,
+                      background: theme === 'light' ? tk.primarySoft : `linear-gradient(135deg, ${tk.primary}30, ${tk.primary}10)`,
+                      border: `1px solid ${tk.primaryRing}`,
+                      color: tk.primary,
                     }}
                   >
                     <Sparkles className="w-3 h-3" />
                     ADMIN CONTROL CENTER
                   </motion.div>
                   
-                  <h1 className="text-2xl sm:text-3xl font-bold text-white mb-2 flex items-center gap-3">
+                  <h1 className="text-2xl sm:text-3xl font-bold mb-2 flex items-center gap-3" style={{ color: tk.text }}>
                     <span>Dashboard</span>
-                    <Activity className="w-6 h-6" style={{ color: colors.accentMint }} />
+                    <Activity className="w-6 h-6" style={{ color: tk.mint }} />
                     <PrivacyToggle />
                   </h1>
-                  <p style={{ color: colors.textSecondary }} className="flex items-center gap-2">
+                  <p style={{ color: tk.textSec }} className="flex items-center gap-2">
                     <BarChart3 className="w-4 h-4" />
                     Manage payments and monitor class finances
                   </p>
@@ -458,10 +462,11 @@ export default function AdminDashboardPage() {
                   whileHover={{ scale: 1.02, y: -2 }}
                   whileTap={{ scale: 0.98 }}
                   onClick={() => navigate('/admin/create-payment')}
-                  className="flex items-center gap-2 px-5 py-2.5 rounded-xl font-medium text-white transition-all shadow-lg"
+                  className="flex items-center gap-2 px-5 py-2.5 rounded-xl font-medium transition-all shadow-lg"
                   style={{ 
-                    background: gradients.primary,
-                    boxShadow: `0 4px 15px ${colors.primary}40`
+                    background: tk.gradOrange,
+                    color: tk.text,
+                    boxShadow: `0 4px 15px ${tk.primary}40`
                   }}
                 >
                   <Plus className="w-5 h-5" />
@@ -473,10 +478,11 @@ export default function AdminDashboardPage() {
                   whileHover={{ scale: 1.02, y: -2 }}
                   whileTap={{ scale: 0.98 }}
                   onClick={() => navigate('/admin/scan-qr')}
-                  className="flex items-center gap-2 px-5 py-2.5 rounded-xl font-medium text-white transition-all shadow-lg"
+                  className="flex items-center gap-2 px-5 py-2.5 rounded-xl font-medium transition-all shadow-lg"
                   style={{ 
-                    background: gradients.mint,
-                    boxShadow: `0 4px 15px ${colors.accentMint}40`
+                    background: `linear-gradient(135deg, ${tk.mint} 0%, ${tk.blue} 100%)`,
+                    color: '#FFFFFF',
+                    boxShadow: `0 4px 15px ${tk.mint}40`
                   }}
                 >
                   <QrCode className="w-5 h-5" />
@@ -490,9 +496,9 @@ export default function AdminDashboardPage() {
                   onClick={() => navigate('/admin/review')}
                   className="flex items-center gap-2 px-5 py-2.5 rounded-xl font-medium transition-all relative"
                   style={{ 
-                    background: `${colors.warning}20`,
-                    border: `1px solid ${colors.warning}50`,
-                    color: colors.warning
+                    background: theme === 'light' ? 'rgba(245, 158, 11, 0.12)' : `${tk.amber}20`,
+                    border: `1px solid ${tk.amber}50`,
+                    color: tk.amber
                   }}
                 >
                   <Clock className="w-5 h-5" />
@@ -501,10 +507,11 @@ export default function AdminDashboardPage() {
                     <motion.span 
                       initial={{ scale: 0 }}
                       animate={{ scale: 1 }}
-                      className="absolute -top-2 -right-2 w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold text-white shadow-lg"
+                      className="absolute -top-2 -right-2 w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold shadow-lg"
                       style={{ 
-                        background: colors.statusUnpaid,
-                        boxShadow: `0 2px 8px ${colors.statusUnpaid}60`
+                        background: tk.danger,
+                        color: '#FFFFFF',
+                        boxShadow: `0 2px 8px ${tk.danger}60`
                       }}
                     >
                       {stats.pendingReview}

@@ -4,7 +4,7 @@
  * Payvexo - Smart Payment & Dues Management
  */
 
-import { supabase } from '@/config/supabase';
+import { supabase, getStoredAccessToken } from '@/config/supabase';
 import type { OrganizationMember, MemberAdmin, Organization, OrganizationGroup, AggregatedPermissions } from '@/types/multiTenant';
 
 // ============================================================
@@ -41,7 +41,14 @@ const SESSION_KEYS = {
   ORG_ID: 'pvx_org_id',
   ORG_SLUG: 'pvx_org_slug',
   GROUP_ID: 'pvx_group_id',
+  JWT: 'pvx_jwt',
 };
+
+// Verification states that count as "trusted". MUST match the server-side gate
+// in migration 035 (create_due_with_scope_check). A 'pending' exec is NOT
+// trusted and gets no admin powers in the UI — mirroring the database, so the
+// client never offers an action the server will reject.
+const TRUSTED_VERIFICATION = ['email_verified', 'document_verified', 'admin_verified', 'member_confirmed'];
 
 // ============================================================
 // SERVICE
@@ -49,9 +56,13 @@ const SESSION_KEYS = {
 
 export const multiTenantAuthService = {
   /**
-   * Login with member ID and password, scoped to an organization
+   * Login with member ID and password, scoped to an organization.
+   *
+   * Credential verification happens server-side at /api/auth/login, which
+   * returns a signed session token (JWT). We store the token so every
+   * subsequent Supabase request carries it and RLS can enforce isolation.
    */
-  async login(memberId: string, password: string, orgSlug: string): Promise<MultiTenantLoginResponse> {
+  async login(memberId: string, password: string, orgSlug: string, groupId?: string): Promise<MultiTenantLoginResponse> {
     try {
       const trimmedId = memberId.trim();
       const trimmedSlug = orgSlug.trim().toLowerCase();
@@ -60,96 +71,40 @@ export const multiTenantAuthService = {
       if (!password) throw new Error('Please enter your password');
       if (!trimmedSlug) throw new Error('Organization is required');
 
-      // Step 1: Find the organization
-      const { data: org, error: orgError } = await supabase
-        .from('organizations')
-        .select('*')
-        .eq('slug', trimmedSlug)
-        .eq('is_active', true)
-        .single();
-
-      if (orgError || !org) {
-        throw new Error('Organization not found or inactive');
-      }
-
-      // Step 2: Find the member in this organization
-      const { data: member, error: memberError } = await supabase
-        .from('organization_members')
-        .select('*')
-        .eq('organization_id', org.id)
-        .eq('member_id', trimmedId)
-        .single();
-
-      if (memberError || !member) {
-        throw new Error('Invalid credentials. Please check your ID and try again.');
-      }
-
-      // Step 3: Check member status
-      if (!member.is_active) {
-        throw new Error('Your account has been deactivated. Contact your administrator.');
-      }
-      if (member.is_suspended) {
-        throw new Error(`Your account is suspended${member.suspension_reason ? ': ' + member.suspension_reason : '. Contact your administrator.'}`);
-      }
-
-      // Step 4: Verify password using RPC
-      const { data: passwordValid, error: pwError } = await supabase.rpc('verify_member_password', {
-        p_member_id: member.id,
-        p_password: password,
+      const res = await fetch('/api/auth/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ memberId: trimmedId, password, orgSlug: trimmedSlug, groupId: groupId?.trim() || undefined }),
       });
 
-      if (pwError || !passwordValid) {
-        throw new Error('Invalid credentials. Please check your ID and password.');
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok || !json?.ok) {
+        throw new Error(json?.error || 'Login failed. Please try again.');
       }
 
-      // Step 5: Get member's group
-      const { data: grp } = await supabase
-        .from('organization_groups')
-        .select('*')
-        .eq('id', member.group_id)
-        .single();
+      const org = json.organization as Organization;
+      const grp = json.group as OrganizationGroup;
+      const admins = (json.adminRecords || []) as MemberAdmin[];
 
-      // Step 6: Get admin records
-      const { data: adminRecords } = await supabase
-        .from('member_admins')
-        .select('*')
-        .eq('member_id', member.id)
-        .eq('is_active', true);
-
-      // Step 7: Update login info (non-blocking)
-      void supabase
-        .from('organization_members')
-        .update({
-          last_login_at: new Date().toISOString(),
-          login_count: (member.login_count || 0) + 1,
-        })
-        .eq('id', member.id);
-
-      // Step 8: Aggregate permissions
-      const admins = (adminRecords || []) as MemberAdmin[];
-      const permissions = this.aggregatePermissions(admins);
-
-      // Build member with relations
       const fullMember: OrganizationMember = {
-        ...(member as OrganizationMember),
-        organization: org as Organization,
-        group: grp as OrganizationGroup,
+        ...(json.member as OrganizationMember),
+        organization: org,
+        group: grp,
         admin_records: admins,
-        admin_permissions: permissions,
+        admin_permissions: this.aggregatePermissions(admins),
       };
-
-      // Remove password_hash from response
       delete (fullMember as unknown as Record<string, unknown>).password_hash;
 
-      // Save session
-      this.saveSession(fullMember, org as Organization);
+      // Persist the session token first so subsequent requests are authenticated.
+      if (json.token) localStorage.setItem(SESSION_KEYS.JWT, json.token as string);
+      this.saveSession(fullMember, org);
 
       return {
         member: fullMember,
-        organization: org as Organization,
-        group: (grp as OrganizationGroup) || { id: member.group_id },
+        organization: org,
+        group: grp || ({ id: fullMember.group_id } as OrganizationGroup),
         adminRecords: admins,
-        mustChangePassword: member.force_password_change,
+        mustChangePassword: !!json.mustChangePassword,
       };
     } catch (error: unknown) {
       const message = error instanceof Error ? error.message : 'Login failed. Please try again.';
@@ -243,6 +198,7 @@ export const multiTenantAuthService = {
     localStorage.removeItem(SESSION_KEYS.ORG_ID);
     localStorage.removeItem(SESSION_KEYS.ORG_SLUG);
     localStorage.removeItem(SESSION_KEYS.GROUP_ID);
+    localStorage.removeItem(SESSION_KEYS.JWT);
   },
 
   /**
@@ -267,6 +223,13 @@ export const multiTenantAuthService = {
     try {
       const authStatus = localStorage.getItem(SESSION_KEYS.AUTH_STATUS);
       if (authStatus !== 'active') return null;
+
+      // The session token is the real credential. If it's missing or expired,
+      // the session is definitively over — clear it and force re-login.
+      if (!getStoredAccessToken()) {
+        this.clearSession();
+        return null;
+      }
 
       const memberId = localStorage.getItem(SESSION_KEYS.MEMBER_ID);
       const orgId = localStorage.getItem(SESSION_KEYS.ORG_ID);
@@ -351,6 +314,7 @@ export const multiTenantAuthService = {
     localStorage.removeItem(SESSION_KEYS.ORG_ID);
     localStorage.removeItem(SESSION_KEYS.ORG_SLUG);
     localStorage.removeItem(SESSION_KEYS.GROUP_ID);
+    localStorage.removeItem(SESSION_KEYS.JWT);
   },
 
   /**
@@ -404,6 +368,70 @@ export const multiTenantAuthService = {
   hasPermission(member: OrganizationMember | null, permission: keyof AggregatedPermissions): boolean {
     if (!member?.admin_permissions) return false;
     return member.admin_permissions[permission] === true;
+  },
+
+  /**
+   * Is the member a VERIFIED admin — an active admin record in a trusted
+   * verification state? A pending founder/exec returns false, so they get
+   * no admin access in the UI until they verify (mirrors the server gate).
+   */
+  isVerifiedAdmin(member: OrganizationMember | null): boolean {
+    if (!member?.admin_records) return false;
+    return member.admin_records.some(
+      a => a.is_active && TRUSTED_VERIFICATION.includes(a.verification_status || '')
+    );
+  },
+
+  /**
+   * Does the member hold `permission` via a VERIFIED admin record?
+   * Trust-aware counterpart to hasPermission — gates money/admin actions so
+   * an unverified exec can never reach them (matches create_due_with_scope_check).
+   */
+  hasVerifiedPermission(member: OrganizationMember | null, permission: keyof AggregatedPermissions): boolean {
+    if (!member?.admin_records) return false;
+    return member.admin_records.some(
+      a => a.is_active
+        && TRUSTED_VERIFICATION.includes(a.verification_status || '')
+        && (a as unknown as Record<string, boolean>)[permission] === true
+    );
+  },
+
+  /**
+   * School-email verification — request an OTP to the member's institutional email.
+   */
+  async requestSchoolEmailCode(
+    memberId: string,
+    email: string,
+  ): Promise<{ ok: boolean; error?: string; sentTo?: string; devCode?: string }> {
+    try {
+      const res = await fetch('/api/auth/verify-email', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'request', memberId, email }),
+      });
+      return await res.json().catch(() => ({ ok: false, error: 'Network error' }));
+    } catch (e) {
+      return { ok: false, error: e instanceof Error ? e.message : 'Network error' };
+    }
+  },
+
+  /**
+   * School-email verification — confirm the OTP; promotes the exec to verified.
+   */
+  async confirmSchoolEmailCode(
+    memberId: string,
+    code: string,
+  ): Promise<{ ok: boolean; error?: string; message?: string; promoted?: number }> {
+    try {
+      const res = await fetch('/api/auth/verify-email', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'confirm', memberId, code }),
+      });
+      return await res.json().catch(() => ({ ok: false, error: 'Network error' }));
+    } catch (e) {
+      return { ok: false, error: e instanceof Error ? e.message : 'Network error' };
+    }
   },
 };
 

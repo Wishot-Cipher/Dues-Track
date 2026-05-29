@@ -35,21 +35,45 @@ import {
 import { organizationService } from '@/services/organizationService';
 import { APP_NAME } from '@/config/constants';
 import TrustBadge from '@/components/trust/TrustBadge';
+import { getDashboardTokens, useTheme } from '@/hooks/useTheme';
 import type { SeedInstitution } from '@/types/multiTenant';
 
-const tk = {
-  primary:    '#FF6803',
-  mint:       '#30FFAC',
-  bg:         '#0F0703',
-  panel:      'rgba(255,255,255,0.025)',
-  panelHov:   'rgba(255,255,255,0.04)',
-  border:     'rgba(255,255,255,0.08)',
-  borderHov:  'rgba(255,104,3,0.30)',
-  text:       '#FFFFFF',
-  textSec:    'rgba(255,255,255,0.65)',
-  textTer:    'rgba(255,255,255,0.40)',
-  danger:     '#ef4444',
+type BringTokens = {
+  primary: string;
+  mint: string;
+  bg: string;
+  panel: string;
+  panelHov: string;
+  border: string;
+  borderHov: string;
+  text: string;
+  textSec: string;
+  textTer: string;
+  textTertiary: string;
+  danger: string;
+  inputBg: string;
+  inputBgHov: string;
 };
+
+function buildBringTokens(theme: 'light' | 'dark'): BringTokens {
+  const dtk = getDashboardTokens(theme);
+  return {
+    primary: dtk.primary,
+    mint: dtk.mint,
+    bg: dtk.bg,
+    panel: dtk.card,
+    panelHov: dtk.cardHover,
+    border: dtk.cardBorder,
+    borderHov: dtk.primaryRing,
+    text: dtk.text,
+    textSec: dtk.textSec,
+    textTer: dtk.textTer,
+    textTertiary: dtk.textTer,
+    danger: dtk.danger,
+    inputBg: dtk.card,
+    inputBgHov: dtk.cardHover,
+  };
+}
 
 const ORG_TYPES: { value: string; label: string }[] = [
   { value: 'university',           label: 'University' },
@@ -135,6 +159,7 @@ const EMPTY_FORM: FormState = {
 // ────────────────────────────────────────────────────────────────────────────
 
 function Field({
+  tk,
   label,
   hint,
   required,
@@ -142,6 +167,7 @@ function Field({
   children,
   className = '',
 }: {
+  tk: BringTokens;
   label: string;
   hint?: string;
   required?: boolean;
@@ -167,6 +193,7 @@ function Field({
 }
 
 function TextInput({
+  tk,
   value,
   onChange,
   placeholder,
@@ -174,6 +201,7 @@ function TextInput({
   autoComplete,
   required,
 }: {
+  tk: BringTokens;
   value: string;
   onChange: (v: string) => void;
   placeholder?: string;
@@ -191,7 +219,7 @@ function TextInput({
       placeholder={placeholder}
       className="w-full rounded-xl px-3.5 py-2.5 text-sm outline-none transition-colors"
       style={{
-        background: 'rgba(26,14,9,0.85)',
+        background: tk.inputBg,
         border: `1px solid ${tk.border}`,
         color: tk.text,
       }}
@@ -202,10 +230,12 @@ function TextInput({
 }
 
 function SelectInput({
+  tk,
   value,
   onChange,
   options,
 }: {
+  tk: BringTokens;
   value: string;
   onChange: (v: string) => void;
   options: { value: string; label: string }[];
@@ -216,7 +246,7 @@ function SelectInput({
       onChange={(e) => onChange(e.target.value)}
       className="w-full rounded-xl px-3.5 py-2.5 text-sm outline-none transition-colors appearance-none"
       style={{
-        background: 'rgba(26,14,9,0.85)',
+        background: tk.inputBg,
         border: `1px solid ${tk.border}`,
         color: tk.text,
       }}
@@ -237,6 +267,8 @@ function SelectInput({
 export default function BringMySchoolPage() {
   const navigate = useNavigate();
   const [params] = useSearchParams();
+  const { theme } = useTheme();
+  const tk = buildBringTokens(theme);
   const seedId = params.get('seed');
   const prefillName = params.get('name') || '';
 
@@ -370,12 +402,12 @@ export default function BringMySchoolPage() {
         </button>
         <div className="flex items-center gap-2">
           <div
-            className="w-8 h-8 rounded-lg flex items-center justify-center font-extrabold text-white text-sm"
+            className="w-8 h-8 rounded-lg flex items-center justify-center font-extrabold text-sm"
             style={{ background: 'linear-gradient(135deg, #FF6803 0%, #FFAC5F 100%)' }}
           >
             P
           </div>
-          <span className="text-base font-bold text-white">{APP_NAME}</span>
+          <span className="text-base font-bold" style={{ color: tk.text }}>{APP_NAME}</span>
         </div>
       </nav>
 
@@ -392,7 +424,8 @@ export default function BringMySchoolPage() {
         </motion.div>
 
         <motion.h1
-          className="text-3xl sm:text-4xl font-extrabold text-white tracking-tight leading-tight mb-3"
+          className="text-3xl sm:text-4xl font-extrabold tracking-tight leading-tight mb-3"
+          style={{ color: tk.text }}
           initial={{ opacity: 0, y: 12 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.05 }}
@@ -425,27 +458,27 @@ export default function BringMySchoolPage() {
         className="relative z-10 max-w-3xl mx-auto px-5 sm:px-6 pb-24 space-y-6"
       >
         {/* ── Section 1: Your school ── */}
-        <Panel title="Your school" subtitle="The organization you're bringing online." icon={<Building2 className="w-4 h-4" />}>
-          <Field label="Organization name" required>
-            <TextInput value={form.orgName} onChange={(v) => setField('orgName', v)} placeholder="University of Nigeria, Nsukka" required />
+        <Panel tk={tk} title="Your school" subtitle="The organization you're bringing online." icon={<Building2 className="w-4 h-4" />}>
+          <Field tk={tk} label="Organization name" required>
+            <TextInput tk={tk} value={form.orgName} onChange={(v) => setField('orgName', v)} placeholder="University of Nigeria, Nsukka" required />
           </Field>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <Field label="Short name" hint="e.g. UNN">
-              <TextInput value={form.orgShortName} onChange={(v) => setField('orgShortName', v.toUpperCase())} placeholder="UNN" />
+            <Field tk={tk} label="Short name" hint="e.g. UNN">
+              <TextInput tk={tk} value={form.orgShortName} onChange={(v) => setField('orgShortName', v.toUpperCase())} placeholder="UNN" />
             </Field>
-            <Field label="Type" required>
-              <SelectInput value={form.orgType} onChange={(v) => setField('orgType', v)} options={ORG_TYPES} />
+            <Field tk={tk} label="Type" required>
+              <SelectInput tk={tk} value={form.orgType} onChange={(v) => setField('orgType', v)} options={ORG_TYPES} />
             </Field>
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-            <Field label="State" icon={<MapPin className="w-3 h-3" />}>
-              <TextInput value={form.state} onChange={(v) => setField('state', v)} placeholder="Enugu" />
+            <Field tk={tk} label="State" icon={<MapPin className="w-3 h-3" />}>
+              <TextInput tk={tk} value={form.state} onChange={(v) => setField('state', v)} placeholder="Enugu" />
             </Field>
-            <Field label="City">
-              <TextInput value={form.city} onChange={(v) => setField('city', v)} placeholder="Nsukka" />
+            <Field tk={tk} label="City">
+              <TextInput tk={tk} value={form.city} onChange={(v) => setField('city', v)} placeholder="Nsukka" />
             </Field>
-            <Field label="Website" hint="optional">
-              <TextInput value={form.website} onChange={(v) => setField('website', v)} placeholder="https://example.edu.ng" />
+            <Field tk={tk} label="Website" hint="optional">
+              <TextInput tk={tk} value={form.website} onChange={(v) => setField('website', v)} placeholder="https://example.edu.ng" />
             </Field>
           </div>
         </Panel>
@@ -490,36 +523,37 @@ export default function BringMySchoolPage() {
 
           return (
             <Panel
+              tk={tk}
               title={sectionTitle}
               subtitle={sectionSubtitle}
               icon={<GraduationCap className="w-4 h-4" />}
             >
               {isAcademic && (
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  <Field label="Faculty name" hint="optional">
-                    <TextInput value={form.facultyName} onChange={(v) => setField('facultyName', v)} placeholder="School of Engineering" />
+                  <Field tk={tk} label="Faculty name" hint="optional">
+                    <TextInput tk={tk} value={form.facultyName} onChange={(v) => setField('facultyName', v)} placeholder="School of Engineering" />
                   </Field>
-                  <Field label="Faculty short name" hint="e.g. SOE">
-                    <TextInput value={form.facultyShort} onChange={(v) => setField('facultyShort', v.toUpperCase())} placeholder="SOE" />
+                  <Field tk={tk} label="Faculty short name" hint="e.g. SOE">
+                    <TextInput tk={tk} value={form.facultyShort} onChange={(v) => setField('facultyShort', v.toUpperCase())} placeholder="SOE" />
                   </Field>
                 </div>
               )}
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <Field label={leafLabel} required icon={<Layers className="w-3 h-3" />}>
-                  <TextInput value={form.groupName} onChange={(v) => setField('groupName', v)} placeholder={leafPlaceholder} required />
+                <Field tk={tk} label={leafLabel} required icon={<Layers className="w-3 h-3" />}>
+                  <TextInput tk={tk} value={form.groupName} onChange={(v) => setField('groupName', v)} placeholder={leafPlaceholder} required />
                 </Field>
-                <Field label="Short name" hint="e.g. EEE">
-                  <TextInput value={form.groupShort} onChange={(v) => setField('groupShort', v.toUpperCase())} placeholder="EEE" />
+                <Field tk={tk} label="Short name" hint="e.g. EEE">
+                  <TextInput tk={tk} value={form.groupShort} onChange={(v) => setField('groupShort', v.toUpperCase())} placeholder="EEE" />
                 </Field>
               </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <Field label="Group kind" required>
-                  <SelectInput value={form.groupKind} onChange={(v) => setField('groupKind', v)} options={GROUP_KINDS} />
+                <Field tk={tk} label="Group kind" required>
+                  <SelectInput tk={tk} value={form.groupKind} onChange={(v) => setField('groupKind', v)} options={GROUP_KINDS} />
                 </Field>
-                <Field label={levelLabel} hint={isAcademic ? 'e.g. 200L, SS2, Member' : undefined}>
-                  <TextInput value={form.userLevel} onChange={(v) => setField('userLevel', v)} placeholder={levelPlaceholder} />
+                <Field tk={tk} label={levelLabel} hint={isAcademic ? 'e.g. 200L, SS2, Member' : undefined}>
+                  <TextInput tk={tk} value={form.userLevel} onChange={(v) => setField('userLevel', v)} placeholder={levelPlaceholder} />
                 </Field>
               </div>
             </Panel>
@@ -528,34 +562,35 @@ export default function BringMySchoolPage() {
 
         {/* ── Section 3: Your account ── */}
         <Panel
+          tk={tk}
           title="Your account"
           subtitle="You'll log in with this. Your member ID + password get you back to your dashboard."
           icon={<User className="w-4 h-4" />}
         >
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <Field label="Full name" required>
-              <TextInput value={form.fullName} onChange={(v) => setField('fullName', v)} placeholder="John Doe" required autoComplete="name" />
+            <Field tk={tk} label="Full name" required>
+              <TextInput tk={tk} value={form.fullName} onChange={(v) => setField('fullName', v)} placeholder="John Doe" required autoComplete="name" />
             </Field>
-            <Field label="Member ID" required hint="matric / staff / member number">
-              <TextInput value={form.memberNumber} onChange={(v) => setField('memberNumber', v)} placeholder="2018/1/12345" required />
-            </Field>
-          </div>
-
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <Field label="Email" required icon={<Mail className="w-3 h-3" />}>
-              <TextInput value={form.email} onChange={(v) => setField('email', v)} placeholder="you@example.com" type="email" required autoComplete="email" />
-            </Field>
-            <Field label="Phone" icon={<Phone className="w-3 h-3" />}>
-              <TextInput value={form.phone} onChange={(v) => setField('phone', v)} placeholder="+234 800 000 0000" autoComplete="tel" />
+            <Field tk={tk} label="Member ID" required hint="matric / staff / member number">
+              <TextInput tk={tk} value={form.memberNumber} onChange={(v) => setField('memberNumber', v)} placeholder="2018/1/12345" required />
             </Field>
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <Field label="Password" required icon={<Lock className="w-3 h-3" />} hint="at least 6 chars">
-              <TextInput value={form.password} onChange={(v) => setField('password', v)} placeholder="••••••••" type="password" required autoComplete="new-password" />
+            <Field tk={tk} label="Email" required icon={<Mail className="w-3 h-3" />}>
+              <TextInput tk={tk} value={form.email} onChange={(v) => setField('email', v)} placeholder="you@example.com" type="email" required autoComplete="email" />
             </Field>
-            <Field label="Confirm password" required>
-              <TextInput value={form.passwordConfirm} onChange={(v) => setField('passwordConfirm', v)} placeholder="••••••••" type="password" required autoComplete="new-password" />
+            <Field tk={tk} label="Phone" icon={<Phone className="w-3 h-3" />}>
+              <TextInput tk={tk} value={form.phone} onChange={(v) => setField('phone', v)} placeholder="+234 800 000 0000" autoComplete="tel" />
+            </Field>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <Field tk={tk} label="Password" required icon={<Lock className="w-3 h-3" />} hint="at least 6 chars">
+              <TextInput tk={tk} value={form.password} onChange={(v) => setField('password', v)} placeholder="••••••••" type="password" required autoComplete="new-password" />
+            </Field>
+            <Field tk={tk} label="Confirm password" required>
+              <TextInput tk={tk} value={form.passwordConfirm} onChange={(v) => setField('passwordConfirm', v)} placeholder="••••••••" type="password" required autoComplete="new-password" />
             </Field>
           </div>
           {pwMismatch && (
@@ -577,7 +612,7 @@ export default function BringMySchoolPage() {
               style={{ background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.25)' }}
             >
               <AlertCircle className="w-5 h-5 shrink-0" style={{ color: tk.danger, marginTop: 1 }} />
-              <p className="text-sm leading-6" style={{ color: 'rgba(254,202,202,0.95)' }}>
+              <p className="text-sm leading-6" style={{ color: tk.text }}>
                 {error}
               </p>
             </motion.div>
@@ -592,9 +627,10 @@ export default function BringMySchoolPage() {
           <motion.button
             type="submit"
             disabled={!canSubmit || submitting}
-            className="px-7 py-3.5 rounded-2xl text-white font-bold text-sm flex items-center gap-2 disabled:opacity-40 disabled:cursor-not-allowed"
+            className="px-7 py-3.5 rounded-2xl font-bold text-sm flex items-center gap-2 disabled:opacity-40 disabled:cursor-not-allowed"
             style={{
               background: 'linear-gradient(135deg, #FF6803 0%, #FFAC5F 100%)',
+              color: tk.text,
               boxShadow: canSubmit ? '0 8px 30px rgba(255,104,3,0.4)' : 'none',
             }}
             whileHover={canSubmit && !submitting ? { scale: 1.03 } : undefined}
@@ -624,11 +660,13 @@ export default function BringMySchoolPage() {
 // ────────────────────────────────────────────────────────────────────────────
 
 function Panel({
+  tk,
   title,
   subtitle,
   icon,
   children,
 }: {
+  tk: BringTokens;
   title: string;
   subtitle?: string;
   icon?: React.ReactNode;
@@ -647,7 +685,7 @@ function Panel({
       }}
     >
       <header className="mb-5">
-        <h2 className="flex items-center gap-2 text-base font-bold text-white">
+        <h2 className="flex items-center gap-2 text-base font-bold" style={{ color: tk.text }}>
           {icon && (
             <span
               className="w-7 h-7 rounded-lg flex items-center justify-center"

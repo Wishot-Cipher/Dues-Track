@@ -454,7 +454,7 @@ export default function GroupWelcomePage() {
                   style={{ background: 'rgba(255,210,74,0.08)', border: '1px solid rgba(255,210,74,0.25)' }}
                 >
                   <ShieldCheck className="w-5 h-5 shrink-0" style={{ color: '#FFD24A', marginTop: 1 }} />
-                  <p className="text-xs leading-5" style={{ color: 'rgba(255,224,170,0.95)' }}>
+                  <p className="text-xs leading-5" style={{ color: tk.textSec }}>
                     This {km.label.toLowerCase()} requires an invite code to join. Your admin can generate one for you, or use an existing account below.
                   </p>
                 </div>
@@ -581,7 +581,7 @@ export default function GroupWelcomePage() {
                         style={{ background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.25)' }}
                       >
                         <AlertCircle className="w-5 h-5 shrink-0" style={{ color: tk.danger, marginTop: 1 }} />
-                        <p className="text-sm leading-6" style={{ color: 'rgba(254,202,202,0.95)' }}>{error}</p>
+                        <p className="text-sm leading-6" style={{ color: tk.text }}>{error}</p>
                       </motion.div>
                     )}
                   </AnimatePresence>
