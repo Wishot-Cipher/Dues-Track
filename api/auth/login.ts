@@ -48,6 +48,64 @@ export default async function handler(req: any, res: any) {
   }
 
   const body = req.body || {};
+  const mode = String(body.mode ?? 'login');
+  const supabase = createClient(supabaseUrl, serviceRole);
+
+  // ── Org switch: re-mint a JWT for another org the SAME account owns. The
+  //    current valid token proves identity, so no password is needed. ──
+  if (mode === 'switch') {
+    try {
+      const currentToken = String(body.token ?? '');
+      const targetMemberId = String(body.targetMemberId ?? '').trim();
+      if (!currentToken || !targetMemberId) {
+        return res.status(400).json({ ok: false, error: 'Missing switch parameters' });
+      }
+      const { verifyMemberToken, signMemberToken } = await import('../_lib/jwt.js');
+      const claims = verifyMemberToken(currentToken, jwtSecret);
+      if (!claims?.sub) return res.status(401).json({ ok: false, error: 'Session expired. Please sign in again.' });
+
+      const { data: cur } = await supabase
+        .from('organization_members').select('id, account_id').eq('id', claims.sub).single();
+      const { data: target } = await supabase
+        .from('organization_members').select('*').eq('id', targetMemberId).single();
+
+      if (!cur || !target) return res.status(404).json({ ok: false, error: 'Membership not found' });
+      if (!cur.account_id || cur.account_id !== target.account_id) {
+        return res.status(403).json({ ok: false, error: 'That organization is not linked to your account.' });
+      }
+      if (!target.is_active) return res.status(403).json({ ok: false, error: 'That membership is inactive.' });
+      if (target.is_suspended) return res.status(403).json({ ok: false, error: 'That membership is suspended.' });
+
+      const [{ data: org }, { data: grp }, { data: adminRecords }] = await Promise.all([
+        supabase.from('organizations').select('*').eq('id', target.organization_id).single(),
+        supabase.from('organization_groups').select('*').eq('id', target.group_id).single(),
+        supabase.from('member_admins').select('*').eq('member_id', target.id).eq('is_active', true),
+      ]);
+      const admins = adminRecords || [];
+
+      const { token, expiresAt } = signMemberToken({
+        memberId: target.id,
+        organizationId: target.organization_id,
+        groupId: target.group_id ?? null,
+        memberHumanId: target.member_id,
+      }, jwtSecret);
+
+      const safeTarget = { ...target };
+      delete (safeTarget as any).password_hash;
+
+      return res.status(200).json({
+        ok: true, token, expiresAt,
+        member: { ...safeTarget, admin_records: admins, admin_permissions: aggregatePermissions(admins) },
+        organization: org,
+        group: grp || { id: target.group_id },
+        adminRecords: admins,
+      });
+    } catch (err) {
+      console.error('[auth/login switch] error:', (err as Error)?.stack);
+      return res.status(500).json({ ok: false, error: 'Could not switch organization.' });
+    }
+  }
+
   const memberHumanId = String(body.memberId ?? '').trim();
   const password = String(body.password ?? '');
   const orgSlug = String(body.orgSlug ?? '').trim().toLowerCase();
@@ -56,8 +114,6 @@ export default async function handler(req: any, res: any) {
   if (!memberHumanId) return res.status(400).json({ ok: false, error: 'Please enter your ID' });
   if (!password) return res.status(400).json({ ok: false, error: 'Please enter your password' });
   if (!orgSlug) return res.status(400).json({ ok: false, error: 'Organization is required' });
-
-  const supabase = createClient(supabaseUrl, serviceRole);
 
   try {
     // Step 1: Organization

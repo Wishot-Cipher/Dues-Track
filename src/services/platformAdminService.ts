@@ -270,6 +270,33 @@ export async function grantClaimOverride(claimId: string): Promise<void> {
   if (!data?.ok) throw new Error(data?.error || 'Grant failed');
 }
 
+/** Reject / dismiss an in-flight exec claim. */
+export async function rejectClaim(claimId: string, reason?: string): Promise<void> {
+  await callPlatformRpc('platform_reject_claim', { p_claim_id: claimId, p_reason: reason ?? null });
+}
+
+// ── Org admin management (revoke suspicious roles) ───────────────
+export interface OrgAdminRow {
+  admin_id: string;
+  member_id: string;
+  scope_level: string;
+  role: string | null;
+  role_label: string | null;
+  is_active: boolean;
+  verification_layer: number;
+  verification_status: string | null;
+  full_name: string;
+  email: string | null;
+  human_id: string | null;
+  group_name: string | null;
+}
+export const listOrgAdmins = async (orgId: string) =>
+  (await callPlatformRpc<{ ok: boolean; admins: OrgAdminRow[] }>('platform_list_org_admins', { p_org_id: orgId })).admins;
+
+export async function setAdminActive(adminId: string, active: boolean, reason?: string): Promise<void> {
+  await callPlatformRpc('platform_set_admin_active', { p_admin_id: adminId, p_active: active, p_reason: reason ?? null });
+}
+
 // ── Financial intelligence / audit / analytics ──────────────────
 
 async function callPlatformRpc<T = Record<string, unknown>>(fn: string, extra: Record<string, unknown> = {}): Promise<T> {
@@ -399,15 +426,9 @@ export async function fetchPlatformStats(): Promise<PlatformStats> {
  * Toggle org active status
  */
 export async function toggleOrganizationStatus(orgId: string, isActive: boolean): Promise<void> {
-  const admin = getPlatformAdmin();
-  if (!admin?.can_manage_organizations) throw new Error('Insufficient permissions');
-
-  const { error } = await supabase.rpc('set_organization_status', {
-    p_org_id: orgId,
-    p_is_active: isActive,
-  });
-
-  if (error) throw error;
+  // set_organization_status takes (p_session_token, p_org_id, p_is_active) and
+  // returns { ok } — callPlatformRpc injects the token and unwraps the result.
+  await callPlatformRpc('set_organization_status', { p_org_id: orgId, p_is_active: isActive });
 }
 
 /**
@@ -438,7 +459,7 @@ export async function updateOrgSubscription(
 
   const defaults = planLimits[plan];
 
-  const { error } = await supabase.rpc('update_organization_subscription', {
+  await callPlatformRpc('update_organization_subscription', {
     p_org_id: orgId,
     p_plan: plan,
     p_max_groups: options?.max_groups ?? defaults.max_groups,
@@ -448,26 +469,13 @@ export async function updateOrgSubscription(
     p_is_on_trial: options?.is_on_trial ?? false,
     p_trial_ends_at: options?.trial_ends_at ?? null,
   });
-
-  if (error) throw error;
 }
 
 /**
  * Extend an organization's trial period
  */
 export async function extendTrial(orgId: string, days: number): Promise<void> {
-  const admin = getPlatformAdmin();
-  if (!admin?.can_manage_subscriptions) throw new Error('Insufficient permissions');
-
-  const trialEnd = new Date();
-  trialEnd.setDate(trialEnd.getDate() + days);
-
-  const { error } = await supabase.rpc('extend_organization_trial', {
-    p_org_id: orgId,
-    p_days: days,
-  });
-
-  if (error) throw error;
+  await callPlatformRpc('extend_organization_trial', { p_org_id: orgId, p_days: days });
 }
 
 /**

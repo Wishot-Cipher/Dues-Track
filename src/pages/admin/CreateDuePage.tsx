@@ -239,13 +239,18 @@ export default function CreateDuePage() {
 
   // Derived: what kinds of targets are available given caller scope
   const targetGroups = ctx?.targets ?? [];
+  // "Whole unit" targets: a faculty, college or department — a due here cascades
+  // to every class below it. Departments live here (not in the leaf list) so a
+  // department president can bill all their classes in one publish.
   const facultyTargets = useMemo(
-    () => targetGroups.filter((g) => g.kind === 'faculty' || g.kind === 'college'),
+    () => targetGroups.filter((g) =>
+      g.kind === 'faculty' || g.kind === 'college' || g.kind === 'department' || g.kind === 'unit'
+    ),
     [targetGroups]
   );
   const leafTargets = useMemo(
     () => targetGroups.filter((g) =>
-      g.kind === 'class' || g.kind === 'department' || g.kind === 'association' || g.kind === 'level'
+      g.kind === 'class' || g.kind === 'association' || g.kind === 'level'
     ),
     [targetGroups]
   );
@@ -738,12 +743,12 @@ export default function CreateDuePage() {
                         active={targetScope === 'faculty'}
                         onClick={() => {
                           setTargetScope('faculty');
-                          // pick caller's own faculty if they're unit scope
+                          // pick caller's own unit if they're unit scope
                           const def = ctx.caller?.scope === 'unit' ? ctx.caller.group_id : facultyTargets[0]?.id ?? null;
                           setTargetGroupId(def);
                         }}
-                        label="One faculty"
-                        sublabel="All classes under it"
+                        label="Whole faculty / dept"
+                        sublabel="Bills everyone in the classes below"
                         color={form.color}
                       />
                     )}
@@ -768,16 +773,16 @@ export default function CreateDuePage() {
 
                 {/* Specific picker when scope=faculty or scope=group */}
                 {targetScope === 'faculty' && facultyTargets.length > 1 && (
-                  <Field label="Faculty">
+                  <Field label="Faculty / Department">
                     <ProfessionalDropdown
                       value={targetGroupId ?? ''}
                       onChange={(v) => setTargetGroupId((Array.isArray(v) ? v[0] : v) || null)}
-                      placeholder="Select a faculty…"
+                      placeholder="Select a faculty or department…"
                       searchable
                       options={facultyTargets.map((g) => ({
                         value: g.id,
                         label: g.name,
-                        description: g.short_name,
+                        description: g.short_name ?? g.kind,
                       }))}
                     />
                   </Field>

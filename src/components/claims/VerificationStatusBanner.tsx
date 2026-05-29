@@ -511,11 +511,18 @@ export default function VerificationStatusBanner() {
     return 'not_admin'; // covers both regular students and non-exec org creators
   }, [loading, adminRow, pendingClaim]);
 
-  // Whether to show the invite panel (always true — even for non-execs)
-  const showInvitePanel = true;
-
   // Is this person acting as / trying to be an exec?
   const isExec = Boolean(adminRow || pendingClaim);
+
+  // The person who actually created this org may invite the first members to
+  // bootstrap it (self-growing model). A regular member who simply JOINED must
+  // NOT get an invite link — otherwise anyone could pull in the wrong people.
+  const isOrgCreator = Boolean(
+    memberId && (organization?.created_by === memberId || organization?.founded_by_user_id === memberId)
+  );
+
+  // Only execs, in-flight claimants, and the org creator get the invite panel.
+  const showInvitePanel = isExec || isOrgCreator;
 
   const goToClaim = () => navigate(`/${orgSlug}/claim`);
 
@@ -645,15 +652,17 @@ export default function VerificationStatusBanner() {
     );
   }, [inviteLink, whatsAppMessage]);
 
-  // ── Auto-generate invite for admins + all non-exec org creators ────────
+  // ── Auto-generate invite — only for those allowed to invite ────────────
   useEffect(() => {
-    if (inviteLink || inviteLoading) return;
-    // Always auto-generate — every user on this banner should have an invite link
+    if (!showInvitePanel || inviteLink || inviteLoading) return;
     void generateInviteLink();
-  }, [inviteLink, inviteLoading, generateInviteLink]);
+  }, [showInvitePanel, inviteLink, inviteLoading, generateInviteLink]);
 
   if (variant === 'hidden') return null;
   if (variant === 'not_admin' && dismissed) return null;
+  // A regular member who just joined (not an exec, not the creator) gets no
+  // onboarding/invite banner at all.
+  if (variant === 'not_admin' && !isExec && !isOrgCreator) return null;
 
   // ── Shared invite panel props ──────────────────────────────────────────
   const invitePanelProps = {

@@ -29,6 +29,7 @@ import { APP_NAME } from '@/config/constants';
 import { organizationService } from '@/services/organizationService';
 import { supabase } from '@/config/supabase';
 import { useMultiTenantAuth } from '@/hooks/useMultiTenantAuth';
+import { multiTenantAuthService } from '@/services/multiTenantAuthService';
 import PageWrapper from '@/components/ui/PageWrapper';
 import ProfessionalDropdown from '@/components/ui/ProfessionalDropdown';
 import Checkbox from '@/components/ui/Checkbox';
@@ -240,7 +241,7 @@ export default function CreateOrganizationPage() {
         if (!form.short_name.trim()) { setError('Short name / abbreviation is required'); return false; }
         if (!form.slug.trim() || form.slug.length < 3) { setError('URL slug must be at least 3 characters'); return false; }
         if (slugAvailable === false) { setError('This URL is already taken'); return false; }
-        if (form.email.trim() && emailAvailable === false) { setError('This organization email is already in use'); return false; }
+        // Org contact email may be shared across orgs (same founder) — not blocked.
         return true;
       case academicStep:
         if (isAcademic) {
@@ -299,14 +300,15 @@ export default function CreateOrganizationPage() {
     setLoading(true);
     setError('');
 
+    // If the founder is already signed in (creating a SECOND org), remember
+    // their current membership so we can link the new org to the same account.
+    const previousMemberId = (() => {
+      try { return localStorage.getItem('pvx_member_id'); } catch { return null; }
+    })();
+
     try {
-      if (form.email.trim()) {
-        const emailIsAvailable = await organizationService.isEmailAvailable(form.email.trim());
-        if (!emailIsAvailable) {
-          setEmailAvailable(false);
-          throw new Error('This organization email is already in use.');
-        }
-      }
+      // Org contact email is just contact info now — multiple orgs (often run by
+      // the same person) may share it, so we no longer block on it being reused.
 
       // Determine owner/group levels to pass to service (academic level when applicable)
       let ownerLevels: string[] | undefined = undefined;
@@ -336,6 +338,12 @@ export default function CreateOrganizationPage() {
       });
 
       if (result?.slug) {
+        // Global identity: link the new org's founder membership to the
+        // creator's existing account so both show in the org switcher.
+        if (previousMemberId && result.member_id) {
+          await multiTenantAuthService.attachMembershipToAccount(previousMemberId, result.member_id);
+        }
+
         // Save academic info to organization_settings.custom_settings if applicable
         if (isAcademic && form.academic_scope && result.organization_id) {
           const academicLevelRaw = form.academic_level === '__custom__' ? form.custom_level : (form.academic_level || '');
@@ -586,11 +594,11 @@ export default function CreateOrganizationPage() {
                     <div className="pr-3 shrink-0">
                       {checkingEmail && <Loader2 size={16} className="animate-spin text-gray-400" />}
                       {!checkingEmail && emailAvailable === true && <Check size={16} className="text-green-400" />}
-                      {!checkingEmail && emailAvailable === false && <span className="text-xs text-red-400">Taken</span>}
+                      {!checkingEmail && emailAvailable === false && <span className="text-[11px] text-amber-400">In use elsewhere</span>}
                     </div>
                   </div>
                   <p className="mt-1 text-xs" style={{ color: colors.textTertiary }}>
-                    This email is used for admin contact and must be unique.
+                    Optional contact email. The same email can be reused if you run more than one organization.
                   </p>
                 </div>
                 <div>

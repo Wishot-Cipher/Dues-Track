@@ -5,7 +5,7 @@ import { useAppNav } from '@/hooks/useAppNav';
 import { useAuth } from '@/hooks/useAppAuth';
 import { supabase } from '@/config/supabase';
 import { getOrgScope } from '@/utils/orgScope';
-import { colors, gradients } from '@/config/colors';
+import { gradients } from '@/config/colors';
 import GlassCard from '@/components/ui/GlassCard';
 import DashboardSwitcher from '@/components/DashboardSwitcher';
 import { formatCurrency, formatDate } from '@/utils/formatters';
@@ -328,13 +328,13 @@ export default function AdminDashboardPage() {
   const getStatusColor = (status: string) => {
     switch (status) {
       case 'approved':
-        return colors.statusPaid;
+        return tk.mint;
       case 'rejected':
-        return colors.statusUnpaid;
+        return tk.danger;
       case 'pending':
-        return colors.warning;
+        return tk.amber;
       default:
-        return colors.textSecondary;
+        return tk.textSec;
     }
   };
 
@@ -532,12 +532,12 @@ export default function AdminDashboardPage() {
                 <GlassCard className="p-4">
                   <div className="flex items-center gap-3">
                     <div className="w-12 h-12 rounded-lg flex items-center justify-center"
-                         style={{ background: `linear-gradient(135deg, ${colors.primary}30, ${colors.primary}10)` }}>
-                      <Building2 className="w-6 h-6" style={{ color: colors.primary }} />
+                         style={{ background: `linear-gradient(135deg, ${tk.primary}30, ${tk.primary}10)` }}>
+                      <Building2 className="w-6 h-6" style={{ color: tk.primary }} />
                     </div>
                     <div>
-                      <p className="text-sm font-semibold text-white">Groups</p>
-                      <p className="text-xs" style={{ color: colors.textSecondary }}>Faculties & Classes</p>
+                      <p className="text-sm font-semibold">Groups</p>
+                      <p className="text-xs" style={{ color: tk.textSec }}>Faculties & Classes</p>
                     </div>
                   </div>
                 </GlassCard>
@@ -547,12 +547,12 @@ export default function AdminDashboardPage() {
                 <GlassCard className="p-4">
                   <div className="flex items-center gap-3">
                     <div className="w-12 h-12 rounded-lg flex items-center justify-center"
-                         style={{ background: `linear-gradient(135deg, ${colors.accentMint}30, ${colors.accentMint}10)` }}>
-                      <Calendar className="w-6 h-6" style={{ color: colors.accentMint }} />
+                         style={{ background: `linear-gradient(135deg, ${tk.mint}30, ${tk.mint}10)` }}>
+                      <Calendar className="w-6 h-6" style={{ color: tk.mint }} />
                     </div>
                     <div>
-                      <p className="text-sm font-semibold text-white">Academic Calendar</p>
-                      <p className="text-xs" style={{ color: colors.textSecondary }}>Sessions & Terms</p>
+                      <p className="text-sm font-semibold">Academic Calendar</p>
+                      <p className="text-xs" style={{ color: tk.textSec }}>Sessions & Terms</p>
                     </div>
                   </div>
                 </GlassCard>
@@ -578,29 +578,29 @@ export default function AdminDashboardPage() {
                 {/* Gradient border on hover */}
                 <div className="absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-none rounded-xl"
                      style={{ 
-                       background: `linear-gradient(135deg, ${colors.primary}20, transparent)`,
-                       border: `1px solid ${colors.primary}40`
+                       background: `linear-gradient(135deg, ${tk.primary}20, transparent)`,
+                       border: `1px solid ${tk.primary}40`
                      }} />
                 
                 {/* Background Icon */}
                 <div className="absolute -bottom-4 -right-4 w-24 h-24 opacity-10 group-hover:opacity-20 transition-opacity">
-                  <Users className="w-full h-full" style={{ color: colors.primary }} />
+                  <Users className="w-full h-full" style={{ color: tk.primary }} />
                 </div>
                 
                 <div className="flex items-center justify-between relative z-10">
                   <div>
-                    <p className="text-sm mb-1 flex items-center gap-2" style={{ color: colors.textSecondary }}>
+                    <p className="text-sm mb-1 flex items-center gap-2" style={{ color: tk.textSec }}>
                       Total Students
-                      <ChevronRight className="w-3 h-3 opacity-0 group-hover:opacity-100 transition-opacity" style={{ color: colors.primary }} />
+                      <ChevronRight className="w-3 h-3 opacity-0 group-hover:opacity-100 transition-opacity" style={{ color: tk.primary }} />
                     </p>
-                    <p className="text-3xl font-bold text-white">
+                    <p className="text-3xl font-bold">
                       <AnimatedCounter value={stats.totalStudents} />
                     </p>
-                    <p className="text-xs mt-1" style={{ color: colors.accentMint }}>Active members</p>
+                    <p className="text-xs mt-1" style={{ color: tk.mint }}>Active members</p>
                   </div>
                   <div className="w-14 h-14 rounded-xl flex items-center justify-center transition-all group-hover:scale-110"
-                       style={{ background: `linear-gradient(135deg, ${colors.primary}30, ${colors.primary}10)` }}>
-                    <Users className="w-7 h-7" style={{ color: colors.primary }} />
+                       style={{ background: `linear-gradient(135deg, ${tk.primary}30, ${tk.primary}10)` }}>
+                    <Users className="w-7 h-7" style={{ color: tk.primary }} />
                   </div>
                 </div>
               </GlassCard>
@@ -618,34 +618,34 @@ export default function AdminDashboardPage() {
               <GlassCard className="relative overflow-hidden group">
                 <div className="absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-none rounded-xl"
                      style={{ 
-                       background: `linear-gradient(135deg, ${colors.warning}20, transparent)`,
-                       border: `1px solid ${colors.warning}40`
+                       background: `linear-gradient(135deg, ${tk.amber}20, transparent)`,
+                       border: `1px solid ${tk.amber}40`
                      }} />
                 
                 <div className="absolute -bottom-4 -right-4 w-24 h-24 opacity-10 group-hover:opacity-20 transition-opacity">
-                  <Clock className="w-full h-full" style={{ color: colors.warning }} />
+                  <Clock className="w-full h-full" style={{ color: tk.amber }} />
                 </div>
                 
                 {/* Pulsing indicator for pending */}
                 {stats.pendingReview > 0 && (
                   <div className="absolute top-3 right-3 w-3 h-3 rounded-full animate-pulse"
-                       style={{ background: colors.warning, boxShadow: `0 0 8px ${colors.warning}` }} />
+                       style={{ background: tk.amber, boxShadow: `0 0 8px ${tk.amber}` }} />
                 )}
                 
                 <div className="flex items-center justify-between relative z-10">
                   <div>
-                    <p className="text-sm mb-1 flex items-center gap-2" style={{ color: colors.textSecondary }}>
+                    <p className="text-sm mb-1 flex items-center gap-2" style={{ color: tk.textSec }}>
                       Pending Review
-                      <ChevronRight className="w-3 h-3 opacity-0 group-hover:opacity-100 transition-opacity" style={{ color: colors.warning }} />
+                      <ChevronRight className="w-3 h-3 opacity-0 group-hover:opacity-100 transition-opacity" style={{ color: tk.amber }} />
                     </p>
-                    <p className="text-3xl font-bold" style={{ color: colors.warning }}>
+                    <p className="text-3xl font-bold" style={{ color: tk.amber }}>
                       <AnimatedCounter value={stats.pendingReview} />
                     </p>
-                    <p className="text-xs mt-1" style={{ color: colors.textSecondary }}>Awaiting action</p>
+                    <p className="text-xs mt-1" style={{ color: tk.textSec }}>Awaiting action</p>
                   </div>
                   <div className="w-14 h-14 rounded-xl flex items-center justify-center transition-all group-hover:scale-110"
-                       style={{ background: `linear-gradient(135deg, ${colors.warning}30, ${colors.warning}10)` }}>
-                    <Clock className="w-7 h-7" style={{ color: colors.warning }} />
+                       style={{ background: `linear-gradient(135deg, ${tk.amber}30, ${tk.amber}10)` }}>
+                    <Clock className="w-7 h-7" style={{ color: tk.amber }} />
                   </div>
                 </div>
               </GlassCard>
@@ -663,28 +663,28 @@ export default function AdminDashboardPage() {
               <GlassCard className="relative overflow-hidden group">
                 <div className="absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-none rounded-xl"
                      style={{ 
-                       background: `linear-gradient(135deg, ${colors.statusPaid}20, transparent)`,
-                       border: `1px solid ${colors.statusPaid}40`
+                       background: `linear-gradient(135deg, ${tk.mint}20, transparent)`,
+                       border: `1px solid ${tk.mint}40`
                      }} />
                 
                 <div className="absolute -bottom-4 -right-4 w-24 h-24 opacity-10 group-hover:opacity-20 transition-opacity">
-                  <Wallet className="w-full h-full" style={{ color: colors.statusPaid }} />
+                  <Wallet className="w-full h-full" style={{ color: tk.mint }} />
                 </div>
                 
                 <div className="flex items-center justify-between relative z-10">
                   <div>
-                    <p className="text-sm mb-1 flex items-center gap-2" style={{ color: colors.textSecondary }}>
+                    <p className="text-sm mb-1 flex items-center gap-2" style={{ color: tk.textSec }}>
                       Total Collected
-                      <TrendingUp className="w-3 h-3" style={{ color: colors.statusPaid }} />
+                      <TrendingUp className="w-3 h-3" style={{ color: tk.mint }} />
                     </p>
-                    <PrivacyMask><p className="text-2xl font-bold text-white">
+                    <PrivacyMask><p className="text-2xl font-bold">
                       {formatCurrency(stats.totalCollected)}
                     </p></PrivacyMask>
-                    <p className="text-xs mt-1" style={{ color: colors.statusPaid }}>Revenue to date</p>
+                    <p className="text-xs mt-1" style={{ color: tk.mint }}>Revenue to date</p>
                   </div>
                   <div className="w-14 h-14 rounded-xl flex items-center justify-center transition-all group-hover:scale-110"
-                       style={{ background: `linear-gradient(135deg, ${colors.statusPaid}30, ${colors.statusPaid}10)` }}>
-                    <Wallet className="w-7 h-7" style={{ color: colors.statusPaid }} />
+                       style={{ background: `linear-gradient(135deg, ${tk.mint}30, ${tk.mint}10)` }}>
+                    <Wallet className="w-7 h-7" style={{ color: tk.mint }} />
                   </div>
                 </div>
               </GlassCard>
@@ -702,28 +702,28 @@ export default function AdminDashboardPage() {
               <GlassCard className="relative overflow-hidden group">
                 <div className="absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-none rounded-xl"
                      style={{ 
-                       background: `linear-gradient(135deg, ${colors.accentMint}20, transparent)`,
-                       border: `1px solid ${colors.accentMint}40`
+                       background: `linear-gradient(135deg, ${tk.mint}20, transparent)`,
+                       border: `1px solid ${tk.mint}40`
                      }} />
                 
                 <div className="absolute -bottom-4 -right-4 w-24 h-24 opacity-10 group-hover:opacity-20 transition-opacity">
-                  <FileText className="w-full h-full" style={{ color: colors.accentMint }} />
+                  <FileText className="w-full h-full" style={{ color: tk.mint }} />
                 </div>
                 
                 <div className="flex items-center justify-between relative z-10">
                   <div>
-                    <p className="text-sm mb-1 flex items-center gap-2" style={{ color: colors.textSecondary }}>
+                    <p className="text-sm mb-1 flex items-center gap-2" style={{ color: tk.textSec }}>
                       Active Payments
-                      <ChevronRight className="w-3 h-3 opacity-0 group-hover:opacity-100 transition-opacity" style={{ color: colors.accentMint }} />
+                      <ChevronRight className="w-3 h-3 opacity-0 group-hover:opacity-100 transition-opacity" style={{ color: tk.mint }} />
                     </p>
-                    <p className="text-3xl font-bold text-white">
+                    <p className="text-3xl font-bold">
                       <AnimatedCounter value={stats.totalPaymentTypes} />
                     </p>
-                    <p className="text-xs mt-1" style={{ color: colors.accentMint }}>Payment types</p>
+                    <p className="text-xs mt-1" style={{ color: tk.mint }}>Payment types</p>
                   </div>
                   <div className="w-14 h-14 rounded-xl flex items-center justify-center transition-all group-hover:scale-110"
-                       style={{ background: `linear-gradient(135deg, ${colors.accentMint}30, ${colors.accentMint}10)` }}>
-                    <FileText className="w-7 h-7" style={{ color: colors.accentMint }} />
+                       style={{ background: `linear-gradient(135deg, ${tk.mint}30, ${tk.mint}10)` }}>
+                    <FileText className="w-7 h-7" style={{ color: tk.mint }} />
                   </div>
                 </div>
               </GlassCard>
@@ -739,25 +739,25 @@ export default function AdminDashboardPage() {
               <GlassCard className="relative overflow-hidden group">
                 <div className="absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-none rounded-xl"
                      style={{ 
-                       background: `linear-gradient(135deg, ${colors.statusPaid}20, transparent)`,
-                       border: `1px solid ${colors.statusPaid}40`
+                       background: `linear-gradient(135deg, ${tk.mint}20, transparent)`,
+                       border: `1px solid ${tk.mint}40`
                      }} />
                 
                 <div className="absolute -bottom-4 -right-4 w-24 h-24 opacity-10 group-hover:opacity-20 transition-opacity">
-                  <CheckCircle className="w-full h-full" style={{ color: colors.statusPaid }} />
+                  <CheckCircle className="w-full h-full" style={{ color: tk.mint }} />
                 </div>
                 
                 <div className="flex items-center justify-between relative z-10">
                   <div>
-                    <p className="text-sm mb-1" style={{ color: colors.textSecondary }}>Approved Today</p>
-                    <p className="text-3xl font-bold" style={{ color: colors.statusPaid }}>
+                    <p className="text-sm mb-1" style={{ color: tk.textSec }}>Approved Today</p>
+                    <p className="text-3xl font-bold" style={{ color: tk.mint }}>
                       <AnimatedCounter value={stats.approvedToday} />
                     </p>
-                    <p className="text-xs mt-1" style={{ color: colors.textSecondary }}>Today's activity</p>
+                    <p className="text-xs mt-1" style={{ color: tk.textSec }}>Today's activity</p>
                   </div>
                   <div className="w-14 h-14 rounded-xl flex items-center justify-center transition-all group-hover:scale-110"
-                       style={{ background: `linear-gradient(135deg, ${colors.statusPaid}30, ${colors.statusPaid}10)` }}>
-                    <CheckCircle className="w-7 h-7" style={{ color: colors.statusPaid }} />
+                       style={{ background: `linear-gradient(135deg, ${tk.mint}30, ${tk.mint}10)` }}>
+                    <CheckCircle className="w-7 h-7" style={{ color: tk.mint }} />
                   </div>
                 </div>
               </GlassCard>
@@ -773,25 +773,25 @@ export default function AdminDashboardPage() {
               <GlassCard className="relative overflow-hidden group">
                 <div className="absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-none rounded-xl"
                      style={{ 
-                       background: `linear-gradient(135deg, ${colors.statusUnpaid}20, transparent)`,
-                       border: `1px solid ${colors.statusUnpaid}40`
+                       background: `linear-gradient(135deg, ${tk.danger}20, transparent)`,
+                       border: `1px solid ${tk.danger}40`
                      }} />
                 
                 <div className="absolute -bottom-4 -right-4 w-24 h-24 opacity-10 group-hover:opacity-20 transition-opacity">
-                  <XCircle className="w-full h-full" style={{ color: colors.statusUnpaid }} />
+                  <XCircle className="w-full h-full" style={{ color: tk.danger }} />
                 </div>
                 
                 <div className="flex items-center justify-between relative z-10">
                   <div>
-                    <p className="text-sm mb-1" style={{ color: colors.textSecondary }}>Rejected</p>
-                    <p className="text-3xl font-bold" style={{ color: colors.statusUnpaid }}>
+                    <p className="text-sm mb-1" style={{ color: tk.textSec }}>Rejected</p>
+                    <p className="text-3xl font-bold" style={{ color: tk.danger }}>
                       <AnimatedCounter value={stats.rejectedPayments} />
                     </p>
-                    <p className="text-xs mt-1" style={{ color: colors.textSecondary }}>Total rejected</p>
+                    <p className="text-xs mt-1" style={{ color: tk.textSec }}>Total rejected</p>
                   </div>
                   <div className="w-14 h-14 rounded-xl flex items-center justify-center transition-all group-hover:scale-110"
-                       style={{ background: `linear-gradient(135deg, ${colors.statusUnpaid}30, ${colors.statusUnpaid}10)` }}>
-                    <XCircle className="w-7 h-7" style={{ color: colors.statusUnpaid }} />
+                       style={{ background: `linear-gradient(135deg, ${tk.danger}30, ${tk.danger}10)` }}>
+                    <XCircle className="w-7 h-7" style={{ color: tk.danger }} />
                   </div>
                 </div>
               </GlassCard>
@@ -809,18 +809,18 @@ export default function AdminDashboardPage() {
             {/* Section Header with gradient accent */}
             <div 
               className="absolute top-0 left-0 w-full h-1 opacity-60"
-              style={{ background: `linear-gradient(90deg, ${colors.primary}, ${colors.accentMint}, transparent)` }}
+              style={{ background: `linear-gradient(90deg, ${tk.primary}, ${tk.mint}, transparent)` }}
             />
             
             <div className="flex items-center justify-between mb-6">
               <div className="flex items-center gap-3">
                 <div className="w-10 h-10 rounded-lg flex items-center justify-center"
-                     style={{ background: `linear-gradient(135deg, ${colors.primary}30, ${colors.primary}10)` }}>
-                  <Activity className="w-5 h-5" style={{ color: colors.primary }} />
+                     style={{ background: `linear-gradient(135deg, ${tk.primary}30, ${tk.primary}10)` }}>
+                  <Activity className="w-5 h-5" style={{ color: tk.primary }} />
                 </div>
                 <div>
-                  <h2 className="text-xl font-bold text-white">Recent Submissions</h2>
-                  <p className="text-xs" style={{ color: colors.textSecondary }}>Latest reviewed payments</p>
+                  <h2 className="text-xl font-bold">Recent Submissions</h2>
+                  <p className="text-xs" style={{ color: tk.textSec }}>Latest reviewed payments</p>
                 </div>
               </div>
               <motion.button
@@ -829,9 +829,9 @@ export default function AdminDashboardPage() {
                 onClick={() => setShowAllReviewsModal(true)}
                 className="flex items-center gap-2 text-sm font-medium px-4 py-2 rounded-lg transition-all"
                 style={{ 
-                  color: colors.primary,
-                  background: `${colors.primary}10`,
-                  border: `1px solid ${colors.primary}30`
+                  color: tk.primary,
+                  background: `${tk.primary}10`,
+                  border: `1px solid ${tk.primary}30`
                 }}
               >
                 View All
@@ -859,10 +859,10 @@ export default function AdminDashboardPage() {
                 >
                   <div className="w-20 h-20 rounded-full mx-auto mb-4 flex items-center justify-center"
                        style={{ background: 'rgba(255, 255, 255, 0.05)' }}>
-                    <AlertCircle className="w-10 h-10" style={{ color: colors.textSecondary }} />
+                    <AlertCircle className="w-10 h-10" style={{ color: tk.textSec }} />
                   </div>
-                  <p className="text-lg font-medium text-white mb-1">No Recent Activity</p>
-                  <p style={{ color: colors.textSecondary }}>Submissions will appear here once reviewed</p>
+                  <p className="text-lg font-medium mb-1">No Recent Activity</p>
+                  <p style={{ color: tk.textSec }}>Submissions will appear here once reviewed</p>
                 </motion.div>
               ) : (
                 <motion.div 
@@ -890,28 +890,28 @@ export default function AdminDashboardPage() {
                       <div className="flex items-center gap-3 sm:gap-4 flex-1">
                         <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-full flex items-center justify-center font-bold text-base sm:text-lg transition-transform group-hover:scale-110 shrink-0"
                              style={{ 
-                               background: `linear-gradient(135deg, ${colors.primary}40, ${colors.primary}20)`,
-                               color: colors.primary
+                               background: `linear-gradient(135deg, ${tk.primary}40, ${tk.primary}20)`,
+                               color: tk.primary
                              }}>
                           {payment.member?.full_name?.charAt(0) || '?'}
                         </div>
                         <div className="flex-1 min-w-0">
-                          <p className="text-white font-medium truncate text-sm sm:text-base">{payment.member?.full_name}</p>
-                          <p className="text-xs sm:text-sm truncate" style={{ color: colors.textSecondary }}>
+                          <p className="font-medium truncate text-sm sm:text-base">{payment.member?.full_name}</p>
+                          <p className="text-xs sm:text-sm truncate" style={{ color: tk.textSec }}>
                             {payment.payment_types?.name}
                           </p>
                           {/* Mobile: Show amount and date inline */}
                           <div className="flex items-center gap-2 mt-1 sm:hidden">
-                            <PrivacyMask><span className="text-white font-semibold text-sm">{formatCurrency(payment.amount)}</span></PrivacyMask>
-                            <span className="text-xs" style={{ color: colors.textSecondary }}>•</span>
-                            <span className="text-xs" style={{ color: colors.textSecondary }}>{formatDate(payment.created_at, 'short')}</span>
+                            <PrivacyMask><span className="font-semibold text-sm">{formatCurrency(payment.amount)}</span></PrivacyMask>
+                            <span className="text-xs" style={{ color: tk.textSec }}>•</span>
+                            <span className="text-xs" style={{ color: tk.textSec }}>{formatDate(payment.created_at, 'short')}</span>
                           </div>
                         </div>
                       </div>
                       <div className="flex items-center justify-between sm:justify-end gap-2 sm:gap-4 pl-13 sm:pl-0">
                         <div className="text-right hidden sm:block">
-                          <PrivacyMask><p className="text-white font-semibold">{formatCurrency(payment.amount)}</p></PrivacyMask>
-                          <p className="text-xs" style={{ color: colors.textSecondary }}>
+                          <PrivacyMask><p className="font-semibold">{formatCurrency(payment.amount)}</p></PrivacyMask>
+                          <p className="text-xs" style={{ color: tk.textSec }}>
                             {formatDate(payment.created_at, 'short')}
                           </p>
                         </div>
@@ -926,7 +926,7 @@ export default function AdminDashboardPage() {
                         <motion.div
                           whileHover={{ scale: 1.1 }}
                           className="p-2 sm:p-2.5 rounded-lg transition-all opacity-70 group-hover:opacity-100"
-                          style={{ background: `${colors.primary}20`, color: colors.primary }}
+                          style={{ background: `${tk.primary}20`, color: tk.primary }}
                           title="View Receipt"
                         >
                           <Eye className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
@@ -949,17 +949,17 @@ export default function AdminDashboardPage() {
           <GlassCard className="relative overflow-hidden">
             <div 
               className="absolute top-0 left-0 w-full h-1 opacity-60"
-              style={{ background: `linear-gradient(90deg, ${colors.accentMint}, ${colors.primary}, transparent)` }}
+              style={{ background: `linear-gradient(90deg, ${tk.mint}, ${tk.primary}, transparent)` }}
             />
             
             <div className="flex items-center gap-3 mb-6">
               <div className="w-10 h-10 rounded-lg flex items-center justify-center"
-                   style={{ background: `linear-gradient(135deg, ${colors.accentMint}30, ${colors.accentMint}10)` }}>
-                <Sparkles className="w-5 h-5" style={{ color: colors.accentMint }} />
+                   style={{ background: `linear-gradient(135deg, ${tk.mint}30, ${tk.mint}10)` }}>
+                <Sparkles className="w-5 h-5" style={{ color: tk.mint }} />
               </div>
               <div>
-                <h2 className="text-xl font-bold text-white">Quick Actions</h2>
-                <p className="text-xs" style={{ color: colors.textSecondary }}>Frequently used operations</p>
+                <h2 className="text-xl font-bold">Quick Actions</h2>
+                <p className="text-xs" style={{ color: tk.textSec }}>Frequently used operations</p>
               </div>
             </div>
             
@@ -971,17 +971,17 @@ export default function AdminDashboardPage() {
                 onClick={() => navigate('/admin/create-payment')}
                 className="flex items-center gap-3 p-4 rounded-xl transition-all group"
                 style={{ 
-                  background: `linear-gradient(135deg, ${colors.primary}15, ${colors.primary}05)`,
-                  border: `1px solid ${colors.primary}30`
+                  background: `linear-gradient(135deg, ${tk.primary}15, ${tk.primary}05)`,
+                  border: `1px solid ${tk.primary}30`
                 }}
               >
                 <div className="w-10 h-10 rounded-lg flex items-center justify-center transition-transform group-hover:scale-110"
-                     style={{ background: `${colors.primary}30` }}>
-                  <Plus className="w-5 h-5" style={{ color: colors.primary }} />
+                     style={{ background: `${tk.primary}30` }}>
+                  <Plus className="w-5 h-5" style={{ color: tk.primary }} />
                 </div>
                 <div className="text-left">
-                  <span className="text-white font-medium block">Create Payment</span>
-                  <span className="text-xs" style={{ color: colors.textSecondary }}>Add new payment type</span>
+                  <span className="font-medium block">Create Payment</span>
+                  <span className="text-xs" style={{ color: tk.textSec }}>Add new payment type</span>
                 </div>
               </motion.button>
               )}
@@ -998,12 +998,12 @@ export default function AdminDashboardPage() {
                 }}
               >
                 <div className="w-10 h-10 rounded-lg flex items-center justify-center transition-transform group-hover:scale-110"
-                     style={{ background: `${colors.accentMint}20` }}>
-                  <FileText className="w-5 h-5" style={{ color: colors.accentMint }} />
+                     style={{ background: `${tk.mint}20` }}>
+                  <FileText className="w-5 h-5" style={{ color: tk.mint }} />
                 </div>
                 <div className="text-left">
-                  <span className="text-white font-medium block">Manage Dues</span>
-                  <span className="text-xs" style={{ color: colors.textSecondary }}>Edit existing payment types</span>
+                  <span className="font-medium block">Manage Dues</span>
+                  <span className="text-xs" style={{ color: tk.textSec }}>Edit existing payment types</span>
                 </div>
               </motion.button>
               )}
@@ -1020,18 +1020,18 @@ export default function AdminDashboardPage() {
                 }}
               >
                 {stats.pendingReview > 0 && (
-                  <div className="absolute -top-1 -right-1 w-5 h-5 rounded-full flex items-center justify-center text-xs font-bold text-white"
-                       style={{ background: colors.warning }}>
+                  <div className="absolute -top-1 -right-1 w-5 h-5 rounded-full flex items-center justify-center text-xs font-bold"
+                       style={{ background: tk.amber }}>
                     {stats.pendingReview}
                   </div>
                 )}
                 <div className="w-10 h-10 rounded-lg flex items-center justify-center transition-transform group-hover:scale-110"
-                     style={{ background: `${colors.warning}20` }}>
-                  <Eye className="w-5 h-5" style={{ color: colors.warning }} />
+                     style={{ background: `${tk.amber}20` }}>
+                  <Eye className="w-5 h-5" style={{ color: tk.amber }} />
                 </div>
                 <div className="text-left">
-                  <span className="text-white font-medium block">Review Payments</span>
-                  <span className="text-xs" style={{ color: colors.textSecondary }}>Approve or reject submissions</span>
+                  <span className="font-medium block">Review Payments</span>
+                  <span className="text-xs" style={{ color: tk.textSec }}>Approve or reject submissions</span>
                 </div>
               </motion.button>
               )}
@@ -1048,12 +1048,12 @@ export default function AdminDashboardPage() {
                 }}
               >
                 <div className="w-10 h-10 rounded-lg flex items-center justify-center transition-transform group-hover:scale-110"
-                     style={{ background: `${colors.accentMint}20` }}>
-                  <Users className="w-5 h-5" style={{ color: colors.accentMint }} />
+                     style={{ background: `${tk.mint}20` }}>
+                  <Users className="w-5 h-5" style={{ color: tk.mint }} />
                 </div>
                 <div className="text-left">
-                  <span className="text-white font-medium block">Manage Students</span>
-                  <span className="text-xs" style={{ color: colors.textSecondary }}>View and edit student records</span>
+                  <span className="font-medium block">Manage Students</span>
+                  <span className="text-xs" style={{ color: tk.textSec }}>View and edit student records</span>
                 </div>
               </motion.button>
               )}
@@ -1070,12 +1070,12 @@ export default function AdminDashboardPage() {
                 }}
               >
                 <div className="w-10 h-10 rounded-lg flex items-center justify-center transition-transform group-hover:scale-110"
-                     style={{ background: `${colors.primary}20` }}>
-                  <BarChart3 className="w-5 h-5" style={{ color: colors.primary }} />
+                     style={{ background: `${tk.primary}20` }}>
+                  <BarChart3 className="w-5 h-5" style={{ color: tk.primary }} />
                 </div>
                 <div className="text-left">
-                  <span className="text-white font-medium block">Expenses</span>
-                  <span className="text-xs" style={{ color: colors.textSecondary }}>Track class expenditures</span>
+                  <span className="font-medium block">Expenses</span>
+                  <span className="text-xs" style={{ color: tk.textSec }}>Track class expenditures</span>
                 </div>
               </motion.button>
               )}
@@ -1092,12 +1092,12 @@ export default function AdminDashboardPage() {
                 }}
               >
                 <div className="w-10 h-10 rounded-lg flex items-center justify-center transition-transform group-hover:scale-110"
-                     style={{ background: `${colors.statusPaid}20` }}>
-                  <Edit className="w-5 h-5" style={{ color: colors.statusPaid }} />
+                     style={{ background: `${tk.mint}20` }}>
+                  <Edit className="w-5 h-5" style={{ color: tk.mint }} />
                 </div>
                 <div className="text-left">
-                  <span className="text-white font-medium block">Waive Payment</span>
-                  <span className="text-xs" style={{ color: colors.textSecondary }}>Grant payment exemptions</span>
+                  <span className="font-medium block">Waive Payment</span>
+                  <span className="text-xs" style={{ color: tk.textSec }}>Grant payment exemptions</span>
                 </div>
               </motion.button>
               )}
@@ -1109,17 +1109,17 @@ export default function AdminDashboardPage() {
                 onClick={() => navigate('/admin/donation-settings')}
                 className="flex items-center gap-3 p-4 rounded-xl transition-all group"
                 style={{ 
-                  background: `linear-gradient(135deg, ${colors.accentMint}10, transparent)`,
-                  border: `1px solid ${colors.accentMint}30`
+                  background: `linear-gradient(135deg, ${tk.mint}10, transparent)`,
+                  border: `1px solid ${tk.mint}30`
                 }}
               >
                 <div className="w-10 h-10 rounded-lg flex items-center justify-center transition-transform group-hover:scale-110"
-                     style={{ background: `${colors.accentMint}30` }}>
-                  <Heart className="w-5 h-5" style={{ color: colors.accentMint }} />
+                     style={{ background: `${tk.mint}30` }}>
+                  <Heart className="w-5 h-5" style={{ color: tk.mint }} />
                 </div>
                 <div className="text-left">
-                  <span className="text-white font-medium block">Public Donations</span>
-                  <span className="text-xs" style={{ color: colors.textSecondary }}>Manage contributions & settings</span>
+                  <span className="font-medium block">Public Donations</span>
+                  <span className="text-xs" style={{ color: tk.textSec }}>Manage contributions & settings</span>
                 </div>
               </motion.button>
               )}
@@ -1148,8 +1148,8 @@ export default function AdminDashboardPage() {
           transition={{ delay: 0.87 }}
         >
           <div className="space-y-2">
-            <h3 className="text-sm font-semibold px-1 flex items-center gap-2" style={{ color: colors.textSecondary }}>
-              <Bell size={16} style={{ color: colors.primary }} />
+            <h3 className="text-sm font-semibold px-1 flex items-center gap-2" style={{ color: tk.textSec }}>
+              <Bell size={16} style={{ color: tk.primary }} />
               Push Notifications
             </h3>
             <PushNotificationPrompt mode="settings" />
@@ -1166,7 +1166,7 @@ export default function AdminDashboardPage() {
             {/* Gradient top border for consistency */}
             <div 
               className="absolute top-0 left-0 w-full h-1"
-              style={{ background: `linear-gradient(90deg, ${colors.statusFailed}, ${colors.warning}, transparent)` }}
+              style={{ background: `linear-gradient(90deg, ${tk.danger}, ${tk.amber}, transparent)` }}
             />
             
             {/* Header */}
@@ -1174,31 +1174,31 @@ export default function AdminDashboardPage() {
               <div className="flex items-center gap-3">
                 <div className="w-12 h-12 rounded-xl flex items-center justify-center"
                      style={{ 
-                       background: `linear-gradient(135deg, ${colors.statusFailed}30, ${colors.statusFailed}10)`,
-                       border: `1px solid ${colors.statusFailed}40`,
-                       boxShadow: `0 4px 15px ${colors.statusFailed}20`
+                       background: `linear-gradient(135deg, ${tk.danger}30, ${tk.danger}10)`,
+                       border: `1px solid ${tk.danger}40`,
+                       boxShadow: `0 4px 15px ${tk.danger}20`
                      }}>
-                  <TrendingUp className="w-6 h-6" style={{ color: colors.statusFailed }} />
+                  <TrendingUp className="w-6 h-6" style={{ color: tk.danger }} />
                 </div>
                 <div>
                   <div className="flex items-center gap-2 mb-1">
-                    <h2 className="text-xl font-bold text-white">Recent Expenses</h2>
+                    <h2 className="text-xl font-bold">Recent Expenses</h2>
                     <span className="px-2 py-0.5 rounded-full text-[10px] font-bold uppercase"
-                          style={{ background: `${colors.statusFailed}30`, color: colors.statusFailed }}>
+                          style={{ background: `${tk.danger}30`, color: tk.danger }}>
                       {recentExpenses.length} Total
                     </span>
                   </div>
-                  <p className="text-xs" style={{ color: colors.textSecondary }}>Latest class expenditures</p>
+                  <p className="text-xs" style={{ color: tk.textSec }}>Latest class expenditures</p>
                 </div>
               </div>
               <motion.button
                 whileHover={{ scale: 1.02 }}
                 whileTap={{ scale: 0.98 }}
                 onClick={() => navigate('/admin/expenses')}
-                className="flex items-center justify-center gap-2 px-5 py-2.5 rounded-xl font-medium text-white transition-all shadow-lg"
+                className="flex items-center justify-center gap-2 px-5 py-2.5 rounded-xl font-medium transition-all shadow-lg"
                 style={{ 
-                  background: `linear-gradient(135deg, ${colors.statusFailed}, ${colors.primary})`,
-                  boxShadow: `0 4px 15px ${colors.statusFailed}40`
+                  background: `linear-gradient(135deg, ${tk.danger}, ${tk.primary})`,
+                  boxShadow: `0 4px 15px ${tk.danger}40`
                 }}
               >
                 <FileText className="w-4 h-4" />
@@ -1228,10 +1228,10 @@ export default function AdminDashboardPage() {
                 >
                   <div className="w-16 h-16 rounded-full mx-auto mb-4 flex items-center justify-center"
                        style={{ background: 'rgba(255, 255, 255, 0.05)' }}>
-                    <Wallet className="w-8 h-8" style={{ color: colors.textSecondary }} />
+                    <Wallet className="w-8 h-8" style={{ color: tk.textSec }} />
                   </div>
-                  <p className="text-white font-medium mb-1">No Expenses Recorded</p>
-                  <p className="text-sm" style={{ color: colors.textSecondary }}>
+                  <p className="font-medium mb-1">No Expenses Recorded</p>
+                  <p className="text-sm" style={{ color: tk.textSec }}>
                     Start tracking expenses in the expenses page
                   </p>
                 </motion.div>
@@ -1257,44 +1257,44 @@ export default function AdminDashboardPage() {
                         <div className="w-10 h-10 rounded-lg flex items-center justify-center shrink-0"
                              style={{ 
                                background: expense.status === 'approved' 
-                                 ? `${colors.statusPaid}20` 
+                                 ? `${tk.mint}20` 
                                  : expense.status === 'rejected' 
-                                 ? `${colors.statusUnpaid}20`
-                                 : `${colors.warning}20`
+                                 ? `${tk.danger}20`
+                                 : `${tk.amber}20`
                              }}>
-                          {expense.status === 'approved' && <CheckCircle className="w-5 h-5" style={{ color: colors.statusPaid }} />}
-                          {expense.status === 'rejected' && <XCircle className="w-5 h-5" style={{ color: colors.statusUnpaid }} />}
-                          {expense.status === 'pending' && <Clock className="w-5 h-5" style={{ color: colors.warning }} />}
+                          {expense.status === 'approved' && <CheckCircle className="w-5 h-5" style={{ color: tk.mint }} />}
+                          {expense.status === 'rejected' && <XCircle className="w-5 h-5" style={{ color: tk.danger }} />}
+                          {expense.status === 'pending' && <Clock className="w-5 h-5" style={{ color: tk.amber }} />}
                         </div>
                         <div className="flex-1 min-w-0">
-                          <p className="text-white font-medium text-sm truncate">{expense.title}</p>
+                          <p className="font-medium text-sm truncate">{expense.title}</p>
                           <div className="flex items-center gap-2 flex-wrap">
                             <span className="text-xs capitalize px-2 py-0.5 rounded-full"
-                                  style={{ background: 'rgba(255, 255, 255, 0.05)', color: colors.textSecondary }}>
+                                  style={{ background: 'rgba(255, 255, 255, 0.05)', color: tk.textSec }}>
                               {expense.category?.replace(/_/g, ' ') || 'Other'}
                             </span>
-                            <span className="text-xs" style={{ color: colors.textSecondary }}>
+                            <span className="text-xs" style={{ color: tk.textSec }}>
                               {formatDate(expense.expense_date, 'short')}
                             </span>
                           </div>
                         </div>
                       </div>
                       <div className="flex items-center gap-3">
-                        <PrivacyMask><p className="font-semibold text-sm" style={{ color: colors.statusFailed }}>
+                        <PrivacyMask><p className="font-semibold text-sm" style={{ color: tk.danger }}>
                           -{formatCurrency(expense.amount)}
                         </p></PrivacyMask>
                         <span className="px-2 py-1 rounded-full text-[10px] font-semibold capitalize"
                               style={{ 
                                 background: expense.status === 'approved' 
-                                  ? `${colors.statusPaid}20` 
+                                  ? `${tk.mint}20` 
                                   : expense.status === 'rejected' 
-                                  ? `${colors.statusUnpaid}20`
-                                  : `${colors.warning}20`,
+                                  ? `${tk.danger}20`
+                                  : `${tk.amber}20`,
                                 color: expense.status === 'approved' 
-                                  ? colors.statusPaid 
+                                  ? tk.mint 
                                   : expense.status === 'rejected' 
-                                  ? colors.statusUnpaid
-                                  : colors.warning
+                                  ? tk.danger
+                                  : tk.amber
                               }}>
                           {expense.status}
                         </span>
@@ -1308,7 +1308,7 @@ export default function AdminDashboardPage() {
             {/* Pagination */}
             {totalExpensePages > 1 && (
               <div className="flex items-center justify-between mt-4 pt-4 border-t border-white/10">
-                <p className="text-xs" style={{ color: colors.textSecondary }}>
+                <p className="text-xs" style={{ color: tk.textSec }}>
                   Page {expensesPage} of {totalExpensePages}
                 </p>
                 <div className="flex items-center gap-2">
@@ -1319,9 +1319,9 @@ export default function AdminDashboardPage() {
                     disabled={expensesPage === 1}
                     className="flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-medium transition-all disabled:opacity-40"
                     style={{
-                      background: expensesPage === 1 ? 'rgba(255, 255, 255, 0.03)' : `${colors.primary}20`,
-                      border: `1px solid ${expensesPage === 1 ? 'transparent' : colors.primary}40`,
-                      color: expensesPage === 1 ? colors.textSecondary : colors.primary,
+                      background: expensesPage === 1 ? 'rgba(255, 255, 255, 0.03)' : `${tk.primary}20`,
+                      border: `1px solid ${expensesPage === 1 ? 'transparent' : tk.primary}40`,
+                      color: expensesPage === 1 ? tk.textSec : tk.primary,
                     }}
                   >
                     <ChevronLeft className="w-3 h-3" />
@@ -1350,9 +1350,9 @@ export default function AdminDashboardPage() {
                           className="w-7 h-7 rounded-lg text-xs font-semibold transition-all"
                           style={{
                             background: expensesPage === page 
-                              ? `linear-gradient(135deg, ${colors.statusFailed}, ${colors.primary})`
+                              ? `linear-gradient(135deg, ${tk.danger}, ${tk.primary})`
                               : 'rgba(255, 255, 255, 0.05)',
-                            color: expensesPage === page ? 'white' : colors.textSecondary,
+                            color: expensesPage === page ? 'white' : tk.textSec,
                           }}
                         >
                           {page}
@@ -1368,9 +1368,9 @@ export default function AdminDashboardPage() {
                     disabled={expensesPage === totalExpensePages}
                     className="flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-medium transition-all disabled:opacity-40"
                     style={{
-                      background: expensesPage === totalExpensePages ? 'rgba(255, 255, 255, 0.03)' : `${colors.primary}20`,
-                      border: `1px solid ${expensesPage === totalExpensePages ? 'transparent' : colors.primary}40`,
-                      color: expensesPage === totalExpensePages ? colors.textSecondary : colors.primary,
+                      background: expensesPage === totalExpensePages ? 'rgba(255, 255, 255, 0.03)' : `${tk.primary}20`,
+                      border: `1px solid ${expensesPage === totalExpensePages ? 'transparent' : tk.primary}40`,
+                      color: expensesPage === totalExpensePages ? tk.textSec : tk.primary,
                     }}
                   >
                     Next
@@ -1405,25 +1405,25 @@ export default function AdminDashboardPage() {
                 <GlassCard className="p-0 overflow-hidden">
                   {/* Modal Header */}
                   <div className="relative p-6 border-b border-white/10"
-                       style={{ background: `linear-gradient(135deg, ${colors.primary}10, transparent)` }}>
+                       style={{ background: `linear-gradient(135deg, ${tk.primary}10, transparent)` }}>
                     <div 
                       className="absolute top-0 left-0 w-full h-1"
-                      style={{ background: `linear-gradient(90deg, ${colors.primary}, ${colors.accentMint}, transparent)` }}
+                      style={{ background: `linear-gradient(90deg, ${tk.primary}, ${tk.mint}, transparent)` }}
                     />
                     <div className="flex items-start justify-between">
                       <div className="flex items-center gap-4">
                         <div className="w-14 h-14 rounded-2xl flex items-center justify-center shadow-lg"
                              style={{ 
-                               background: `linear-gradient(135deg, ${colors.primary}40, ${colors.primary}20)`,
-                               border: `1px solid ${colors.primary}50`,
-                               boxShadow: `0 4px 15px ${colors.primary}30`
+                               background: `linear-gradient(135deg, ${tk.primary}40, ${tk.primary}20)`,
+                               border: `1px solid ${tk.primary}50`,
+                               boxShadow: `0 4px 15px ${tk.primary}30`
                              }}>
-                          <FileText className="w-7 h-7" style={{ color: colors.primary }} />
+                          <FileText className="w-7 h-7" style={{ color: tk.primary }} />
                         </div>
                         <div>
                           <div className="flex items-center gap-2 mb-1">
                             <span className="px-2 py-0.5 rounded-full text-[10px] font-bold uppercase"
-                                  style={{ background: `${colors.primary}30`, color: colors.primary }}>
+                                  style={{ background: `${tk.primary}30`, color: tk.primary }}>
                               Payment Receipt
                             </span>
                             <span className="px-2 py-0.5 rounded-full text-[10px] font-bold uppercase flex items-center gap-1"
@@ -1437,8 +1437,8 @@ export default function AdminDashboardPage() {
                               {selectedPayment.status}
                             </span>
                           </div>
-                          <h3 className="text-xl font-bold text-white">{selectedPayment.member?.full_name}</h3>
-                          <p className="text-sm flex items-center gap-2" style={{ color: colors.textSecondary }}>
+                          <h3 className="text-xl font-bold">{selectedPayment.member?.full_name}</h3>
+                          <p className="text-sm flex items-center gap-2" style={{ color: tk.textSec }}>
                             <Users className="w-4 h-4" />
                             {selectedPayment.member?.member_id}
                           </p>
@@ -1451,7 +1451,7 @@ export default function AdminDashboardPage() {
                         className="p-2 rounded-xl transition-colors"
                         style={{ background: 'rgba(255, 255, 255, 0.1)' }}
                       >
-                        <X size={20} style={{ color: colors.textSecondary }} />
+                        <X size={20} style={{ color: tk.textSec }} />
                       </motion.button>
                     </div>
                   </div>
@@ -1461,23 +1461,23 @@ export default function AdminDashboardPage() {
                     {/* Payment Details Grid */}
                     <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
                       <div className="p-4 rounded-xl text-center" 
-                           style={{ background: `linear-gradient(135deg, ${colors.primary}20, ${colors.primary}05)`, border: `1px solid ${colors.primary}30` }}>
-                        <p className="text-xs font-medium mb-1" style={{ color: colors.textSecondary }}>Amount</p>
-                        <PrivacyMask><p className="text-xl sm:text-2xl font-bold" style={{ color: colors.primary }}>
+                           style={{ background: `linear-gradient(135deg, ${tk.primary}20, ${tk.primary}05)`, border: `1px solid ${tk.primary}30` }}>
+                        <p className="text-xs font-medium mb-1" style={{ color: tk.textSec }}>Amount</p>
+                        <PrivacyMask><p className="text-xl sm:text-2xl font-bold" style={{ color: tk.primary }}>
                           {formatCurrency(selectedPayment.amount)}
                         </p></PrivacyMask>
                       </div>
                       <div className="p-4 rounded-xl text-center" 
                            style={{ background: 'rgba(255, 255, 255, 0.03)', border: '1px solid rgba(255, 255, 255, 0.08)' }}>
-                        <p className="text-xs font-medium mb-1" style={{ color: colors.textSecondary }}>Payment Type</p>
-                        <p className="text-white font-semibold text-sm sm:text-base">
+                        <p className="text-xs font-medium mb-1" style={{ color: tk.textSec }}>Payment Type</p>
+                        <p className="font-semibold text-sm sm:text-base">
                           {selectedPayment.payment_types?.name || 'N/A'}
                         </p>
                       </div>
                       <div className="p-4 rounded-xl text-center" 
                            style={{ background: 'rgba(255, 255, 255, 0.03)', border: '1px solid rgba(255, 255, 255, 0.08)' }}>
-                        <p className="text-xs font-medium mb-1" style={{ color: colors.textSecondary }}>Date Submitted</p>
-                        <p className="text-white font-medium text-sm">
+                        <p className="text-xs font-medium mb-1" style={{ color: tk.textSec }}>Date Submitted</p>
+                        <p className="font-medium text-sm">
                           {formatDate(selectedPayment.created_at, 'short')}
                         </p>
                       </div>
@@ -1486,7 +1486,7 @@ export default function AdminDashboardPage() {
                              background: `${getStatusColor(selectedPayment.status)}10`, 
                              border: `1px solid ${getStatusColor(selectedPayment.status)}30` 
                            }}>
-                        <p className="text-xs font-medium mb-1" style={{ color: colors.textSecondary }}>Status</p>
+                        <p className="text-xs font-medium mb-1" style={{ color: tk.textSec }}>Status</p>
                         <p className="font-semibold text-sm capitalize flex items-center justify-center gap-1"
                            style={{ color: getStatusColor(selectedPayment.status) }}>
                           {selectedPayment.status === 'approved' && <CheckCircle className="w-4 h-4" />}
@@ -1500,8 +1500,8 @@ export default function AdminDashboardPage() {
                     {/* Transaction Reference */}
                     <div className="p-4 rounded-xl" 
                          style={{ background: 'rgba(255, 255, 255, 0.03)', border: '1px solid rgba(255, 255, 255, 0.08)' }}>
-                      <p className="text-xs font-medium mb-2" style={{ color: colors.textSecondary }}>Transaction Reference</p>
-                      <p className="text-white font-mono text-sm sm:text-base break-all bg-black/20 px-3 py-2 rounded-lg">
+                      <p className="text-xs font-medium mb-2" style={{ color: tk.textSec }}>Transaction Reference</p>
+                      <p className="font-mono text-sm sm:text-base break-all bg-black/20 px-3 py-2 rounded-lg">
                         {selectedPayment.transaction_ref}
                       </p>
                     </div>
@@ -1509,9 +1509,9 @@ export default function AdminDashboardPage() {
                     {/* Notes if available */}
                     {selectedPayment.notes && (
                       <div className="p-4 rounded-xl" 
-                           style={{ background: `${colors.accentMint}08`, border: `1px solid ${colors.accentMint}20` }}>
-                        <p className="text-xs font-medium mb-2" style={{ color: colors.accentMint }}>Payment Notes</p>
-                        <p className="text-white text-sm whitespace-pre-wrap leading-relaxed">
+                           style={{ background: `${tk.mint}08`, border: `1px solid ${tk.mint}20` }}>
+                        <p className="text-xs font-medium mb-2" style={{ color: tk.mint }}>Payment Notes</p>
+                        <p className="text-sm whitespace-pre-wrap leading-relaxed">
                           {selectedPayment.notes}
                         </p>
                       </div>
@@ -1519,7 +1519,7 @@ export default function AdminDashboardPage() {
 
                     {/* Receipt Image/PDF Section */}
                     <div>
-                      <p className="text-xs font-semibold uppercase tracking-wider mb-3" style={{ color: colors.textSecondary }}>
+                      <p className="text-xs font-semibold uppercase tracking-wider mb-3" style={{ color: tk.textSec }}>
                         Receipt Attachment
                       </p>
                       <div className="rounded-xl overflow-hidden" 
@@ -1528,20 +1528,20 @@ export default function AdminDashboardPage() {
                           selectedPayment.receipt_url.endsWith('.pdf') ? (
                             <div className="p-8 text-center">
                               <div className="w-16 h-16 rounded-xl mx-auto mb-4 flex items-center justify-center"
-                                   style={{ background: `${colors.primary}20` }}>
-                                <FileText size={32} style={{ color: colors.primary }} />
+                                   style={{ background: `${tk.primary}20` }}>
+                                <FileText size={32} style={{ color: tk.primary }} />
                               </div>
-                              <p className="text-white font-medium mb-4">PDF Receipt Document</p>
+                              <p className="font-medium mb-4">PDF Receipt Document</p>
                               <motion.a
                                 whileHover={{ scale: 1.02 }}
                                 whileTap={{ scale: 0.98 }}
                                 href={selectedPayment.receipt_url}
                                 target="_blank"
                                 rel="noopener noreferrer"
-                                className="inline-flex items-center gap-2 px-6 py-3 rounded-xl font-medium text-white transition-all shadow-lg"
+                                className="inline-flex items-center gap-2 px-6 py-3 rounded-xl font-medium transition-all shadow-lg"
                                 style={{ 
                                   background: gradients.primary,
-                                  boxShadow: `0 4px 15px ${colors.primary}30`
+                                  boxShadow: `0 4px 15px ${tk.primary}30`
                                 }}
                               >
                                 <ExternalLink size={18} />
@@ -1562,7 +1562,7 @@ export default function AdminDashboardPage() {
                                 target="_blank"
                                 rel="noopener noreferrer"
                                 className="flex items-center justify-center gap-2 p-3 text-sm font-medium transition-colors border-t border-white/10"
-                                style={{ color: colors.primary }}
+                                style={{ color: tk.primary }}
                               >
                                 <ExternalLink size={16} />
                                 View Full Size
@@ -1573,10 +1573,10 @@ export default function AdminDashboardPage() {
                           <div className="p-8 text-center">
                             <div className="w-16 h-16 rounded-full mx-auto mb-4 flex items-center justify-center"
                                  style={{ background: 'rgba(255, 255, 255, 0.05)' }}>
-                              <AlertCircle size={32} style={{ color: colors.textSecondary }} />
+                              <AlertCircle size={32} style={{ color: tk.textSec }} />
                             </div>
-                            <p className="text-white font-medium mb-1">No Receipt Uploaded</p>
-                            <p className="text-sm" style={{ color: colors.textSecondary }}>
+                            <p className="font-medium mb-1">No Receipt Uploaded</p>
+                            <p className="text-sm" style={{ color: tk.textSec }}>
                               This payment doesn't have an attached receipt
                             </p>
                           </div>
@@ -1615,17 +1615,17 @@ export default function AdminDashboardPage() {
                   <div className="relative p-4 sm:p-6 border-b border-white/10">
                     <div 
                       className="absolute top-0 left-0 w-full h-1"
-                      style={{ background: `linear-gradient(90deg, ${colors.primary}, ${colors.accentMint}, transparent)` }}
+                      style={{ background: `linear-gradient(90deg, ${tk.primary}, ${tk.mint}, transparent)` }}
                     />
                     <div className="flex items-center justify-between">
                       <div className="flex items-center gap-2 sm:gap-3">
                         <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-xl flex items-center justify-center shrink-0"
-                             style={{ background: `linear-gradient(135deg, ${colors.primary}30, ${colors.primary}10)` }}>
-                          <Receipt className="w-5 h-5 sm:w-6 sm:h-6" style={{ color: colors.primary }} />
+                             style={{ background: `linear-gradient(135deg, ${tk.primary}30, ${tk.primary}10)` }}>
+                          <Receipt className="w-5 h-5 sm:w-6 sm:h-6" style={{ color: tk.primary }} />
                         </div>
                         <div>
-                          <h3 className="text-lg sm:text-xl font-bold text-white">All Payment Reviews</h3>
-                          <p className="text-xs sm:text-sm" style={{ color: colors.textSecondary }}>
+                          <h3 className="text-lg sm:text-xl font-bold">All Payment Reviews</h3>
+                          <p className="text-xs sm:text-sm" style={{ color: tk.textSec }}>
                             {filteredReviews.length} total submissions
                           </p>
                         </div>
@@ -1637,7 +1637,7 @@ export default function AdminDashboardPage() {
                         className="p-1.5 sm:p-2 rounded-lg transition-colors"
                         style={{ background: 'rgba(255, 255, 255, 0.1)' }}
                       >
-                        <X className="w-4 h-4 sm:w-5 sm:h-5" style={{ color: colors.textSecondary }} />
+                        <X className="w-4 h-4 sm:w-5 sm:h-5" style={{ color: tk.textSec }} />
                       </motion.button>
                     </div>
 
@@ -1645,9 +1645,9 @@ export default function AdminDashboardPage() {
                     <div className="flex flex-wrap gap-1.5 sm:gap-2 mt-4">
                       {[
                         { key: 'all', label: 'All', count: allPayments.length },
-                        { key: 'pending', label: 'Pending', count: pendingCount, color: colors.warning },
-                        { key: 'approved', label: 'Approved', count: approvedCount, color: colors.statusPaid },
-                        { key: 'rejected', label: 'Rejected', count: rejectedCount, color: colors.statusUnpaid },
+                        { key: 'pending', label: 'Pending', count: pendingCount, color: tk.amber },
+                        { key: 'approved', label: 'Approved', count: approvedCount, color: tk.mint },
+                        { key: 'rejected', label: 'Rejected', count: rejectedCount, color: tk.danger },
                       ].map((filter) => (
                         <motion.button
                           key={filter.key}
@@ -1660,10 +1660,10 @@ export default function AdminDashboardPage() {
                           className="flex items-center gap-1 sm:gap-2 px-2.5 sm:px-4 py-1.5 sm:py-2 rounded-lg text-xs sm:text-sm font-medium transition-all"
                           style={{
                             background: reviewsFilter === filter.key 
-                              ? `linear-gradient(135deg, ${filter.color || colors.primary}30, ${filter.color || colors.primary}10)` 
+                              ? `linear-gradient(135deg, ${filter.color || tk.primary}30, ${filter.color || tk.primary}10)` 
                               : 'rgba(255, 255, 255, 0.05)',
-                            border: `1px solid ${reviewsFilter === filter.key ? (filter.color || colors.primary) + '50' : 'rgba(255, 255, 255, 0.1)'}`,
-                            color: reviewsFilter === filter.key ? (filter.color || colors.primary) : colors.textSecondary,
+                            border: `1px solid ${reviewsFilter === filter.key ? (filter.color || tk.primary) + '50' : 'rgba(255, 255, 255, 0.1)'}`,
+                            color: reviewsFilter === filter.key ? (filter.color || tk.primary) : tk.textSec,
                           }}
                         >
                           {filter.label}
@@ -1682,10 +1682,10 @@ export default function AdminDashboardPage() {
                       <div className="text-center py-12">
                         <div className="w-16 h-16 rounded-full mx-auto mb-4 flex items-center justify-center"
                              style={{ background: 'rgba(255, 255, 255, 0.05)' }}>
-                          <AlertCircle className="w-8 h-8" style={{ color: colors.textSecondary }} />
+                          <AlertCircle className="w-8 h-8" style={{ color: tk.textSec }} />
                         </div>
-                        <p className="text-white font-medium mb-1">No Payments Found</p>
-                        <p className="text-sm" style={{ color: colors.textSecondary }}>
+                        <p className="font-medium mb-1">No Payments Found</p>
+                        <p className="text-sm" style={{ color: tk.textSec }}>
                           No {reviewsFilter !== 'all' ? reviewsFilter : ''} payments to display
                         </p>
                       </div>
@@ -1717,28 +1717,28 @@ export default function AdminDashboardPage() {
                                 {payment.member?.full_name?.charAt(0) || '?'}
                               </div>
                               <div className="flex-1 min-w-0">
-                                <p className="text-white font-medium truncate text-sm sm:text-base">{payment.member?.full_name}</p>
+                                <p className="font-medium truncate text-sm sm:text-base">{payment.member?.full_name}</p>
                                 <div className="flex items-center gap-2 flex-wrap">
-                                  <p className="text-xs sm:text-sm truncate" style={{ color: colors.textSecondary }}>
+                                  <p className="text-xs sm:text-sm truncate" style={{ color: tk.textSec }}>
                                     {payment.payment_types?.name}
                                   </p>
                                   <span className="text-[10px] sm:text-xs px-1.5 sm:px-2 py-0.5 rounded-full hidden xs:inline"
-                                        style={{ background: 'rgba(255, 255, 255, 0.05)', color: colors.textSecondary }}>
+                                        style={{ background: 'rgba(255, 255, 255, 0.05)', color: tk.textSec }}>
                                     {payment.member?.member_id}
                                   </span>
                                 </div>
                                 {/* Mobile: Show amount and date inline */}
                                 <div className="flex items-center gap-2 mt-1 sm:hidden">
-                                  <PrivacyMask><span className="text-white font-semibold text-sm">{formatCurrency(payment.amount)}</span></PrivacyMask>
-                                  <span className="text-xs" style={{ color: colors.textSecondary }}>•</span>
-                                  <span className="text-xs" style={{ color: colors.textSecondary }}>{formatDate(payment.created_at, 'short')}</span>
+                                  <PrivacyMask><span className="font-semibold text-sm">{formatCurrency(payment.amount)}</span></PrivacyMask>
+                                  <span className="text-xs" style={{ color: tk.textSec }}>•</span>
+                                  <span className="text-xs" style={{ color: tk.textSec }}>{formatDate(payment.created_at, 'short')}</span>
                                 </div>
                               </div>
                             </div>
                             <div className="flex items-center justify-between sm:justify-end gap-2 sm:gap-3 pl-13 sm:pl-0">
                               <div className="text-right hidden sm:block">
-                                <PrivacyMask><p className="text-white font-semibold">{formatCurrency(payment.amount)}</p></PrivacyMask>
-                                <p className="text-xs flex items-center gap-1" style={{ color: colors.textSecondary }}>
+                                <PrivacyMask><p className="font-semibold">{formatCurrency(payment.amount)}</p></PrivacyMask>
+                                <p className="text-xs flex items-center gap-1" style={{ color: tk.textSec }}>
                                   <Calendar className="w-3 h-3" />
                                   {formatDate(payment.created_at, 'short')}
                                 </p>
@@ -1757,7 +1757,7 @@ export default function AdminDashboardPage() {
                               <motion.div
                                 whileHover={{ scale: 1.1 }}
                                 className="p-1.5 sm:p-2 rounded-lg opacity-60 group-hover:opacity-100 transition-opacity"
-                                style={{ background: `${colors.primary}20`, color: colors.primary }}
+                                style={{ background: `${tk.primary}20`, color: tk.primary }}
                               >
                                 <Eye className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
                               </motion.div>
@@ -1772,7 +1772,7 @@ export default function AdminDashboardPage() {
                   {totalReviewPages > 1 && (
                     <div className="p-3 sm:p-4 border-t border-white/10">
                       <div className="flex flex-col sm:flex-row items-center justify-between gap-3">
-                        <p className="text-xs sm:text-sm text-center sm:text-left" style={{ color: colors.textSecondary }}>
+                        <p className="text-xs sm:text-sm text-center sm:text-left" style={{ color: tk.textSec }}>
                           Page {reviewsPage} of {totalReviewPages} • <span className="hidden xs:inline">Showing</span> {paginatedReviews.length} of {filteredReviews.length}
                         </p>
                         <div className="flex items-center gap-1 sm:gap-2">
@@ -1783,9 +1783,9 @@ export default function AdminDashboardPage() {
                             disabled={reviewsPage === 1}
                             className="flex items-center gap-0.5 sm:gap-1 px-2 sm:px-3 py-1.5 sm:py-2 rounded-lg text-xs sm:text-sm font-medium transition-all disabled:opacity-40"
                             style={{
-                              background: reviewsPage === 1 ? 'rgba(255, 255, 255, 0.03)' : `${colors.primary}20`,
-                              border: `1px solid ${reviewsPage === 1 ? 'transparent' : colors.primary}40`,
-                              color: reviewsPage === 1 ? colors.textSecondary : colors.primary,
+                              background: reviewsPage === 1 ? 'rgba(255, 255, 255, 0.03)' : `${tk.primary}20`,
+                              border: `1px solid ${reviewsPage === 1 ? 'transparent' : tk.primary}40`,
+                              color: reviewsPage === 1 ? tk.textSec : tk.primary,
                             }}
                           >
                             <ChevronLeft className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
@@ -1816,7 +1816,7 @@ export default function AdminDashboardPage() {
                                     background: reviewsPage === page 
                                       ? gradients.primary
                                       : 'rgba(255, 255, 255, 0.05)',
-                                    color: reviewsPage === page ? 'white' : colors.textSecondary,
+                                    color: reviewsPage === page ? 'white' : tk.textSec,
                                   }}
                                 >
                                   {page}
@@ -1832,9 +1832,9 @@ export default function AdminDashboardPage() {
                             disabled={reviewsPage === totalReviewPages}
                             className="flex items-center gap-0.5 sm:gap-1 px-2 sm:px-3 py-1.5 sm:py-2 rounded-lg text-xs sm:text-sm font-medium transition-all disabled:opacity-40"
                             style={{
-                              background: reviewsPage === totalReviewPages ? 'rgba(255, 255, 255, 0.03)' : `${colors.primary}20`,
-                              border: `1px solid ${reviewsPage === totalReviewPages ? 'transparent' : colors.primary}40`,
-                              color: reviewsPage === totalReviewPages ? colors.textSecondary : colors.primary,
+                              background: reviewsPage === totalReviewPages ? 'rgba(255, 255, 255, 0.03)' : `${tk.primary}20`,
+                              border: `1px solid ${reviewsPage === totalReviewPages ? 'transparent' : tk.primary}40`,
+                              color: reviewsPage === totalReviewPages ? tk.textSec : tk.primary,
                             }}
                           >
                             <span className="hidden xs:inline">Next</span>
@@ -1854,10 +1854,10 @@ export default function AdminDashboardPage() {
                         setShowAllReviewsModal(false);
                         navigate('/admin/review');
                       }}
-                      className="w-full flex items-center justify-center gap-2 py-3 rounded-xl font-medium text-white transition-all"
+                      className="w-full flex items-center justify-center gap-2 py-3 rounded-xl font-medium transition-all"
                       style={{ 
                         background: gradients.primary,
-                        boxShadow: `0 4px 15px ${colors.primary}30`
+                        boxShadow: `0 4px 15px ${tk.primary}30`
                       }}
                     >
                       <Eye className="w-5 h-5" />

@@ -446,6 +446,90 @@ export const multiTenantAuthService = {
       return { ok: false, error: e instanceof Error ? e.message : 'Network error' };
     }
   },
+
+  /**
+   * Global identity — every organization this person belongs to (one login,
+   * many orgs). Feeds the org switcher. Returns [] for a single-org member.
+   */
+  async listMyOrganizations(memberId: string): Promise<MembershipSummary[]> {
+    try {
+      const { data } = await supabase.rpc('get_my_memberships', { p_member_id: memberId });
+      if (data && (data as { ok?: boolean }).ok) {
+        return ((data as { memberships?: MembershipSummary[] }).memberships || []);
+      }
+    } catch { /* RPC not deployed yet */ }
+    return [];
+  },
+
+  /**
+   * Switch the active session to another org the SAME account owns. No password
+   * is needed — the current JWT proves identity server-side. Re-mints the token
+   * and rewrites the session so RLS scopes to the new membership.
+   */
+  async switchOrganization(targetMemberId: string): Promise<MultiTenantLoginResponse> {
+    const token = getStoredAccessToken();
+    if (!token) throw new Error('Your session expired. Please sign in again.');
+
+    const res = await fetch('/api/auth/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ mode: 'switch', token, targetMemberId }),
+    });
+    const json = await res.json().catch(() => ({}));
+    if (!res.ok || !json?.ok) throw new Error(json?.error || 'Could not switch organization.');
+
+    const org = json.organization as Organization;
+    const grp = json.group as OrganizationGroup;
+    const admins = (json.adminRecords || []) as MemberAdmin[];
+    const fullMember: OrganizationMember = {
+      ...(json.member as OrganizationMember),
+      organization: org,
+      group: grp,
+      admin_records: admins,
+      admin_permissions: this.aggregatePermissions(admins),
+    };
+    delete (fullMember as unknown as Record<string, unknown>).password_hash;
+
+    if (json.token) localStorage.setItem(SESSION_KEYS.JWT, json.token as string);
+    this.saveSession(fullMember, org);
+
+    return {
+      member: fullMember,
+      organization: org,
+      group: grp || ({ id: fullMember.group_id } as OrganizationGroup),
+      adminRecords: admins,
+      mustChangePassword: false,
+    };
+  },
+
+  /**
+   * Link a newly-created org's founder membership to the current account, so a
+   * person who creates a second org keeps a single identity across both.
+   */
+  async attachMembershipToAccount(callerMemberId: string, targetMemberId: string): Promise<void> {
+    try {
+      await supabase.rpc('attach_member_to_my_account', {
+        p_caller_member_id: callerMemberId,
+        p_target_member_id: targetMemberId,
+      });
+    } catch { /* best effort — switcher falls back to email-linked memberships */ }
+  },
 };
+
+export interface MembershipSummary {
+  member_id: string;
+  human_id: string;
+  org_id: string;
+  org_name: string;
+  org_slug: string;
+  logo_url: string | null;
+  org_state: string;
+  group_id: string | null;
+  group_name: string | null;
+  is_current: boolean;
+  is_admin: boolean;
+  role_label: string | null;
+  verification_layer: number;
+}
 
 export default multiTenantAuthService;

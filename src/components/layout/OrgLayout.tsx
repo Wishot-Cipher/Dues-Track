@@ -38,6 +38,8 @@ import {
   Banknote,
   CalendarDays,
   LayoutGrid,
+  Ticket as TicketIcon,
+  ScanLine,
   X as XIcon,
 } from 'lucide-react';
 // import Footer from '@/components/Footer';
@@ -50,6 +52,7 @@ import { supabase } from '@/config/supabase';
 import LoadingSpinner from '@/components/ui/LoadingSpinner';
 import { NotificationCenter } from '@/components/NotificationCenter';
 import { organizationService } from '@/services/organizationService';
+import { multiTenantAuthService, type MembershipSummary } from '@/services/multiTenantAuthService';
 import RoleSwitcher from '@/components/RoleSwitcher';
 import RoleSwitcherSheet from '@/components/RoleSwitcherSheet';
 
@@ -62,6 +65,13 @@ interface NavItem {
   section?: 'member' | 'admin';
   permission?: string;
   hideOnMobile?: boolean;
+  /**
+   * Minimum admin scope required to see this tool. Used ONLY for tenant-level
+   * tools (billing, org structure, academic calendar) — never for money
+   * collection, so a group-scope class rep can still run dues for their class
+   * (e.g. collecting for textbooks without bugging the finsec).
+   */
+  minScope?: 'org' | 'unit';
 }
 
 /* ─────────────────────── component ─────────────────────── */
@@ -90,7 +100,34 @@ export default function OrgLayout() {
   const profileRef = useRef<HTMLDivElement>(null);
   const [fetchedLevel, setFetchedLevel] = useState<string | null>(null);
 
+  // Global identity — the orgs this person can switch between (one login).
+  const [myOrgs, setMyOrgs] = useState<MembershipSummary[]>([]);
+  const [switchingId, setSwitchingId] = useState<string | null>(null);
+
   const currentSlug = organization?.slug;
+
+  // Load the account's other orgs when the profile menu opens.
+  useEffect(() => {
+    if (!showProfileMenu || !user?.id || myOrgs.length > 0) return;
+    let cancelled = false;
+    (async () => {
+      const orgs = await multiTenantAuthService.listMyOrganizations(user.id);
+      if (!cancelled) setMyOrgs(orgs);
+    })();
+    return () => { cancelled = true; };
+  }, [showProfileMenu, user?.id, myOrgs.length]);
+
+  const handleSwitchOrg = async (m: MembershipSummary) => {
+    if (m.is_current || switchingId) return;
+    setSwitchingId(m.member_id);
+    try {
+      await multiTenantAuthService.switchOrganization(m.member_id);
+      // Hard navigation so every provider re-reads the new session cleanly.
+      window.location.assign(`/${m.org_slug}/dashboard`);
+    } catch {
+      setSwitchingId(null);
+    }
+  };
 
   // Hide the bottom nav + content padding on focused checkout-style
   // routes. The Pay flow and Paystack verify return are single-task
@@ -187,22 +224,46 @@ export default function OrgLayout() {
     { path: '/dashboard', label: 'Home', icon: <LayoutDashboard size={20} />, section: 'member' },
     { path: '/payments', label: organization.payment_label || 'Payments', icon: <CreditCard size={20} />, section: 'member' },
     { path: '/groups', label: organization.group_label_plural || 'Groups', icon: <Users size={20} />, section: 'member' },
+    { path: '/tickets', label: 'Tickets', icon: <TicketIcon size={20} />, section: 'member', hideOnMobile: true },
   ];
 
-  const adminNav: NavItem[] = showAdmin ? [
+  // Every tool is tagged with the permission it needs. We then show an exec
+  // ONLY the tools they can actually use — so a class rep isn't buried under
+  // billing/payout/expenses they'll never touch. Overview has no permission
+  // (every exec gets it). Permission map comes from the member's aggregated
+  // admin_permissions (see multiTenantAuthService.aggregatePermissions).
+  const perms = (user.admin_permissions || {}) as Record<string, boolean>;
+
+  // Highest scope this exec holds across their admin rows (org > unit > group).
+  // Drives which TENANT-level tools appear; money tools ignore scope on purpose.
+  const scopeRank = (s?: string) => (s === 'org' ? 2 : s === 'unit' ? 1 : 0);
+  const execScopeRank = (user.admin_records || []).reduce(
+    (max, a) => Math.max(max, scopeRank((a as { scope_level?: string }).scope_level)), 0,
+  );
+
+  const adminNavAll: NavItem[] = showAdmin ? [
     { path: '/admin/dashboard', label: 'Overview', icon: <PieChart size={20} />, section: 'admin' },
-    { path: '/admin/members', label: organization.member_label_plural || 'Members', icon: <Users size={20} />, section: 'admin' },
-    { path: '/admin/groups', label: groupNavLabel, icon: <Building2 size={20} />, section: 'admin', hideOnMobile: true },
-    ...(isAcademicOrg ? [{ path: '/admin/academic-calendar', label: 'Academic Calendar', icon: <CalendarDays size={20} />, section: 'admin' as const, hideOnMobile: true }] : []),
-    { path: '/admin/create-payment', label: 'Create Dues', icon: <BadgeDollarSign size={20} />, section: 'admin', hideOnMobile: true },
-    { path: '/admin/manage-dues', label: 'Manage Dues', icon: <Receipt size={20} />, section: 'admin', hideOnMobile: true },
-    { path: '/admin/review', label: 'Review', icon: <ClipboardCheck size={20} />, section: 'admin', hideOnMobile: true },
-    { path: '/admin/expenses', label: 'Expenses', icon: <HandCoins size={20} />, section: 'admin', hideOnMobile: true },
-    { path: '/admin/scan-qr', label: 'Scan QR', icon: <QrCode size={20} />, section: 'admin', hideOnMobile: true },
-    { path: '/admin/contributions', label: 'Contributions', icon: <Heart size={20} />, section: 'admin', hideOnMobile: true },
-    { path: '/admin/billing', label: 'Billing', icon: <Wallet size={20} />, section: 'admin', hideOnMobile: true },
-    { path: '/admin/payout', label: 'Payout Account', icon: <Banknote size={20} />, section: 'admin', hideOnMobile: true },
+    { path: '/admin/members', label: organization.member_label_plural || 'Members', icon: <Users size={20} />, section: 'admin', permission: 'can_manage_members' },
+    // Tenant structure — org/unit execs only (a class rep doesn't reshape the org tree).
+    { path: '/admin/groups', label: groupNavLabel, icon: <Building2 size={20} />, section: 'admin', hideOnMobile: true, permission: 'can_manage_settings', minScope: 'unit' },
+    ...(isAcademicOrg ? [{ path: '/admin/academic-calendar', label: 'Academic Calendar', icon: <CalendarDays size={20} />, section: 'admin' as const, hideOnMobile: true, permission: 'can_manage_settings', minScope: 'unit' as const }] : []),
+    // Money collection — available at ANY scope (class rep can collect for their own class).
+    { path: '/admin/create-payment', label: 'Create Dues', icon: <BadgeDollarSign size={20} />, section: 'admin', hideOnMobile: true, permission: 'can_create_payments' },
+    { path: '/admin/manage-dues', label: 'Manage Dues', icon: <Receipt size={20} />, section: 'admin', hideOnMobile: true, permission: 'can_create_payments' },
+    { path: '/admin/review', label: 'Review', icon: <ClipboardCheck size={20} />, section: 'admin', hideOnMobile: true, permission: 'can_approve_payments' },
+    { path: '/admin/expenses', label: 'Expenses', icon: <HandCoins size={20} />, section: 'admin', hideOnMobile: true, permission: 'can_manage_expenses' },
+    { path: '/admin/scan-qr', label: 'Scan QR', icon: <QrCode size={20} />, section: 'admin', hideOnMobile: true, permission: 'can_approve_payments' },
+    { path: '/admin/check-in', label: 'Event Check-in', icon: <ScanLine size={20} />, section: 'admin', hideOnMobile: true, permission: 'can_approve_payments' },
+    { path: '/admin/contributions', label: 'Contributions', icon: <Heart size={20} />, section: 'admin', hideOnMobile: true, permission: 'can_approve_payments' },
+    // Payout destination — a collector needs somewhere for money to land, so it's
+    // NOT scope-gated; just permission-gated.
+    { path: '/admin/payout', label: 'Payout Account', icon: <Banknote size={20} />, section: 'admin', hideOnMobile: true, permission: 'can_manage_settings' },
+    // Platform subscription — the whole tenant's plan: org-scope owner only.
+    { path: '/admin/billing', label: 'Billing', icon: <Wallet size={20} />, section: 'admin', hideOnMobile: true, permission: 'can_manage_settings', minScope: 'org' },
   ] : [];
+  const adminNav: NavItem[] = adminNavAll.filter(
+    (i) => (!i.permission || perms[i.permission]) && (!i.minScope || execScopeRank >= scopeRank(i.minScope)),
+  );
 
   // Bottom tab items (mobile) — fintech "2 + FAB + 2" pattern.
   // The mockup shows Home / Dues on the left, a big orange center FAB,
@@ -616,6 +677,49 @@ export default function OrgLayout() {
                         isLight={isLight}
                       />
                     </div>
+
+                    {/* Your organizations (global identity) — only when >1 */}
+                    {myOrgs.length > 1 && (
+                      <div
+                        className="px-1.5 pb-1.5 pt-1"
+                        style={{ borderTop: `1px solid ${isLight ? 'rgba(15, 7, 3, 0.06)' : colors.borderLight}` }}
+                      >
+                        <p className="px-3 pt-1.5 pb-1 text-[10px] font-bold uppercase tracking-wider" style={{ color: colors.textTertiary }}>
+                          Your organizations
+                        </p>
+                        <div className="max-h-56 overflow-y-auto">
+                          {myOrgs.map((m) => (
+                            <button
+                              key={m.member_id}
+                              onClick={() => handleSwitchOrg(m)}
+                              disabled={switchingId !== null}
+                              className="w-full flex items-center gap-3 px-3 py-2 rounded-xl text-left transition-all hover:bg-white/5 disabled:opacity-60"
+                              style={{ background: m.is_current ? `${colors.primary}12` : 'transparent' }}
+                            >
+                              <div
+                                className="w-8 h-8 rounded-lg flex items-center justify-center shrink-0 overflow-hidden text-xs font-bold"
+                                style={{ background: `${colors.primary}1a`, color: colors.primary }}
+                              >
+                                {m.logo_url ? <img src={m.logo_url} alt="" className="w-full h-full object-cover" /> : (m.org_name?.[0] || '?')}
+                              </div>
+                              <div className="min-w-0 flex-1">
+                                <p className="text-sm font-semibold truncate" style={{ color: isLight ? '#0F0703' : '#FFFFFF' }}>
+                                  {m.org_name}
+                                </p>
+                                <p className="text-[11px] truncate" style={{ color: colors.textTertiary }}>
+                                  {m.role_label || (m.is_admin ? 'Admin' : 'Member')}{m.group_name ? ` · ${m.group_name}` : ''}
+                                </p>
+                              </div>
+                              {switchingId === m.member_id
+                                ? <LoadingSpinner size="sm" />
+                                : m.is_current
+                                  ? <CheckCircle2 size={16} style={{ color: colors.primary }} />
+                                  : null}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    )}
 
                     {/* Logout */}
                     <div

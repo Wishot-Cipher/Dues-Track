@@ -1142,13 +1142,9 @@ export const organizationService = {
     levels?: string[];
   }): Promise<{ slug: string; organization_id: string; group_id: string; member_id: string } | null> {
     try {
+      // Org contact email is no longer globally unique (migration 076): one
+      // person may run several orgs and reuse the same contact email.
       const normalizedEmail = orgData.email?.trim().toLowerCase();
-      if (normalizedEmail) {
-        const emailAvailable = await this.isEmailAvailable(normalizedEmail);
-        if (!emailAvailable) {
-          throw new Error('This organization email is already in use.');
-        }
-      }
 
       // If owner data provided, use the RPC to create everything in one call
       if (ownerData) {

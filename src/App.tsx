@@ -25,6 +25,9 @@ import PaymentDetailPage from '@/pages/PaymentDetailPage';
 import MakePaymentPage from '@/pages/MakePaymentPage';
 import MyDuesPage from '@/pages/MyDuesPage';
 import MyGroupsPage from '@/pages/MyGroupsPage';
+import MyTicketsPage from '@/pages/MyTicketsPage';
+import TicketPage from '@/pages/TicketPage';
+import TicketCheckInPage from '@/pages/admin/TicketCheckInPage';
 import PaymentVerifyPage from '@/pages/PaymentVerifyPage';
 import ReceiptPage from '@/pages/ReceiptPage';
 import AdminDashboardPage from '@/pages/admin/AdminDashboardPage';
@@ -119,6 +122,9 @@ function App() {
               {/* Org-scoped public join page */}
               <Route path="/:orgSlug/join" element={<JoinOrganizationPage />} />
 
+              {/* Public event ticket — resolvable by code (saved link / screenshot) */}
+              <Route path="/:orgSlug/ticket/:code" element={<TicketPage />} />
+
               {/* Org-scoped forgot password */}
               <Route path="/:orgSlug/forgot-password" element={<ForgotPasswordPage />} />
 
@@ -136,6 +142,7 @@ function App() {
                 <Route path="claim/:claimId/decide" element={<OrgProtectedRoute><ClaimDecisionPage /></OrgProtectedRoute>} />
                 <Route path="payments" element={<OrgProtectedRoute><MyDuesPage /></OrgProtectedRoute>} />
                 <Route path="groups" element={<OrgProtectedRoute><MyGroupsPage /></OrgProtectedRoute>} />
+                <Route path="tickets" element={<OrgProtectedRoute><MyTicketsPage /></OrgProtectedRoute>} />
                 {/* Default Pay flow — clean Paystack-first MakePaymentPage. */}
                 <Route path="payment/:id" element={<OrgProtectedRoute><MakePaymentPage /></OrgProtectedRoute>} />
                 {/* Manual / offline fallback — bank transfer + receipt upload. */}
@@ -165,6 +172,7 @@ function App() {
                 <Route path="admin/collected" element={<OrgProtectedRoute requireAdmin requireVerified><AdminCollectedPage /></OrgProtectedRoute>} />
                 <Route path="admin/waive-payment" element={<OrgProtectedRoute requireAdmin requireVerified><WaivePaymentPage /></OrgProtectedRoute>} />
                 <Route path="admin/scan-qr" element={<OrgProtectedRoute requiredPermission="can_approve_payments" requireVerified><ScanQRCodePage /></OrgProtectedRoute>} />
+                <Route path="admin/check-in" element={<OrgProtectedRoute requireActing><TicketCheckInPage /></OrgProtectedRoute>} />
                 <Route path="admin/contributions" element={<OrgProtectedRoute requiredPermission="can_approve_payments" requireVerified><PublicContributionsPage /></OrgProtectedRoute>} />
                 <Route path="admin/donation-settings" element={<OrgProtectedRoute requiredPermission="can_approve_payments" requireVerified><DonationSettingsPage /></OrgProtectedRoute>} />
                 <Route path="admin/billing" element={<OrgProtectedRoute requireAdmin requireVerified><BillingPage /></OrgProtectedRoute>} />

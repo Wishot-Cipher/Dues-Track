@@ -161,6 +161,18 @@ export default function OrgMembersPage() {
 
   const memberLabel = organization?.member_label || 'Member';
   const memberLabelPlural = organization?.member_label_plural || 'Members';
+  const pageSurface = {
+    background: tk.bgWash,
+    color: tk.text,
+  };
+  const cardSurface = {
+    background: tk.card,
+    border: `1px solid ${tk.cardBorder}`,
+  };
+  const subtleSurface = {
+    background: theme === 'light' ? 'rgba(255, 255, 255, 0.78)' : 'rgba(255, 255, 255, 0.03)',
+    border: `1px solid ${tk.cardBorder}`,
+  };
 
   // ── Fetch members ──
   const fetchMembers = useCallback(async () => {
@@ -938,16 +950,14 @@ export default function OrgMembersPage() {
   };
 
   return (
-    <div className="min-h-screen py-4 sm:py-6 pb-24 lg:pb-6 relative overflow-x-hidden" style={{
-      background: tk.bgWash,
-    }}>
+    <div className="min-h-screen py-4 sm:py-6 pb-24 lg:pb-6 relative overflow-x-hidden" style={pageSurface}>
       {/* Background Grid Pattern */}
       <div
         className="absolute inset-0 opacity-20 pointer-events-none"
         style={{
           backgroundImage: `
-            linear-gradient(${colors.primary}40 1px, transparent 1px),
-            linear-gradient(90deg, ${colors.primary}40 1px, transparent 1px)
+            linear-gradient(${theme === 'light' ? 'rgba(255, 104, 3, 0.12)' : 'rgba(255, 104, 3, 0.24)'} 1px, transparent 1px),
+            linear-gradient(90deg, ${theme === 'light' ? 'rgba(255, 104, 3, 0.12)' : 'rgba(255, 104, 3, 0.24)'} 1px, transparent 1px)
           `,
           backgroundSize: '50px 50px',
         }}
@@ -958,7 +968,7 @@ export default function OrgMembersPage() {
         <div
           className="absolute w-[500px] h-[500px] rounded-full blur-[120px] opacity-30 animate-pulse"
           style={{
-            background: `radial-gradient(circle, ${colors.primary} 0%, transparent 70%)`,
+            background: `radial-gradient(circle, ${tk.primary} 0%, transparent 70%)`,
             top: '-10%',
             right: '-5%',
             animationDuration: '4s',
@@ -967,7 +977,7 @@ export default function OrgMembersPage() {
         <div
           className="absolute w-[400px] h-[400px] rounded-full blur-[100px] opacity-20"
           style={{
-            background: `radial-gradient(circle, ${colors.accentMint} 0%, transparent 70%)`,
+            background: `radial-gradient(circle, ${tk.mint} 0%, transparent 70%)`,
             bottom: '-5%',
             left: '-5%',
             animation: 'pulse 6s ease-in-out infinite',
@@ -985,11 +995,11 @@ export default function OrgMembersPage() {
           <GlassCard className="relative overflow-hidden">
             {/* Decorative Elements */}
             <div className="absolute top-0 right-0 w-64 h-64 opacity-5 pointer-events-none">
-              <Users className="w-full h-full" style={{ color: colors.accentMint }} />
+              <Users className="w-full h-full" style={{ color: tk.primary }} />
             </div>
             <div
               className="absolute top-0 left-0 w-full h-1"
-              style={{ background: `linear-gradient(90deg, ${colors.accentMint}, ${colors.primary}, transparent)` }}
+              style={{ background: tk.gradOrange }}
             />
 
             <div className="relative z-10">
@@ -999,12 +1009,12 @@ export default function OrgMembersPage() {
                   animate={{ scale: 1 }}
                   className="w-14 h-14 rounded-xl flex items-center justify-center shrink-0 shadow-lg"
                   style={{
-                    background: `linear-gradient(135deg, ${colors.accentMint}30, ${colors.accentMint}10)`,
-                    border: `1px solid ${colors.accentMint}40`,
-                    boxShadow: `0 4px 15px ${colors.accentMint}20`
+                    background: `linear-gradient(135deg, ${tk.primary}30, ${tk.primary}10)`,
+                    border: `1px solid ${tk.primaryRing}`,
+                    boxShadow: `0 4px 15px ${tk.primary}20`
                   }}
                 >
-                  <Users className="w-7 h-7" style={{ color: colors.accentMint }} />
+                  <Users className="w-7 h-7" style={{ color: tk.primary }} />
                 </motion.div>
                 <div className="text-center sm:text-left">
                   {/* Badge */}
@@ -1014,16 +1024,16 @@ export default function OrgMembersPage() {
                     transition={{ delay: 0.1 }}
                     className="inline-flex items-center gap-2 px-3 py-1 rounded-full text-xs font-semibold mb-2"
                     style={{
-                      background: `linear-gradient(135deg, ${colors.accentMint}30, ${colors.accentMint}10)`,
-                      border: `1px solid ${colors.accentMint}40`,
-                      color: colors.accentMint,
+                      background: theme === 'light' ? tk.primarySoft : `linear-gradient(135deg, ${tk.primary}30, ${tk.primary}10)`,
+                      border: `1px solid ${tk.primaryRing}`,
+                      color: tk.primary,
                     }}
                   >
                     <Sparkles className="w-3 h-3" />
                     {memberLabelPlural.toUpperCase()} MANAGEMENT
                   </motion.div>
-                  <h1 className="text-2xl sm:text-3xl font-bold text-white">Manage {memberLabelPlural}</h1>
-                  <p className="flex items-center justify-center sm:justify-start gap-2" style={{ color: colors.textSecondary }}>
+                  <h1 className="text-2xl sm:text-3xl font-bold" style={{ color: tk.text }}>Manage {memberLabelPlural}</h1>
+                  <p className="flex items-center justify-center sm:justify-start gap-2" style={{ color: tk.textSec }}>
                     <Filter className="w-4 h-4" />
                     {organization?.name} &bull; {group?.name || 'All Groups'}
                   </p>
@@ -1035,10 +1045,11 @@ export default function OrgMembersPage() {
                     whileHover={{ scale: 1.02, y: -2 }}
                     whileTap={{ scale: 0.98 }}
                     onClick={() => setShowAddMenu(!showAddMenu)}
-                    className="flex items-center gap-2 px-5 py-3 rounded-xl font-semibold text-white transition-all"
+                    className="flex items-center gap-2 px-5 py-3 rounded-xl font-semibold transition-all"
                     style={{
-                      background: `linear-gradient(135deg, ${colors.accentMint}, ${colors.primary})`,
-                      boxShadow: `0 4px 20px ${colors.accentMint}40`
+                      background: tk.gradOrange,
+                      color: '#FFFFFF',
+                      boxShadow: `0 4px 20px ${tk.primary}40`
                     }}
                   >
                     <Plus className="w-5 h-5" />
@@ -1055,9 +1066,9 @@ export default function OrgMembersPage() {
                         transition={{ duration: 0.15 }}
                         className="absolute right-0 top-full mt-2 w-64 rounded-xl overflow-hidden shadow-2xl z-50"
                         style={{
-                          background: 'linear-gradient(135deg, rgba(30, 20, 15, 0.98), rgba(20, 12, 8, 0.98))',
-                          border: '1px solid rgba(255, 255, 255, 0.1)',
+                          ...subtleSurface,
                           backdropFilter: 'blur(20px)',
+                          boxShadow: '0 16px 48px rgba(15, 7, 3, 0.18)',
                         }}
                       >
                         <div className="p-2">
@@ -1066,12 +1077,12 @@ export default function OrgMembersPage() {
                             onClick={() => { setShowAddMenu(false); setShowAddModal(true); setAddError(''); setAddSuccess(null); }}
                             className="w-full flex items-center gap-3 px-3 py-3 rounded-lg transition-all hover:bg-white/5"
                           >
-                            <div className="w-9 h-9 rounded-lg flex items-center justify-center" style={{ background: `${colors.primary}20` }}>
-                              <UserPlus className="w-4 h-4" style={{ color: colors.primary }} />
+                            <div className="w-9 h-9 rounded-lg flex items-center justify-center" style={{ background: tk.primarySoft }}>
+                              <UserPlus className="w-4 h-4" style={{ color: tk.primary }} />
                             </div>
                             <div className="text-left">
-                              <p className="text-sm font-medium text-white">Single {memberLabel}</p>
-                              <p className="text-[10px]" style={{ color: colors.textSecondary }}>Add one {memberLabel.toLowerCase()} manually</p>
+                              <p className="text-sm font-medium" style={{ color: tk.text }}>Single {memberLabel}</p>
+                              <p className="text-[10px]" style={{ color: tk.textSec }}>Add one {memberLabel.toLowerCase()} manually</p>
                             </div>
                           </motion.button>
                           <motion.button
@@ -1079,12 +1090,12 @@ export default function OrgMembersPage() {
                             onClick={() => { setShowAddMenu(false); setShowBulkModal(true); }}
                             className="w-full flex items-center gap-3 px-3 py-3 rounded-lg transition-all hover:bg-white/5"
                           >
-                            <div className="w-9 h-9 rounded-lg flex items-center justify-center" style={{ background: `${colors.accentMint}20` }}>
-                              <Upload className="w-4 h-4" style={{ color: colors.accentMint }} />
+                            <div className="w-9 h-9 rounded-lg flex items-center justify-center" style={{ background: `${tk.mint}20` }}>
+                              <Upload className="w-4 h-4" style={{ color: tk.mint }} />
                             </div>
                             <div className="text-left">
-                              <p className="text-sm font-medium text-white">Bulk Import</p>
-                              <p className="text-[10px]" style={{ color: colors.textSecondary }}>Upload CSV / Excel file</p>
+                              <p className="text-sm font-medium" style={{ color: tk.text }}>Bulk Import</p>
+                              <p className="text-[10px]" style={{ color: tk.textSec }}>Upload CSV / Excel file</p>
                             </div>
                           </motion.button>
                           <motion.button
@@ -1092,12 +1103,12 @@ export default function OrgMembersPage() {
                             onClick={() => { setShowAddMenu(false); setShowInviteModal(true); setInviteLink(''); setInviteCode(''); setInviteCopied(false); }}
                             className="w-full flex items-center gap-3 px-3 py-3 rounded-lg transition-all hover:bg-white/5"
                           >
-                            <div className="w-9 h-9 rounded-lg flex items-center justify-center" style={{ background: `${colors.success}20` }}>
-                              <Link2 className="w-4 h-4" style={{ color: colors.success }} />
+                            <div className="w-9 h-9 rounded-lg flex items-center justify-center" style={{ background: `${tk.mint}20` }}>
+                              <Link2 className="w-4 h-4" style={{ color: tk.mint }} />
                             </div>
                             <div className="text-left">
-                              <p className="text-sm font-medium text-white">Invite Link</p>
-                              <p className="text-[10px]" style={{ color: colors.textSecondary }}>Share a join link</p>
+                              <p className="text-sm font-medium" style={{ color: tk.text }}>Invite Link</p>
+                              <p className="text-[10px]" style={{ color: tk.textSec }}>Share a join link</p>
                             </div>
                           </motion.button>
                         </div>
@@ -1110,25 +1121,25 @@ export default function OrgMembersPage() {
 
               {/* Quick Stats */}
               <div className="grid grid-cols-2 sm:grid-cols-5 gap-3 mt-4">
-                <div className="p-3 rounded-xl text-center" style={{ background: 'rgba(255, 255, 255, 0.03)', border: '1px solid rgba(255, 255, 255, 0.05)' }}>
-                  <p className="text-2xl font-bold text-white"><AnimatedCounter value={members.length} /></p>
-                  <p className="text-xs" style={{ color: colors.textSecondary }}>Total</p>
+                <div className="p-3 rounded-xl text-center" style={cardSurface}>
+                  <p className="text-2xl font-bold" style={{ color: tk.text }}><AnimatedCounter value={members.length} /></p>
+                  <p className="text-xs" style={{ color: tk.textSec }}>Total</p>
                 </div>
-                <div className="p-3 rounded-xl text-center" style={{ background: `${colors.statusPaid}10`, border: `1px solid ${colors.statusPaid}20` }}>
-                  <p className="text-2xl font-bold" style={{ color: colors.statusPaid }}><AnimatedCounter value={activeCount} /></p>
-                  <p className="text-xs" style={{ color: colors.textSecondary }}>Active</p>
+                <div className="p-3 rounded-xl text-center" style={{ background: `${tk.mint}10`, border: `1px solid ${tk.mint}20` }}>
+                  <p className="text-2xl font-bold" style={{ color: tk.mint }}><AnimatedCounter value={activeCount} /></p>
+                  <p className="text-xs" style={{ color: tk.textSec }}>Active</p>
                 </div>
-                <div className="p-3 rounded-xl text-center" style={{ background: `${colors.primary}10`, border: `1px solid ${colors.primary}20` }}>
-                  <p className="text-2xl font-bold" style={{ color: colors.primary }}><AnimatedCounter value={adminCount} /></p>
-                  <p className="text-xs" style={{ color: colors.textSecondary }}>Admins</p>
+                <div className="p-3 rounded-xl text-center" style={{ background: tk.primarySoft, border: `1px solid ${tk.primaryRing}` }}>
+                  <p className="text-2xl font-bold" style={{ color: tk.primary }}><AnimatedCounter value={adminCount} /></p>
+                  <p className="text-xs" style={{ color: tk.textSec }}>Admins</p>
                 </div>
-                <div className="p-3 rounded-xl text-center" style={{ background: `${colors.accentMint}10`, border: `1px solid ${colors.accentMint}20` }}>
-                  <p className="text-2xl font-bold" style={{ color: colors.accentMint }}><AnimatedCounter value={finsecCount} /></p>
-                  <p className="text-xs" style={{ color: colors.textSecondary }}>FinSecs</p>
+                <div className="p-3 rounded-xl text-center" style={{ background: `${tk.mint}10`, border: `1px solid ${tk.mint}20` }}>
+                  <p className="text-2xl font-bold" style={{ color: tk.mint }}><AnimatedCounter value={finsecCount} /></p>
+                  <p className="text-xs" style={{ color: tk.textSec }}>FinSecs</p>
                 </div>
-                <div className="p-3 rounded-xl text-center" style={{ background: `${colors.warning}10`, border: `1px solid ${colors.warning}20` }}>
-                  <p className="text-2xl font-bold" style={{ color: colors.warning }}><AnimatedCounter value={classRepCount} /></p>
-                  <p className="text-xs" style={{ color: colors.textSecondary }}>Class Reps</p>
+                <div className="p-3 rounded-xl text-center" style={{ background: `${tk.amber}10`, border: `1px solid ${tk.amber}20` }}>
+                  <p className="text-2xl font-bold" style={{ color: tk.amber }}><AnimatedCounter value={classRepCount} /></p>
+                  <p className="text-xs" style={{ color: tk.textSec }}>Class Reps</p>
                 </div>
               </div>
 
@@ -1152,7 +1163,7 @@ export default function OrgMembersPage() {
                         : isNearLimit
                         ? `${colors.warning}08`
                         : 'rgba(255,255,255,0.02)',
-                      border: `1px solid ${isAtLimit ? colors.error : isNearLimit ? colors.warning : 'rgba(255,255,255,0.06)'}30`,
+                      border: `1px solid ${isAtLimit ? colors.error : isNearLimit ? colors.warning : tk.cardBorder}30`,
                     }}
                   >
                     <div className="flex items-center justify-between mb-2">
@@ -1216,16 +1227,17 @@ export default function OrgMembersPage() {
         >
           <GlassCard className="mb-4 sm:mb-6">
             <div className="relative mb-4">
-              <Search className="absolute left-3 sm:left-4 top-1/2 -translate-y-1/2 w-4 h-4 sm:w-5 sm:h-5" style={{ color: colors.textSecondary }} />
+              <Search className="absolute left-3 sm:left-4 top-1/2 -translate-y-1/2 w-4 h-4 sm:w-5 sm:h-5" style={{ color: tk.textSec }} />
               <input
                 type="text"
                 placeholder={`Search by name, ID, email...`}
                 value={searchQuery}
                 onChange={(e) => { setSearchQuery(e.target.value); setCurrentPage(1); }}
-                className="w-full pl-10 sm:pl-12 pr-4 py-2.5 sm:py-3 rounded-lg text-sm sm:text-base text-white focus:outline-none focus:ring-2 focus:ring-orange-500"
+                className="w-full pl-10 sm:pl-12 pr-4 py-2.5 sm:py-3 rounded-lg text-sm sm:text-base focus:outline-none"
                 style={{
-                  background: 'rgba(255, 255, 255, 0.05)',
-                  border: '1px solid rgba(255, 255, 255, 0.1)'
+                  background: theme === 'light' ? '#FFFFFF' : 'rgba(255, 255, 255, 0.04)',
+                  border: `1px solid ${tk.cardBorder}`,
+                  color: tk.text,
                 }}
               />
             </div>
@@ -1234,7 +1246,7 @@ export default function OrgMembersPage() {
             <div className="space-y-3">
               {/* Status Filter */}
               <div>
-                <p className="text-xs font-medium mb-2" style={{ color: colors.textSecondary }}>Status</p>
+                <p className="text-xs font-medium mb-2" style={{ color: tk.textSec }}>Status</p>
                 <div className="flex flex-wrap gap-2">
                   {[
                     { value: 'all' as const, label: 'All', count: members.length },
@@ -1249,9 +1261,9 @@ export default function OrgMembersPage() {
                       }}
                       className="px-3 py-1.5 rounded-lg text-xs sm:text-sm font-medium transition-all"
                       style={{
-                        background: statusFilter === value ? `${colors.primary}30` : 'rgba(255, 255, 255, 0.05)',
-                        border: `1px solid ${statusFilter === value ? colors.primary + '60' : 'transparent'}`,
-                        color: statusFilter === value ? colors.primary : colors.textSecondary,
+                        background: statusFilter === value ? tk.primarySoft : theme === 'light' ? '#FFF6EE' : 'rgba(255, 255, 255, 0.05)',
+                        border: `1px solid ${statusFilter === value ? tk.primaryRing : 'transparent'}`,
+                        color: statusFilter === value ? tk.primary : tk.textSec,
                       }}
                     >
                       {label} ({count})
@@ -1262,7 +1274,7 @@ export default function OrgMembersPage() {
 
               {/* Role Filter */}
               <div>
-                <p className="text-xs font-medium mb-2" style={{ color: colors.textSecondary }}>Role</p>
+                <p className="text-xs font-medium mb-2" style={{ color: tk.textSec }}>Role</p>
                 <div className="flex flex-wrap gap-2">
                   {[
                     { value: 'all' as const, label: 'All Roles', count: members.length },
@@ -1279,9 +1291,9 @@ export default function OrgMembersPage() {
                       }}
                       className="px-3 py-1.5 rounded-lg text-xs sm:text-sm font-medium transition-all"
                       style={{
-                        background: roleFilter === value ? `${colors.accentMint}30` : 'rgba(255, 255, 255, 0.05)',
-                        border: `1px solid ${roleFilter === value ? colors.accentMint + '60' : 'transparent'}`,
-                        color: roleFilter === value ? colors.accentMint : colors.textSecondary,
+                        background: roleFilter === value ? `${tk.mint}20` : theme === 'light' ? '#FFF6EE' : 'rgba(255, 255, 255, 0.05)',
+                        border: `1px solid ${roleFilter === value ? tk.mint + '60' : 'transparent'}`,
+                        color: roleFilter === value ? tk.mint : tk.textSec,
                       }}
                     >
                       {label} ({count})
@@ -1301,9 +1313,9 @@ export default function OrgMembersPage() {
                   }}
                   className="w-full sm:w-auto px-4 py-2 rounded-lg text-sm font-medium transition-all flex items-center gap-2"
                   style={{
-                    background: `${colors.statusUnpaid}20`,
-                    border: `1px solid ${colors.statusUnpaid}40`,
-                    color: colors.statusUnpaid,
+                    background: tk.primarySoft,
+                    border: `1px solid ${tk.primaryRing}`,
+                    color: tk.primary,
                   }}
                 >
                   <X className="w-4 h-4" />
@@ -1569,11 +1581,11 @@ export default function OrgMembersPage() {
                   </table>
                 </div>
 
-                {/* Mobile Card View */}
                 <div className="lg:hidden space-y-4">
                   {paginated.map((member, index) => {
                     const { isAdmin, isFinsec, isClassRep } = getMemberRoles(member);
                     const hasRoles = isAdmin || isFinsec || isClassRep;
+
                     return (
                       <motion.div
                         key={member.id}
@@ -1582,20 +1594,19 @@ export default function OrgMembersPage() {
                         transition={{ delay: Math.min(index * 0.02, 0.3) }}
                         className="rounded-xl overflow-hidden"
                         style={{
-                          background: 'rgba(255, 255, 255, 0.05)',
-                          border: '1px solid rgba(255, 255, 255, 0.1)'
+                          background: theme === 'light' ? '#FFFFFF' : 'rgba(255, 255, 255, 0.05)',
+                          border: `1px solid ${tk.cardBorder}`,
                         }}
                       >
-                        {/* Header with Avatar and Name */}
                         <div
                           className="p-4 flex items-center gap-4"
                           style={{
                             background: isAdmin
-                              ? `linear-gradient(135deg, ${colors.primary}15, transparent)`
+                              ? `linear-gradient(135deg, ${tk.primarySoft}, transparent)`
                               : isFinsec
-                                ? `linear-gradient(135deg, ${colors.accentMint}15, transparent)`
+                                ? `linear-gradient(135deg, ${tk.mint}18, transparent)`
                                 : isClassRep
-                                  ? `linear-gradient(135deg, ${colors.warning}15, transparent)`
+                                  ? `linear-gradient(135deg, ${tk.amber}18, transparent)`
                                   : 'transparent'
                           }}
                         >
@@ -1603,92 +1614,63 @@ export default function OrgMembersPage() {
                             className="w-14 h-14 rounded-full flex items-center justify-center text-lg font-bold shrink-0"
                             style={{
                               background: isAdmin
-                                ? gradients.primary
+                                ? tk.gradOrange
                                 : isFinsec
-                                  ? `linear-gradient(135deg, ${colors.accentMint}, ${colors.accentMint}80)`
+                                  ? `linear-gradient(135deg, ${tk.mint}, ${tk.blue})`
                                   : isClassRep
-                                    ? `linear-gradient(135deg, ${colors.warning}, ${colors.warning}80)`
-                                    : gradients.primary
+                                    ? `linear-gradient(135deg, ${tk.amber}, ${tk.primary})`
+                                    : tk.gradOrange,
+                              color: '#FFFFFF'
                             }}
                           >
                             {member.full_name?.charAt(0)?.toUpperCase() || '?'}
                           </div>
                           <div className="flex-1 min-w-0">
-                            <p className="font-semibold text-white text-base truncate">{member.full_name}</p>
+                            <p className="font-semibold text-base truncate" style={{ color: tk.text }}>{member.full_name}</p>
                             <div className="flex items-center gap-2 mt-0.5">
-                              <p className="text-sm truncate" style={{ color: colors.textSecondary }}>{member.member_id}</p>
+                              <p className="text-sm truncate" style={{ color: tk.textSec }}>{member.member_id}</p>
                               {(member.level || orgLevel) && (
-                                <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-semibold shrink-0" style={{ background: `${colors.accentMint}15`, color: colors.accentMint }}>
+                                <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-semibold shrink-0" style={{ background: tk.primarySoft, color: tk.primary }}>
                                   {member.level || orgLevel}
                                 </span>
                               )}
                             </div>
-                            {member.email && <p className="text-xs truncate" style={{ color: colors.textSecondary }}>{member.email}</p>}
+                            {member.email && <p className="text-xs truncate" style={{ color: tk.textSec }}>{member.email}</p>}
                           </div>
-                          {/* Status Badge */}
                           <div
                             className="px-2 py-1 rounded-full text-[10px] font-medium shrink-0"
                             style={{
-                              background: member.is_active ? `${colors.statusPaid}20` : `${colors.statusUnpaid}20`,
-                              color: member.is_active ? colors.statusPaid : colors.statusUnpaid,
-                              border: `1px solid ${member.is_active ? `${colors.statusPaid}40` : `${colors.statusUnpaid}40`}`
+                              background: member.is_active ? `${tk.mint}20` : `${tk.amber}20`,
+                              color: member.is_active ? tk.mint : tk.amber,
+                              border: `1px solid ${member.is_active ? `${tk.mint}40` : `${tk.amber}40`}`
                             }}
                           >
                             {member.is_active ? '● Active' : '○ Inactive'}
                           </div>
                         </div>
 
-                        {/* Role Badges */}
                         <div className="px-4 pb-3">
                           <div className="flex flex-wrap gap-2">
                             {isAdmin && (
-                              <span
-                                className="px-3 py-1.5 rounded-full text-xs font-semibold flex items-center gap-1.5"
-                                style={{
-                                  background: `${colors.primary}25`,
-                                  color: colors.primary,
-                                  border: `1px solid ${colors.primary}40`
-                                }}
-                              >
+                              <span className="px-3 py-1.5 rounded-full text-xs font-semibold flex items-center gap-1.5" style={{ background: tk.primarySoft, color: tk.primary, border: `1px solid ${tk.primaryRing}` }}>
                                 <Crown className="w-3.5 h-3.5" />
                                 Admin
                               </span>
                             )}
                             {isFinsec && (
-                              <span
-                                className="px-3 py-1.5 rounded-full text-xs font-semibold flex items-center gap-1.5"
-                                style={{
-                                  background: `${colors.accentMint}25`,
-                                  color: colors.accentMint,
-                                  border: `1px solid ${colors.accentMint}40`
-                                }}
-                              >
+                              <span className="px-3 py-1.5 rounded-full text-xs font-semibold flex items-center gap-1.5" style={{ background: `${tk.mint}18`, color: tk.mint, border: `1px solid ${tk.mint}30` }}>
                                 <Shield className="w-3.5 h-3.5" />
                                 Financial Sec
                               </span>
                             )}
                             {isClassRep && (
-                              <span
-                                className="px-3 py-1.5 rounded-full text-xs font-semibold flex items-center gap-1.5"
-                                style={{
-                                  background: `${colors.warning}25`,
-                                  color: colors.warning,
-                                  border: `1px solid ${colors.warning}40`
-                                }}
-                              >
+                              <span className="px-3 py-1.5 rounded-full text-xs font-semibold flex items-center gap-1.5" style={{ background: `${tk.amber}18`, color: tk.amber, border: `1px solid ${tk.amber}30` }}>
                                 <Users className="w-3.5 h-3.5" />
                                 Class Rep
                               </span>
                             )}
                             {!hasRoles && (
-                              <span
-                                className="px-3 py-1.5 rounded-full text-xs font-medium flex items-center gap-1.5"
-                                style={{
-                                  background: 'rgba(255, 255, 255, 0.05)',
-                                  color: colors.textSecondary,
-                                  border: '1px solid rgba(255, 255, 255, 0.1)'
-                                }}
-                              >
+                              <span className="px-3 py-1.5 rounded-full text-xs font-medium flex items-center gap-1.5" style={{ background: theme === 'light' ? '#FFF6EE' : 'rgba(255, 255, 255, 0.05)', color: tk.textSec, border: `1px solid ${tk.cardBorder}` }}>
                                 <User className="w-3.5 h-3.5" />
                                 {memberLabel}
                               </span>
@@ -1696,69 +1678,65 @@ export default function OrgMembersPage() {
                           </div>
                         </div>
 
-                        {/* Actions */}
-                        <div className="p-4 pt-2 space-y-3" style={{ borderTop: '1px solid rgba(255, 255, 255, 0.05)' }}>
-                          {/* Activate/Deactivate Button */}
+                        <div className="p-4 pt-2 space-y-3" style={{ borderTop: `1px solid ${tk.cardBorder}` }}>
                           <button
                             onClick={() => toggleActive(member)}
                             className="w-full px-4 py-2.5 rounded-lg text-sm font-medium transition-all active:scale-[0.98]"
                             style={{
-                              background: member.is_active ? `${colors.statusUnpaid}15` : `${colors.statusPaid}15`,
-                              color: member.is_active ? colors.statusUnpaid : colors.statusPaid,
-                              border: `1px solid ${member.is_active ? `${colors.statusUnpaid}30` : `${colors.statusPaid}30`}`
+                              background: member.is_active ? `${tk.amber}15` : `${tk.mint}15`,
+                              color: member.is_active ? tk.amber : tk.mint,
+                              border: `1px solid ${member.is_active ? `${tk.amber}30` : `${tk.mint}30`}`
                             }}
                           >
                             {member.is_active ? '⏸ Deactivate' : '▶ Activate'}
                           </button>
 
-                          {/* Role Management Button */}
                           <button
                             onClick={() => { setRoleTarget(member); setShowRoleModal(true); }}
                             className="w-full px-4 py-2.5 rounded-lg text-sm font-medium transition-all active:scale-[0.98] flex items-center justify-center gap-2"
                             style={{
-                              background: `${colors.accentPurple}15`,
-                              color: colors.accentPurple,
-                              border: `1px solid ${colors.accentPurple}30`
+                              background: `${tk.primarySoft}`,
+                              color: tk.primary,
+                              border: `1px solid ${tk.primaryRing}`
                             }}
                           >
                             <UserCog className="w-4 h-4" />
                             Manage Roles
                           </button>
 
-                          {/* Edit/Password Reset/Delete Buttons */}
                           <div className="grid grid-cols-3 gap-2">
                             <button
                               onClick={() => { setEditingMember({ ...member }); setShowEditModal(true); }}
                               className="p-3 rounded-xl transition-all active:scale-[0.95] flex items-center justify-center gap-2"
                               style={{
-                                background: 'rgba(255, 255, 255, 0.05)',
-                                border: '1px solid rgba(255, 255, 255, 0.1)'
+                                background: theme === 'light' ? '#FFFDF9' : 'rgba(255, 255, 255, 0.05)',
+                                border: `1px solid ${tk.cardBorder}`
                               }}
                             >
-                              <Edit2 className="w-4 h-4" style={{ color: colors.textSecondary }} />
-                              <span className="text-xs font-medium" style={{ color: colors.textSecondary }}>Edit</span>
+                              <Edit2 className="w-4 h-4" style={{ color: tk.textSec }} />
+                              <span className="text-xs font-medium" style={{ color: tk.textSec }}>Edit</span>
                             </button>
                             <button
                               onClick={() => resetPassword(member)}
                               className="p-3 rounded-xl transition-all active:scale-[0.95] flex items-center justify-center gap-2"
                               style={{
-                                background: 'rgba(245, 158, 11, 0.1)',
-                                border: '1px solid rgba(245, 158, 11, 0.2)'
+                                background: `${tk.amber}10`,
+                                border: `1px solid ${tk.amber}20`
                               }}
                             >
-                              <Key className="w-4 h-4" style={{ color: colors.warning }} />
-                              <span className="text-xs font-medium" style={{ color: colors.warning }}>Reset</span>
+                              <Key className="w-4 h-4" style={{ color: tk.amber }} />
+                              <span className="text-xs font-medium" style={{ color: tk.amber }}>Reset</span>
                             </button>
                             <button
                               onClick={() => deleteMember(member)}
                               className="p-3 rounded-xl transition-all active:scale-[0.95] flex items-center justify-center gap-2"
                               style={{
-                                background: 'rgba(239, 68, 68, 0.1)',
-                                border: '1px solid rgba(239, 68, 68, 0.2)'
+                                background: `${tk.danger}10`,
+                                border: `1px solid ${tk.danger}20`
                               }}
                             >
-                              <Trash2 className="w-4 h-4 text-red-400" />
-                              <span className="text-xs font-medium text-red-400">Delete</span>
+                              <Trash2 className="w-4 h-4" style={{ color: tk.danger }} />
+                              <span className="text-xs font-medium" style={{ color: tk.danger }}>Delete</span>
                             </button>
                           </div>
                         </div>
@@ -1837,31 +1815,31 @@ export default function OrgMembersPage() {
             <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={() => setShowInviteModal(false)} />
             <motion.div
               className="relative w-full max-w-md rounded-2xl p-6 z-10"
-              style={{ background: colors.backgroundCard, border: `1px solid ${colors.borderLight}` }}
+              style={{ background: tk.card, border: `1px solid ${tk.cardBorder}`, color: tk.text }}
               initial={{ scale: 0.95, opacity: 0 }}
               animate={{ scale: 1, opacity: 1 }}
               exit={{ scale: 0.95, opacity: 0 }}
             >
               <div className="flex items-center justify-between mb-5">
                 <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-xl flex items-center justify-center" style={{ background: `${colors.success}15` }}>
-                    <Link2 size={20} style={{ color: colors.success }} />
+                  <div className="w-10 h-10 rounded-xl flex items-center justify-center" style={{ background: `${tk.mint}15` }}>
+                    <Link2 size={20} style={{ color: tk.mint }} />
                   </div>
                   <div>
-                    <h3 className="text-lg font-semibold text-white">Invite Link</h3>
-                    <p className="text-xs" style={{ color: colors.textTertiary }}>
+                    <h3 className="text-lg font-semibold" style={{ color: tk.text }}>Invite Link</h3>
+                    <p className="text-xs" style={{ color: tk.textSec }}>
                       Share this link with {memberLabelPlural.toLowerCase()} to join
                     </p>
                   </div>
                 </div>
-                <button onClick={() => setShowInviteModal(false)} className="p-2 rounded-lg hover:bg-white/5"><X size={18} className="text-gray-400" /></button>
+                <button onClick={() => setShowInviteModal(false)} className="p-2 rounded-lg hover:bg-white/5"><X size={18} style={{ color: tk.textSec }} /></button>
               </div>
 
               {!inviteLink ? (
                 <div className="space-y-4">
                   {/* Max Uses */}
                   <div>
-                    <label className="block text-sm font-medium text-white mb-1.5">Max number of joins</label>
+                    <label className="block text-sm font-medium mb-1.5" style={{ color: tk.text }}>Max number of joins</label>
                     <div className="flex gap-2">
                       {[10, 25, 50, 100, 500].map(n => (
                         <button
@@ -1869,9 +1847,9 @@ export default function OrgMembersPage() {
                           onClick={() => setInviteMaxUses(n)}
                           className="flex-1 py-2 rounded-lg text-xs font-medium transition-all"
                           style={{
-                            background: inviteMaxUses === n ? `${colors.primary}20` : 'rgba(255,255,255,0.03)',
-                            border: `1px solid ${inviteMaxUses === n ? colors.primary : 'rgba(255,255,255,0.08)'}`,
-                            color: inviteMaxUses === n ? colors.primary : colors.textSecondary,
+                            background: inviteMaxUses === n ? tk.primarySoft : theme === 'light' ? '#FFF6EE' : 'rgba(255,255,255,0.03)',
+                            border: `1px solid ${inviteMaxUses === n ? tk.primaryRing : tk.cardBorder}`,
+                            color: inviteMaxUses === n ? tk.primary : tk.textSec,
                           }}
                         >
                           {n}
@@ -1882,7 +1860,7 @@ export default function OrgMembersPage() {
 
                   {/* Expiry */}
                   <div>
-                    <label className="block text-sm font-medium text-white mb-1.5">Expires in</label>
+                    <label className="block text-sm font-medium mb-1.5" style={{ color: tk.text }}>Expires in</label>
                     <div className="flex gap-2">
                       {([['1d', '1 day'], ['7d', '7 days'], ['30d', '30 days'], ['never', 'Never']] as const).map(([val, label]) => (
                         <button
@@ -1890,9 +1868,9 @@ export default function OrgMembersPage() {
                           onClick={() => setInviteExpiry(val)}
                           className="flex-1 py-2 rounded-lg text-xs font-medium transition-all"
                           style={{
-                            background: inviteExpiry === val ? `${colors.primary}20` : 'rgba(255,255,255,0.03)',
-                            border: `1px solid ${inviteExpiry === val ? colors.primary : 'rgba(255,255,255,0.08)'}`,
-                            color: inviteExpiry === val ? colors.primary : colors.textSecondary,
+                            background: inviteExpiry === val ? tk.primarySoft : theme === 'light' ? '#FFF6EE' : 'rgba(255,255,255,0.03)',
+                            border: `1px solid ${inviteExpiry === val ? tk.primaryRing : tk.cardBorder}`,
+                            color: inviteExpiry === val ? tk.primary : tk.textSec,
                           }}
                         >
                           {label}
@@ -1902,9 +1880,9 @@ export default function OrgMembersPage() {
                   </div>
 
                   {group && (
-                    <div className="p-3 rounded-xl text-sm" style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.06)' }}>
-                      <p className="text-xs" style={{ color: colors.textTertiary }}>
-                        Members who join will be added to: <span className="text-white font-medium">{group.name}</span>
+                    <div className="p-3 rounded-xl text-sm" style={{ background: theme === 'light' ? '#FFFDF9' : 'rgba(255,255,255,0.03)', border: `1px solid ${tk.cardBorder}` }}>
+                      <p className="text-xs" style={{ color: tk.textSec }}>
+                        Members who join will be added to: <span style={{ color: tk.text, fontWeight: 500 }}>{group.name}</span>
                       </p>
                     </div>
                   )}
@@ -1912,8 +1890,8 @@ export default function OrgMembersPage() {
                   <button
                     onClick={generateInviteLink}
                     disabled={inviteLoading}
-                    className="w-full px-6 py-3 rounded-xl text-white font-semibold flex items-center justify-center gap-2 transition-all hover:scale-[1.02] active:scale-[0.98] disabled:opacity-60"
-                    style={{ background: colors.primary }}
+                    className="w-full px-6 py-3 rounded-xl font-semibold flex items-center justify-center gap-2 transition-all hover:scale-[1.02] active:scale-[0.98] disabled:opacity-60"
+                    style={{ background: tk.gradOrange, color: '#FFFFFF' }}
                   >
                     {inviteLoading ? <><Loader2 size={16} className="animate-spin" /> Generating...</> : <><Link2 size={16} /> Generate Link</>}
                   </button>
@@ -1921,14 +1899,14 @@ export default function OrgMembersPage() {
               ) : (
                 <div className="space-y-4">
                   {/* Generated Link */}
-                  <div className="p-3 rounded-xl" style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.08)' }}>
-                    <p className="text-xs font-medium mb-2" style={{ color: colors.textTertiary }}>Invite Link</p>
-                    <p className="text-sm text-white break-all font-mono">{inviteLink}</p>
+                  <div className="p-3 rounded-xl" style={{ background: theme === 'light' ? '#FFFDF9' : 'rgba(255,255,255,0.03)', border: `1px solid ${tk.cardBorder}` }}>
+                    <p className="text-xs font-medium mb-2" style={{ color: tk.textSec }}>Invite Link</p>
+                    <p className="text-sm break-all font-mono" style={{ color: tk.text }}>{inviteLink}</p>
                   </div>
 
-                  <div className="p-3 rounded-xl" style={{ background: `${colors.primary}08`, border: `1px solid ${colors.primary}20` }}>
-                    <p className="text-xs font-medium mb-1" style={{ color: colors.textTertiary }}>Invite Code</p>
-                    <p className="text-2xl font-bold tracking-[0.3em] text-white text-center">{inviteCode}</p>
+                  <div className="p-3 rounded-xl" style={{ background: tk.primarySoft, border: `1px solid ${tk.primaryRing}` }}>
+                    <p className="text-xs font-medium mb-1" style={{ color: tk.textSec }}>Invite Code</p>
+                    <p className="text-2xl font-bold tracking-[0.3em] text-center" style={{ color: tk.text }}>{inviteCode}</p>
                   </div>
 
                   <div className="flex gap-2">
@@ -1936,9 +1914,9 @@ export default function OrgMembersPage() {
                       onClick={copyInviteLink}
                       className="flex-1 px-4 py-3 rounded-xl text-sm font-medium flex items-center justify-center gap-2 transition-all hover:scale-[1.02]"
                       style={{
-                        background: inviteCopied ? `${colors.success}15` : `${colors.primary}15`,
-                        color: inviteCopied ? colors.success : colors.primary,
-                        border: `1px solid ${inviteCopied ? colors.success : colors.primary}30`,
+                        background: inviteCopied ? `${tk.mint}15` : tk.primarySoft,
+                        color: inviteCopied ? tk.mint : tk.primary,
+                        border: `1px solid ${inviteCopied ? tk.mint : tk.primary}30`,
                       }}
                     >
                       {inviteCopied ? <><Check size={16} /> Copied!</> : <><Copy size={16} /> Copy Link</>}
@@ -1946,7 +1924,7 @@ export default function OrgMembersPage() {
                     <button
                       onClick={shareInviteLink}
                       className="flex-1 px-4 py-3 rounded-xl text-sm font-medium flex items-center justify-center gap-2 transition-all hover:scale-[1.02]"
-                      style={{ background: `${colors.primary}15`, color: colors.primary, border: `1px solid ${colors.primary}30` }}
+                      style={{ background: tk.primarySoft, color: tk.primary, border: `1px solid ${tk.primaryRing}` }}
                     >
                       <Share2 size={16} /> Share
                     </button>
@@ -1955,7 +1933,7 @@ export default function OrgMembersPage() {
                   <button
                     onClick={() => { setInviteLink(''); setInviteCode(''); }}
                     className="w-full text-center text-xs py-2 hover:underline"
-                    style={{ color: colors.textTertiary }}
+                    style={{ color: tk.textSec }}
                   >
                     Generate a new link
                   </button>
@@ -1980,15 +1958,15 @@ export default function OrgMembersPage() {
             <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={() => setShowAddModal(false)} />
             <motion.div
               className="relative w-full max-w-md rounded-2xl p-6 border"
-              style={{ background: colors.secondaryLight, borderColor: colors.borderLight, boxShadow: '0 25px 60px rgba(0,0,0,0.6)' }}
+              style={{ background: tk.card, borderColor: tk.cardBorder, boxShadow: '0 25px 60px rgba(0,0,0,0.18)', color: tk.text }}
               initial={{ scale: 0.9, y: 20 }}
               animate={{ scale: 1, y: 0 }}
               exit={{ scale: 0.9, y: 20 }}
             >
               <div className="flex items-center justify-between mb-6">
-                <h3 className="text-lg font-bold text-white">Add {memberLabel}</h3>
+                <h3 className="text-lg font-bold" style={{ color: tk.text }}>Add {memberLabel}</h3>
                 <button onClick={() => setShowAddModal(false)} className="p-2 rounded-lg hover:bg-white/5">
-                  <X size={18} className="text-white" />
+                  <X size={18} style={{ color: tk.textSec }} />
                 </button>
               </div>
 
@@ -1996,28 +1974,28 @@ export default function OrgMembersPage() {
               {addSuccess ? (
                 <motion.div className="space-y-4" initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
                   <div className="text-center py-4">
-                    <div className="w-14 h-14 rounded-full mx-auto mb-3 flex items-center justify-center" style={{ background: `${colors.success}15` }}>
-                      <UserCheck size={28} style={{ color: colors.success }} />
+                    <div className="w-14 h-14 rounded-full mx-auto mb-3 flex items-center justify-center" style={{ background: `${tk.mint}15` }}>
+                      <UserCheck size={28} style={{ color: tk.mint }} />
                     </div>
-                    <h4 className="text-lg font-semibold text-white">{memberLabel} Added!</h4>
-                    <p className="text-sm mt-1" style={{ color: colors.textTertiary }}>{addSuccess.name} can now log in</p>
+                    <h4 className="text-lg font-semibold" style={{ color: tk.text }}>{memberLabel} Added!</h4>
+                    <p className="text-sm mt-1" style={{ color: tk.textSec }}>{addSuccess.name} can now log in</p>
                   </div>
 
-                  <div className="p-4 rounded-xl space-y-3" style={{ background: 'rgba(255,255,255,0.03)', border: `1px solid ${colors.borderLight}` }}>
+                  <div className="p-4 rounded-xl space-y-3" style={{ background: theme === 'light' ? '#FFFDF9' : 'rgba(255,255,255,0.03)', border: `1px solid ${tk.cardBorder}` }}>
                     <div className="flex items-center justify-between">
                       <div>
-                        <p className="text-xs" style={{ color: colors.textTertiary }}>Login ID</p>
-                        <p className="text-sm font-mono text-white">{addSuccess.id}</p>
+                        <p className="text-xs" style={{ color: tk.textSec }}>Login ID</p>
+                        <p className="text-sm font-mono" style={{ color: tk.text }}>{addSuccess.id}</p>
                       </div>
                       <button onClick={() => copyCredentials(addSuccess.id, addSuccess.password)} className="p-2 rounded-lg hover:bg-white/5" title="Copy">
-                        <Copy size={14} style={{ color: colors.primary }} />
+                        <Copy size={14} style={{ color: tk.primary }} />
                       </button>
                     </div>
                     <div>
-                      <p className="text-xs" style={{ color: colors.textTertiary }}>Default Password</p>
-                      <p className="text-sm font-mono text-white">{addSuccess.password}</p>
+                      <p className="text-xs" style={{ color: tk.textSec }}>Default Password</p>
+                      <p className="text-sm font-mono" style={{ color: tk.text }}>{addSuccess.password}</p>
                     </div>
-                    <p className="text-xs" style={{ color: colors.warning }}>
+                    <p className="text-xs" style={{ color: tk.amber }}>
                       Share these credentials securely. They'll be asked to change their password on first login.
                     </p>
                   </div>
@@ -2025,15 +2003,15 @@ export default function OrgMembersPage() {
                   <div className="flex gap-2">
                     <button
                       onClick={() => setAddSuccess(null)}
-                      className="flex-1 px-4 py-2.5 rounded-xl text-sm font-medium text-white"
-                      style={{ background: colors.primary }}
+                      className="flex-1 px-4 py-2.5 rounded-xl text-sm font-medium"
+                      style={{ background: tk.gradOrange, color: '#FFFFFF' }}
                     >
                       Add Another
                     </button>
                     <button
                       onClick={() => setShowAddModal(false)}
                       className="px-4 py-2.5 rounded-xl text-sm font-medium"
-                      style={{ color: colors.textSecondary, border: `1px solid ${colors.borderLight}` }}
+                      style={{ color: tk.textSec, border: `1px solid ${tk.cardBorder}` }}
                     >
                       Done
                     </button>
@@ -2042,78 +2020,84 @@ export default function OrgMembersPage() {
               ) : (
                 <div className="space-y-4">
                   {addError && (
-                    <div className="flex items-start gap-2 p-3 rounded-xl text-sm" style={{ background: `${colors.error}10`, color: colors.error, border: `1px solid ${colors.error}25` }}>
+                    <div className="flex items-start gap-2 p-3 rounded-xl text-sm" style={{ background: `${tk.danger}10`, color: tk.danger, border: `1px solid ${tk.danger}25` }}>
                       <AlertTriangle size={16} className="mt-0.5 shrink-0" />
                       {addError}
                     </div>
                   )}
 
                   <div>
-                    <label className="block text-sm font-medium text-white mb-1.5">{memberLabel} ID *</label>
+                    <label className="block text-sm font-medium mb-1.5" style={{ color: tk.text }}>{memberLabel} ID *</label>
                     <input
                       type="text"
                       placeholder={organization?.organization_type === 'university' ? 'e.g. CSC/2020/001' : 'e.g. MEM001'}
                       value={newMember.member_id}
                       onChange={e => setNewMember(prev => ({ ...prev, member_id: e.target.value }))}
-                      className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white placeholder-gray-500 outline-none focus:border-[#FF6803] transition-colors text-sm"
+                      className="w-full rounded-xl px-4 py-3 outline-none transition-colors text-sm"
+                      style={{ background: theme === 'light' ? '#FFFDF9' : 'rgba(255,255,255,0.04)', border: `1px solid ${tk.cardBorder}`, color: tk.text }}
                     />
                   </div>
 
                   <div>
-                    <label className="block text-sm font-medium text-white mb-1.5">Full Name *</label>
+                    <label className="block text-sm font-medium mb-1.5" style={{ color: tk.text }}>Full Name *</label>
                     <input
                       type="text"
                       placeholder="e.g. John Doe"
                       value={newMember.full_name}
                       onChange={e => setNewMember(prev => ({ ...prev, full_name: e.target.value }))}
-                      className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white placeholder-gray-500 outline-none focus:border-[#FF6803] transition-colors text-sm"
+                      className="w-full rounded-xl px-4 py-3 outline-none transition-colors text-sm"
+                      style={{ background: theme === 'light' ? '#FFFDF9' : 'rgba(255,255,255,0.04)', border: `1px solid ${tk.cardBorder}`, color: tk.text }}
                     />
                   </div>
 
                   <div className="grid grid-cols-2 gap-3">
                     <div>
-                      <label className="block text-sm font-medium text-white mb-1.5">Email</label>
+                      <label className="block text-sm font-medium mb-1.5" style={{ color: tk.text }}>Email</label>
                       <input
                         type="email"
                         placeholder="Optional"
                         value={newMember.email}
                         onChange={e => setNewMember(prev => ({ ...prev, email: e.target.value }))}
-                        className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white placeholder-gray-500 outline-none focus:border-[#FF6803] transition-colors text-sm"
+                        className="w-full rounded-xl px-4 py-3 outline-none transition-colors text-sm"
+                        style={{ background: theme === 'light' ? '#FFFDF9' : 'rgba(255,255,255,0.04)', border: `1px solid ${tk.cardBorder}`, color: tk.text }}
                       />
                     </div>
                     <div>
-                      <label className="block text-sm font-medium text-white mb-1.5">Phone</label>
+                      <label className="block text-sm font-medium mb-1.5" style={{ color: tk.text }}>Phone</label>
                       <input
                         type="tel"
                         placeholder="Optional"
                         value={newMember.phone}
                         onChange={e => setNewMember(prev => ({ ...prev, phone: e.target.value }))}
-                        className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white placeholder-gray-500 outline-none focus:border-[#FF6803] transition-colors text-sm"
+                        className="w-full rounded-xl px-4 py-3 outline-none transition-colors text-sm"
+                        style={{ background: theme === 'light' ? '#FFFDF9' : 'rgba(255,255,255,0.04)', border: `1px solid ${tk.cardBorder}`, color: tk.text }}
                       />
                     </div>
                   </div>
 
                   <div>
-                    <label className="block text-sm font-medium text-white mb-1.5">Level / Year</label>
+                    <label className="block text-sm font-medium mb-1.5" style={{ color: tk.text }}>Level / Year</label>
                     <input
                       type="text"
                       placeholder="e.g. 200L, Year 2, Grade 10"
                       value={newMember.level}
                       onChange={e => setNewMember(prev => ({ ...prev, level: e.target.value }))}
-                      className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white placeholder-gray-500 outline-none focus:border-[#FF6803] transition-colors text-sm"
+                      className="w-full rounded-xl px-4 py-3 outline-none transition-colors text-sm"
+                      style={{ background: theme === 'light' ? '#FFFDF9' : 'rgba(255,255,255,0.04)', border: `1px solid ${tk.cardBorder}`, color: tk.text }}
                     />
                   </div>
 
                   <div>
-                    <label className="block text-sm font-medium text-white mb-1.5">Default Password</label>
+                    <label className="block text-sm font-medium mb-1.5" style={{ color: tk.text }}>Default Password</label>
                     <input
                       type="text"
                       value={newMember.password}
                       onChange={e => setNewMember(prev => ({ ...prev, password: e.target.value }))}
                       placeholder={newMember.member_id || 'Same as ID (auto)'}
-                      className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white placeholder-gray-500 outline-none focus:border-[#FF6803] transition-colors text-sm font-mono"
+                      className="w-full rounded-xl px-4 py-3 outline-none transition-colors text-sm font-mono"
+                      style={{ background: theme === 'light' ? '#FFFDF9' : 'rgba(255,255,255,0.04)', border: `1px solid ${tk.cardBorder}`, color: tk.text }}
                     />
-                    <p className="text-xs mt-1" style={{ color: colors.textTertiary }}>
+                    <p className="text-xs mt-1" style={{ color: tk.textSec }}>
                       Defaults to their ID/Reg Number. {memberLabel} will be forced to change on first login.
                     </p>
                   </div>
@@ -2121,8 +2105,8 @@ export default function OrgMembersPage() {
                   <button
                     onClick={handleAddMember}
                     disabled={addLoading}
-                    className="w-full flex items-center justify-center gap-2 px-4 py-3 rounded-xl text-white font-semibold text-sm transition-all hover:scale-[1.02] active:scale-[0.98] disabled:opacity-60"
-                    style={{ background: colors.primary }}
+                    className="w-full flex items-center justify-center gap-2 px-4 py-3 rounded-xl font-semibold text-sm transition-all hover:scale-[1.02] active:scale-[0.98] disabled:opacity-60"
+                    style={{ background: tk.gradOrange, color: '#FFFFFF' }}
                   >
                     {addLoading ? <><Loader2 size={16} className="animate-spin" /> Adding...</> : <><UserPlus size={16} /> Add {memberLabel}</>}
                   </button>

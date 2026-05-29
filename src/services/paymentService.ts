@@ -46,6 +46,16 @@ class PaymentService {
    */
   private async getMemberGroupIds(memberId: string): Promise<string[]> {
     const scope = getOrgScope();
+    // Preferred: every group the member belongs to PLUS all ancestor groups, so
+    // a due placed on a parent unit (department/faculty) still matches a member
+    // in a class below it. Falls back to direct memberships, then primary group.
+    try {
+      const { data } = await supabase.rpc('get_my_billing_group_ids', { p_member_id: memberId });
+      const ids = data && (data as { ok?: boolean }).ok ? (data as { group_ids?: string[] }).group_ids : null;
+      if (Array.isArray(ids) && ids.length) return ids.filter(Boolean);
+    } catch {
+      // RPC not deployed yet — fall through.
+    }
     try {
       const { data } = await supabase.rpc('get_my_groups', { p_member_id: memberId });
       const groups = data && (data as { ok?: boolean }).ok ? (data as { groups?: Array<{ group_id: string }> }).groups : null;
@@ -626,14 +636,20 @@ class PaymentService {
       if (error) throw error;
       const memberLevelCanon = organizationService.canonicalizeLevel(student.level || '');
 
-      const paymentTypes = (allPaymentTypesRes || []).filter((pt: any) => {
-        // Group-scoped due: applies only if the member belongs to that group.
-        if (pt.group_id) return groupIds.has(pt.group_id);
-
-        // Org-wide due: applies by level target (or to everyone when untargeted).
+      const matchesLevel = (pt: any): boolean => {
         const targets: string[] = pt.target_levels || [];
         if (!targets || targets.length === 0) return true;
         return targets.map((l: string) => organizationService.canonicalizeLevel(l)).includes(memberLevelCanon);
+      };
+
+      const paymentTypes = (allPaymentTypesRes || []).filter((pt: any) => {
+        // Group/unit-scoped due: the member must belong to that group (or a class
+        // below it — groupIds already includes ancestor units), AND match any
+        // level filter the exec set (e.g. "300L across the whole department").
+        if (pt.group_id) return groupIds.has(pt.group_id) && matchesLevel(pt);
+
+        // Org-wide due: applies by level target (or to everyone when untargeted).
+        return matchesLevel(pt);
       });
 
       return paymentTypes || [];

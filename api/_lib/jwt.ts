@@ -65,3 +65,33 @@ export function signMemberToken(claims: MemberTokenClaims, secret: string): { to
 
   return { token: `${signingInput}.${signature}`, expiresAt: exp };
 }
+
+/**
+ * Verify a Payvexo session JWT (HS256) and return its claims, or null if the
+ * signature is invalid or the token is expired. Used by the org-switch flow to
+ * prove the caller's current identity without a password.
+ */
+export function verifyMemberToken(
+  token: string,
+  secret: string,
+): { sub: string; org_id?: string; group_id?: string | null; member_human_id?: string | null } | null {
+  if (!token || !secret) return null;
+  const parts = token.split('.');
+  if (parts.length !== 3) return null;
+  const [h, p, sig] = parts;
+
+  const expected = base64url(crypto.createHmac('sha256', secret).update(`${h}.${p}`).digest());
+  // Constant-time comparison to avoid timing leaks.
+  const a = Buffer.from(sig);
+  const b = Buffer.from(expected);
+  if (a.length !== b.length || !crypto.timingSafeEqual(a, b)) return null;
+
+  try {
+    const payload = JSON.parse(Buffer.from(p.replace(/-/g, '+').replace(/_/g, '/'), 'base64').toString('utf8'));
+    if (typeof payload.exp === 'number' && payload.exp < Math.floor(Date.now() / 1000)) return null;
+    if (!payload.sub) return null;
+    return payload;
+  } catch {
+    return null;
+  }
+}

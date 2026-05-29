@@ -8,6 +8,7 @@ import ConfirmDialog from '@/components/ui/ConfirmDialog'
 import ProfessionalDropdown from '@/components/ui/ProfessionalDropdown'
 import ProfessionalDateTimePicker from '@/components/ui/ProfessionalDateTimePicker'
 import { colors } from '@/config/colors'
+import Pagination, { usePagination } from '@/components/ui/Pagination'
 import { useAuth } from '@/hooks/useAppAuth'
 import { useToast } from '@/hooks/useToast'
 import { supabase } from '@/config/supabase'
@@ -362,6 +363,8 @@ export default function ManageDuesPage() {
     return matchesSearch && matchesStatus && matchesCategory
   })
 
+  const duesPager = usePagination(filteredPaymentTypes, 12)
+
   const getCategoryLabel = (category: string) => {
     const cat = CATEGORIES.find(c => c.value === category)
     return cat?.label || category
@@ -676,7 +679,7 @@ export default function ManageDuesPage() {
 
               {!loading && filteredPaymentTypes.length > 0 && (
                 <div className="space-y-4 pt-6">
-                  {filteredPaymentTypes.map((pt, index) => (
+                  {duesPager.pageItems.map((pt, index) => (
                     <motion.div
                       key={pt.id}
                       initial={{ opacity: 0, y: 20 }}
@@ -844,6 +847,14 @@ export default function ManageDuesPage() {
                       </div>
                     </motion.div>
                   ))}
+                  <Pagination
+                    page={duesPager.page}
+                    pageCount={duesPager.pageCount}
+                    onChange={duesPager.setPage}
+                    range={duesPager.range}
+                    total={duesPager.total}
+                    noun="dues"
+                  />
                 </div>
               )}
             </div>
