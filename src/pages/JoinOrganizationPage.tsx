@@ -33,7 +33,6 @@ import {
   EyeOff,
   AlertCircle,
   Ticket,
-  tk,
   Globe,
   Mail,
   Phone,
@@ -467,7 +466,6 @@ export default function JoinOrganizationPage() {
                       key={i}
                       value={c}
                       filled={Boolean(c)}
-                      focused={false}
                       separator={i === 3}
                       inputRef={(el) => { codeRefs.current[i] = el; }}
                       onChange={(v) => handleCellChange(i, v)}
@@ -823,7 +821,6 @@ function CodeCell({
   tk,
   value,
   filled,
-  focused,
   separator,
   inputRef,
   onChange,
@@ -833,7 +830,6 @@ function CodeCell({
   tk: JoinTokens;
   value: string;
   filled: boolean;
-  focused: boolean;
   separator: boolean;
   inputRef: (el: HTMLInputElement | null) => void;
   onChange: (v: string) => void;
