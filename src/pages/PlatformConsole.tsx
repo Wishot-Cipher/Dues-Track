@@ -15,7 +15,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import {
   LayoutDashboard, ShieldCheck, Building2, Banknote, GraduationCap, Siren,
   Megaphone, Settings2, BarChart3, ScrollText, LogOut, Loader2, Mail, KeyRound,
-  CheckCircle2, AlertTriangle, RefreshCw, Clock, Vote, ChevronRight,
+  CheckCircle2, AlertTriangle, RefreshCw, Clock, Vote,
 } from 'lucide-react';
 import {
   platformAdminRequestCode, platformAdminVerifyCode, getPlatformAdmin,
