@@ -72,62 +72,131 @@ function LogoutConfirmModal({
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
+      style={{ background: 'rgba(3,7,18,0.68)', backdropFilter: 'blur(10px)' }}
+      onClick={onCancel}
     >
-      <motion.button
-        type="button"
-        className="absolute inset-0"
-        style={{ background: 'rgba(0,0,0,0.68)', backdropFilter: 'blur(8px)' }}
-        onClick={onCancel}
-        initial={{ opacity: 0 }}
-        animate={{ opacity: 1 }}
-      />
-
       <motion.div
-        className="relative w-full max-w-md rounded-[24px] overflow-hidden"
-        style={{ background: T.card, border: `1px solid ${T.borderHot}` }}
-        initial={{ opacity: 0, y: 24, scale: 0.96 }}
+        initial={{ opacity: 0, y: 10, scale: 0.98 }}
         animate={{ opacity: 1, y: 0, scale: 1 }}
-        exit={{ opacity: 0, y: 18, scale: 0.96 }}
-        transition={{ duration: 0.22, ease: [0.22, 1, 0.36, 1] }}
+        exit={{ opacity: 0, y: 10, scale: 0.98 }}
+        transition={{ duration: 0.16 }}
+        onClick={(e) => e.stopPropagation()}
+        style={{
+          width: '100%',
+          maxWidth: 520,
+          background: '#0C1220',
+          border: `1px solid ${T.borderHot}`,
+          borderRadius: 18,
+          padding: 22,
+          boxShadow: '0 24px 60px rgba(0,0,0,0.45)',
+        }}
       >
-        <div style={{ height: 2, background: `linear-gradient(90deg, ${T.primary}, transparent 75%)` }} />
-        <div className="p-6 sm:p-7">
-          <div
-            className="w-12 h-12 rounded-2xl flex items-center justify-center mb-4"
-            style={{ background: 'rgba(255,104,3,0.10)', border: '1px solid rgba(255,104,3,0.22)' }}
-          >
-            <LogOut size={20} style={{ color: T.primary }} />
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12 }}>
+          <div style={{ width: 38, height: 38, borderRadius: 12, background: 'rgba(255,104,3,0.12)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: T.primary }}>
+            <LogOut size={18} />
           </div>
-          <h3 className="text-xl font-bold tracking-tight" style={{ color: T.text }}>
-            Sign out of the console?
-          </h3>
-          <p className="mt-2 text-sm leading-6" style={{ color: T.textSec }}>
-            You’ll need to verify your session again next time you open the platform console.
-          </p>
+          <div>
+            <h3 style={{ margin: 0, fontSize: 18, color: T.text }}>Confirm sign out</h3>
+            <p style={{ margin: '2px 0 0', fontSize: 12, color: T.textSec }}>Review the action before leaving the console.</p>
+          </div>
+        </div>
 
-          <div className="mt-6 flex items-center gap-3">
-            <motion.button
-              type="button"
-              onClick={onCancel}
-              whileTap={{ scale: 0.98 }}
-              className="flex-1 rounded-xl px-4 py-3 text-sm font-semibold"
-              style={{ background: 'rgba(255,255,255,0.05)', border: `1px solid ${T.border}`, color: T.text }}
-              disabled={busy}
-            >
-              Cancel
-            </motion.button>
-            <motion.button
-              type="button"
-              onClick={onConfirm}
-              whileTap={{ scale: 0.98 }}
-              className="flex-1 rounded-xl px-4 py-3 text-sm font-semibold text-white inline-flex items-center justify-center gap-2"
-              style={{ background: T.primary }}
-              disabled={busy}
-            >
-              {busy ? <Loader2 size={16} className="animate-spin" /> : <LogOut size={16} />}
-              Sign out
-            </motion.button>
+        <div style={{ display: 'grid', gap: 10, marginBottom: 18 }}>
+          <div style={{ padding: 12, borderRadius: 12, background: 'rgba(255,255,255,0.03)', border: `1px solid ${T.border}` }}>
+            <div style={{ fontSize: 10, color: T.textTer, textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 4 }}>Action</div>
+            <div style={{ fontSize: 13, color: T.text }}>Sign out of the platform console</div>
           </div>
+          <div style={{ padding: 12, borderRadius: 12, background: 'rgba(255,255,255,0.03)', border: `1px solid ${T.border}` }}>
+            <div style={{ fontSize: 10, color: T.textTer, textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 4 }}>Impact</div>
+            <div style={{ fontSize: 13, color: T.textSec, lineHeight: 1.6, whiteSpace: 'pre-wrap' }}>You’ll need to verify your session again next time you open the platform console.</div>
+          </div>
+        </div>
+
+        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, flexWrap: 'wrap' }}>
+          <Btn onClick={onCancel} disabled={busy} color={T.textSec}>Cancel</Btn>
+          <Btn onClick={onConfirm} disabled={busy} color={T.primary}>
+            {busy ? <Loader2 size={14} className="animate-spin" /> : <LogOut size={14} />} Sign out
+          </Btn>
+        </div>
+      </motion.div>
+    </motion.div>
+  );
+}
+
+function SafetyConfirmModal({
+  org,
+  onCancel,
+  onConfirm,
+  busy,
+}: {
+  org: OrgOverview | null;
+  onCancel: () => void;
+  onConfirm: () => void;
+  busy: boolean;
+}) {
+  if (!org) return null;
+
+  const freezing = org.is_active;
+  const actionLabel = freezing ? 'Freeze organization' : 'Unfreeze organization';
+  const actionDescription = freezing
+    ? 'This will immediately block access for all members in this organization.'
+    : 'This will restore access for all members in this organization.';
+
+  return (
+    <motion.div
+      className="fixed inset-0 z-[120] flex items-end sm:items-center justify-center p-4"
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      style={{ background: 'rgba(3,7,18,0.68)', backdropFilter: 'blur(10px)' }}
+      onClick={onCancel}
+    >
+      <motion.div
+        initial={{ opacity: 0, y: 10, scale: 0.98 }}
+        animate={{ opacity: 1, y: 0, scale: 1 }}
+        exit={{ opacity: 0, y: 10, scale: 0.98 }}
+        transition={{ duration: 0.16 }}
+        onClick={(e) => e.stopPropagation()}
+        style={{
+          width: '100%',
+          maxWidth: 520,
+          background: '#0C1220',
+          border: `1px solid ${freezing ? T.borderHot : 'rgba(16,185,129,0.3)'}`,
+          borderRadius: 18,
+          padding: 22,
+          boxShadow: '0 24px 60px rgba(0,0,0,0.45)',
+        }}
+      >
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12 }}>
+          <div style={{ width: 38, height: 38, borderRadius: 12, background: freezing ? 'rgba(239,68,68,0.12)' : 'rgba(16,185,129,0.12)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: freezing ? T.red : T.mint }}>
+            <Siren size={18} />
+          </div>
+          <div>
+            <h3 style={{ margin: 0, fontSize: 18, color: T.text }}>{freezing ? 'Confirm freeze' : 'Confirm unfreeze'}</h3>
+            <p style={{ margin: '2px 0 0', fontSize: 12, color: T.textSec }}>Review the selected organization before applying changes.</p>
+          </div>
+        </div>
+
+        <div style={{ display: 'grid', gap: 10, marginBottom: 18 }}>
+          <div style={{ padding: 12, borderRadius: 12, background: 'rgba(255,255,255,0.03)', border: `1px solid ${T.border}` }}>
+            <div style={{ fontSize: 10, color: T.textTer, textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 4 }}>Organization</div>
+            <div style={{ fontSize: 13, color: T.text }}>{org.name}</div>
+          </div>
+          <div style={{ padding: 12, borderRadius: 12, background: 'rgba(255,255,255,0.03)', border: `1px solid ${T.border}` }}>
+            <div style={{ fontSize: 10, color: T.textTer, textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 4 }}>Action</div>
+            <div style={{ fontSize: 13, color: T.text }}>{actionLabel}</div>
+          </div>
+          <div style={{ padding: 12, borderRadius: 12, background: 'rgba(255,255,255,0.03)', border: `1px solid ${T.border}` }}>
+            <div style={{ fontSize: 10, color: T.textTer, textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 4 }}>Impact</div>
+            <div style={{ fontSize: 13, color: T.textSec, lineHeight: 1.6, whiteSpace: 'pre-wrap' }}>{actionDescription}</div>
+          </div>
+        </div>
+
+        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, flexWrap: 'wrap' }}>
+          <Btn onClick={onCancel} disabled={busy} color={T.textSec}>Cancel</Btn>
+          <Btn onClick={onConfirm} disabled={busy} color={freezing ? T.red : T.mint}>
+            {busy ? <Loader2 size={14} className="animate-spin" /> : <Siren size={14} />} {freezing ? 'Freeze' : 'Unfreeze'}
+          </Btn>
         </div>
       </motion.div>
     </motion.div>
@@ -919,6 +988,7 @@ function TrustSafety() {
   const [flags, setFlags]   = useState<PendingClaim[]>([]);
   const [loading, setLoading] = useState(true);
   const [busyId, setBusyId] = useState<string | null>(null);
+  const [confirmOrg, setConfirmOrg] = useState<OrgOverview | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -931,11 +1001,17 @@ function TrustSafety() {
   useEffect(() => { void load(); }, [load]);
 
   const toggle = async (o: OrgOverview) => {
-    if (!confirm(`${o.is_active ? 'Freeze' : 'Unfreeze'} ${o.name}?`)) return;
+    setConfirmOrg(o);
+  };
+
+  const runToggle = async () => {
+    if (!confirmOrg) return;
+    const o = confirmOrg;
     setBusyId(o.id);
     try {
       await toggleOrganizationStatus(o.id, !o.is_active);
       setOrgs((p) => p.map((x) => x.id === o.id ? { ...x, is_active: !x.is_active } : x));
+      setConfirmOrg(null);
     } catch (e) { alert(e instanceof Error ? e.message : 'Failed'); }
     setBusyId(null);
   };
@@ -979,6 +1055,17 @@ function TrustSafety() {
           </div>
         ))}
       </div>
+
+      <AnimatePresence>
+        {confirmOrg && (
+          <SafetyConfirmModal
+            org={confirmOrg}
+            onCancel={() => setConfirmOrg(null)}
+            onConfirm={runToggle}
+            busy={busyId === confirmOrg.id}
+          />
+        )}
+      </AnimatePresence>
     </div>
   );
 }
@@ -1279,7 +1366,7 @@ export default function PlatformConsole() {
     return (
       <motion.button
         key={n.id}
-        whileHover={{ background: T.hover }}
+        whileHover={{ background: 'rgba(17, 24, 39, 1)' }}
         onClick={() => setSection(n.id)}
         title={collapsed && !isMobile ? n.label : undefined}
         style={{
@@ -1287,8 +1374,8 @@ export default function PlatformConsole() {
           justifyContent: collapsed && !isMobile ? 'center' : 'flex-start',
           gap: 10, padding: collapsed && !isMobile ? '10px 0' : '9px 12px',
           borderRadius: 9, cursor: 'pointer', width: '100%',
-          background: on ? `${T.primary}15` : 'transparent',
-          border: `1px solid ${on ? T.primary + '30' : 'transparent'}`,
+          background: on ? `${T.primary}15` : 'rgba(17, 24, 39, 0)',
+          border: `1px solid ${on ? T.primary + '30' : 'rgba(17, 24, 39, 0)'}`,
           color: on ? T.primary : T.textSec,
           fontSize: 13, fontWeight: 600, marginBottom: 2,
           overflow: 'hidden', transition: 'background 0.15s, border-color 0.15s',

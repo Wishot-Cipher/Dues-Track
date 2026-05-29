@@ -906,14 +906,14 @@ function PlatformDashboard({ admin, onLogout }: { admin: PlatformAdmin; onLogout
         {/* Stats Grid */}
         {stats && (
           <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
-            <StatCard
+            <ConsoleStatCard
               label="Organizations"
               value={stats.totalOrganizations}
               icon={Building2}
               color={colors.primary}
               subtext={`${stats.activeOrganizations} active`}
             />
-            <StatCard
+            <ConsoleStatCard
               label="Total Members"
               value={stats.totalMembers.toLocaleString()}
               icon={Users}
