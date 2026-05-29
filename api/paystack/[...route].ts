@@ -158,12 +158,17 @@ async function handleInitCore(req: any, res: any, body: any) {
 
   const supabase = createClient(supabaseUrl, serviceRole);
 
-  const { memberId, paymentTypeId, callbackPath, tierId } = body || {};
-  const auth = await verifyMember(supabase, memberId);
-  if (!auth.valid || !auth.data) {
-    return res.status(auth.status || 401).json({ ok: false, error: auth.error || 'Auth failed' });
+  const { memberId, paymentTypeId, callbackPath, tierId, guestName, guestEmail, guestPhone } = body || {};
+  const isGuestCheckout = !memberId;
+  let member: any = null;
+
+  if (!isGuestCheckout) {
+    const auth = await verifyMember(supabase, memberId);
+    if (!auth.valid || !auth.data) {
+      return res.status(auth.status || 401).json({ ok: false, error: auth.error || 'Auth failed' });
+    }
+    member = auth.data;
   }
-  const member = auth.data;
 
   if (!paymentTypeId || typeof paymentTypeId !== 'string') {
     return res.status(400).json({ ok: false, error: 'paymentTypeId is required' });
@@ -173,7 +178,6 @@ async function handleInitCore(req: any, res: any, body: any) {
     .from('payment_types')
     .select('*')
     .eq('id', paymentTypeId)
-    .eq('organization_id', member.organization_id)
     .maybeSingle();
 
   if (ptErr) {
@@ -181,7 +185,7 @@ async function handleInitCore(req: any, res: any, body: any) {
     return res.status(500).json({ ok: false, error: `Lookup failed: ${ptErr.message || 'unknown'}` });
   }
   if (!pt) {
-    return res.status(404).json({ ok: false, error: 'Payment type not found in your organization' });
+    return res.status(404).json({ ok: false, error: 'Payment type not found.' });
   }
   if (pt.is_active === false) {
     return res.status(400).json({ ok: false, error: 'This payment is no longer accepting contributions.' });
@@ -190,10 +194,24 @@ async function handleInitCore(req: any, res: any, body: any) {
     return res.status(400).json({ ok: false, error: 'This payment is not configured for online checkout.' });
   }
 
+  if (isGuestCheckout) {
+    if (pt.category !== 'event' || !pt.is_public) {
+      return res.status(403).json({ ok: false, error: 'This event is not open for public checkout.' });
+    }
+    if (!guestName || typeof guestName !== 'string' || !guestName.trim()) {
+      return res.status(400).json({ ok: false, error: 'guestName is required' });
+    }
+    if (!guestEmail || typeof guestEmail !== 'string' || !guestEmail.trim()) {
+      return res.status(400).json({ ok: false, error: 'guestEmail is required' });
+    }
+  } else if (member?.organization_id !== pt.organization_id) {
+    return res.status(403).json({ ok: false, error: 'Payment type not found in your organization' });
+  }
+
   const { data: org, error: orgErr } = await supabase
     .from('organizations')
     .select('id, slug, name, currency_code, platform_fee_percent, platform_fee_flat, platform_fee_min, platform_fee_cap, platform_fee_mode, paystack_subaccount_code')
-    .eq('id', member.organization_id)
+    .eq('id', pt.organization_id)
     .maybeSingle();
   if (orgErr || !org) {
     return res.status(500).json({ ok: false, error: 'Could not resolve organization.' });
@@ -203,6 +221,9 @@ async function handleInitCore(req: any, res: any, body: any) {
   // A due that's already fully paid must not be payable again. (Events are
   // tickets — a member may legitimately buy more than one, so skip them.)
   if (pt.category !== 'event' && Number(pt.amount) > 0) {
+    if (isGuestCheckout) {
+      return res.status(403).json({ ok: false, error: 'Public checkout is only available for event tickets.' });
+    }
     const { data: priorApproved } = await supabase
       .from('payments')
       .select('amount')
@@ -217,13 +238,15 @@ async function handleInitCore(req: any, res: any, body: any) {
 
   // Retire stale pending inits for this member+due so abandoned checkouts don't
   // pile up (and don't make a paid due look "pending"/payable in the UI).
-  await supabase
-    .from('payments')
-    .update({ status: 'abandoned' })
-    .eq('member_id', member.id)
-    .eq('payment_type_id', pt.id)
-    .eq('status', 'pending')
-    .is('paystack_status', null);
+  if (!isGuestCheckout) {
+    await supabase
+      .from('payments')
+      .update({ status: 'abandoned' })
+      .eq('member_id', member.id)
+      .eq('payment_type_id', pt.id)
+      .eq('status', 'pending')
+      .is('paystack_status', null);
+  }
 
   // Events: the price comes from the chosen ticket tier, not pt.amount.
   let baseNaira = Number(pt.amount);
@@ -261,12 +284,17 @@ async function handleInitCore(req: any, res: any, body: any) {
   });
   const totalKobo = duesKobo + feeKobo;
 
-  const payerEmail = member.email || `${member.member_id}@payvexo.app`;
+  const payerEmail = isGuestCheckout
+    ? String(guestEmail).trim()
+    : (member.email || `${member.member_id}@payvexo.app`);
+  const payerName = isGuestCheckout
+    ? String(guestName).trim()
+    : member.full_name;
 
   const paymentRow: Record<string, unknown> = {
-    organization_id:     member.organization_id,
-    group_id:            member.group_id,
-    member_id:           member.id,
+    organization_id:     pt.organization_id,
+    group_id:            isGuestCheckout ? null : member.group_id,
+    member_id:           isGuestCheckout ? null : member.id,
     payment_type_id:     pt.id,
     event_tier_id:       resolvedTierId,
     amount:              baseNaira,
@@ -277,7 +305,7 @@ async function handleInitCore(req: any, res: any, body: any) {
     payment_method:      'paystack',
     status:              'pending',
     payer_email:         payerEmail,
-    payer_name:          member.full_name,
+    payer_name:          payerName,
   };
 
   const { data: inserted, error: insErr } = await supabase
@@ -316,14 +344,16 @@ async function handleInitCore(req: any, res: any, body: any) {
       payment_id:       inserted.id,
       payment_type_id:  pt.id,
       payment_type_title: pt.title,
-      organization_id:  member.organization_id,
-      member_id:        member.id,
-      group_id:         member.group_id,
+        organization_id:  pt.organization_id,
+        member_id:        isGuestCheckout ? null : member.id,
+        group_id:         isGuestCheckout ? null : member.group_id,
       dues_kobo:        duesKobo,
       platform_fee_kobo: feeKobo,
       total_kobo:       totalKobo,
       currency_code:    paymentRow.currency_code,
-      payer_name:       member.full_name,
+        payer_name:       payerName,
+        payer_email:      payerEmail,
+        guest_checkout:   isGuestCheckout,
     },
   };
 
@@ -400,7 +430,7 @@ async function handleVerify(req: any, res: any, body: any) {
 
   const { data: paymentRow, error: paymentErr } = await supabase
     .from('payments')
-    .select('id, status, paystack_status, organization_id, group_id, member_id, payment_type_id, dues_amount_kobo, platform_fee_kobo, total_charged_kobo, currency_code, amount, payer_email, payer_name')
+    .select('id, status, paystack_status, organization_id, group_id, member_id, payment_type_id, event_tier_id, dues_amount_kobo, platform_fee_kobo, total_charged_kobo, currency_code, amount, payer_email, payer_name')
     .eq('paystack_reference', reference)
     .maybeSingle();
 
@@ -413,10 +443,12 @@ async function handleVerify(req: any, res: any, body: any) {
   }
 
   if (paymentRow.status === 'approved' && paymentRow.paystack_status === 'success') {
+    const ticketResult = await supabase.rpc('issue_event_ticket', { p_payment_id: paymentRow.id });
     return res.status(200).json({
       ok: true,
       status: 'approved',
       payment: paymentRow,
+      ticket_code: ticketResult?.data?.ticket_code || null,
     });
   }
 
@@ -480,12 +512,13 @@ async function handleVerify(req: any, res: any, body: any) {
     }
 
     // If this was an event purchase, mint the ticket (idempotent; no-ops for dues)
-    await supabase.rpc('issue_event_ticket', { p_payment_id: paymentRow.id });
+    const ticketResult = await supabase.rpc('issue_event_ticket', { p_payment_id: paymentRow.id });
 
     return res.status(200).json({
       ok: true,
       status: 'approved',
       payment: { ...paymentRow, status: 'approved', paystack_status: 'success' },
+      ticket_code: ticketResult?.data?.ticket_code || null,
       paystack: {
         status:   ps.status,
         amount:   ps.amount,

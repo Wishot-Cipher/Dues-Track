@@ -2,7 +2,7 @@
  * paystackService — frontend bindings for the Paystack init + verify API.
  *
  * Two methods:
- *   initialize({ paymentTypeId, memberId, callbackPath? })
+ *   initialize({ paymentTypeId, memberId?, guestName?, guestEmail?, callbackPath? })
  *      → calls POST /api/paystack/init
  *      → returns { authorization_url, reference, payment_id, total_kobo, … }
  *
@@ -17,7 +17,10 @@
 
 export interface PaystackInitInput {
   paymentTypeId: string;
-  memberId: string;
+  memberId?: string;
+  guestName?: string;
+  guestEmail?: string;
+  guestPhone?: string;
   /** For events: the chosen ticket tier (drives the price). */
   tierId?: string | null;
   /**
@@ -26,6 +29,7 @@ export interface PaystackInitInput {
    * `/<orgSlug>/payments/verify` which is what we register the
    * route under.
    */
+  ticket_code?: string | null;
   callbackPath?: string;
 }
 
@@ -46,6 +50,7 @@ export interface PaystackVerifyResult {
   ok: boolean;
   error?: string;
   status?: 'approved' | 'failed' | 'abandoned' | 'pending' | 'reversed';
+  ticket_code?: string | null;
   payment?: {
     id: string;
     status: string;
@@ -94,10 +99,13 @@ export const paystackService = {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          memberId:       input.memberId,
-          paymentTypeId:  input.paymentTypeId,
-          tierId:         input.tierId ?? undefined,
-          callbackPath:   input.callbackPath,
+          memberId:     input.memberId,
+          paymentTypeId: input.paymentTypeId,
+          guestName:    input.guestName,
+          guestEmail:   input.guestEmail,
+          guestPhone:   input.guestPhone,
+          tierId:       input.tierId ?? undefined,
+          callbackPath: input.callbackPath,
         }),
       });
       const json = (await res.json().catch(() => ({}))) as PaystackInitResult;

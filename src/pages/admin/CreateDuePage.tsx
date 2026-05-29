@@ -28,7 +28,7 @@
  * row; in the next migration we'll fan out notifications.
  */
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
@@ -56,6 +56,7 @@ import { useAuth } from '@/hooks/useAppAuth';
 import { useAppNav } from '@/hooks/useAppNav';
 import { useToast } from '@/hooks/useToast';
 import { organizationService, type DueCreationContext } from '@/services/organizationService';
+import { STORAGE_BUCKETS, supabase } from '@/config/supabase';
 import ProfessionalDropdown from '@/components/ui/ProfessionalDropdown';
 import ProfessionalDateTimePicker from '@/components/ui/ProfessionalDateTimePicker';
 
@@ -116,6 +117,7 @@ const NIGERIAN_BANKS = [
 const AMOUNT_CHIPS = [500, 1000, 2000, 5000, 10000];
 
 const LEVEL_OPTIONS = ['100', '200', '300', '400', '500', '600', '700'];
+const RECOMMENDED_COVER_SIZE = { width: 1600, height: 900 };
 
 // ────────────────────────────────────────────────────────────────────────────
 // Form state
@@ -189,6 +191,10 @@ export default function CreateDuePage() {
   const [form, setForm] = useState<FormState>(EMPTY);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [coverUploading, setCoverUploading] = useState(false);
+  const [coverFileName, setCoverFileName] = useState<string | null>(null);
+  const [coverWarning, setCoverWarning] = useState<string | null>(null);
+  const coverInputRef = useRef<HTMLInputElement>(null);
 
   // Scope-aware context loaded from mig 035 RPC
   const [ctx, setCtx] = useState<DueCreationContext | null>(null);
@@ -259,6 +265,29 @@ export default function CreateDuePage() {
   const canChooseOrgScope     = callerScope === 'org';
   const canChooseFacultyScope = callerScope === 'org' || callerScope === 'unit';
 
+  useEffect(() => {
+    if (form.category !== 'event') return;
+    setForm((f) => {
+      if (
+        !f.is_mandatory &&
+        !f.allow_partial &&
+        f.minimum_partial_amount === '' &&
+        !f.accepts_manual &&
+        f.late_fee_per_day === ''
+      ) {
+        return f;
+      }
+      return {
+        ...f,
+        is_mandatory: false,
+        allow_partial: false,
+        minimum_partial_amount: '',
+        accepts_manual: false,
+        late_fee_per_day: '',
+      };
+    });
+  }, [form.category]);
+
   // ── Smart defaults: category sets default icon + color ──
   const setCategory = (value: string) => {
     const meta = CATEGORIES.find((c) => c.value === value);
@@ -267,11 +296,108 @@ export default function CreateDuePage() {
       category: value,
       icon: meta?.icon ?? f.icon,
       color: meta?.color ?? f.color,
+      is_mandatory: value === 'event' ? false : f.is_mandatory,
+      allow_partial: value === 'event' ? false : f.allow_partial,
+      minimum_partial_amount: value === 'event' ? '' : f.minimum_partial_amount,
+      accepts_manual: value === 'event' ? false : f.accepts_manual,
+      late_fee_per_day: value === 'event' ? '' : f.late_fee_per_day,
     }));
   };
 
   const setField = <K extends keyof FormState>(k: K, v: FormState[K]) =>
     setForm((f) => ({ ...f, [k]: v }));
+
+  const readFileAsDataUrl = (file: File): Promise<string> =>
+    new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => {
+        if (typeof reader.result === 'string') resolve(reader.result);
+        else reject(new Error('Failed to read image file.'));
+      };
+      reader.onerror = () => reject(new Error('Failed to read image file.'));
+      reader.readAsDataURL(file);
+    });
+
+  const getImageDimensions = (file: File): Promise<{ width: number; height: number }> =>
+    new Promise((resolve, reject) => {
+      const image = new Image();
+      const objectUrl = URL.createObjectURL(file);
+
+      image.onload = () => {
+        URL.revokeObjectURL(objectUrl);
+        resolve({ width: image.naturalWidth, height: image.naturalHeight });
+      };
+
+      image.onerror = () => {
+        URL.revokeObjectURL(objectUrl);
+        reject(new Error('Failed to inspect image dimensions.'));
+      };
+
+      image.src = objectUrl;
+    });
+
+  const handleCoverUpload = async (file: File | null) => {
+    if (!file) return;
+    if (!file.type.startsWith('image/')) {
+      setError('Please select an image file for the event cover.');
+      return;
+    }
+    if (file.size > 5 * 1024 * 1024) {
+      setError('Cover image must be smaller than 5MB.');
+      return;
+    }
+
+    const scope = getOrgScope();
+    if (!scope?.memberId) {
+      setError('No organization context found. Please log in again.');
+      return;
+    }
+
+    try {
+      setCoverUploading(true);
+      setError(null);
+      setCoverWarning(null);
+
+      try {
+        const { width, height } = await getImageDimensions(file);
+        if (width < RECOMMENDED_COVER_SIZE.width || height < RECOMMENDED_COVER_SIZE.height) {
+          setCoverWarning(
+            `Best results use at least ${RECOMMENDED_COVER_SIZE.width}×${RECOMMENDED_COVER_SIZE.height}px. Current image: ${width}×${height}px.`,
+          );
+        }
+      } catch {
+        setCoverWarning('Could not inspect the image size, but it will still upload.');
+      }
+
+      const fileExt = file.name.split('.').pop() || 'jpg';
+      const fileName = `event_${scope.memberId}_${Date.now()}.${fileExt}`;
+      const filePath = `event-covers/${fileName}`;
+
+      try {
+        const { error: uploadError } = await supabase.storage
+          .from(STORAGE_BUCKETS.EVENT_COVERS)
+          .upload(filePath, file, { cacheControl: '3600', upsert: true });
+
+        if (uploadError) throw new Error(uploadError.message);
+
+        const { data: urlData } = supabase.storage
+          .from(STORAGE_BUCKETS.EVENT_COVERS)
+          .getPublicUrl(filePath);
+
+        setField('event_cover_url', urlData.publicUrl);
+        setCoverFileName(file.name);
+      } catch {
+        const dataUrl = await readFileAsDataUrl(file);
+        setField('event_cover_url', dataUrl);
+        setCoverFileName(`${file.name} (local preview)`);
+      }
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Failed to upload cover image.';
+      setError(message);
+    } finally {
+      setCoverUploading(false);
+    }
+  };
 
   const isEvent = form.category === 'event';
 
@@ -659,8 +785,42 @@ export default function CreateDuePage() {
                     </Field>
                   </Row>
                   <Row>
-                    <Field label="Cover image URL" hint="optional" icon={<ImageIcon className="w-3 h-3" />}>
-                      <Input value={form.event_cover_url} onChange={(v) => setField('event_cover_url', v)} placeholder="https://..." />
+                    <Field label="Cover image" hint="upload or paste a URL" icon={<ImageIcon className="w-3 h-3" />}>
+                      <div className="space-y-2">
+                        <input
+                          ref={coverInputRef}
+                          type="file"
+                          accept="image/*"
+                          className="hidden"
+                          onChange={(e) => {
+                            void handleCoverUpload(e.target.files?.[0] ?? null);
+                            e.currentTarget.value = '';
+                          }}
+                        />
+                        <div className="flex flex-wrap items-center gap-2">
+                          <button
+                            type="button"
+                            onClick={() => coverInputRef.current?.click()}
+                            disabled={coverUploading}
+                            className="inline-flex items-center gap-2 rounded-xl px-3 py-2 text-xs font-bold transition disabled:cursor-not-allowed disabled:opacity-60"
+                            style={{ background: tk.panelHov, color: tk.text }}
+                          >
+                            <Upload className="w-3.5 h-3.5" />
+                            {coverUploading ? 'Uploading…' : 'Upload image'}
+                          </button>
+                          {coverFileName && (
+                            <span className="text-[11px]" style={{ color: tk.textTer }}>
+                              {coverFileName}
+                            </span>
+                          )}
+                        </div>
+                        {coverWarning && (
+                          <p className="text-[11px] leading-5" style={{ color: tk.amber }}>
+                            {coverWarning}
+                          </p>
+                        )}
+                        <Input value={form.event_cover_url} onChange={(v) => setField('event_cover_url', v)} placeholder="https://..." />
+                      </div>
                     </Field>
                     <Field label="Max attendees" hint="optional">
                       <Input value={form.event_max_attendees} onChange={(v) => setField('event_max_attendees', v.replace(/[^0-9]/g, ''))} placeholder="200" />

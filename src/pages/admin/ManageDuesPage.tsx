@@ -1,4 +1,4 @@
-﻿import { useState, useEffect, useCallback } from 'react'
+﻿import { useState, useEffect, useCallback, useMemo } from 'react'
 import { motion} from 'framer-motion'
 import {  } from 'react-router-dom'
 import { useAppNav } from '@/hooks/useAppNav';
@@ -29,7 +29,8 @@ import {
   CheckCircle,
   ArrowLeft,
   Search,
-  Tag
+  Tag,
+  Copy
 } from 'lucide-react'
 
 interface PaymentType {
@@ -148,6 +149,11 @@ export default function ManageDuesPage() {
   const [searchTerm, setSearchTerm] = useState('')
   const [filterStatus, setFilterStatus] = useState<'all' | 'active' | 'inactive'>('all')
   const [filterCategory, setFilterCategory] = useState<string>('all')
+  const publicEventLink = useMemo(() => {
+    if (!orgSlug || !editingPaymentType?.id) return ''
+    if (editingPaymentType.category !== 'event' || !editingPaymentType.is_public) return ''
+    return `${window.location.origin}/${orgSlug}/events/${editingPaymentType.id}`
+  }, [editingPaymentType, orgSlug])
   
   // Modals
   const [showEditModal, setShowEditModal] = useState(false)
@@ -163,6 +169,16 @@ export default function ManageDuesPage() {
     active: 0,
     totalAmount: 0
   })
+
+  const handleCopyPublicLink = useCallback(async () => {
+    if (!publicEventLink) return
+    try {
+      await navigator.clipboard.writeText(publicEventLink)
+      success('Public event link copied')
+    } catch {
+      showError('Could not copy the public link')
+    }
+  }, [publicEventLink, success, showError])
 
   const loadPaymentTypes = useCallback(async () => {
     try {
@@ -1154,6 +1170,18 @@ export default function ManageDuesPage() {
                       </span>
                     )}
                   </div>
+
+                  {publicEventLink && (
+                    <button
+                      type="button"
+                      onClick={handleCopyPublicLink}
+                      className="inline-flex items-center gap-2 px-3 py-2 rounded-xl text-sm font-semibold border"
+                      style={{ background: 'rgba(255,255,255,0.04)', borderColor: 'rgba(255,255,255,0.08)', color: '#fff' }}
+                    >
+                      <Copy className="w-4 h-4" />
+                      Copy public event link
+                    </button>
+                  )}
 
                   <div className="grid grid-cols-2 gap-3 pt-2">
                     <div className="p-3 rounded-xl" style={{ background: 'rgba(255,255,255,0.04)' }}>

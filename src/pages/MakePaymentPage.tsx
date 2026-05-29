@@ -53,6 +53,8 @@ interface PaymentTypeRow {
   deadline: string | null;
   category: string | null;
   is_mandatory: boolean | null;
+  event_date?: string | null;
+  event_venue?: string | null;
   bank_name?: string | null;
   account_number?: string | null;
   account_name?: string | null;
@@ -174,9 +176,11 @@ export default function MakePaymentPage() {
     [myPayments],
   );
   const isEvent     = (pt?.category || '').toLowerCase() === 'event';
+  const eventEnded  = isEvent && Boolean(pt?.event_date) && new Date(pt.event_date as string).getTime() < Date.now();
   const selectedTier = useMemo(() => tiers.find(t => t.id === selectedTierId) || null, [tiers, selectedTierId]);
   const tierSoldOut = (t: TierRow) => t.quantity != null && t.sold_count >= t.quantity;
   const eventSoldOut = tiers.length > 0 && tiers.every(tierSoldOut);
+  const eventClosed  = eventEnded || eventSoldOut;
 
   const dueAmount   = Number(pt?.amount || 0);
   const approvedOutstanding = Math.max(0, dueAmount - approvedSum);
@@ -198,6 +202,10 @@ export default function MakePaymentPage() {
   const handlePayWithPaystack = useCallback(async () => {
     if (!user?.id || !id) {
       setError('You need to be signed in to pay.');
+      return;
+    }
+    if (eventEnded) {
+      setError('This event has ended. Tickets are no longer available.');
       return;
     }
     if (!isEvent && fullyPaid) {
@@ -231,7 +239,7 @@ export default function MakePaymentPage() {
     }
 
     window.location.assign(res.authorization_url);
-  }, [user?.id, id, fullyPaid, toast, isEvent, tiers, selectedTierId, selectedTier]);
+  }, [user?.id, id, fullyPaid, toast, isEvent, tiers, selectedTierId, selectedTier, eventEnded]);
 
   // ── Render ───────────────────────────────────────────────────────
   return (
@@ -345,6 +353,25 @@ export default function MakePaymentPage() {
               </div>
             </section>
 
+            {eventEnded && (
+              <section>
+                <div
+                  className="rounded-2xl px-4 py-3"
+                  style={{
+                    background: isLight ? '#FFF1F1' : 'rgba(239,68,68,0.10)',
+                    border: `1px solid ${isLight ? '#F8C7C7' : 'rgba(239,68,68,0.25)'}`,
+                  }}
+                >
+                  <p className="text-[12px] font-bold" style={{ color: t.danger }}>
+                    This event has ended.
+                  </p>
+                  <p className="text-[11px] mt-1" style={{ color: t.textSec }}>
+                    Tickets are closed and payment is no longer available.
+                  </p>
+                </div>
+              </section>
+            )}
+
             {/* Ticket type selector (events only) */}
             {isEvent && tiers.length > 0 && (
               <section>
@@ -363,7 +390,7 @@ export default function MakePaymentPage() {
                       <button
                         key={tier.id}
                         type="button"
-                        disabled={sold}
+                        disabled={sold || eventEnded}
                         onClick={() => setSelectedTierId(tier.id)}
                         className="w-full rounded-2xl px-4 py-3 flex items-center gap-3 text-left transition-all disabled:opacity-50"
                         style={{
@@ -384,8 +411,8 @@ export default function MakePaymentPage() {
                         <div className="flex-1 min-w-0">
                           <p className="text-[14px] font-bold truncate" style={{ color: t.text }}>{tier.name}</p>
                           {(tier.description || left != null || sold) && (
-                            <p className="text-[11px] mt-0.5" style={{ color: sold ? t.amber : t.textSec }}>
-                              {sold ? 'Sold out' : tier.description || (left != null ? `${left} left` : '')}
+                            <p className="text-[11px] mt-0.5" style={{ color: sold || eventEnded ? t.amber : t.textSec }}>
+                              {eventEnded ? 'Ended' : sold ? 'Sold out' : tier.description || (left != null ? `${left} left` : '')}
                             </p>
                           )}
                         </div>
@@ -559,7 +586,7 @@ export default function MakePaymentPage() {
       </main>
 
       {/* ── Sticky bottom CTA ───────────────────────────────── */}
-      {!loading && pt && (isEvent ? !eventSoldOut : !fullyPaid) && (
+      {!loading && pt && (isEvent ? !eventClosed : !fullyPaid) && (
         <div
           className="fixed bottom-0 left-0 right-0 z-40 px-4 sm:px-6 pb-5 pt-3"
           style={{

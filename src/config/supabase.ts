@@ -43,6 +43,7 @@ export const STORAGE_BUCKETS = {
   RECEIPTS: 'payment-receipts',
   PROFILE_IMAGES: 'profile-images',
   EXPENSE_RECEIPTS: 'expense-receipts',
+  EVENT_COVERS: 'event-covers',
 }
 
 // Helper to get public URL for uploaded files

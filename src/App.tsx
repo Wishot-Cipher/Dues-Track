@@ -27,6 +27,7 @@ import MyDuesPage from '@/pages/MyDuesPage';
 import MyGroupsPage from '@/pages/MyGroupsPage';
 import MyTicketsPage from '@/pages/MyTicketsPage';
 import TicketPage from '@/pages/TicketPage';
+import UpcomingEventsPage from '@/pages/UpcomingEventsPage';
 import TicketCheckInPage from '@/pages/admin/TicketCheckInPage';
 import PaymentVerifyPage from '@/pages/PaymentVerifyPage';
 import ReceiptPage from '@/pages/ReceiptPage';
@@ -48,6 +49,7 @@ import PayoutSetupPage from '@/pages/admin/PayoutSetupPage';
 import OrgGroupsPage from '@/pages/admin/OrgGroupsPage';
 import OrgAcademicCalendarPage from '@/pages/admin/OrgAcademicCalendarPage';
 import ContributePage from '@/pages/ContributePage';
+import PublicEventCheckoutPage from '@/pages/PublicEventCheckoutPage';
 import NotFoundPage from '@/pages/NotFoundPage';
 
 // Multi-Tenant Pages (public / onboarding)
@@ -118,6 +120,7 @@ function App() {
               {/* Org-scoped public contribution page */}
               <Route path="/:orgSlug/contribute" element={<ContributePage />} />
               <Route path="/:orgSlug/donate" element={<ContributePage />} />
+              <Route path="/:orgSlug/events/:eventId" element={<PublicEventCheckoutPage />} />
 
               {/* Org-scoped public join page */}
               <Route path="/:orgSlug/join" element={<JoinOrganizationPage />} />
@@ -138,6 +141,7 @@ function App() {
               <Route path="/:orgSlug" element={<OrgLayout />}>
                 {/* Member pages */}
                 <Route path="dashboard" element={<OrgProtectedRoute><StudentDashboardPage /></OrgProtectedRoute>} />
+                <Route path="events" element={<OrgProtectedRoute><UpcomingEventsPage /></OrgProtectedRoute>} />
                 <Route path="claim" element={<OrgProtectedRoute><ClaimSubmitPage /></OrgProtectedRoute>} />
                 <Route path="claim/:claimId/decide" element={<OrgProtectedRoute><ClaimDecisionPage /></OrgProtectedRoute>} />
                 <Route path="payments" element={<OrgProtectedRoute><MyDuesPage /></OrgProtectedRoute>} />

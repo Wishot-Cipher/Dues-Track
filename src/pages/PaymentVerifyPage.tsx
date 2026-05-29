@@ -173,10 +173,16 @@ export default function PaymentVerifyPage() {
   // is your receipt" handoff.
   useEffect(() => {
     if (uiState !== 'approved') return;
+    const ticketCode = result?.ticket_code;
     const pid = result?.payment?.id;
-    if (!pid) return;
     const id = window.setTimeout(() => {
-      navigate(`/${orgSlug}/receipt/${pid}`);
+      if (ticketCode) {
+        navigate(`/${orgSlug}/ticket/${ticketCode}`);
+        return;
+      }
+      if (pid) {
+        navigate(`/${orgSlug}/receipt/${pid}`);
+      }
     }, 3200);
     return () => window.clearTimeout(id);
   }, [uiState, result, navigate, orgSlug]);
