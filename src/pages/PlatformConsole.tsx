@@ -21,8 +21,12 @@ import {
   platformAdminRequestCode, platformAdminVerifyCode, getPlatformAdmin,
   verifySession, platformAdminLogout, fetchPlatformStats, fetchOrganizations,
   toggleOrganizationStatus, listPendingClaims, grantClaimOverride,
+  getFinancialSummary, getAuditFeed, getGrowthFunnel,
   type PlatformAdmin, type PlatformStats, type OrgOverview, type PendingClaim,
+  type FinancialSummary, type AuditEntry, type FunnelStage,
 } from '@/services/platformAdminService';
+
+const naira = (kobo: number) => '₦' + Math.round((kobo || 0) / 100).toLocaleString();
 
 // ── Theme ────────────────────────────────────────────────────────
 const T = {
@@ -401,6 +405,142 @@ function Placeholder({ title, phase }: { title: string; phase: string }) {
   );
 }
 
+const STATUS_COLOR: Record<string, string> = { approved: T.mint, successful: T.mint, paid: T.mint, pending: T.amber, failed: T.red, abandoned: T.textTer };
+
+function FinancialIntel() {
+  const [d, setD] = useState<FinancialSummary | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [err, setErr] = useState<string | null>(null);
+  useEffect(() => {
+    (async () => {
+      try { setD(await getFinancialSummary()); } catch (e) { setErr(e instanceof Error ? e.message : 'Failed'); }
+      setLoading(false);
+    })();
+  }, []);
+
+  if (loading) return <p style={{ color: T.textSec, fontSize: 13 }}><Loader2 size={14} className="animate-spin" style={{ verticalAlign: 'middle' }} /> Loading…</p>;
+  if (err || !d) return <p style={{ color: T.red, fontSize: 13 }}>{err || 'No data'}</p>;
+  const s = d.summary;
+
+  return (
+    <div>
+      <SectionHead title="Financial Intelligence" sub="Month-to-date money flow, fees and settlements" />
+      <div style={{ background: `linear-gradient(135deg, ${T.card}, rgba(255,104,3,0.05))`, border: `1px solid ${T.borderHot}`, borderRadius: 14, padding: 22, marginBottom: 22 }}>
+        <p style={{ margin: '0 0 14px', fontSize: 11, color: T.primary, letterSpacing: '0.12em', fontFamily: mono }}>MONTH-TO-DATE</p>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(150px, 1fr))', gap: 16 }}>
+          {[
+            { l: 'Gross volume', v: naira(s.mtd_gross_kobo), c: T.text },
+            { l: 'To orgs (dues)', v: naira(s.mtd_dues_kobo), c: T.blue },
+            { l: 'Platform fees', v: naira(s.mtd_fees_kobo), c: T.primary },
+            { l: 'All-time fees', v: naira(s.alltime_fees_kobo), c: T.mint },
+            { l: 'Pending settle', v: naira(s.pending_settlement_kobo), c: T.amber },
+            { l: 'Success / Fail', v: `${s.mtd_success} / ${s.mtd_failed}`, c: T.textSec },
+          ].map((x, i) => (
+            <div key={i}>
+              <p style={{ margin: '0 0 4px', fontSize: 10, color: T.textTer, textTransform: 'uppercase', letterSpacing: '0.08em' }}>{x.l}</p>
+              <p style={{ margin: 0, fontSize: 19, fontWeight: 800, color: x.c }}>{x.v}</p>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 280px', gap: 16 }}>
+        <div style={{ background: T.card, border: `1px solid ${T.border}`, borderRadius: 14, overflow: 'hidden' }}>
+          <div style={{ padding: '14px 18px', borderBottom: `1px solid ${T.border}`, fontSize: 13, fontWeight: 700, color: T.text }}>Recent transactions</div>
+          {d.recent.length === 0 ? <p style={{ padding: 18, margin: 0, fontSize: 12, color: T.textTer }}>No transactions yet.</p>
+            : d.recent.map((t) => (
+              <div key={t.id} style={{ padding: '10px 18px', borderBottom: `1px solid ${T.border}`, display: 'flex', alignItems: 'center', gap: 12 }}>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <p style={{ margin: 0, fontSize: 12, fontWeight: 600, color: T.text }}>{t.payer_name || '—'}</p>
+                  <p style={{ margin: '2px 0 0', fontSize: 11, color: T.textSec }}>{t.org_name} · {t.paystack_channel || '—'}</p>
+                </div>
+                <div style={{ textAlign: 'right' }}>
+                  <p style={{ margin: 0, fontSize: 12, color: T.text, fontFamily: mono }}>{naira(t.total_charged_kobo)}</p>
+                  <p style={{ margin: '2px 0 0', fontSize: 10, color: T.textTer }}>fee {naira(t.platform_fee_kobo)}</p>
+                </div>
+                <Badge color={STATUS_COLOR[t.status] || T.textTer}>{t.status}</Badge>
+              </div>
+            ))}
+        </div>
+        <div style={{ background: T.card, border: `1px solid ${T.border}`, borderRadius: 14, overflow: 'hidden' }}>
+          <div style={{ padding: '14px 18px', borderBottom: `1px solid ${T.border}`, fontSize: 13, fontWeight: 700, color: T.text }}>Top orgs (MTD)</div>
+          {d.top_orgs.length === 0 ? <p style={{ padding: 18, margin: 0, fontSize: 12, color: T.textTer }}>—</p>
+            : d.top_orgs.map((o, i) => (
+              <div key={i} style={{ padding: '10px 18px', borderBottom: `1px solid ${T.border}`, display: 'flex', justifyContent: 'space-between', gap: 8 }}>
+                <span style={{ fontSize: 12, color: T.text, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{o.org_name}</span>
+                <span style={{ fontSize: 12, color: T.mint, fontFamily: mono, flexShrink: 0 }}>{naira(o.collected_kobo)}</span>
+              </div>
+            ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function GrowthAnalytics() {
+  const [funnel, setFunnel] = useState<FunnelStage[]>([]);
+  const [loading, setLoading] = useState(true);
+  useEffect(() => { (async () => { try { setFunnel(await getGrowthFunnel()); } catch { /* ignore */ } setLoading(false); })(); }, []);
+  const top = funnel[0]?.count || 1;
+  if (loading) return <p style={{ color: T.textSec, fontSize: 13 }}><Loader2 size={14} className="animate-spin" style={{ verticalAlign: 'middle' }} /> Loading…</p>;
+  return (
+    <div>
+      <SectionHead title="Growth & Analytics" sub="Where orgs progress — and where they drop off" />
+      <div style={{ background: T.card, border: `1px solid ${T.border}`, borderRadius: 14, padding: 22, display: 'grid', gap: 12 }}>
+        {funnel.map((f, i) => {
+          const pct = Math.round((f.count / top) * 100);
+          return (
+            <div key={i}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 5 }}>
+                <span style={{ fontSize: 13, color: T.text }}>{f.stage}</span>
+                <span style={{ fontSize: 12, color: T.textSec, fontFamily: mono }}>{f.count} · {pct}%</span>
+              </div>
+              <Progress v={f.count} max={top} color={i === 0 ? T.blue : pct > 50 ? T.mint : pct > 25 ? T.amber : T.red} />
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+function AuditTrail() {
+  const [entries, setEntries] = useState<AuditEntry[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [err, setErr] = useState<string | null>(null);
+  const load = useCallback(async () => {
+    setLoading(true); setErr(null);
+    try { setEntries(await getAuditFeed(100)); } catch (e) { setErr(e instanceof Error ? e.message : 'Failed'); }
+    setLoading(false);
+  }, []);
+  useEffect(() => { void load(); }, [load]);
+  return (
+    <div>
+      <SectionHead title="Audit Trail" sub="Every privileged platform action — append-only"
+        right={<Btn onClick={load} color={T.textSec}><RefreshCw size={13} /> Refresh</Btn>} />
+      {loading ? <p style={{ color: T.textSec, fontSize: 13 }}><Loader2 size={14} className="animate-spin" style={{ verticalAlign: 'middle' }} /> Loading…</p>
+        : err ? <p style={{ color: T.red, fontSize: 13 }}>{err}</p>
+        : entries.length === 0 ? <p style={{ color: T.textTer, fontSize: 13 }}>No audit entries yet.</p>
+        : (
+          <div style={{ background: T.card, border: `1px solid ${T.border}`, borderRadius: 14, overflow: 'hidden' }}>
+            {entries.map((e) => (
+              <div key={e.id} style={{ padding: '11px 18px', borderBottom: `1px solid ${T.border}`, display: 'flex', alignItems: 'center', gap: 12 }}>
+                <Badge color={T.purple}>{e.action}</Badge>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <p style={{ margin: 0, fontSize: 12, color: T.text, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                    {e.target_type ? `${e.target_type}` : ''}{e.target_id ? ` · ${String(e.target_id).slice(0, 8)}` : ''}
+                  </p>
+                  <p style={{ margin: '2px 0 0', fontSize: 11, color: T.textSec }}>{e.admin_email}</p>
+                </div>
+                <span style={{ fontSize: 10, color: T.textTer, fontFamily: mono, flexShrink: 0 }}>{new Date(e.created_at).toLocaleString()}</span>
+              </div>
+            ))}
+          </div>
+        )}
+    </div>
+  );
+}
+
 // ── Nav ──────────────────────────────────────────────────────────
 const NAV = [
   { id: 'command', label: 'Command', icon: LayoutDashboard },
@@ -470,13 +610,13 @@ export default function PlatformConsole() {
             {section === 'command' && <CommandCenter />}
             {section === 'verification' && <VerificationQueue />}
             {section === 'orgs' && <OrgRegistry />}
-            {section === 'financial' && <Placeholder title="Financial Intelligence" phase="Phase 3" />}
+            {section === 'financial' && <FinancialIntel />}
             {section === 'map' && <Placeholder title="University Map" phase="Phase 3" />}
             {section === 'safety' && <Placeholder title="Trust & Safety" phase="Phase 4" />}
             {section === 'comms' && <Placeholder title="Communications" phase="Phase 4" />}
             {section === 'config' && <Placeholder title="Platform Config" phase="Phase 3" />}
-            {section === 'analytics' && <Placeholder title="Growth & Analytics" phase="Phase 4" />}
-            {section === 'audit' && <Placeholder title="Audit Trail" phase="Phase 4" />}
+            {section === 'analytics' && <GrowthAnalytics />}
+            {section === 'audit' && <AuditTrail />}
           </motion.div>
         </AnimatePresence>
       </main>

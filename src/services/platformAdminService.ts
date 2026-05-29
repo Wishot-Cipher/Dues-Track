@@ -270,6 +270,38 @@ export async function grantClaimOverride(claimId: string): Promise<void> {
   if (!data?.ok) throw new Error(data?.error || 'Grant failed');
 }
 
+// ── Financial intelligence / audit / analytics ──────────────────
+
+async function callPlatformRpc<T = Record<string, unknown>>(fn: string, extra: Record<string, unknown> = {}): Promise<T> {
+  const admin = getPlatformAdmin();
+  if (!admin?.session_token) throw new Error('Not authenticated');
+  const { data, error } = await supabase.rpc(fn, { p_session_token: admin.session_token, ...extra });
+  if (error) throw new Error(error.message);
+  if (!data?.ok) throw new Error(data?.error || 'Request failed');
+  return data as T;
+}
+
+export interface FinancialSummary {
+  ok: boolean;
+  summary: {
+    mtd_gross_kobo: number; mtd_dues_kobo: number; mtd_fees_kobo: number;
+    mtd_success: number; mtd_failed: number; alltime_fees_kobo: number;
+    pending_settlement_kobo: number; orgs_with_payout: number;
+  };
+  recent: Array<{ id: string; payer_name: string | null; total_charged_kobo: number; platform_fee_kobo: number; dues_amount_kobo: number; status: string; paystack_channel: string | null; created_at: string; org_name: string; org_slug: string }>;
+  top_orgs: Array<{ org_name: string; org_slug: string; collected_kobo: number; txns: number }>;
+}
+
+export const getFinancialSummary = () => callPlatformRpc<FinancialSummary>('platform_financial_summary');
+
+export interface AuditEntry { id: number; admin_email: string; action: string; target_type: string | null; target_id: string | null; payload: Record<string, unknown>; created_at: string }
+export const getAuditFeed = async (limit = 50) =>
+  (await callPlatformRpc<{ ok: boolean; entries: AuditEntry[] }>('platform_audit_feed', { p_limit: limit })).entries;
+
+export interface FunnelStage { stage: string; count: number }
+export const getGrowthFunnel = async () =>
+  (await callPlatformRpc<{ ok: boolean; funnel: FunnelStage[] }>('platform_growth_funnel')).funnel;
+
 /**
  * Fetch all organizations with aggregated stats
  */
