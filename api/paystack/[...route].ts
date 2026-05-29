@@ -199,6 +199,32 @@ async function handleInitCore(req: any, res: any, body: any) {
     return res.status(500).json({ ok: false, error: 'Could not resolve organization.' });
   }
 
+  // ── Double-payment guard (dues only) ──
+  // A due that's already fully paid must not be payable again. (Events are
+  // tickets — a member may legitimately buy more than one, so skip them.)
+  if (pt.category !== 'event' && Number(pt.amount) > 0) {
+    const { data: priorApproved } = await supabase
+      .from('payments')
+      .select('amount')
+      .eq('member_id', member.id)
+      .eq('payment_type_id', pt.id)
+      .in('status', ['approved', 'successful', 'paid']);
+    const alreadyPaid = (priorApproved || []).reduce((s: number, r: any) => s + Number(r.amount || 0), 0);
+    if (alreadyPaid >= Number(pt.amount)) {
+      return res.status(409).json({ ok: false, error: 'You have already paid this due.' });
+    }
+  }
+
+  // Retire stale pending inits for this member+due so abandoned checkouts don't
+  // pile up (and don't make a paid due look "pending"/payable in the UI).
+  await supabase
+    .from('payments')
+    .update({ status: 'abandoned' })
+    .eq('member_id', member.id)
+    .eq('payment_type_id', pt.id)
+    .eq('status', 'pending')
+    .is('paystack_status', null);
+
   // Events: the price comes from the chosen ticket tier, not pt.amount.
   let baseNaira = Number(pt.amount);
   let resolvedTierId: string | null = null;

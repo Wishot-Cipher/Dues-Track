@@ -785,7 +785,9 @@ export default function PlatformConsole() {
       <Loader2 size={24} className="animate-spin" style={{ color: T.primary }} />
     </div>;
   }
-  if (!admin) return <LoginGate onLogin={setAdmin} />;
+  // A session without a token predates session_token persistence (or expired) —
+  // force a fresh login so every session-gated RPC (Config, grants, broadcast…) works.
+  if (!admin || !admin.session_token) return <LoginGate onLogin={setAdmin} />;
 
   return (
     <div style={{ minHeight: '100vh', background: T.bg, color: T.text, display: 'flex' }}>

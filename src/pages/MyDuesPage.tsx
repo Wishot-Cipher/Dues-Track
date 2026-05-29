@@ -120,9 +120,13 @@ export default function MyDuesPage() {
       const approvedSum = own.filter(p => p.status === 'approved')
         .reduce((s, p) => s + Number(p.amount || 0), 0);
 
+      // PAID must win over a stray 'pending' row: an abandoned Paystack init
+      // leaves a pending row behind, and if pending took priority a fully-paid
+      // due would show as payable again → double payment. Check paid first.
+      const amount = Number(pt.amount || 0);
       const status: DueRowData['status'] =
-        own.some(p => p.status === 'pending') ? 'pending'
-        : approvedSum >= Number(pt.amount || 0) ? 'paid'
+        amount > 0 && approvedSum >= amount ? 'paid'
+        : own.some(p => p.status === 'pending') ? 'pending'
         : approvedSum > 0 ? 'partial'
         : 'unpaid';
 
