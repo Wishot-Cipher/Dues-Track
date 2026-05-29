@@ -302,6 +302,32 @@ export interface FunnelStage { stage: string; count: number }
 export const getGrowthFunnel = async () =>
   (await callPlatformRpc<{ ok: boolean; funnel: FunnelStage[] }>('platform_growth_funnel')).funnel;
 
+export interface PlatformSettings {
+  fee_mode: string; fee_percent: number; fee_flat_kobo: number; fee_min_kobo: number; fee_cap_kobo: number;
+  bootstrap_base_votes: number; bootstrap_escalated_votes: number; bootstrap_window_hours: number;
+  independent_votes: number; platform_review_days: number;
+}
+export const getPlatformSettings = async () =>
+  (await callPlatformRpc<{ ok: boolean; settings: PlatformSettings }>('platform_get_settings')).settings;
+export async function updatePlatformSettings(patch: Partial<PlatformSettings> & { apply_fee_to_all_orgs?: boolean }): Promise<PlatformSettings> {
+  const d = await callPlatformRpc<{ ok: boolean; settings: PlatformSettings }>('platform_update_settings', { p_patch: patch });
+  return d.settings;
+}
+
+// ── Trust & Safety / University map / Communications ─────────────
+export async function suspendMember(memberId: string, suspend: boolean, reason?: string): Promise<void> {
+  await callPlatformRpc('platform_set_member_suspended', { p_member_id: memberId, p_suspend: suspend, p_reason: reason ?? null });
+}
+
+export interface UniRow { org_id: string; org_name: string; org_slug: string; organization_type: string; member_count: number; group_count: number; verified_execs: number; collected_kobo: number; org_state: string }
+export const getUniversityMap = async () =>
+  (await callPlatformRpc<{ ok: boolean; rows: UniRow[] }>('platform_university_map')).rows;
+
+export async function broadcast(orgId: string | null, title: string, message: string): Promise<number> {
+  const d = await callPlatformRpc<{ ok: boolean; notified: number }>('platform_broadcast', { p_org_id: orgId, p_title: title, p_message: message });
+  return d.notified;
+}
+
 /**
  * Fetch all organizations with aggregated stats
  */

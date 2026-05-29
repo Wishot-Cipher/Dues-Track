@@ -44,11 +44,15 @@ const SESSION_KEYS = {
   JWT: 'pvx_jwt',
 };
 
-// Verification states that count as "trusted". MUST match the server-side gate
-// in migration 035 (create_due_with_scope_check). A 'pending' exec is NOT
-// trusted and gets no admin powers in the UI — mirroring the database, so the
-// client never offers an action the server will reject.
-const TRUSTED_VERIFICATION = ['email_verified', 'document_verified', 'admin_verified', 'member_confirmed'];
+// Layered-trust thresholds (Blueprint §13). Power is gated by verification_layer,
+// NOT just "verified yes/no":
+//   < 2  pending      → no admin at all
+//   >= 2 acting       → school-email verified / peer-voted: setup + view only
+//   >= 4 full         → money + manage members + all sensitive actions
+// Mirrors the server gates so the client never offers an action the DB rejects.
+const LAYER_ACTING = 2;
+const LAYER_FULL = 4;
+const layerOf = (a: MemberAdmin): number => Number((a as unknown as Record<string, unknown>).verification_layer ?? 0);
 
 // ============================================================
 // SERVICE
@@ -371,27 +375,36 @@ export const multiTenantAuthService = {
   },
 
   /**
-   * Is the member a VERIFIED admin — an active admin record in a trusted
-   * verification state? A pending founder/exec returns false, so they get
-   * no admin access in the UI until they verify (mirrors the server gate).
+   * FULLY-verified admin = an active admin row at verification_layer >= 4.
+   * Layer 4 is the trust anchor where money + sensitive actions unlock
+   * (parent-exec confirmed, bootstrap-complete, or platform override).
+   * Email-only (Layer 2) and peer-voted (Layer 3) are NOT full — see isActingAdmin.
    */
   isVerifiedAdmin(member: OrganizationMember | null): boolean {
     if (!member?.admin_records) return false;
-    return member.admin_records.some(
-      a => a.is_active && TRUSTED_VERIFICATION.includes(a.verification_status || '')
-    );
+    return member.admin_records.some(a => a.is_active && layerOf(a) >= LAYER_FULL);
   },
 
   /**
-   * Does the member hold `permission` via a VERIFIED admin record?
-   * Trust-aware counterpart to hasPermission — gates money/admin actions so
-   * an unverified exec can never reach them (matches create_due_with_scope_check).
+   * ACTING admin = an active admin row at verification_layer >= 2 (school-email
+   * verified or peer-voted, but not yet fully verified). Acting execs may set up
+   * org structure and view, but NOT collect money or manage members. A pending
+   * (Layer < 2) founder is not even acting.
+   */
+  isActingAdmin(member: OrganizationMember | null): boolean {
+    if (!member?.admin_records) return false;
+    return member.admin_records.some(a => a.is_active && layerOf(a) >= LAYER_ACTING);
+  },
+
+  /**
+   * Holds `permission` via a FULLY-verified (Layer 4) admin record. Gates the
+   * money/sensitive actions so an email-only exec can never reach them
+   * (mirrors create_due_with_scope_check's layer gate).
    */
   hasVerifiedPermission(member: OrganizationMember | null, permission: keyof AggregatedPermissions): boolean {
     if (!member?.admin_records) return false;
     return member.admin_records.some(
-      a => a.is_active
-        && TRUSTED_VERIFICATION.includes(a.verification_status || '')
+      a => a.is_active && layerOf(a) >= LAYER_FULL
         && (a as unknown as Record<string, boolean>)[permission] === true
     );
   },

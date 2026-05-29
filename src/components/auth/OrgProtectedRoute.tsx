@@ -15,12 +15,18 @@ interface OrgProtectedRouteProps {
   requireAdmin?: boolean;
   requiredPermission?: keyof AggregatedPermissions;
   /**
-   * When true, the admin/permission check additionally requires a TRUSTED
-   * (verified) admin record — a pending founder/exec is rejected. Use on every
-   * money-touching route so the client never exposes an action the server
-   * (create_due_with_scope_check) will reject.
+   * Full verification (verification_layer >= 4). Use on every money/sensitive
+   * route — collecting dues, managing members, payouts, billing. Email-only
+   * (Layer 2) and peer-voted (Layer 3) execs are rejected. Mirrors the server
+   * layer gate so the client never exposes an action the DB will reject.
    */
   requireVerified?: boolean;
+  /**
+   * Acting access (verification_layer >= 2). Use on non-money SETUP routes —
+   * dashboard, org structure, calendar. A school-email-verified founder can
+   * set things up here while still locked out of money until Layer 4.
+   */
+  requireActing?: boolean;
 }
 
 const OrgProtectedRoute = ({
@@ -28,6 +34,7 @@ const OrgProtectedRoute = ({
   requireAdmin = false,
   requiredPermission,
   requireVerified = false,
+  requireActing = false,
 }: OrgProtectedRouteProps) => {
   const { orgSlug } = useParams<{ orgSlug: string }>();
   const { user, loading, needsPasswordChange, isProfileComplete, hasPermission, isAnyAdmin } = useMultiTenantAuth();
@@ -58,19 +65,18 @@ const OrgProtectedRoute = ({
     return <Navigate to={`${basePath}/complete-profile`} replace />;
   }
 
-  // Permission check (verification-aware: money routes require a trusted admin)
+  // Layer-aware access. Money/sensitive → full (Layer 4); setup → acting (Layer 2).
   if (requiredPermission) {
     const ok = requireVerified
       ? multiTenantAuthService.hasVerifiedPermission(user, requiredPermission)
       : hasPermission(requiredPermission);
-    if (!ok) {
-      return <Navigate to={`${basePath}/dashboard`} replace />;
-    }
+    if (!ok) return <Navigate to={`${basePath}/dashboard`} replace />;
+  } else if (requireVerified) {
+    if (!multiTenantAuthService.isVerifiedAdmin(user)) return <Navigate to={`${basePath}/dashboard`} replace />;
+  } else if (requireActing) {
+    if (!multiTenantAuthService.isActingAdmin(user)) return <Navigate to={`${basePath}/dashboard`} replace />;
   } else if (requireAdmin) {
-    const ok = requireVerified ? multiTenantAuthService.isVerifiedAdmin(user) : isAnyAdmin();
-    if (!ok) {
-      return <Navigate to={`${basePath}/dashboard`} replace />;
-    }
+    if (!isAnyAdmin()) return <Navigate to={`${basePath}/dashboard`} replace />;
   }
 
   return <>{children}</>;

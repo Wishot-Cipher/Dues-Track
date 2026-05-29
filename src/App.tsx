@@ -148,13 +148,14 @@ function App() {
                 <Route path="complete-profile" element={<OrgProtectedRoute><OrgCompleteProfilePage /></OrgProtectedRoute>} />
                 <Route path="verify-email" element={<OrgProtectedRoute><VerifyEmailPage /></OrgProtectedRoute>} />
 
-                {/* Admin pages — every admin route requires a VERIFIED admin.
-                    A pending/unverified founder is bounced to the member dashboard
-                    until they verify (e.g. via school email). */}
-                <Route path="admin/dashboard" element={<OrgProtectedRoute requireAdmin requireVerified><AdminDashboardPage /></OrgProtectedRoute>} />
+                {/* Admin pages. Layered trust:
+                      ACTING (Layer 2, school-email verified) → setup-only routes
+                      FULL  (Layer 4, fully verified)         → money + members + sensitive
+                    A pending founder (Layer < 2) is bounced to the member dashboard. */}
+                <Route path="admin/dashboard" element={<OrgProtectedRoute requireActing><AdminDashboardPage /></OrgProtectedRoute>} />
+                <Route path="admin/groups" element={<OrgProtectedRoute requireActing><OrgGroupsPage /></OrgProtectedRoute>} />
+                <Route path="admin/academic-calendar" element={<OrgProtectedRoute requireActing><OrgAcademicCalendarPage /></OrgProtectedRoute>} />
                 <Route path="admin/members" element={<OrgProtectedRoute requiredPermission="can_manage_members" requireVerified><OrgMembersPage /></OrgProtectedRoute>} />
-                <Route path="admin/groups" element={<OrgProtectedRoute requiredPermission="can_manage_members" requireVerified><OrgGroupsPage /></OrgProtectedRoute>} />
-                <Route path="admin/academic-calendar" element={<OrgProtectedRoute requireAdmin requireVerified><OrgAcademicCalendarPage /></OrgProtectedRoute>} />
                 <Route path="admin/create-payment" element={<OrgProtectedRoute requiredPermission="can_create_payments" requireVerified><CreateDuePage /></OrgProtectedRoute>} />
                 <Route path="admin/manage-dues" element={<OrgProtectedRoute requiredPermission="can_create_payments" requireVerified><ManageDuesPage /></OrgProtectedRoute>} />
                 <Route path="admin/review" element={<OrgProtectedRoute requiredPermission="can_approve_payments" requireVerified><AdminReviewPage /></OrgProtectedRoute>} />

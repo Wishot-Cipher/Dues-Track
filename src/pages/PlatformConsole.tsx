@@ -22,8 +22,10 @@ import {
   verifySession, platformAdminLogout, fetchPlatformStats, fetchOrganizations,
   toggleOrganizationStatus, listPendingClaims, grantClaimOverride,
   getFinancialSummary, getAuditFeed, getGrowthFunnel,
+  getPlatformSettings, updatePlatformSettings, getUniversityMap, broadcast,
   type PlatformAdmin, type PlatformStats, type OrgOverview, type PendingClaim,
   type FinancialSummary, type AuditEntry, type FunnelStage,
+  type PlatformSettings, type UniRow,
 } from '@/services/platformAdminService';
 
 const naira = (kobo: number) => '₦' + Math.round((kobo || 0) / 100).toLocaleString();
@@ -393,18 +395,6 @@ function OrgRegistry() {
   );
 }
 
-function Placeholder({ title, phase }: { title: string; phase: string }) {
-  return (
-    <div>
-      <SectionHead title={title} sub="Coming in a later build phase" />
-      <div style={{ background: T.card, border: `1px dashed ${T.border}`, borderRadius: 14, padding: 40, textAlign: 'center' }}>
-        <p style={{ color: T.textSec, fontSize: 14, margin: 0 }}>{title} lands in <b style={{ color: T.primary }}>{phase}</b>.</p>
-        <p style={{ color: T.textTer, fontSize: 12, margin: '6px 0 0' }}>Wired to real data via session-gated RPCs (no new API functions).</p>
-      </div>
-    </div>
-  );
-}
-
 const STATUS_COLOR: Record<string, string> = { approved: T.mint, successful: T.mint, paid: T.mint, pending: T.amber, failed: T.red, abandoned: T.textTer };
 
 function FinancialIntel() {
@@ -541,6 +531,211 @@ function AuditTrail() {
   );
 }
 
+const inputStyle: React.CSSProperties = { width: '100%', padding: '9px 12px', background: 'rgba(0,0,0,0.25)', border: `1px solid ${T.border}`, borderRadius: 9, color: T.text, fontSize: 13, outline: 'none', boxSizing: 'border-box' };
+
+function Field({ label, children, hint }: { label: string; children: React.ReactNode; hint?: string }) {
+  return (
+    <div>
+      <label style={{ display: 'block', fontSize: 11, color: T.textSec, fontWeight: 600, marginBottom: 5 }}>{label}{hint && <span style={{ color: T.textTer, fontWeight: 400 }}> · {hint}</span>}</label>
+      {children}
+    </div>
+  );
+}
+
+function PlatformConfig() {
+  const [s, setS] = useState<PlatformSettings | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [applyAll, setApplyAll] = useState(false);
+  const toast = useToast();
+
+  useEffect(() => { (async () => { try { setS(await getPlatformSettings()); } catch { /* */ } setLoading(false); })(); }, []);
+  const set = (k: keyof PlatformSettings, v: string | number) => setS((p) => p ? { ...p, [k]: v } : p);
+
+  const save = async () => {
+    if (!s) return;
+    setSaving(true);
+    try {
+      const next = await updatePlatformSettings({ ...s, apply_fee_to_all_orgs: applyAll });
+      setS(next); toast?.success?.('Platform settings saved.');
+    } catch (e) { toast?.error?.(e instanceof Error ? e.message : 'Save failed'); }
+    setSaving(false);
+  };
+
+  if (loading || !s) return <p style={{ color: T.textSec, fontSize: 13 }}><Loader2 size={14} className="animate-spin" style={{ verticalAlign: 'middle' }} /> Loading…</p>;
+
+  return (
+    <div>
+      <SectionHead title="Platform Config" sub="Fee model and trust thresholds — these control the live system" />
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: 16 }}>
+        <div style={{ background: T.card, border: `1px solid ${T.border}`, borderRadius: 14, padding: 18 }}>
+          <h3 style={{ margin: '0 0 14px', fontSize: 14, color: T.text }}>Service fee (default)</h3>
+          <div style={{ display: 'grid', gap: 12 }}>
+            <Field label="Mode">
+              <select value={s.fee_mode} onChange={(e) => set('fee_mode', e.target.value)} style={inputStyle}>
+                <option value="percent" style={{ color: '#000' }}>Percentage only</option>
+                <option value="hybrid" style={{ color: '#000' }}>Percentage + flat</option>
+                <option value="flat" style={{ color: '#000' }}>Flat only</option>
+              </select>
+            </Field>
+            <Field label="Percent" hint="%"><input type="number" step="0.1" value={s.fee_percent} onChange={(e) => set('fee_percent', Number(e.target.value))} style={inputStyle} /></Field>
+            <Field label="Flat fee" hint="₦"><input type="number" value={Math.round(s.fee_flat_kobo / 100)} onChange={(e) => set('fee_flat_kobo', Number(e.target.value) * 100)} style={inputStyle} /></Field>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+              <Field label="Floor" hint="₦"><input type="number" value={Math.round(s.fee_min_kobo / 100)} onChange={(e) => set('fee_min_kobo', Number(e.target.value) * 100)} style={inputStyle} /></Field>
+              <Field label="Cap" hint="₦"><input type="number" value={Math.round(s.fee_cap_kobo / 100)} onChange={(e) => set('fee_cap_kobo', Number(e.target.value) * 100)} style={inputStyle} /></Field>
+            </div>
+            <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, color: T.textSec, cursor: 'pointer' }}>
+              <input type="checkbox" checked={applyAll} onChange={(e) => setApplyAll(e.target.checked)} /> Re-price all existing orgs to this
+            </label>
+          </div>
+        </div>
+
+        <div style={{ background: T.card, border: `1px solid ${T.border}`, borderRadius: 14, padding: 18 }}>
+          <h3 style={{ margin: '0 0 14px', fontSize: 14, color: T.text }}>Verification policy</h3>
+          <div style={{ display: 'grid', gap: 12 }}>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+              <Field label="Bootstrap base votes"><input type="number" value={s.bootstrap_base_votes} onChange={(e) => set('bootstrap_base_votes', Number(e.target.value))} style={inputStyle} /></Field>
+              <Field label="Escalated votes"><input type="number" value={s.bootstrap_escalated_votes} onChange={(e) => set('bootstrap_escalated_votes', Number(e.target.value))} style={inputStyle} /></Field>
+            </div>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+              <Field label="Window" hint="hrs"><input type="number" value={s.bootstrap_window_hours} onChange={(e) => set('bootstrap_window_hours', Number(e.target.value))} style={inputStyle} /></Field>
+              <Field label="Independent votes"><input type="number" value={s.independent_votes} onChange={(e) => set('independent_votes', Number(e.target.value))} style={inputStyle} /></Field>
+            </div>
+            <Field label="Platform-review after" hint="days stuck"><input type="number" value={s.platform_review_days} onChange={(e) => set('platform_review_days', Number(e.target.value))} style={inputStyle} /></Field>
+          </div>
+        </div>
+      </div>
+      <div style={{ marginTop: 18 }}>
+        <Btn onClick={save} disabled={saving} color={T.primary}>{saving ? <Loader2 size={14} className="animate-spin" /> : <CheckCircle2 size={14} />} Save settings</Btn>
+      </div>
+    </div>
+  );
+}
+
+function UniversityMap() {
+  const [rows, setRows] = useState<UniRow[]>([]);
+  const [loading, setLoading] = useState(true);
+  useEffect(() => { (async () => { try { setRows(await getUniversityMap()); } catch { /* */ } setLoading(false); })(); }, []);
+  if (loading) return <p style={{ color: T.textSec, fontSize: 13 }}><Loader2 size={14} className="animate-spin" style={{ verticalAlign: 'middle' }} /> Loading…</p>;
+  return (
+    <div>
+      <SectionHead title="University Map" sub="Per-institution penetration across the platform" />
+      <div style={{ background: T.card, border: `1px solid ${T.border}`, borderRadius: 14, overflow: 'hidden' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr 1fr 1fr 1.2fr', padding: '10px 18px', borderBottom: `1px solid ${T.border}`, fontSize: 10, color: T.textTer, textTransform: 'uppercase', letterSpacing: '0.08em' }}>
+          <span>Institution</span><span>Members</span><span>Groups</span><span>Verified</span><span>Collected</span>
+        </div>
+        {rows.length === 0 ? <p style={{ padding: 18, margin: 0, fontSize: 12, color: T.textTer }}>No organizations yet.</p>
+          : rows.map((r) => (
+            <div key={r.org_id} style={{ display: 'grid', gridTemplateColumns: '2fr 1fr 1fr 1fr 1.2fr', padding: '11px 18px', borderBottom: `1px solid ${T.border}`, alignItems: 'center', fontSize: 12 }}>
+              <div style={{ minWidth: 0 }}>
+                <p style={{ margin: 0, color: T.text, fontWeight: 600, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{r.org_name}</p>
+                <p style={{ margin: '1px 0 0', color: T.textTer, fontSize: 10, fontFamily: mono }}>{r.organization_type}</p>
+              </div>
+              <span style={{ color: T.text, fontFamily: mono }}>{r.member_count}</span>
+              <span style={{ color: T.text, fontFamily: mono }}>{r.group_count}</span>
+              <span style={{ color: r.verified_execs > 0 ? T.mint : T.textTer, fontFamily: mono }}>{r.verified_execs}</span>
+              <span style={{ color: T.amber, fontFamily: mono }}>{naira(r.collected_kobo)}</span>
+            </div>
+          ))}
+      </div>
+    </div>
+  );
+}
+
+function TrustSafety() {
+  const [orgs, setOrgs] = useState<OrgOverview[]>([]);
+  const [flags, setFlags] = useState<PendingClaim[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [busyId, setBusyId] = useState<string | null>(null);
+  const load = useCallback(async () => {
+    setLoading(true);
+    try {
+      const [o, c] = await Promise.all([fetchOrganizations(), listPendingClaims().catch(() => [])]);
+      setOrgs(o); setFlags(c.filter((x) => x.dispute_count > 0));
+    } catch { /* */ }
+    setLoading(false);
+  }, []);
+  useEffect(() => { void load(); }, [load]);
+  const toggle = async (o: OrgOverview) => {
+    if (!confirm(`${o.is_active ? 'Freeze' : 'Unfreeze'} ${o.name}? ${o.is_active ? 'Payments and access stop.' : ''}`)) return;
+    setBusyId(o.id);
+    try { await toggleOrganizationStatus(o.id, !o.is_active); setOrgs((p) => p.map((x) => x.id === o.id ? { ...x, is_active: !x.is_active } : x)); } catch (e) { alert(e instanceof Error ? e.message : 'Failed'); }
+    setBusyId(null);
+  };
+  if (loading) return <p style={{ color: T.textSec, fontSize: 13 }}><Loader2 size={14} className="animate-spin" style={{ verticalAlign: 'middle' }} /> Loading…</p>;
+  return (
+    <div>
+      <SectionHead title="Trust & Safety" sub="Fraud signals and emergency controls" right={<Btn onClick={load} color={T.textSec}><RefreshCw size={13} /> Refresh</Btn>} />
+      <div style={{ background: T.card, border: `1px solid ${T.border}`, borderRadius: 14, overflow: 'hidden', marginBottom: 18 }}>
+        <div style={{ padding: '14px 18px', borderBottom: `1px solid ${T.border}`, display: 'flex', justifyContent: 'space-between' }}>
+          <span style={{ fontSize: 13, fontWeight: 700, color: T.text }}>Disputed claims</span><Badge color={T.red} dot>{flags.length}</Badge>
+        </div>
+        {flags.length === 0 ? <p style={{ padding: 18, margin: 0, fontSize: 12, color: T.textTer }}>No disputed claims.</p>
+          : flags.map((f) => (
+            <div key={f.id} style={{ padding: '11px 18px', borderBottom: `1px solid ${T.border}`, display: 'flex', alignItems: 'center', gap: 12 }}>
+              <Siren size={15} style={{ color: T.red }} />
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <p style={{ margin: 0, fontSize: 12, color: T.text, fontWeight: 600 }}>{f.claimant_name} · {f.position_title}</p>
+                <p style={{ margin: '2px 0 0', fontSize: 11, color: T.textSec }}>{f.dispute_count} disputes · {f.org_name}</p>
+              </div>
+              <Badge color={T.red}>{f.dispute_count} disputes</Badge>
+            </div>
+          ))}
+      </div>
+
+      <div style={{ background: T.card, border: `1px solid ${T.border}`, borderRadius: 14, overflow: 'hidden' }}>
+        <div style={{ padding: '14px 18px', borderBottom: `1px solid ${T.border}`, fontSize: 13, fontWeight: 700, color: T.text }}>Emergency org controls</div>
+        {orgs.map((o) => (
+          <div key={o.id} style={{ padding: '10px 18px', borderBottom: `1px solid ${T.border}`, display: 'flex', alignItems: 'center', gap: 12 }}>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <p style={{ margin: 0, fontSize: 12, color: T.text, fontWeight: 600 }}>{o.name}</p>
+              <p style={{ margin: '2px 0 0', fontSize: 11, color: T.textSec, fontFamily: mono }}>/{o.slug}</p>
+            </div>
+            <Badge color={o.is_active ? T.mint : T.red}>{o.is_active ? 'active' : 'frozen'}</Badge>
+            <Btn onClick={() => toggle(o)} disabled={busyId === o.id} color={o.is_active ? T.red : T.mint}>{o.is_active ? 'Freeze' : 'Unfreeze'}</Btn>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function Communications() {
+  const [orgs, setOrgs] = useState<OrgOverview[]>([]);
+  const [target, setTarget] = useState<string>('all');
+  const [title, setTitle] = useState('');
+  const [message, setMessage] = useState('');
+  const [sending, setSending] = useState(false);
+  const toast = useToast();
+  useEffect(() => { (async () => { try { setOrgs(await fetchOrganizations()); } catch { /* */ } })(); }, []);
+  const send = async () => {
+    if (title.trim().length < 2 || message.trim().length < 2) { toast?.error?.('Title and message required.'); return; }
+    if (!confirm(`Send to ${target === 'all' ? 'EVERY member on the platform' : orgs.find((o) => o.id === target)?.name}?`)) return;
+    setSending(true);
+    try {
+      const n = await broadcast(target === 'all' ? null : target, title.trim(), message.trim());
+      toast?.success?.(`Sent to ${n} member${n === 1 ? '' : 's'}.`); setTitle(''); setMessage('');
+    } catch (e) { toast?.error?.(e instanceof Error ? e.message : 'Failed'); }
+    setSending(false);
+  };
+  return (
+    <div>
+      <SectionHead title="Communications" sub="Broadcast an in-app announcement" />
+      <div style={{ background: T.card, border: `1px solid ${T.border}`, borderRadius: 14, padding: 18, maxWidth: 560, display: 'grid', gap: 14 }}>
+        <Field label="Audience">
+          <select value={target} onChange={(e) => setTarget(e.target.value)} style={inputStyle}>
+            <option value="all" style={{ color: '#000' }}>All organizations (everyone)</option>
+            {orgs.map((o) => <option key={o.id} value={o.id} style={{ color: '#000' }}>{o.name}</option>)}
+          </select>
+        </Field>
+        <Field label="Title"><input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Scheduled maintenance" style={inputStyle} /></Field>
+        <Field label="Message"><textarea value={message} onChange={(e) => setMessage(e.target.value)} rows={4} placeholder="What do you want members to know?" style={{ ...inputStyle, resize: 'vertical' }} /></Field>
+        <div><Btn onClick={send} disabled={sending} color={T.primary}>{sending ? <Loader2 size={14} className="animate-spin" /> : <Megaphone size={14} />} Send broadcast</Btn></div>
+      </div>
+    </div>
+  );
+}
+
 // ── Nav ──────────────────────────────────────────────────────────
 const NAV = [
   { id: 'command', label: 'Command', icon: LayoutDashboard },
@@ -562,10 +757,28 @@ export default function PlatformConsole() {
   const [admin, setAdmin] = useState<PlatformAdmin | null>(() => getPlatformAdmin());
   const [checking, setChecking] = useState(true);
   const [section, setSection] = useState<string>('command');
+  const [narrow, setNarrow] = useState(typeof window !== 'undefined' && window.innerWidth < 900);
 
   useEffect(() => {
     (async () => { const a = await verifySession(); setAdmin(a); setChecking(false); })();
+    const onResize = () => setNarrow(window.innerWidth < 900);
+    window.addEventListener('resize', onResize);
+    return () => window.removeEventListener('resize', onResize);
   }, []);
+
+  // Operator console is desktop-only by design — mobile is intentionally left out.
+  if (narrow) {
+    return (
+      <div style={{ minHeight: '100vh', background: T.bg, color: T.text, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 28, textAlign: 'center' }}>
+        <div style={{ maxWidth: 320 }}>
+          <span style={{ fontSize: 22, fontWeight: 800, color: T.primary }}>Pay<span style={{ color: T.amber }}>vexo</span></span>
+          <div style={{ fontSize: 10, color: T.textTer, fontFamily: mono, letterSpacing: '0.2em', margin: '4px 0 20px' }}>CONSOLE</div>
+          <p style={{ color: T.text, fontSize: 15, fontWeight: 700, margin: '0 0 8px' }}>Open on a desktop</p>
+          <p style={{ color: T.textSec, fontSize: 13, margin: 0, lineHeight: 1.6 }}>The operator console is built for a large screen. Please use a laptop or desktop to manage the platform.</p>
+        </div>
+      </div>
+    );
+  }
 
   if (checking) {
     return <div style={{ minHeight: '100vh', background: T.bg, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
@@ -611,10 +824,10 @@ export default function PlatformConsole() {
             {section === 'verification' && <VerificationQueue />}
             {section === 'orgs' && <OrgRegistry />}
             {section === 'financial' && <FinancialIntel />}
-            {section === 'map' && <Placeholder title="University Map" phase="Phase 3" />}
-            {section === 'safety' && <Placeholder title="Trust & Safety" phase="Phase 4" />}
-            {section === 'comms' && <Placeholder title="Communications" phase="Phase 4" />}
-            {section === 'config' && <Placeholder title="Platform Config" phase="Phase 3" />}
+            {section === 'map' && <UniversityMap />}
+            {section === 'safety' && <TrustSafety />}
+            {section === 'comms' && <Communications />}
+            {section === 'config' && <PlatformConfig />}
             {section === 'analytics' && <GrowthAnalytics />}
             {section === 'audit' && <AuditTrail />}
           </motion.div>
