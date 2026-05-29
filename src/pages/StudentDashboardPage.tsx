@@ -54,6 +54,7 @@ import MyClaimStatus from '@/components/claims/MyClaimStatus';
 import { useTheme, getDashboardTokens } from '@/hooks/useTheme';
 import PayvexoBackground from '@/components/student/dashboard/PayvexoBackground';
 import OutstandingHero from '@/components/student/dashboard/OutstandingHero';
+import EventsSection from '@/components/student/dashboard/EventsSection';
 import QuickActionsGrid from '@/components/student/dashboard/QuickActionsGrid';
 import DueNextList, { type DueNextItem } from '@/components/student/dashboard/DueNextList';
 import PayOnTimeCard from '@/components/student/dashboard/PayOnTimeCard';
@@ -97,6 +98,8 @@ export default function StudentDashboardPage() {
   // useAppAuth doesn't surface on its mapped Student shape.
   const { user: mtMember } = useMultiTenantAuth();
   const orgName = mtMember?.organization?.name;
+  const orgId = mtMember?.organization?.id ?? '';
+  const groupId = mtMember?.group?.id ?? null;
   const memberLoginId = mtMember?.member_id ?? user?.reg_number;
   const { go, orgSlug } = useAppNav();
   const navigate = useNavigate();
@@ -167,6 +170,7 @@ export default function StudentDashboardPage() {
         : 'unpaid';
       return {
         pt,
+        category: pt.category ?? null,
         status,
         approvedSum,
         owed: Math.max(0, Number(pt.amount || 0) - approvedSum),
@@ -175,9 +179,14 @@ export default function StudentDashboardPage() {
     });
   }, [paymentTypes, payments]);
 
-  const unpaidActive = useMemo(
-    () => enriched.filter((e) => e.status === 'unpaid' || e.status === 'partial'),
+  const duesOnly = useMemo(
+    () => enriched.filter((e) => e.category !== 'event'),
     [enriched]
+  );
+
+  const unpaidActive = useMemo(
+    () => duesOnly.filter((e) => e.status === 'unpaid' || e.status === 'partial'),
+    [duesOnly]
   );
 
   const urgent = useMemo(() => {
@@ -207,14 +216,14 @@ export default function StudentDashboardPage() {
     const rank: Record<typeof enriched[number]['status'], number> = {
       unpaid: 0, partial: 1, pending: 2, paid: 3,
     };
-    return [...enriched].sort((a, b) => {
+    return [...duesOnly].sort((a, b) => {
       if (rank[a.status] !== rank[b.status]) return rank[a.status] - rank[b.status];
       if (a.pt.is_mandatory !== b.pt.is_mandatory) return a.pt.is_mandatory ? -1 : 1;
       const ad = a.daysLeft ?? Number.MAX_SAFE_INTEGER;
       const bd = b.daysLeft ?? Number.MAX_SAFE_INTEGER;
       return ad - bd;
     });
-  }, [enriched]);
+  }, [duesOnly]);
 
   // ── Items for the new DueNextList (Phase 2) ─────────────────
   // We surface the next ~5 unpaid/partial dues. The component handles
@@ -383,6 +392,15 @@ export default function StudentDashboardPage() {
           totalCount={allDuesSorted.length}
           onItemClick={(id) => go(`/payment/${id}`)}
           onSeeAllClick={() => go('/payments')}
+        />
+
+        <EventsSection
+          theme={theme}
+          orgId={orgId}
+          groupId={groupId}
+          maxItems={2}
+          showAllHref={orgSlug ? `/${orgSlug}/events` : null}
+          onGetTicket={(id) => go(`/payment/${id}`)}
         />
 
         {/* ───────────── QUICK ACTIONS ─────────────
