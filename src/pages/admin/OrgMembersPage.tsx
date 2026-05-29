@@ -1814,8 +1814,17 @@ export default function OrgMembersPage() {
           >
             <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={() => setShowInviteModal(false)} />
             <motion.div
-              className="relative w-full max-w-md rounded-2xl p-6 z-10"
-              style={{ background: tk.card, border: `1px solid ${tk.cardBorder}`, color: tk.text }}
+              className="relative w-full max-w-lg rounded-3xl p-5 sm:p-8 z-10 overflow-hidden backdrop-blur-xl"
+              style={{
+                background: theme === 'light' ? 'rgba(255,255,255,0.92)' : 'rgba(15, 7, 3, 0.6)',
+                border: `1px solid ${tk.primaryRing}`,
+                color: tk.text,
+                boxShadow: `
+                  0 0 0 1px ${theme === 'light' ? 'rgba(15, 7, 3, 0.06)' : 'rgba(255, 104, 3, 0.1)'},
+                  0 20px 50px -12px ${theme === 'light' ? 'rgba(15, 7, 3, 0.15)' : 'rgba(0, 0, 0, 0.8)'},
+                  inset 0 1px 0 0 ${theme === 'light' ? 'rgba(255, 255, 255, 0.45)' : 'rgba(255, 255, 255, 0.05)'}
+                `,
+              }}
               initial={{ scale: 0.95, opacity: 0 }}
               animate={{ scale: 1, opacity: 1 }}
               exit={{ scale: 0.95, opacity: 0 }}
@@ -1832,7 +1841,7 @@ export default function OrgMembersPage() {
                     </p>
                   </div>
                 </div>
-                <button onClick={() => setShowInviteModal(false)} className="p-2 rounded-lg hover:bg-white/5"><X size={18} style={{ color: tk.textSec }} /></button>
+                <button onClick={() => setShowInviteModal(false)} className="p-2 rounded-lg hover:bg-white/5 shrink-0"><X size={18} style={{ color: tk.textSec }} /></button>
               </div>
 
               {!inviteLink ? (
@@ -1840,12 +1849,12 @@ export default function OrgMembersPage() {
                   {/* Max Uses */}
                   <div>
                     <label className="block text-sm font-medium mb-1.5" style={{ color: tk.text }}>Max number of joins</label>
-                    <div className="flex gap-2">
+                    <div className="flex flex-wrap gap-2">
                       {[10, 25, 50, 100, 500].map(n => (
                         <button
                           key={n}
                           onClick={() => setInviteMaxUses(n)}
-                          className="flex-1 py-2 rounded-lg text-xs font-medium transition-all"
+                          className="min-w-[4.5rem] flex-1 py-2 rounded-lg text-xs font-medium transition-all"
                           style={{
                             background: inviteMaxUses === n ? tk.primarySoft : theme === 'light' ? '#FFF6EE' : 'rgba(255,255,255,0.03)',
                             border: `1px solid ${inviteMaxUses === n ? tk.primaryRing : tk.cardBorder}`,
@@ -1861,12 +1870,12 @@ export default function OrgMembersPage() {
                   {/* Expiry */}
                   <div>
                     <label className="block text-sm font-medium mb-1.5" style={{ color: tk.text }}>Expires in</label>
-                    <div className="flex gap-2">
+                    <div className="flex flex-wrap gap-2">
                       {([['1d', '1 day'], ['7d', '7 days'], ['30d', '30 days'], ['never', 'Never']] as const).map(([val, label]) => (
                         <button
                           key={val}
                           onClick={() => setInviteExpiry(val)}
-                          className="flex-1 py-2 rounded-lg text-xs font-medium transition-all"
+                          className="min-w-[5.5rem] flex-1 py-2 rounded-lg text-xs font-medium transition-all"
                           style={{
                             background: inviteExpiry === val ? tk.primarySoft : theme === 'light' ? '#FFF6EE' : 'rgba(255,255,255,0.03)',
                             border: `1px solid ${inviteExpiry === val ? tk.primaryRing : tk.cardBorder}`,
@@ -1880,7 +1889,7 @@ export default function OrgMembersPage() {
                   </div>
 
                   {group && (
-                    <div className="p-3 rounded-xl text-sm" style={{ background: theme === 'light' ? '#FFFDF9' : 'rgba(255,255,255,0.03)', border: `1px solid ${tk.cardBorder}` }}>
+                    <div className="p-3 rounded-xl text-sm break-words" style={{ background: theme === 'light' ? '#FFFDF9' : 'rgba(255,255,255,0.03)', border: `1px solid ${tk.cardBorder}` }}>
                       <p className="text-xs" style={{ color: tk.textSec }}>
                         Members who join will be added to: <span style={{ color: tk.text, fontWeight: 500 }}>{group.name}</span>
                       </p>
@@ -1901,15 +1910,15 @@ export default function OrgMembersPage() {
                   {/* Generated Link */}
                   <div className="p-3 rounded-xl" style={{ background: theme === 'light' ? '#FFFDF9' : 'rgba(255,255,255,0.03)', border: `1px solid ${tk.cardBorder}` }}>
                     <p className="text-xs font-medium mb-2" style={{ color: tk.textSec }}>Invite Link</p>
-                    <p className="text-sm break-all font-mono" style={{ color: tk.text }}>{inviteLink}</p>
+                    <p className="text-xs sm:text-sm break-all font-mono leading-relaxed" style={{ color: tk.text }}>{inviteLink}</p>
                   </div>
 
-                  <div className="p-3 rounded-xl" style={{ background: tk.primarySoft, border: `1px solid ${tk.primaryRing}` }}>
+                  <div className="p-3 rounded-xl text-center" style={{ background: tk.primarySoft, border: `1px solid ${tk.primaryRing}` }}>
                     <p className="text-xs font-medium mb-1" style={{ color: tk.textSec }}>Invite Code</p>
-                    <p className="text-2xl font-bold tracking-[0.3em] text-center" style={{ color: tk.text }}>{inviteCode}</p>
+                    <p className="text-xl sm:text-2xl font-bold tracking-[0.18em] sm:tracking-[0.3em] break-all" style={{ color: tk.text }}>{inviteCode}</p>
                   </div>
 
-                  <div className="flex gap-2">
+                  <div className="flex flex-col sm:flex-row gap-2">
                     <button
                       onClick={copyInviteLink}
                       className="flex-1 px-4 py-3 rounded-xl text-sm font-medium flex items-center justify-center gap-2 transition-all hover:scale-[1.02]"
