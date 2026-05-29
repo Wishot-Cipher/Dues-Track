@@ -24,6 +24,7 @@ import SettingsPage from '@/pages/student/SettingsPage';
 import PaymentDetailPage from '@/pages/PaymentDetailPage';
 import MakePaymentPage from '@/pages/MakePaymentPage';
 import MyDuesPage from '@/pages/MyDuesPage';
+import MyGroupsPage from '@/pages/MyGroupsPage';
 import PaymentVerifyPage from '@/pages/PaymentVerifyPage';
 import ReceiptPage from '@/pages/ReceiptPage';
 import AdminDashboardPage from '@/pages/admin/AdminDashboardPage';
@@ -134,6 +135,7 @@ function App() {
                 <Route path="claim" element={<OrgProtectedRoute><ClaimSubmitPage /></OrgProtectedRoute>} />
                 <Route path="claim/:claimId/decide" element={<OrgProtectedRoute><ClaimDecisionPage /></OrgProtectedRoute>} />
                 <Route path="payments" element={<OrgProtectedRoute><MyDuesPage /></OrgProtectedRoute>} />
+                <Route path="groups" element={<OrgProtectedRoute><MyGroupsPage /></OrgProtectedRoute>} />
                 {/* Default Pay flow — clean Paystack-first MakePaymentPage. */}
                 <Route path="payment/:id" element={<OrgProtectedRoute><MakePaymentPage /></OrgProtectedRoute>} />
                 {/* Manual / offline fallback — bank transfer + receipt upload. */}

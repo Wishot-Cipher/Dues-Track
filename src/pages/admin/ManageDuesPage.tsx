@@ -1,7 +1,8 @@
 ﻿import { useState, useEffect, useCallback } from 'react'
-import { motion, AnimatePresence } from 'framer-motion'
+import { motion} from 'framer-motion'
 import {  } from 'react-router-dom'
 import { useAppNav } from '@/hooks/useAppNav';
+import Modal from '@/components/ui/Modal'
 import GlassCard from '@/components/ui/GlassCard'
 import ConfirmDialog from '@/components/ui/ConfirmDialog'
 import ProfessionalDropdown from '@/components/ui/ProfessionalDropdown'
@@ -37,20 +38,48 @@ interface PaymentType {
   description: string | null
   category: string
   amount: number
+  minimum_partial_amount?: number | null
   allow_partial: boolean
   is_mandatory: boolean
   deadline: string
+  target_levels: string[] | null
+  target_sections: string[] | null
   icon: string
   color: string
   bank_name: string
   account_name: string
   account_number: string
-  target_levels: string[]
+  accepts_paystack?: boolean
+  accepts_manual?: boolean
+  late_fee_per_day?: number | null
   is_active: boolean
   is_public: boolean
   created_at: string
   updated_at: string
-  late_fee_per_day?: number
+}
+
+interface EditPaymentTypeForm {
+  id: string
+  title: string
+  description: string
+  category: string
+  amount: string
+  minimum_partial_amount: string
+  allow_partial: boolean
+  is_mandatory: boolean
+  deadline: string
+  target_levels: string[]
+  target_sections: string[]
+  icon: string
+  color: string
+  bank_name: string
+  account_name: string
+  account_number: string
+  accepts_paystack: boolean
+  accepts_manual: boolean
+  late_fee_per_day: string
+  is_active: boolean
+  is_public: boolean
 }
 
 const CATEGORIES = [
@@ -80,6 +109,33 @@ const ICONS = [
   { value: '🎨', label: 'Art' },
 ]
 
+const LEVEL_OPTIONS = ['100', '200', '300', '400', '500', '600', '700']
+const SECTION_OPTIONS = ['A', 'B', 'C', 'D', 'E', 'F']
+
+const normalizePaymentTypeToForm = (paymentType: PaymentType): EditPaymentTypeForm => ({
+  id: paymentType.id,
+  title: paymentType.title || '',
+  description: paymentType.description || '',
+  category: paymentType.category || 'semester_dues',
+  amount: String(paymentType.amount ?? ''),
+  minimum_partial_amount: String(paymentType.minimum_partial_amount ?? ''),
+  allow_partial: paymentType.allow_partial ?? false,
+  is_mandatory: paymentType.is_mandatory ?? false,
+  deadline: paymentType.deadline || '',
+  target_levels: paymentType.target_levels || [],
+  target_sections: paymentType.target_sections || [],
+  icon: paymentType.icon || '🎓',
+  color: paymentType.color || colors.primary,
+  bank_name: paymentType.bank_name || '',
+  account_name: paymentType.account_name || '',
+  account_number: paymentType.account_number || '',
+  accepts_paystack: paymentType.accepts_paystack ?? true,
+  accepts_manual: paymentType.accepts_manual ?? true,
+  late_fee_per_day: String(paymentType.late_fee_per_day ?? ''),
+  is_active: paymentType.is_active ?? true,
+  is_public: paymentType.is_public ?? false,
+})
+
 export default function ManageDuesPage() {
   const { go: navigate, orgSlug } = useAppNav();
   const { theme } = useTheme()
@@ -98,7 +154,7 @@ export default function ManageDuesPage() {
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
   const [showDeactivateConfirm, setShowDeactivateConfirm] = useState(false)
   const [showEditConfirm, setShowEditConfirm] = useState(false)
-  const [editingPaymentType, setEditingPaymentType] = useState<Partial<PaymentType> | null>(null)
+  const [editingPaymentType, setEditingPaymentType] = useState<EditPaymentTypeForm | null>(null)
   const [selectedPaymentType, setSelectedPaymentType] = useState<PaymentType | null>(null)
   
   // Stats
@@ -174,25 +230,58 @@ export default function ManageDuesPage() {
   async function handleEdit() {
     if (!editingPaymentType?.id) return
 
+    if (!editingPaymentType.title.trim()) {
+      showError('Please provide a title')
+      return
+    }
+
+    if (!editingPaymentType.amount || Number(editingPaymentType.amount) <= 0) {
+      showError('Please provide a valid amount')
+      return
+    }
+
+    if (!editingPaymentType.accepts_paystack && !editingPaymentType.accepts_manual) {
+      showError('Enable at least one payment method')
+      return
+    }
+
+    if (editingPaymentType.allow_partial && Number(editingPaymentType.minimum_partial_amount || 0) <= 0) {
+      showError('Set a minimum partial amount')
+      return
+    }
+
+    if (editingPaymentType.accepts_manual && (!editingPaymentType.bank_name.trim() || !editingPaymentType.account_number.trim())) {
+      showError('Manual payments need bank details')
+      return
+    }
+
     try {
       setActionLoading(true)
       const scope = getOrgScope();
       let editQ = supabase
         .from('payment_types')
         .update({
-          title: editingPaymentType.title,
-          description: editingPaymentType.description,
+          title: editingPaymentType.title.trim(),
+          description: editingPaymentType.description.trim() || null,
           category: editingPaymentType.category,
-          amount: editingPaymentType.amount,
+          amount: Number(editingPaymentType.amount),
+          minimum_partial_amount:
+            editingPaymentType.allow_partial && editingPaymentType.minimum_partial_amount
+              ? Number(editingPaymentType.minimum_partial_amount)
+              : null,
           allow_partial: editingPaymentType.allow_partial,
           is_mandatory: editingPaymentType.is_mandatory,
-          deadline: editingPaymentType.deadline,
-          late_fee_per_day: Number(editingPaymentType.late_fee_per_day || 0),
+          deadline: editingPaymentType.deadline || null,
+          late_fee_per_day: editingPaymentType.late_fee_per_day ? Number(editingPaymentType.late_fee_per_day) : null,
+          target_levels: editingPaymentType.target_levels.length ? editingPaymentType.target_levels : null,
+          target_sections: editingPaymentType.target_sections.length ? editingPaymentType.target_sections : null,
           icon: editingPaymentType.icon,
           color: editingPaymentType.color,
-          bank_name: editingPaymentType.bank_name,
-          account_name: editingPaymentType.account_name,
-          account_number: editingPaymentType.account_number,
+          bank_name: editingPaymentType.accepts_manual ? editingPaymentType.bank_name.trim() : null,
+          account_name: editingPaymentType.accepts_manual ? editingPaymentType.account_name.trim() : null,
+          account_number: editingPaymentType.accepts_manual ? editingPaymentType.account_number.trim() : null,
+          accepts_paystack: editingPaymentType.accepts_paystack,
+          accepts_manual: editingPaymentType.accepts_manual,
           is_public: editingPaymentType.is_public,
           updated_at: new Date().toISOString()
         })
@@ -725,7 +814,8 @@ export default function ManageDuesPage() {
                         <div className="grid grid-cols-2 gap-2">
                           <button
                             onClick={() => {
-                              setEditingPaymentType({ ...pt })
+                              setSelectedPaymentType(pt)
+                              setEditingPaymentType(normalizePaymentTypeToForm(pt))
                               setShowEditConfirm(true)
                             }}
                             className="p-3 rounded-xl transition-all active:scale-[0.95] flex items-center justify-center gap-2"
@@ -765,247 +855,364 @@ export default function ManageDuesPage() {
       </div>
 
       {/* Edit Modal */}
-      <AnimatePresence>
-        {showEditModal && editingPaymentType && (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 overflow-y-auto"
-              onClick={() => { setShowEditModal(false); setEditingPaymentType(null) }}
-          >
-            <motion.div
-              initial={{ scale: 0.9, opacity: 0, y: 20 }}
-              animate={{ scale: 1, opacity: 1, y: 0 }}
-              exit={{ scale: 0.9, opacity: 0, y: 20 }}
-              onClick={(e) => e.stopPropagation()}
-              className="w-full max-w-2xl my-8"
-            >
-              <GlassCard className="relative overflow-hidden max-h-[85vh] overflow-y-auto">
-                <div className="absolute top-0 left-0 w-full h-1" style={{ background: `linear-gradient(90deg, ${colors.primary}, ${colors.accentMint})` }} />
-                <div className="p-6">
-                  <div className="flex items-center justify-between mb-6">
-                    <div className="flex items-center gap-3">
-                      <div className="w-12 h-12 rounded-xl flex items-center justify-center" style={{ background: `${colors.primary}20` }}>
-                        <Edit3 className="w-6 h-6" style={{ color: colors.primary }} />
-                      </div>
-                      <div>
-                        <h3 className="text-lg font-bold text-white">Edit Payment Type</h3>
-                        <p className="text-sm" style={{ color: colors.textSecondary }}>
-                          Modify payment type details
-                        </p>
-                      </div>
-                    </div>
-                    <button onClick={() => { setShowEditModal(false); setEditingPaymentType(null) }} className="p-2 rounded-lg hover:bg-white/10">
-                      <X className="w-5 h-5" style={{ color: colors.textSecondary }} />
-                    </button>
+      <Modal
+        isOpen={showEditModal && Boolean(editingPaymentType)}
+        onClose={() => {
+          setShowEditModal(false)
+          setEditingPaymentType(null)
+        }}
+        title="Edit Published Due"
+        size="xl"
+      >
+        {editingPaymentType && (
+          <div className="grid gap-6 lg:grid-cols-[minmax(0,1.2fr)_minmax(280px,0.8fr)]">
+            <div className="space-y-5">
+              <section className="rounded-2xl p-5 border" style={{ background: 'rgba(255,255,255,0.03)', borderColor: 'rgba(255,255,255,0.08)' }}>
+                <div className="flex items-center gap-2 mb-4">
+                  <Edit3 className="w-4 h-4" style={{ color: colors.primary }} />
+                  <h4 className="text-sm font-semibold uppercase tracking-wider" style={{ color: colors.textSecondary }}>Basics</h4>
+                </div>
+                <div className="space-y-4">
+                  <div>
+                    <label className="block text-sm font-medium text-white mb-2">Title</label>
+                    <input
+                      type="text"
+                      value={editingPaymentType.title}
+                      onChange={(e) => setEditingPaymentType({ ...editingPaymentType, title: e.target.value })}
+                      className="w-full px-4 py-3 rounded-xl bg-white/5 border text-white focus:outline-none focus:ring-2"
+                      style={{ borderColor: 'rgba(255, 255, 255, 0.1)' }}
+                    />
                   </div>
 
-                  <div className="space-y-4">
+                  <div>
+                    <label className="block text-sm font-medium text-white mb-2">Description</label>
+                    <textarea
+                      value={editingPaymentType.description}
+                      onChange={(e) => setEditingPaymentType({ ...editingPaymentType, description: e.target.value })}
+                      rows={4}
+                      className="w-full px-4 py-3 rounded-xl bg-white/5 border text-white focus:outline-none focus:ring-2 resize-none"
+                      style={{ borderColor: 'rgba(255, 255, 255, 0.1)' }}
+                    />
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <div>
-                      <label className="block text-sm font-medium text-white mb-2">Title</label>
+                      <label className="block text-sm font-medium text-white mb-2">Amount (₦)</label>
                       <input
-                        type="text"
-                        value={editingPaymentType.title || ''}
-                        onChange={(e) => setEditingPaymentType({ ...editingPaymentType, title: e.target.value })}
+                        type="number"
+                        value={editingPaymentType.amount}
+                        onChange={(e) => setEditingPaymentType({ ...editingPaymentType, amount: e.target.value.replace(/[^0-9.]/g, '') })}
                         className="w-full px-4 py-3 rounded-xl bg-white/5 border text-white focus:outline-none focus:ring-2"
                         style={{ borderColor: 'rgba(255, 255, 255, 0.1)' }}
                       />
                     </div>
+                    <ProfessionalDateTimePicker
+                      label="Deadline"
+                      value={editingPaymentType.deadline?.slice(0, 16) || ''}
+                      onChange={(value) => setEditingPaymentType({ ...editingPaymentType, deadline: value })}
+                      helperText="Choose when this due stops accepting payments."
+                    />
+                  </div>
 
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <div>
-                      <label className="block text-sm font-medium text-white mb-2">Description</label>
-                      <textarea
-                        value={editingPaymentType.description || ''}
-                        onChange={(e) => setEditingPaymentType({ ...editingPaymentType, description: e.target.value })}
-                        rows={3}
-                        className="w-full px-4 py-3 rounded-xl bg-white/5 border text-white focus:outline-none focus:ring-2 resize-none"
+                      <label className="block text-sm font-medium text-white mb-2">Category</label>
+                      <ProfessionalDropdown
+                        value={editingPaymentType.category}
+                        onChange={(value) => setEditingPaymentType({ ...editingPaymentType, category: typeof value === 'string' ? value : value[0] })}
+                        options={CATEGORIES.map((cat) => ({ value: cat.value, label: `${cat.icon} ${cat.label}` }))}
+                        placeholder="Select category"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-white mb-2">Icon</label>
+                      <ProfessionalDropdown
+                        value={editingPaymentType.icon}
+                        onChange={(value) => setEditingPaymentType({ ...editingPaymentType, icon: typeof value === 'string' ? value : value[0] })}
+                        options={ICONS.map((icon) => ({ value: icon.value, label: `${icon.value} ${icon.label}` }))}
+                        placeholder="Select icon"
+                      />
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-white mb-2">Color</label>
+                    <div className="flex flex-wrap gap-2">
+                      {COLORS.map((color) => (
+                        <button
+                          key={color}
+                          type="button"
+                          onClick={() => setEditingPaymentType({ ...editingPaymentType, color })}
+                          className={`w-8 h-8 rounded-lg transition-all ${editingPaymentType.color === color ? 'ring-2 ring-white ring-offset-2 ring-offset-black scale-110' : ''}`}
+                          style={{ background: color }}
+                        />
+                      ))}
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-sm font-medium text-white mb-2">Late fee per day (₦)</label>
+                      <input
+                        type="number"
+                        value={editingPaymentType.late_fee_per_day}
+                        onChange={(e) => setEditingPaymentType({ ...editingPaymentType, late_fee_per_day: e.target.value.replace(/[^0-9.]/g, '') })}
+                        className="w-full px-4 py-3 rounded-xl bg-white/5 border text-white focus:outline-none focus:ring-2"
                         style={{ borderColor: 'rgba(255, 255, 255, 0.1)' }}
                       />
                     </div>
+                    <div>
+                      <label className="block text-sm font-medium text-white mb-2">Minimum partial amount (₦)</label>
+                      <input
+                        type="number"
+                        value={editingPaymentType.minimum_partial_amount}
+                        onChange={(e) => setEditingPaymentType({ ...editingPaymentType, minimum_partial_amount: e.target.value.replace(/[^0-9.]/g, '') })}
+                        className="w-full px-4 py-3 rounded-xl bg-white/5 border text-white focus:outline-none focus:ring-2"
+                        style={{ borderColor: 'rgba(255, 255, 255, 0.1)' }}
+                      />
+                    </div>
+                  </div>
+                </div>
+              </section>
 
-                    <div className="grid grid-cols-2 gap-4">
+              <section className="rounded-2xl p-5 border" style={{ background: 'rgba(255,255,255,0.03)', borderColor: 'rgba(255,255,255,0.08)' }}>
+                <div className="flex items-center gap-2 mb-4">
+                  <Tag className="w-4 h-4" style={{ color: colors.primary }} />
+                  <h4 className="text-sm font-semibold uppercase tracking-wider" style={{ color: colors.textSecondary }}>Targeting</h4>
+                </div>
+
+                <div className="space-y-4">
+                  <div>
+                    <p className="text-xs font-semibold uppercase tracking-wider mb-3" style={{ color: colors.textSecondary }}>Levels</p>
+                    <div className="flex flex-wrap gap-2">
+                      {LEVEL_OPTIONS.map((lvl) => {
+                        const active = editingPaymentType.target_levels.includes(lvl)
+                        return (
+                          <button
+                            key={lvl}
+                            type="button"
+                            onClick={() => setEditingPaymentType({
+                              ...editingPaymentType,
+                              target_levels: active
+                                ? editingPaymentType.target_levels.filter((item) => item !== lvl)
+                                : [...editingPaymentType.target_levels, lvl],
+                            })}
+                            className="px-3 py-2 rounded-xl text-sm font-medium transition-all"
+                            style={{
+                              background: active ? `${colors.primary}20` : 'rgba(255,255,255,0.04)',
+                              border: `1px solid ${active ? `${colors.primary}40` : 'rgba(255,255,255,0.08)'}`,
+                              color: active ? colors.primary : colors.textSecondary,
+                            }}
+                          >
+                            {lvl}L
+                          </button>
+                        )
+                      })}
+                    </div>
+                  </div>
+
+                  <div>
+                    <p className="text-xs font-semibold uppercase tracking-wider mb-3" style={{ color: colors.textSecondary }}>Sections</p>
+                    <div className="flex flex-wrap gap-2">
+                      {SECTION_OPTIONS.map((section) => {
+                        const active = editingPaymentType.target_sections.includes(section)
+                        return (
+                          <button
+                            key={section}
+                            type="button"
+                            onClick={() => setEditingPaymentType({
+                              ...editingPaymentType,
+                              target_sections: active
+                                ? editingPaymentType.target_sections.filter((item) => item !== section)
+                                : [...editingPaymentType.target_sections, section],
+                            })}
+                            className="px-3 py-2 rounded-xl text-sm font-medium transition-all"
+                            style={{
+                              background: active ? `${colors.accentMint}22` : 'rgba(255,255,255,0.04)',
+                              border: `1px solid ${active ? `${colors.accentMint}40` : 'rgba(255,255,255,0.08)'}`,
+                              color: active ? colors.accentMint : colors.textSecondary,
+                            }}
+                          >
+                            Section {section}
+                          </button>
+                        )
+                      })}
+                    </div>
+                  </div>
+                </div>
+              </section>
+
+              <section className="rounded-2xl p-5 border" style={{ background: 'rgba(255,255,255,0.03)', borderColor: 'rgba(255,255,255,0.08)' }}>
+                <div className="flex items-center gap-2 mb-4">
+                  <CreditCard className="w-4 h-4" style={{ color: colors.primary }} />
+                  <h4 className="text-sm font-semibold uppercase tracking-wider" style={{ color: colors.textSecondary }}>Payment setup</h4>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-4">
+                  <label className="flex items-center gap-3 p-3 rounded-xl border cursor-pointer" style={{ background: editingPaymentType.allow_partial ? `${colors.primary}12` : 'rgba(255,255,255,0.03)', borderColor: editingPaymentType.allow_partial ? `${colors.primary}35` : 'rgba(255,255,255,0.08)' }}>
+                    <input type="checkbox" checked={editingPaymentType.allow_partial} onChange={(e) => setEditingPaymentType({ ...editingPaymentType, allow_partial: e.target.checked })} />
+                    <span className="text-sm text-white">Allow partial payments</span>
+                  </label>
+                  <label className="flex items-center gap-3 p-3 rounded-xl border cursor-pointer" style={{ background: editingPaymentType.is_mandatory ? `${colors.warning}12` : 'rgba(255,255,255,0.03)', borderColor: editingPaymentType.is_mandatory ? `${colors.warning}35` : 'rgba(255,255,255,0.08)' }}>
+                    <input type="checkbox" checked={editingPaymentType.is_mandatory} onChange={(e) => setEditingPaymentType({ ...editingPaymentType, is_mandatory: e.target.checked })} />
+                    <span className="text-sm text-white">Mandatory payment</span>
+                  </label>
+                  <label className="flex items-center gap-3 p-3 rounded-xl border cursor-pointer" style={{ background: editingPaymentType.is_public ? `${colors.accentMint}12` : 'rgba(255,255,255,0.03)', borderColor: editingPaymentType.is_public ? `${colors.accentMint}35` : 'rgba(255,255,255,0.08)' }}>
+                    <input type="checkbox" checked={editingPaymentType.is_public} onChange={(e) => setEditingPaymentType({ ...editingPaymentType, is_public: e.target.checked })} />
+                    <span className="text-sm text-white">Public link</span>
+                  </label>
+                  <label className="flex items-center gap-3 p-3 rounded-xl border cursor-pointer" style={{ background: editingPaymentType.accepts_paystack ? `${colors.primary}12` : 'rgba(255,255,255,0.03)', borderColor: editingPaymentType.accepts_paystack ? `${colors.primary}35` : 'rgba(255,255,255,0.08)' }}>
+                    <input type="checkbox" checked={editingPaymentType.accepts_paystack} onChange={(e) => setEditingPaymentType({ ...editingPaymentType, accepts_paystack: e.target.checked })} />
+                    <span className="text-sm text-white">Paystack checkout</span>
+                  </label>
+                  <label className="flex items-center gap-3 p-3 rounded-xl border cursor-pointer sm:col-span-2" style={{ background: editingPaymentType.accepts_manual ? `${colors.blue}12` : 'rgba(255,255,255,0.03)', borderColor: editingPaymentType.accepts_manual ? `${colors.blue}35` : 'rgba(255,255,255,0.08)' }}>
+                    <input type="checkbox" checked={editingPaymentType.accepts_manual} onChange={(e) => setEditingPaymentType({ ...editingPaymentType, accepts_manual: e.target.checked })} />
+                    <span className="text-sm text-white">Manual bank transfer</span>
+                  </label>
+                </div>
+
+                {editingPaymentType.accepts_manual && (
+                  <div className="space-y-4 pt-1">
+                    <p className="text-xs uppercase tracking-wider font-semibold" style={{ color: colors.textSecondary }}>Bank details shown to members</p>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                       <div>
-                        <label className="block text-sm font-medium text-white mb-2">Amount (₦)</label>
+                        <label className="block text-sm font-medium text-white mb-2">Bank Name</label>
                         <input
-                          type="number"
-                          value={editingPaymentType.amount || ''}
-                          onChange={(e) => setEditingPaymentType({ ...editingPaymentType, amount: parseFloat(e.target.value) || 0 })}
+                          type="text"
+                          value={editingPaymentType.bank_name}
+                          onChange={(e) => setEditingPaymentType({ ...editingPaymentType, bank_name: e.target.value })}
                           className="w-full px-4 py-3 rounded-xl bg-white/5 border text-white focus:outline-none focus:ring-2"
                           style={{ borderColor: 'rgba(255, 255, 255, 0.1)' }}
                         />
                       </div>
-                      <ProfessionalDateTimePicker
-                        label="Deadline"
-                        value={editingPaymentType.deadline?.slice(0, 16) || ''}
-                        onChange={(value) => setEditingPaymentType({ ...editingPaymentType, deadline: value })}
-                        // includeTime
-                        helperText="Choose when this payment type stops accepting payments."
-                      />
-                    </div>
-
-                    <div className="grid grid-cols-2 gap-4">
                       <div>
-                        <label className="block text-sm font-medium text-white mb-2">Category</label>
-                        <ProfessionalDropdown
-                          value={editingPaymentType.category || ''}
-                          onChange={(value) => setEditingPaymentType({ ...editingPaymentType, category: typeof value === 'string' ? value : value[0] })}
-                          options={CATEGORIES.map((cat) => ({
-                            value: cat.value,
-                            label: `${cat.icon} ${cat.label}`
-                          }))}
-                          placeholder="Select category"
+                        <label className="block text-sm font-medium text-white mb-2">Account Name</label>
+                        <input
+                          type="text"
+                          value={editingPaymentType.account_name}
+                          onChange={(e) => setEditingPaymentType({ ...editingPaymentType, account_name: e.target.value })}
+                          className="w-full px-4 py-3 rounded-xl bg-white/5 border text-white focus:outline-none focus:ring-2"
+                          style={{ borderColor: 'rgba(255, 255, 255, 0.1)' }}
                         />
                       </div>
-                      <div>
-                        <label className="block text-sm font-medium text-white mb-2">Icon</label>
-                        <ProfessionalDropdown
-                          value={editingPaymentType.icon || '🎓'}
-                          onChange={(value) => setEditingPaymentType({ ...editingPaymentType, icon: typeof value === 'string' ? value : value[0] })}
-                          options={ICONS.map((icon) => ({
-                            value: icon.value,
-                            label: `${icon.value} ${icon.label}`
-                          }))}
-                          placeholder="Select icon"
+                      <div className="sm:col-span-2">
+                        <label className="block text-sm font-medium text-white mb-2">Account Number</label>
+                        <input
+                          type="text"
+                          value={editingPaymentType.account_number}
+                          onChange={(e) => setEditingPaymentType({ ...editingPaymentType, account_number: e.target.value.replace(/[^0-9]/g, '') })}
+                          className="w-full px-4 py-3 rounded-xl bg-white/5 border text-white focus:outline-none focus:ring-2"
+                          style={{ borderColor: 'rgba(255, 255, 255, 0.1)' }}
                         />
-                      </div>
-                    </div>
-
-                    <div>
-                      <label className="block text-sm font-medium text-white mb-2">Color</label>
-                      <div className="flex flex-wrap gap-2">
-                        {COLORS.map((color) => (
-                          <button
-                            key={color}
-                            onClick={() => setEditingPaymentType({ ...editingPaymentType, color })}
-                            className={`w-8 h-8 rounded-lg transition-all ${editingPaymentType.color === color ? 'ring-2 ring-white ring-offset-2 ring-offset-black scale-110' : ''}`}
-                            style={{ background: color }}
-                          />
-                        ))}
-                      </div>
-                    </div>
-
-                    {/* Bank Details */}
-                    <div className="pt-4 border-t" style={{ borderColor: 'rgba(255, 255, 255, 0.1)' }}>
-                      <h4 className="text-sm font-semibold text-white mb-3">Bank Account Details</h4>
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                        <div>
-                          <label className="block text-sm font-medium text-white mb-2">Bank Name</label>
-                          <input
-                            type="text"
-                            value={editingPaymentType.bank_name || ''}
-                            onChange={(e) => setEditingPaymentType({ ...editingPaymentType, bank_name: e.target.value })}
-                            className="w-full px-4 py-3 rounded-xl bg-white/5 border text-white focus:outline-none focus:ring-2"
-                            style={{ borderColor: 'rgba(255, 255, 255, 0.1)' }}
-                          />
-                        </div>
-                        <div>
-                          <label className="block text-sm font-medium text-white mb-2">Account Name</label>
-                          <input
-                            type="text"
-                            value={editingPaymentType.account_name || ''}
-                            onChange={(e) => setEditingPaymentType({ ...editingPaymentType, account_name: e.target.value })}
-                            className="w-full px-4 py-3 rounded-xl bg-white/5 border text-white focus:outline-none focus:ring-2"
-                            style={{ borderColor: 'rgba(255, 255, 255, 0.1)' }}
-                          />
-                        </div>
-                        <div className="sm:col-span-2">
-                          <label className="block text-sm font-medium text-white mb-2">Account Number</label>
-                          <input
-                            type="text"
-                            value={editingPaymentType.account_number || ''}
-                            onChange={(e) => setEditingPaymentType({ ...editingPaymentType, account_number: e.target.value })}
-                            className="w-full px-4 py-3 rounded-xl bg-white/5 border text-white focus:outline-none focus:ring-2"
-                            style={{ borderColor: 'rgba(255, 255, 255, 0.1)' }}
-                          />
-                        </div>
-                      </div>
-                    </div>
-
-                    <div className="pt-4 border-t" style={{ borderColor: 'rgba(255, 255, 255, 0.1)' }}>
-                      <h4 className="text-sm font-semibold text-white mb-3">Late Fee</h4>
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 items-center">
-                        <div>
-                          <label className="block text-sm font-medium text-white mb-2">Late Fee per Day (₦)</label>
-                          <input
-                            type="number"
-                            value={editingPaymentType?.late_fee_per_day ?? ''}
-                            onChange={(e) => {
-                              const v = e.target.value
-                              setEditingPaymentType({ ...editingPaymentType, late_fee_per_day: v === '' ? undefined : Number(v) })
-                            }}
-                            className="w-full px-4 py-3 rounded-xl bg-white/5 border text-white focus:outline-none focus:ring-2"
-                            style={{ borderColor: 'rgba(255, 255, 255, 0.1)' }}
-                          />
-                        </div>
-                        <div>
-                          <p className="text-sm" style={{ color: colors.textSecondary }}>Set the amount charged per day for students who miss the deadline.</p>
-                        </div>
-                      </div>
-                    </div>
-
-                    {/* Options */}
-                    <div className="pt-4 border-t" style={{ borderColor: 'rgba(255, 255, 255, 0.1)' }}>
-                      <h4 className="text-sm font-semibold text-white mb-3">Payment Options</h4>
-                      <div className="space-y-3">
-                        <label className="flex items-center gap-3 cursor-pointer">
-                          <input
-                            type="checkbox"
-                            checked={editingPaymentType.allow_partial || false}
-                            onChange={(e) => setEditingPaymentType({ ...editingPaymentType, allow_partial: e.target.checked })}
-                            className="w-4 h-4 rounded"
-                          />
-                          <span className="text-sm text-white">Allow partial payments</span>
-                        </label>
-                        <label className="flex items-center gap-3 cursor-pointer">
-                          <input
-                            type="checkbox"
-                            checked={editingPaymentType.is_mandatory || false}
-                            onChange={(e) => setEditingPaymentType({ ...editingPaymentType, is_mandatory: e.target.checked })}
-                            className="w-4 h-4 rounded"
-                          />
-                          <span className="text-sm text-white">Mandatory payment</span>
-                        </label>
-                        <label className="flex items-center gap-3 cursor-pointer">
-                          <input
-                            type="checkbox"
-                            checked={editingPaymentType.is_public || false}
-                            onChange={(e) => setEditingPaymentType({ ...editingPaymentType, is_public: e.target.checked })}
-                            className="w-4 h-4 rounded"
-                          />
-                          <span className="text-sm text-white">Public contribution (visible to everyone)</span>
-                        </label>
                       </div>
                     </div>
                   </div>
+                )}
+              </section>
+            </div>
 
-                  <div className="flex gap-3 mt-6">
-                    <motion.button
-                      whileHover={{ scale: 1.02 }}
-                      whileTap={{ scale: 0.98 }}
-                      onClick={() => { setShowEditModal(false); setEditingPaymentType(null) }}
-                      className="flex-1 px-4 py-3 rounded-xl font-medium"
-                      style={{ background: 'rgba(255, 255, 255, 0.05)', color: colors.textSecondary }}
-                    >
-                      Cancel
-                    </motion.button>
-                    <motion.button
-                      whileHover={{ scale: 1.02 }}
-                      whileTap={{ scale: 0.98 }}
-                      onClick={handleEdit}
-                      disabled={actionLoading}
-                      className="flex-1 px-4 py-3 rounded-xl font-semibold text-white disabled:opacity-50"
-                      style={{ background: `linear-gradient(135deg, ${colors.primary}, ${colors.accentMint})` }}
-                    >
-                      {actionLoading ? 'Saving...' : 'Save Changes'}
-                    </motion.button>
+            <aside className="space-y-4 lg:sticky lg:top-0 self-start">
+              <div className="rounded-2xl p-5 border" style={{ background: `linear-gradient(135deg, ${editingPaymentType.color}22, rgba(255,255,255,0.03))`, borderColor: `${editingPaymentType.color}35` }}>
+                <div className="flex items-center gap-3 mb-4">
+                  <div className="w-14 h-14 rounded-2xl flex items-center justify-center text-2xl" style={{ background: editingPaymentType.color }}>
+                    {editingPaymentType.icon}
+                  </div>
+                  <div>
+                    <p className="text-xs uppercase tracking-wider" style={{ color: colors.textSecondary }}>Live preview</p>
+                    <h4 className="text-lg font-bold text-white">Student view</h4>
                   </div>
                 </div>
-              </GlassCard>
-            </motion.div>
-          </motion.div>
+
+                <div className="space-y-3">
+                  <p className="text-xl font-bold text-white">{editingPaymentType.title || 'Untitled due'}</p>
+                  <p className="text-sm leading-6" style={{ color: colors.textSecondary }}>
+                    {editingPaymentType.description || 'No description provided yet.'}
+                  </p>
+
+                  <div className="flex flex-wrap gap-2">
+                    <span className="px-3 py-1.5 rounded-full text-xs font-semibold" style={{ background: `${editingPaymentType.color}20`, color: editingPaymentType.color }}>
+                      {getCategoryLabel(editingPaymentType.category)}
+                    </span>
+                    {editingPaymentType.is_public && (
+                      <span className="px-3 py-1.5 rounded-full text-xs font-semibold" style={{ background: `${colors.accentMint}20`, color: colors.accentMint }}>
+                        Public
+                      </span>
+                    )}
+                    {editingPaymentType.allow_partial && (
+                      <span className="px-3 py-1.5 rounded-full text-xs font-semibold" style={{ background: `${colors.warning}20`, color: colors.warning }}>
+                        Partial allowed
+                      </span>
+                    )}
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-3 pt-2">
+                    <div className="p-3 rounded-xl" style={{ background: 'rgba(255,255,255,0.04)' }}>
+                      <p className="text-[10px] uppercase tracking-wider" style={{ color: colors.textSecondary }}>Amount</p>
+                      <p className="text-white font-semibold">₦{Number(editingPaymentType.amount || 0).toLocaleString()}</p>
+                    </div>
+                    <div className="p-3 rounded-xl" style={{ background: 'rgba(255,255,255,0.04)' }}>
+                      <p className="text-[10px] uppercase tracking-wider" style={{ color: colors.textSecondary }}>Deadline</p>
+                      <p className="text-white font-semibold text-sm">{editingPaymentType.deadline ? formatDate(editingPaymentType.deadline) : 'No deadline'}</p>
+                    </div>
+                    <div className="p-3 rounded-xl" style={{ background: 'rgba(255,255,255,0.04)' }}>
+                      <p className="text-[10px] uppercase tracking-wider" style={{ color: colors.textSecondary }}>Levels</p>
+                      <p className="text-white font-semibold text-sm">{editingPaymentType.target_levels.length ? `${editingPaymentType.target_levels.join(', ')}L` : 'All levels'}</p>
+                    </div>
+                    <div className="p-3 rounded-xl" style={{ background: 'rgba(255,255,255,0.04)' }}>
+                      <p className="text-[10px] uppercase tracking-wider" style={{ color: colors.textSecondary }}>Sections</p>
+                      <p className="text-white font-semibold text-sm">{editingPaymentType.target_sections.length ? editingPaymentType.target_sections.join(', ') : 'All sections'}</p>
+                    </div>
+                  </div>
+
+                  {editingPaymentType.accepts_manual && editingPaymentType.bank_name && (
+                    <div className="p-4 rounded-xl" style={{ background: 'rgba(255,255,255,0.04)' }}>
+                      <p className="text-[10px] uppercase tracking-wider mb-2" style={{ color: colors.textSecondary }}>Manual payment details</p>
+                      <p className="text-white font-medium">{editingPaymentType.bank_name}</p>
+                      <p className="text-sm" style={{ color: colors.textSecondary }}>{editingPaymentType.account_name || 'Account name not set'}</p>
+                      <p className="text-sm font-mono" style={{ color: colors.textSecondary }}>{editingPaymentType.account_number || 'Account number not set'}</p>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              <div className="rounded-2xl p-4 border" style={{ background: 'rgba(255,255,255,0.03)', borderColor: 'rgba(255,255,255,0.08)' }}>
+                <p className="text-xs uppercase tracking-wider font-semibold mb-3" style={{ color: colors.textSecondary }}>Quick summary</p>
+                <div className="space-y-2 text-sm">
+                  <p style={{ color: colors.textSecondary }}>• {editingPaymentType.is_mandatory ? 'Mandatory' : 'Optional'} due</p>
+                  <p style={{ color: colors.textSecondary }}>• {editingPaymentType.accepts_paystack ? 'Paystack enabled' : 'Paystack disabled'}</p>
+                  <p style={{ color: colors.textSecondary }}>• {editingPaymentType.accepts_manual ? 'Manual transfer enabled' : 'Manual transfer disabled'}</p>
+                  <p style={{ color: colors.textSecondary }}>• {editingPaymentType.allow_partial ? 'Partial payments enabled' : 'Full payment only'}</p>
+                </div>
+              </div>
+
+              <div className="flex gap-3">
+                <motion.button
+                  whileHover={{ scale: 1.02 }}
+                  whileTap={{ scale: 0.98 }}
+                  onClick={() => {
+                    setShowEditModal(false)
+                    setEditingPaymentType(null)
+                  }}
+                  className="flex-1 px-4 py-3 rounded-xl font-medium"
+                  style={{ background: 'rgba(255, 255, 255, 0.05)', color: colors.textSecondary }}
+                >
+                  Cancel
+                </motion.button>
+                <motion.button
+                  whileHover={{ scale: 1.02 }}
+                  whileTap={{ scale: 0.98 }}
+                  onClick={handleEdit}
+                  disabled={actionLoading}
+                  className="flex-1 px-4 py-3 rounded-xl font-semibold text-white disabled:opacity-50"
+                  style={{ background: `linear-gradient(135deg, ${colors.primary}, ${colors.accentMint})` }}
+                >
+                  {actionLoading ? 'Saving...' : 'Save Changes'}
+                </motion.button>
+              </div>
+            </aside>
+          </div>
         )}
-      </AnimatePresence>
+      </Modal>
 
       {/* Delete Confirmation */}
       <ConfirmDialog

@@ -10,6 +10,7 @@ import { colors, gradients } from "@/config/colors";
 import GlassCard from "@/components/ui/GlassCard";
 import { formatCurrency, formatDate } from "@/utils/formatters";
 import { PrivacyMask } from '@/components/ui/PrivacyMask';
+import Modal from '@/components/ui/Modal';
 import AnimatedCounter from "@/components/ui/AnimatedCounter";
 import { getDashboardTokens, useTheme } from '@/hooks/useTheme';
 // AdminNotificationCenter removed - using push notifications instead
@@ -18,7 +19,6 @@ import {
   XCircle,
   FileText,
   User,
-  AlertTriangle,
   Eye,
   X,
   Check,
@@ -55,6 +55,102 @@ interface PendingPayment {
     title: string;
     category: string;
   };
+}
+
+function ReviewDecisionModal({
+  kind,
+  payment,
+  open,
+  loading,
+  rejectionReason,
+  setRejectionReason,
+  onClose,
+  onConfirm,
+}: {
+  kind: 'approve' | 'reject';
+  payment: PendingPayment | null;
+  open: boolean;
+  loading: boolean;
+  rejectionReason: string;
+  setRejectionReason: (value: string) => void;
+  onClose: () => void;
+  onConfirm: () => void;
+}) {
+  if (!open || !payment) return null;
+
+  const isReject = kind === 'reject';
+
+  return (
+    <Modal
+      isOpen={open}
+      onClose={onClose}
+      title={isReject ? 'Reject Payment' : 'Approve Payment'}
+      size="md"
+      closeOnOverlayClick={!loading}
+    >
+      <div className="space-y-4">
+        <div className="p-4 rounded-lg" style={{ background: 'rgba(255, 255, 255, 0.05)' }}>
+          <p className="text-sm mb-1" style={{ color: colors.textSecondary }}>Student</p>
+          <p className="text-white font-medium mb-3">{payment.member.full_name}</p>
+
+          <p className="text-sm mb-1" style={{ color: colors.textSecondary }}>Amount</p>
+          <p className="text-white font-semibold text-lg mb-3">
+            <PrivacyMask>{formatCurrency(payment.amount)}</PrivacyMask>
+          </p>
+
+          <p className="text-sm mb-1" style={{ color: colors.textSecondary }}>Payment Type</p>
+          <p className="text-white">{payment.payment_types.title}</p>
+        </div>
+
+        {isReject && (
+          <div>
+            <label className="block text-sm font-medium text-white mb-2">
+              Rejection Reason *
+            </label>
+            <textarea
+              value={rejectionReason}
+              onChange={(e) => setRejectionReason(e.target.value)}
+              placeholder="e.g., Receipt is blurry, wrong amount, invalid transaction reference..."
+              rows={4}
+              className="w-full rounded-lg px-4 py-3 text-white placeholder-gray-400 focus:outline-none focus:ring-2"
+              style={{
+                background: 'rgba(255, 255, 255, 0.05)',
+                border: '1px solid rgba(255, 255, 255, 0.1)',
+              }}
+            />
+          </div>
+        )}
+      </div>
+
+      <div className="flex gap-3">
+        <button
+          onClick={onClose}
+          className="flex-1 py-3 rounded-lg font-medium text-white transition-all"
+          style={{ background: 'rgba(255, 255, 255, 0.1)' }}
+        >
+          Cancel
+        </button>
+        <button
+          onClick={onConfirm}
+          disabled={loading || (isReject && !rejectionReason.trim())}
+          className="flex-1 flex items-center justify-center gap-2 py-3 rounded-lg font-medium text-white transition-all disabled:opacity-50"
+          style={{ background: isReject ? colors.statusUnpaid : gradients.primary }}
+        >
+          {loading ? (
+            <>
+              <div className="animate-spin rounded-full h-5 w-5 border-2 border-white border-t-transparent" />
+              {isReject ? 'Rejecting...' : 'Approving...'}
+            </>
+          ) : (
+            <>
+              {isReject ? <XCircle className="w-5 h-5" /> : <CheckCircle className="w-5 h-5" />}
+              {isReject ? 'Reject' : 'Approve'}
+            </>
+          )}
+        </button>
+      </div>
+    </Modal>
+  );
 }
 
 export default function AdminReviewPage() {
@@ -1295,231 +1391,30 @@ export default function AdminReviewPage() {
         )}
       </AnimatePresence>
 
-      {/* Approve Confirmation Modal */}
-      <AnimatePresence>
-        {showApproveModal && selectedPayment && (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-start justify-center z-50 p-4 overflow-y-auto"
-            onClick={() => setShowApproveModal(false)}
-          >
-            <motion.div
-              initial={{ scale: 0.9, opacity: 0 }}
-              animate={{ scale: 1, opacity: 1 }}
-              exit={{ scale: 0.9, opacity: 0 }}
-              className="w-full max-w-md my-8"
-              onClick={(e) => e.stopPropagation()}
-            >
-              <GlassCard>
-                <div className="flex items-center gap-3 mb-6">
-                  <div
-                    className="w-12 h-12 rounded-full flex items-center justify-center"
-                    style={{ background: `${colors.statusPaid}20` }}
-                  >
-                    <CheckCircle
-                      className="w-6 h-6"
-                      style={{ color: colors.statusPaid }}
-                    />
-                  </div>
-                  <div>
-                    <h3 className="text-xl font-bold text-white">
-                      Approve Payment
-                    </h3>
-                    <p
-                      className="text-sm"
-                      style={{ color: colors.textSecondary }}
-                    >
-                      Confirm payment approval
-                    </p>
-                  </div>
-                </div>
+      <ReviewDecisionModal
+        kind="approve"
+        payment={selectedPayment}
+        open={showApproveModal}
+        loading={processingId === selectedPayment?.id}
+        rejectionReason={rejectionReason}
+        setRejectionReason={setRejectionReason}
+        onClose={() => setShowApproveModal(false)}
+        onConfirm={handleApprove}
+      />
 
-                <div
-                  className="p-4 rounded-lg mb-6"
-                  style={{ background: "rgba(255, 255, 255, 0.05)" }}
-                >
-                  <p
-                    className="text-sm mb-2"
-                    style={{ color: colors.textSecondary }}
-                  >
-                    Student
-                  </p>
-                  <p className="text-white font-medium mb-3">
-                    {selectedPayment.member.full_name}
-                  </p>
-
-                  <p
-                    className="text-sm mb-2"
-                    style={{ color: colors.textSecondary }}
-                  >
-                    Amount
-                  </p>
-                  <p className="text-white font-semibold text-lg mb-3">
-                    <PrivacyMask>{formatCurrency(selectedPayment.amount)}</PrivacyMask>
-                  </p>
-
-                  <p
-                    className="text-sm mb-2"
-                    style={{ color: colors.textSecondary }}
-                  >
-                    Payment Type
-                  </p>
-                  <p className="text-white">
-                    {selectedPayment.payment_types.title}
-                  </p>
-                </div>
-
-                <div className="flex gap-3">
-                  <button
-                    onClick={() => setShowApproveModal(false)}
-                    className="flex-1 py-3 rounded-lg font-medium text-white transition-all"
-                    style={{ background: "rgba(255, 255, 255, 0.1)" }}
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    onClick={handleApprove}
-                    disabled={processingId === selectedPayment.id}
-                    className="flex-1 flex items-center justify-center gap-2 py-3 rounded-lg font-medium text-white transition-all disabled:opacity-50"
-                    style={{ background: gradients.primary }}
-                  >
-                    {processingId === selectedPayment.id ? (
-                      <>
-                        <div className="animate-spin rounded-full h-5 w-5 border-2 border-white border-t-transparent" />
-                        Approving...
-                      </>
-                    ) : (
-                      <>
-                        <CheckCircle className="w-5 h-5" />
-                        Approve
-                      </>
-                    )}
-                  </button>
-                </div>
-              </GlassCard>
-            </motion.div>
-          </motion.div>
-        )}
-      </AnimatePresence>
-
-      {/* Reject Modal */}
-      <AnimatePresence>
-        {showRejectModal && selectedPayment && (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-start justify-center z-50 p-4 overflow-y-auto"
-            onClick={() => {
-              setShowRejectModal(false);
-              setRejectionReason("");
-            }}
-          >
-            <motion.div
-              initial={{ scale: 0.9, opacity: 0 }}
-              animate={{ scale: 1, opacity: 1 }}
-              exit={{ scale: 0.9, opacity: 0 }}
-              className="w-full max-w-md my-8"
-              onClick={(e) => e.stopPropagation()}
-            >
-              <GlassCard>
-                <div className="flex items-center gap-3 mb-6">
-                  <div
-                    className="w-12 h-12 rounded-full flex items-center justify-center"
-                    style={{ background: `${colors.statusUnpaid}20` }}
-                  >
-                    <AlertTriangle
-                      className="w-6 h-6"
-                      style={{ color: colors.statusUnpaid }}
-                    />
-                  </div>
-                  <div>
-                    <h3 className="text-xl font-bold text-white">
-                      Reject Payment
-                    </h3>
-                    <p
-                      className="text-sm"
-                      style={{ color: colors.textSecondary }}
-                    >
-                      Provide a reason for rejection
-                    </p>
-                  </div>
-                </div>
-
-                <div className="space-y-4 mb-6">
-                  <div
-                    className="p-4 rounded-lg"
-                    style={{ background: "rgba(255, 255, 255, 0.05)" }}
-                  >
-                    <p
-                      className="text-sm mb-1"
-                      style={{ color: colors.textSecondary }}
-                    >
-                      Student
-                    </p>
-                    <p className="text-white font-medium">
-                      {selectedPayment.member.full_name}
-                    </p>
-                  </div>
-
-                  <div>
-                    <label className="block text-sm font-medium text-white mb-2">
-                      Rejection Reason *
-                    </label>
-                    <textarea
-                      value={rejectionReason}
-                      onChange={(e) => setRejectionReason(e.target.value)}
-                      placeholder="e.g., Receipt is blurry, wrong amount, invalid transaction reference..."
-                      rows={4}
-                      className="w-full rounded-lg px-4 py-3 text-white placeholder-gray-400 focus:outline-none focus:ring-2"
-                      style={{
-                        background: "rgba(255, 255, 255, 0.05)",
-                        border: "1px solid rgba(255, 255, 255, 0.1)",
-                      }}
-                    />
-                  </div>
-                </div>
-
-                <div className="flex gap-3">
-                  <button
-                    onClick={() => {
-                      setShowRejectModal(false);
-                      setRejectionReason("");
-                    }}
-                    className="flex-1 py-3 rounded-lg font-medium text-white transition-all"
-                    style={{ background: "rgba(255, 255, 255, 0.1)" }}
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    onClick={handleReject}
-                    disabled={
-                      processingId === selectedPayment.id ||
-                      !rejectionReason.trim()
-                    }
-                    className="flex-1 flex items-center justify-center gap-2 py-3 rounded-lg font-medium text-white transition-all disabled:opacity-50"
-                    style={{ background: colors.statusUnpaid }}
-                  >
-                    {processingId === selectedPayment.id ? (
-                      <>
-                        <div className="animate-spin rounded-full h-5 w-5 border-2 border-white border-t-transparent" />
-                        Rejecting...
-                      </>
-                    ) : (
-                      <>
-                        <XCircle className="w-5 h-5" />
-                        Reject
-                      </>
-                    )}
-                  </button>
-                </div>
-              </GlassCard>
-            </motion.div>
-          </motion.div>
-        )}
-      </AnimatePresence>
+      <ReviewDecisionModal
+        kind="reject"
+        payment={selectedPayment}
+        open={showRejectModal}
+        loading={processingId === selectedPayment?.id}
+        rejectionReason={rejectionReason}
+        setRejectionReason={setRejectionReason}
+        onClose={() => {
+          setShowRejectModal(false);
+          setRejectionReason('');
+        }}
+        onConfirm={handleReject}
+      />
       <Footer />
     </div>
   );

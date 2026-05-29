@@ -25,13 +25,14 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { motion } from 'framer-motion';
 import {
   ArrowLeft, ChevronRight, CheckCircle2, AlertCircle, BookOpen, Calendar,
-  GraduationCap, Heart, Sparkles, Ticket, Wallet, SlidersHorizontal,
+  GraduationCap, Heart, Sparkles, Ticket, Wallet, SlidersHorizontal, Users,
 } from 'lucide-react';
 import { useAppAuth as useAuth } from '@/hooks/useAppAuth';
 import { useAppNav } from '@/hooks/useAppNav';
 import { useTheme, getDashboardTokens } from '@/hooks/useTheme';
 import PayvexoBackground from '@/components/student/dashboard/PayvexoBackground';
 import paymentService from '@/services/paymentService';
+import { groupMembershipService, type MyGroup } from '@/services/groupMembershipService';
 import type { Payment, PaymentType } from '@/types';
 
 // ── Helpers ────────────────────────────────────────────────────────
@@ -73,6 +74,7 @@ function hexAlpha(color: string, alpha: number): string {
 // ── Derived shape per due ─────────────────────────────────────────
 interface DueRowData {
   pt: PaymentType;
+  groupLabel: string;
   status: 'unpaid' | 'partial' | 'pending' | 'paid';
   approvedSum: number;
   outstanding: number;
@@ -94,18 +96,21 @@ export default function MyDuesPage() {
   const [loading, setLoading] = useState(true);
   const [paymentTypes, setPaymentTypes] = useState<PaymentType[]>([]);
   const [payments, setPayments] = useState<Payment[]>([]);
+  const [memberGroups, setMemberGroups] = useState<MyGroup[]>([]);
   const [tab, setTab] = useState<TabKey>('all');
 
   const fetchAll = useCallback(async () => {
     if (!user?.id) return;
     setLoading(true);
     try {
-      const [pts, pays] = await Promise.all([
+      const [pts, pays, groups] = await Promise.all([
         paymentService.getActivePaymentTypesForStudent(user.id),
         paymentService.getStudentPayments(user.id),
+        groupMembershipService.getMyGroups(user.id),
       ]);
       setPaymentTypes(pts);
       setPayments(pays);
+      setMemberGroups(groups);
     } finally {
       setLoading(false);
     }
@@ -115,6 +120,8 @@ export default function MyDuesPage() {
 
   // ── Build a per-due row ─────────────────────────────────────────
   const rows: DueRowData[] = useMemo(() => {
+    const groupNameById = new Map(memberGroups.map((item) => [item.group_id, item.name]));
+
     return paymentTypes.map((pt) => {
       const own = payments.filter(p => p.payment_type_id === pt.id);
       const approvedSum = own.filter(p => p.status === 'approved')
@@ -138,6 +145,7 @@ export default function MyDuesPage() {
 
       return {
         pt,
+        groupLabel: pt.group_id ? (groupNameById.get(pt.group_id) || 'Group due') : 'Org-wide',
         status,
         approvedSum,
         outstanding: Math.max(0, Number(pt.amount || 0) - approvedSum),
@@ -145,7 +153,7 @@ export default function MyDuesPage() {
         paidAt: lastApproved?.created_at ?? null,
       };
     });
-  }, [paymentTypes, payments]);
+  }, [memberGroups, paymentTypes, payments]);
 
   // ── Tab partitions ──────────────────────────────────────────────
   const pendingRows = useMemo(
@@ -213,6 +221,40 @@ export default function MyDuesPage() {
           onChange={setTab}
           theme={theme}
         />
+
+        {!loading && memberGroups.length > 0 && (
+          <section
+            className="mt-4 rounded-2xl px-4 py-3"
+            style={{ background: t.card, border: `1px solid ${t.cardBorder}` }}
+          >
+            <div className="flex items-center gap-2">
+              <Users className="w-4 h-4" style={{ color: t.primary }} />
+              <p className="text-sm font-bold" style={{ color: t.text }}>
+                Dues across {memberGroups.length} group{memberGroups.length === 1 ? '' : 's'}
+              </p>
+            </div>
+            <div className="flex flex-wrap gap-2 mt-3">
+              {memberGroups.slice(0, 4).map((item) => (
+                <span
+                  key={item.group_id}
+                  className="inline-flex items-center rounded-full px-3 py-1 text-[11px] font-semibold"
+                  style={{ background: isLight ? '#F3EEEA' : 'rgba(255,255,255,0.06)', color: t.textSec }}
+                >
+                  {item.name}
+                  {item.is_primary && <span className="ml-1.5 font-bold" style={{ color: t.primary }}>Primary</span>}
+                </span>
+              ))}
+              {memberGroups.length > 4 && (
+                <span
+                  className="inline-flex items-center rounded-full px-3 py-1 text-[11px] font-semibold"
+                  style={{ background: isLight ? '#F3EEEA' : 'rgba(255,255,255,0.06)', color: t.textSec }}
+                >
+                  +{memberGroups.length - 4} more
+                </span>
+              )}
+            </div>
+          </section>
+        )}
 
         {/* ── Loading skeleton ─────────────────────────────────── */}
         {loading && (
@@ -442,6 +484,9 @@ function DueRow({
         <p className="text-[14px] font-extrabold truncate" style={{ color: t.text }}>
           {data.pt.title}
         </p>
+        <p className="text-[11px] mt-0.5 font-semibold" style={{ color: t.textSec }}>
+          {data.groupLabel}
+        </p>
         <p className="text-[14px] font-extrabold tabular-nums mt-0.5" style={{ color: t.text }}>
           {formatNaira(data.outstanding)}
         </p>
@@ -506,6 +551,9 @@ function PaidRow({
       <div className="flex-1 min-w-0">
         <p className="text-[14px] font-extrabold truncate" style={{ color: t.text }}>
           {data.pt.title}
+        </p>
+        <p className="text-[11px] mt-0.5 font-semibold" style={{ color: t.textSec }}>
+          {data.groupLabel}
         </p>
         <p className="text-[14px] font-extrabold tabular-nums mt-0.5" style={{ color: t.text }}>
           {formatNaira(Number(data.pt.amount || 0))}

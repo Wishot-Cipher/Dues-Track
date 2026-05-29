@@ -38,6 +38,25 @@ class PaymentService {
       .single();
     return data ? { level: data.level || '', department: data.section || '', group_id: data.group_id } : null;
   }
+
+  /**
+   * Every active group the member belongs to (class + association + club …).
+   * Multi-group dues span all of these. Falls back to the session's primary
+   * group when the group_memberships RPC isn't available yet.
+   */
+  private async getMemberGroupIds(memberId: string): Promise<string[]> {
+    const scope = getOrgScope();
+    try {
+      const { data } = await supabase.rpc('get_my_groups', { p_member_id: memberId });
+      const groups = data && (data as { ok?: boolean }).ok ? (data as { groups?: Array<{ group_id: string }> }).groups : null;
+      if (Array.isArray(groups) && groups.length) {
+        return groups.map((g) => g.group_id).filter(Boolean);
+      }
+    } catch {
+      // RPC not deployed yet — fall through to the primary group.
+    }
+    return scope?.groupId ? [scope.groupId] : [];
+  }
   /**
    * Get payment statistics for a student/member
    */
@@ -592,7 +611,9 @@ class PaymentService {
       if (!student) return [];
 
       const scope = getOrgScope();
-      // Get all active payment types for this member's level
+      // Multi-group: a member's dues span EVERY group they belong to.
+      const groupIds = new Set(await this.getMemberGroupIds(studentId));
+      // Fetch all active types for the org; filter by the member's groups below.
       let ptQuery = supabase
         .from('payment_types')
         .select('*')
@@ -600,46 +621,19 @@ class PaymentService {
         .order('deadline', { ascending: true });
       if (scope) {
         ptQuery = ptQuery.eq('organization_id', scope.orgId);
-        ptQuery = ptQuery.eq('group_id', scope.groupId);
       }
       const { data: allPaymentTypesRes, error } = await ptQuery;
       if (error) throw error;
       const memberLevelCanon = organizationService.canonicalizeLevel(student.level || '');
-      let orgType: string | null = null;
-      if (scope) {
-        const org = await organizationService.getById(scope.orgId);
-        orgType = org?.organization_type || null;
-      }
 
       const paymentTypes = (allPaymentTypesRes || []).filter((pt: any) => {
+        // Group-scoped due: applies only if the member belongs to that group.
+        if (pt.group_id) return groupIds.has(pt.group_id);
+
+        // Org-wide due: applies by level target (or to everyone when untargeted).
         const targets: string[] = pt.target_levels || [];
-
-        // If payment type is tied to a group, prefer group matching.
-        if (pt.group_id) {
-          // Universities require strict group match.
-          if (orgType === 'university') {
-            if (!student.group_id || student.group_id !== pt.group_id) return false;
-            return true;
-          }
-
-          // For other org types: if we have a member.group_id, require it to match.
-          if (student.group_id) {
-            if (student.group_id !== pt.group_id) return false;
-            return true;
-          }
-
-          // Member has no group info; fall back to level matching if targets exist,
-          // otherwise treat as org-wide.
-          if (!targets || targets.length === 0) return true;
-          const tFallback = targets.map((l: string) => organizationService.canonicalizeLevel(l));
-          return tFallback.includes(memberLevelCanon);
-        }
-
-        // No group constraint: if no explicit targets, applies to all members
         if (!targets || targets.length === 0) return true;
-
-        const t = targets.map((l: string) => organizationService.canonicalizeLevel(l));
-        return t.includes(memberLevelCanon);
+        return targets.map((l: string) => organizationService.canonicalizeLevel(l)).includes(memberLevelCanon);
       });
 
       return paymentTypes || [];
@@ -668,9 +662,10 @@ class PaymentService {
           )
         `)
         .eq('member_id', studentId);
+      // Payments are member-scoped already; don't pin to the primary group, so
+      // dues paid to ANY of the member's groups (class, association, club) show.
       if (scope) {
         query = query.eq('organization_id', scope.orgId);
-        query = query.eq('group_id', scope.groupId);
       }
       query = query.order('created_at', { ascending: false });
 

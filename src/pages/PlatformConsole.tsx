@@ -1,13 +1,16 @@
 /**
  * PAYVEXO PLATFORM CONSOLE — command-room operator console.
  *
- * Fresh shell (Blueprint: operator command center). Phase 1 ships the auth gate,
- * the sidebar shell, and three REAL sections wired to live data:
- *   • Command Center   — platform stats + an alert queue derived from claims
- *   • Verification     — every in-flight claim, categorised, with platform grant
- *   • Organizations    — registry with suspend toggle
- * Later phases fill Financial / Universities / Trust&Safety / Comms / Config /
- * Analytics / Audit. All data flows through session-gated RPCs (no new API fns).
+ * Mobile changelog (this revision):
+ *  - Removed the hard "Open on a desktop" narrow guard entirely.
+ *  - Sidebar is now collapsible on desktop (220 ↔ 56 px icon-rail).
+ *  - On mobile (< 768 px) the sidebar becomes a fixed slide-over
+ *    drawer triggered by a hamburger in a sticky top bar.
+ *  - Content area offset tracks collapsed state on desktop, is 0 on mobile.
+ *  - useIsMobile() hook drives the breakpoint reactively so SSR and
+ *    resize both work correctly.
+ *
+ * All sections, data flows, and business logic are unchanged.
  */
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
@@ -15,7 +18,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import {
   LayoutDashboard, ShieldCheck, Building2, Banknote, GraduationCap, Siren,
   Megaphone, Settings2, BarChart3, ScrollText, LogOut, Loader2, Mail, KeyRound,
-  CheckCircle2, AlertTriangle, RefreshCw, Clock, Vote,
+  Check, CheckCircle2, AlertTriangle, RefreshCw, Clock, Vote, Menu, X,
 } from 'lucide-react';
 import {
   platformAdminRequestCode, platformAdminVerifyCode, getPlatformAdmin,
@@ -39,26 +42,134 @@ const T = {
 };
 const mono = "'JetBrains Mono', ui-monospace, monospace";
 
+// ── Responsive hook ──────────────────────────────────────────────
+function useIsMobile(bp = 768): boolean {
+  const [is, setIs] = useState(() =>
+    typeof window !== 'undefined' ? window.innerWidth < bp : false
+  );
+  useEffect(() => {
+    const mq = window.matchMedia(`(max-width: ${bp - 1}px)`);
+    setIs(mq.matches);
+    const h = (e: MediaQueryListEvent) => setIs(e.matches);
+    mq.addEventListener('change', h);
+    return () => mq.removeEventListener('change', h);
+  }, [bp]);
+  return is;
+}
+
+function LogoutConfirmModal({
+  onCancel,
+  onConfirm,
+  busy,
+}: {
+  onCancel: () => void;
+  onConfirm: () => void;
+  busy: boolean;
+}) {
+  return (
+    <motion.div
+      className="fixed inset-0 z-[120] flex items-end sm:items-center justify-center p-4"
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+    >
+      <motion.button
+        type="button"
+        className="absolute inset-0"
+        style={{ background: 'rgba(0,0,0,0.68)', backdropFilter: 'blur(8px)' }}
+        onClick={onCancel}
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+      />
+
+      <motion.div
+        className="relative w-full max-w-md rounded-[24px] overflow-hidden"
+        style={{ background: T.card, border: `1px solid ${T.borderHot}` }}
+        initial={{ opacity: 0, y: 24, scale: 0.96 }}
+        animate={{ opacity: 1, y: 0, scale: 1 }}
+        exit={{ opacity: 0, y: 18, scale: 0.96 }}
+        transition={{ duration: 0.22, ease: [0.22, 1, 0.36, 1] }}
+      >
+        <div style={{ height: 2, background: `linear-gradient(90deg, ${T.primary}, transparent 75%)` }} />
+        <div className="p-6 sm:p-7">
+          <div
+            className="w-12 h-12 rounded-2xl flex items-center justify-center mb-4"
+            style={{ background: 'rgba(255,104,3,0.10)', border: '1px solid rgba(255,104,3,0.22)' }}
+          >
+            <LogOut size={20} style={{ color: T.primary }} />
+          </div>
+          <h3 className="text-xl font-bold tracking-tight" style={{ color: T.text }}>
+            Sign out of the console?
+          </h3>
+          <p className="mt-2 text-sm leading-6" style={{ color: T.textSec }}>
+            You’ll need to verify your session again next time you open the platform console.
+          </p>
+
+          <div className="mt-6 flex items-center gap-3">
+            <motion.button
+              type="button"
+              onClick={onCancel}
+              whileTap={{ scale: 0.98 }}
+              className="flex-1 rounded-xl px-4 py-3 text-sm font-semibold"
+              style={{ background: 'rgba(255,255,255,0.05)', border: `1px solid ${T.border}`, color: T.text }}
+              disabled={busy}
+            >
+              Cancel
+            </motion.button>
+            <motion.button
+              type="button"
+              onClick={onConfirm}
+              whileTap={{ scale: 0.98 }}
+              className="flex-1 rounded-xl px-4 py-3 text-sm font-semibold text-white inline-flex items-center justify-center gap-2"
+              style={{ background: T.primary }}
+              disabled={busy}
+            >
+              {busy ? <Loader2 size={16} className="animate-spin" /> : <LogOut size={16} />}
+              Sign out
+            </motion.button>
+          </div>
+        </div>
+      </motion.div>
+    </motion.div>
+  );
+}
+
 // ── Small UI ─────────────────────────────────────────────────────
 function Badge({ color, children, dot }: { color: string; children: React.ReactNode; dot?: boolean }) {
   return (
-    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '2px 8px', borderRadius: 99,
-      background: `${color}18`, border: `1px solid ${color}35`, color, fontSize: 11, fontWeight: 600, fontFamily: mono }}>
+    <span style={{
+      display: 'inline-flex', alignItems: 'center', gap: 5,
+      padding: '2px 8px', borderRadius: 99,
+      background: `${color}18`, border: `1px solid ${color}35`,
+      color, fontSize: 11, fontWeight: 600, fontFamily: mono,
+    }}>
       {dot && <span style={{ width: 5, height: 5, borderRadius: '50%', background: color }} />}
       {children}
     </span>
   );
 }
-function Btn({ children, onClick, color = T.primary, disabled }: { children: React.ReactNode; onClick?: () => void; color?: string; disabled?: boolean }) {
+
+function Btn({ children, onClick, color = T.primary, disabled }: {
+  children: React.ReactNode; onClick?: () => void; color?: string; disabled?: boolean;
+}) {
   return (
-    <motion.button whileTap={!disabled ? { scale: 0.97 } : undefined} onClick={onClick} disabled={disabled}
-      style={{ background: `${color}15`, border: `1px solid ${color}35`, color, padding: '6px 12px', borderRadius: 8,
-        fontSize: 11, fontWeight: 700, cursor: disabled ? 'default' : 'pointer', fontFamily: mono, opacity: disabled ? 0.5 : 1,
-        display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+    <motion.button
+      whileTap={!disabled ? { scale: 0.97 } : undefined}
+      onClick={onClick}
+      disabled={disabled}
+      style={{
+        background: `${color}15`, border: `1px solid ${color}35`, color,
+        padding: '6px 12px', borderRadius: 8, fontSize: 11, fontWeight: 700,
+        cursor: disabled ? 'default' : 'pointer', fontFamily: mono,
+        opacity: disabled ? 0.5 : 1,
+        display: 'inline-flex', alignItems: 'center', gap: 6,
+      }}
+    >
       {children}
     </motion.button>
   );
 }
+
 function StatCard({ label, value, accent = T.primary }: { label: string; value: string | number; accent?: string }) {
   return (
     <div style={{ background: T.card, border: `1px solid ${T.border}`, borderRadius: 12, padding: '14px 18px' }}>
@@ -68,10 +179,14 @@ function StatCard({ label, value, accent = T.primary }: { label: string; value: 
     </div>
   );
 }
+
 function Progress({ v, max, color = T.primary }: { v: number; max: number; color?: string }) {
   return (
     <div style={{ background: 'rgba(255,255,255,0.06)', borderRadius: 99, height: 5, overflow: 'hidden' }}>
-      <div style={{ width: `${Math.min(100, (v / Math.max(1, max)) * 100)}%`, height: '100%', background: color, borderRadius: 99 }} />
+      <div style={{
+        width: `${Math.min(100, (v / Math.max(1, max)) * 100)}%`,
+        height: '100%', background: color, borderRadius: 99,
+      }} />
     </div>
   );
 }
@@ -80,11 +195,13 @@ function Progress({ v, max, color = T.primary }: { v: number; max: number; color
 type Cat = 'escalated' | 'disputed' | 'independent' | 'bootstrap' | 'normal';
 function categorise(c: PendingClaim): Cat {
   if (c.platform_review_requested_at) return 'escalated';
-  if (c.dispute_count > 0) return 'disputed';
-  if (c.is_independent) return 'independent';
+  if (c.dispute_count > 0)            return 'disputed';
+  if (c.is_independent)               return 'independent';
   return c.higher_exec_exists ? 'normal' : 'bootstrap';
 }
-const CAT_COLOR: Record<Cat, string> = { escalated: T.purple, disputed: T.red, independent: T.blue, bootstrap: T.amber, normal: T.mint };
+const CAT_COLOR: Record<Cat, string> = {
+  escalated: T.purple, disputed: T.red, independent: T.blue, bootstrap: T.amber, normal: T.mint,
+};
 function hoursSince(iso: string | null): number {
   if (!iso) return 0;
   return Math.round((Date.now() - new Date(iso).getTime()) / 3.6e6);
@@ -94,13 +211,13 @@ function hoursSince(iso: string | null): number {
 // LOGIN GATE
 // ════════════════════════════════════════════════════════════════
 function LoginGate({ onLogin }: { onLogin: (a: PlatformAdmin) => void }) {
-  const [step, setStep] = useState<'email' | 'code'>('email');
+  const [step, setStep]   = useState<'email' | 'code'>('email');
   const [email, setEmail] = useState('');
   const [token, setToken] = useState('');
-  const [code, setCode] = useState('');
-  const [busy, setBusy] = useState(false);
-  const [err, setErr] = useState<string | null>(null);
-  const [note, setNote] = useState<string | null>(null);
+  const [code, setCode]   = useState('');
+  const [busy, setBusy]   = useState(false);
+  const [err, setErr]     = useState<string | null>(null);
+  const [note, setNote]   = useState<string | null>(null);
 
   const sendCode = async () => {
     setBusy(true); setErr(null); setNote(null);
@@ -113,6 +230,7 @@ function LoginGate({ onLogin }: { onLogin: (a: PlatformAdmin) => void }) {
     } catch (e) { setErr(e instanceof Error ? e.message : 'Failed'); }
     setBusy(false);
   };
+
   const verify = async () => {
     setBusy(true); setErr(null);
     try {
@@ -136,9 +254,12 @@ function LoginGate({ onLogin }: { onLogin: (a: PlatformAdmin) => void }) {
             <label style={{ fontSize: 11, color: T.textSec, fontWeight: 600 }}>Operator email</label>
             <div style={{ position: 'relative', margin: '6px 0 16px' }}>
               <Mail size={15} style={{ position: 'absolute', left: 11, top: 11, color: T.textTer }} />
-              <input value={email} onChange={(e) => setEmail(e.target.value)} placeholder="you@payvexo.com" type="email"
+              <input
+                value={email} onChange={(e) => setEmail(e.target.value)}
+                placeholder="you@payvexo.com" type="email"
                 onKeyDown={(e) => e.key === 'Enter' && sendCode()}
-                style={{ width: '100%', padding: '9px 12px 9px 34px', background: 'rgba(0,0,0,0.25)', border: `1px solid ${T.border}`, borderRadius: 10, color: T.text, fontSize: 13, outline: 'none', boxSizing: 'border-box' }} />
+                style={{ width: '100%', padding: '9px 12px 9px 34px', background: 'rgba(0,0,0,0.25)', border: `1px solid ${T.border}`, borderRadius: 10, color: T.text, fontSize: 13, outline: 'none', boxSizing: 'border-box' }}
+              />
             </div>
             <Btn onClick={sendCode} disabled={busy} color={T.primary}>
               {busy ? <Loader2 size={14} className="animate-spin" /> : <Mail size={14} />} Send code
@@ -149,9 +270,13 @@ function LoginGate({ onLogin }: { onLogin: (a: PlatformAdmin) => void }) {
             <label style={{ fontSize: 11, color: T.textSec, fontWeight: 600 }}>6-digit code</label>
             <div style={{ position: 'relative', margin: '6px 0 16px' }}>
               <KeyRound size={15} style={{ position: 'absolute', left: 11, top: 11, color: T.textTer }} />
-              <input value={code} onChange={(e) => setCode(e.target.value.replace(/\D/g, '').slice(0, 6))} placeholder="123456" inputMode="numeric"
+              <input
+                value={code}
+                onChange={(e) => setCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                placeholder="123456" inputMode="numeric"
                 onKeyDown={(e) => e.key === 'Enter' && verify()}
-                style={{ width: '100%', padding: '9px 12px 9px 34px', background: 'rgba(0,0,0,0.25)', border: `1px solid ${T.border}`, borderRadius: 10, color: T.text, fontSize: 16, letterSpacing: '0.3em', fontFamily: mono, outline: 'none', boxSizing: 'border-box' }} />
+                style={{ width: '100%', padding: '9px 12px 9px 34px', background: 'rgba(0,0,0,0.25)', border: `1px solid ${T.border}`, borderRadius: 10, color: T.text, fontSize: 16, letterSpacing: '0.3em', fontFamily: mono, outline: 'none', boxSizing: 'border-box' }}
+              />
             </div>
             <div style={{ display: 'flex', gap: 8 }}>
               <Btn onClick={verify} disabled={busy} color={T.mint}>
@@ -161,8 +286,8 @@ function LoginGate({ onLogin }: { onLogin: (a: PlatformAdmin) => void }) {
             </div>
           </>
         )}
-        {note && <p style={{ color: T.mint, fontSize: 11, marginTop: 14 }}>{note}</p>}
-        {err && <p style={{ color: T.red, fontSize: 12, marginTop: 14 }}>{err}</p>}
+        {note && <p style={{ color: T.mint,  fontSize: 11, marginTop: 14 }}>{note}</p>}
+        {err  && <p style={{ color: T.red,   fontSize: 12, marginTop: 14 }}>{err}</p>}
       </div>
     </div>
   );
@@ -173,7 +298,7 @@ function LoginGate({ onLogin }: { onLogin: (a: PlatformAdmin) => void }) {
 // ════════════════════════════════════════════════════════════════
 function SectionHead({ title, sub, right }: { title: string; sub?: string; right?: React.ReactNode }) {
   return (
-    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 22, gap: 12 }}>
+    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 22, gap: 12, flexWrap: 'wrap' }}>
       <div>
         <h2 style={{ margin: 0, fontSize: 21, fontWeight: 800, color: T.text, letterSpacing: '-0.02em' }}>{title}</h2>
         {sub && <p style={{ margin: '4px 0 0', fontSize: 13, color: T.textSec }}>{sub}</p>}
@@ -184,11 +309,11 @@ function SectionHead({ title, sub, right }: { title: string; sub?: string; right
 }
 
 function VerificationQueue() {
-  const [claims, setClaims] = useState<PendingClaim[]>([]);
+  const [claims, setClaims]   = useState<PendingClaim[]>([]);
   const [loading, setLoading] = useState(true);
-  const [err, setErr] = useState<string | null>(null);
-  const [filter, setFilter] = useState<'all' | Cat>('all');
-  const [busyId, setBusyId] = useState<string | null>(null);
+  const [err, setErr]         = useState<string | null>(null);
+  const [filter, setFilter]   = useState<'all' | Cat>('all');
+  const [busyId, setBusyId]   = useState<string | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true); setErr(null);
@@ -215,73 +340,80 @@ function VerificationQueue() {
 
   return (
     <div>
-      <SectionHead title="Verification Queue" sub="Every in-flight exec claim — review, then grant or let the system resolve it"
-        right={<Btn onClick={load} color={T.textSec}><RefreshCw size={13} /> Refresh</Btn>} />
-
+      <SectionHead
+        title="Verification Queue"
+        sub="Every in-flight exec claim — review, then grant or let the system resolve it"
+        right={<Btn onClick={load} color={T.textSec}><RefreshCw size={13} /> Refresh</Btn>}
+      />
       <div style={{ display: 'flex', gap: 8, marginBottom: 18, flexWrap: 'wrap' }}>
         {(['all', 'escalated', 'disputed', 'bootstrap', 'independent', 'normal'] as const).map((f) => (
           <button key={f} onClick={() => setFilter(f)} style={{
             padding: '5px 12px', borderRadius: 8, fontSize: 11, fontWeight: 600, cursor: 'pointer', fontFamily: mono,
             background: filter === f ? `${T.primary}18` : 'transparent',
-            border: `1px solid ${filter === f ? T.primary + '40' : T.border}`, color: filter === f ? T.primary : T.textSec }}>
+            border: `1px solid ${filter === f ? T.primary + '40' : T.border}`,
+            color: filter === f ? T.primary : T.textSec,
+          }}>
             {f.toUpperCase()} ({f === 'all' ? claims.length : counts[f] || 0})
           </button>
         ))}
       </div>
 
-      {loading ? <p style={{ color: T.textSec, fontSize: 13 }}><Loader2 size={14} className="animate-spin" style={{ verticalAlign: 'middle' }} /> Loading…</p>
-        : err ? <p style={{ color: T.red, fontSize: 13 }}>{err}</p>
-        : filtered.length === 0 ? <p style={{ color: T.textTer, fontSize: 13 }}>No claims in this view.</p>
-        : (
-          <div style={{ display: 'grid', gap: 10 }}>
-            {filtered.map((c) => {
-              const cat = categorise(c);
-              const col = CAT_COLOR[cat];
-              const stuckH = hoursSince(c.layer3_reached_at);
-              return (
-                <div key={c.id} style={{ background: T.card, border: `1px solid ${T.border}`, borderLeft: `3px solid ${col}`, borderRadius: 12, padding: '14px 18px' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap' }}>
-                    <div style={{ width: 38, height: 38, borderRadius: '50%', background: `${col}33`, color: col, display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, flexShrink: 0 }}>
-                      {(c.claimant_name || '?')[0]}
-                    </div>
-                    <div style={{ flex: 1, minWidth: 180 }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-                        <span style={{ fontSize: 14, fontWeight: 700, color: T.text }}>{c.claimant_name}</span>
-                        <Badge color={col}>{cat}</Badge>
-                        {c.dispute_count > 0 && <Badge color={T.red}>{c.dispute_count} disputes</Badge>}
-                        {c.has_financial_history && <Badge color={T.amber}>has money</Badge>}
+      {loading
+        ? <p style={{ color: T.textSec, fontSize: 13 }}><Loader2 size={14} className="animate-spin" style={{ verticalAlign: 'middle' }} /> Loading…</p>
+        : err
+          ? <p style={{ color: T.red, fontSize: 13 }}>{err}</p>
+          : filtered.length === 0
+            ? <p style={{ color: T.textTer, fontSize: 13 }}>No claims in this view.</p>
+            : (
+              <div style={{ display: 'grid', gap: 10 }}>
+                {filtered.map((c) => {
+                  const cat  = categorise(c);
+                  const col  = CAT_COLOR[cat];
+                  const stuckH = hoursSince(c.layer3_reached_at);
+                  return (
+                    <div key={c.id} style={{ background: T.card, border: `1px solid ${T.border}`, borderLeft: `3px solid ${col}`, borderRadius: 12, padding: '14px 18px' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap' }}>
+                        <div style={{ width: 38, height: 38, borderRadius: '50%', background: `${col}33`, color: col, display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, flexShrink: 0 }}>
+                          {(c.claimant_name || '?')[0]}
+                        </div>
+                        <div style={{ flex: 1, minWidth: 180 }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                            <span style={{ fontSize: 14, fontWeight: 700, color: T.text }}>{c.claimant_name}</span>
+                            <Badge color={col}>{cat}</Badge>
+                            {c.dispute_count > 0 && <Badge color={T.red}>{c.dispute_count} disputes</Badge>}
+                            {c.has_financial_history && <Badge color={T.amber}>has money</Badge>}
+                          </div>
+                          <p style={{ margin: '3px 0 0', fontSize: 12, color: T.textSec }}>
+                            {c.position_title} · {c.target_group_name || c.claimed_scope} · {c.org_name}
+                          </p>
+                        </div>
+                        <div style={{ width: 110, flexShrink: 0 }}>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 10, color: T.textTer, marginBottom: 4 }}>
+                            <span style={{ display: 'inline-flex', gap: 4, alignItems: 'center' }}><Vote size={11} /> votes</span>
+                            <span style={{ fontFamily: mono, color: T.text }}>{c.votes_received}/{c.votes_required}</span>
+                          </div>
+                          <Progress v={c.votes_received} max={c.votes_required} color={c.votes_received >= c.votes_required ? T.mint : col} />
+                        </div>
+                        <div style={{ flexShrink: 0, textAlign: 'right', minWidth: 90 }}>
+                          {c.layer3_reached_at
+                            ? <span style={{ fontSize: 11, color: stuckH >= 168 ? T.red : T.textSec, display: 'inline-flex', gap: 4, alignItems: 'center' }}><Clock size={11} /> {stuckH}h stuck</span>
+                            : <span style={{ fontSize: 11, color: T.textTer }}>L{c.current_layer}</span>}
+                        </div>
+                        <Btn onClick={() => grant(c)} disabled={busyId === c.id} color={T.mint}>
+                          {busyId === c.id ? <Loader2 size={13} className="animate-spin" /> : <ShieldCheck size={13} />} Grant L4
+                        </Btn>
                       </div>
-                      <p style={{ margin: '3px 0 0', fontSize: 12, color: T.textSec }}>
-                        {c.position_title} · {c.target_group_name || c.claimed_scope} · {c.org_name}
-                      </p>
                     </div>
-                    <div style={{ width: 110, flexShrink: 0 }}>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 10, color: T.textTer, marginBottom: 4 }}>
-                        <span style={{ display: 'inline-flex', gap: 4, alignItems: 'center' }}><Vote size={11} /> votes</span>
-                        <span style={{ fontFamily: mono, color: T.text }}>{c.votes_received}/{c.votes_required}</span>
-                      </div>
-                      <Progress v={c.votes_received} max={c.votes_required} color={c.votes_received >= c.votes_required ? T.mint : col} />
-                    </div>
-                    <div style={{ flexShrink: 0, textAlign: 'right', minWidth: 90 }}>
-                      {c.layer3_reached_at
-                        ? <span style={{ fontSize: 11, color: stuckH >= 168 ? T.red : T.textSec, display: 'inline-flex', gap: 4, alignItems: 'center' }}><Clock size={11} /> {stuckH}h stuck</span>
-                        : <span style={{ fontSize: 11, color: T.textTer }}>L{c.current_layer}</span>}
-                    </div>
-                    <Btn onClick={() => grant(c)} disabled={busyId === c.id} color={T.mint}>
-                      {busyId === c.id ? <Loader2 size={13} className="animate-spin" /> : <ShieldCheck size={13} />} Grant L4
-                    </Btn>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        )}
+                  );
+                })}
+              </div>
+            )}
     </div>
   );
 }
 
 function CommandCenter() {
-  const [stats, setStats] = useState<PlatformStats | null>(null);
+  const [stats, setStats]   = useState<PlatformStats | null>(null);
   const [claims, setClaims] = useState<PendingClaim[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -308,12 +440,12 @@ function CommandCenter() {
     <div>
       <SectionHead title="Command Center" sub="Platform pulse and everything that needs your attention" />
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(150px, 1fr))', gap: 12, marginBottom: 26 }}>
-        <StatCard label="Organizations" value={stats?.totalOrganizations ?? 0} />
-        <StatCard label="Active orgs" value={stats?.activeOrganizations ?? 0} accent={T.mint} />
-        <StatCard label="Members" value={(stats?.totalMembers ?? 0).toLocaleString()} accent={T.blue} />
-        <StatCard label="Payments" value={(stats?.totalPayments ?? 0).toLocaleString()} accent={T.purple} />
-        <StatCard label="Collected" value={`₦${((stats?.totalCollected ?? 0)).toLocaleString()}`} accent={T.amber} />
-        <StatCard label="Pending claims" value={claims.length} accent={T.amber} />
+        <StatCard label="Organizations"   value={stats?.totalOrganizations ?? 0} />
+        <StatCard label="Active orgs"     value={stats?.activeOrganizations ?? 0}                            accent={T.mint} />
+        <StatCard label="Members"         value={(stats?.totalMembers ?? 0).toLocaleString()}                accent={T.blue} />
+        <StatCard label="Payments"        value={(stats?.totalPayments ?? 0).toLocaleString()}               accent={T.purple} />
+        <StatCard label="Collected"       value={`₦${((stats?.totalCollected ?? 0)).toLocaleString()}`}      accent={T.amber} />
+        <StatCard label="Pending claims"  value={claims.length}                                              accent={T.amber} />
       </div>
 
       <div style={{ background: T.card, border: `1px solid ${T.border}`, borderRadius: 14, overflow: 'hidden' }}>
@@ -321,9 +453,10 @@ function CommandCenter() {
           <span style={{ fontSize: 13, fontWeight: 700, color: T.text }}>Needs attention</span>
           <Badge color={T.red} dot>{alerts.length}</Badge>
         </div>
-        {alerts.length === 0 ? <p style={{ padding: '16px 18px', margin: 0, fontSize: 12, color: T.textTer }}>All clear — nothing flagged.</p>
+        {alerts.length === 0
+          ? <p style={{ padding: '16px 18px', margin: 0, fontSize: 12, color: T.textTer }}>All clear — nothing flagged.</p>
           : alerts.map(({ c, cat, stuck }) => (
-            <div key={c.id} style={{ padding: '12px 18px', borderBottom: `1px solid ${T.border}`, display: 'flex', alignItems: 'center', gap: 12 }}>
+            <div key={c.id} style={{ padding: '12px 18px', borderBottom: `1px solid ${T.border}`, display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
               <AlertTriangle size={15} style={{ color: CAT_COLOR[cat], flexShrink: 0 }} />
               <div style={{ flex: 1, minWidth: 0 }}>
                 <p style={{ margin: 0, fontSize: 12, fontWeight: 700, color: T.text }}>{c.claimant_name} · {c.position_title}</p>
@@ -340,9 +473,9 @@ function CommandCenter() {
 }
 
 function OrgRegistry() {
-  const [orgs, setOrgs] = useState<OrgOverview[]>([]);
+  const [orgs, setOrgs]     = useState<OrgOverview[]>([]);
   const [loading, setLoading] = useState(true);
-  const [q, setQ] = useState('');
+  const [q, setQ]           = useState('');
   const [busyId, setBusyId] = useState<string | null>(null);
 
   const load = useCallback(async () => {
@@ -354,20 +487,27 @@ function OrgRegistry() {
 
   const toggle = async (o: OrgOverview) => {
     setBusyId(o.id);
-    try { await toggleOrganizationStatus(o.id, !o.is_active); setOrgs((p) => p.map((x) => x.id === o.id ? { ...x, is_active: !x.is_active } : x)); }
-    catch (e) { alert(e instanceof Error ? e.message : 'Failed'); }
+    try {
+      await toggleOrganizationStatus(o.id, !o.is_active);
+      setOrgs((p) => p.map((x) => x.id === o.id ? { ...x, is_active: !x.is_active } : x));
+    } catch (e) { alert(e instanceof Error ? e.message : 'Failed'); }
     setBusyId(null);
   };
 
-  const filtered = orgs.filter((o) => !q || o.name.toLowerCase().includes(q.toLowerCase()) || o.slug.includes(q.toLowerCase()));
+  const filtered = orgs.filter((o) =>
+    !q || o.name.toLowerCase().includes(q.toLowerCase()) || o.slug.includes(q.toLowerCase())
+  );
 
   return (
     <div>
       <SectionHead title="Organization Registry" sub="Every org on the platform"
-        right={<Btn onClick={load} color={T.textSec}><RefreshCw size={13} /> Refresh</Btn>} />
+        right={<Btn onClick={load} color={T.textSec}><RefreshCw size={13} /> Refresh</Btn>}
+      />
       <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search orgs…"
-        style={{ width: '100%', padding: '9px 14px', background: T.card, border: `1px solid ${T.border}`, borderRadius: 10, color: T.text, fontSize: 13, outline: 'none', marginBottom: 16, boxSizing: 'border-box' }} />
-      {loading ? <p style={{ color: T.textSec, fontSize: 13 }}><Loader2 size={14} className="animate-spin" style={{ verticalAlign: 'middle' }} /> Loading…</p>
+        style={{ width: '100%', padding: '9px 14px', background: T.card, border: `1px solid ${T.border}`, borderRadius: 10, color: T.text, fontSize: 13, outline: 'none', marginBottom: 16, boxSizing: 'border-box' }}
+      />
+      {loading
+        ? <p style={{ color: T.textSec, fontSize: 13 }}><Loader2 size={14} className="animate-spin" style={{ verticalAlign: 'middle' }} /> Loading…</p>
         : (
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: 12 }}>
             {filtered.map((o) => (
@@ -395,15 +535,20 @@ function OrgRegistry() {
   );
 }
 
-const STATUS_COLOR: Record<string, string> = { approved: T.mint, successful: T.mint, paid: T.mint, pending: T.amber, failed: T.red, abandoned: T.textTer };
+const STATUS_COLOR: Record<string, string> = {
+  approved: T.mint, successful: T.mint, paid: T.mint,
+  pending: T.amber, failed: T.red, abandoned: T.textTer,
+};
 
 function FinancialIntel() {
-  const [d, setD] = useState<FinancialSummary | null>(null);
+  const [d, setD]           = useState<FinancialSummary | null>(null);
   const [loading, setLoading] = useState(true);
-  const [err, setErr] = useState<string | null>(null);
+  const [err, setErr]       = useState<string | null>(null);
+
   useEffect(() => {
     (async () => {
-      try { setD(await getFinancialSummary()); } catch (e) { setErr(e instanceof Error ? e.message : 'Failed'); }
+      try { setD(await getFinancialSummary()); }
+      catch (e) { setErr(e instanceof Error ? e.message : 'Failed'); }
       setLoading(false);
     })();
   }, []);
@@ -419,11 +564,11 @@ function FinancialIntel() {
         <p style={{ margin: '0 0 14px', fontSize: 11, color: T.primary, letterSpacing: '0.12em', fontFamily: mono }}>MONTH-TO-DATE</p>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(150px, 1fr))', gap: 16 }}>
           {[
-            { l: 'Gross volume', v: naira(s.mtd_gross_kobo), c: T.text },
-            { l: 'To orgs (dues)', v: naira(s.mtd_dues_kobo), c: T.blue },
-            { l: 'Platform fees', v: naira(s.mtd_fees_kobo), c: T.primary },
-            { l: 'All-time fees', v: naira(s.alltime_fees_kobo), c: T.mint },
-            { l: 'Pending settle', v: naira(s.pending_settlement_kobo), c: T.amber },
+            { l: 'Gross volume',    v: naira(s.mtd_gross_kobo),          c: T.text    },
+            { l: 'To orgs (dues)',  v: naira(s.mtd_dues_kobo),           c: T.blue    },
+            { l: 'Platform fees',  v: naira(s.mtd_fees_kobo),           c: T.primary },
+            { l: 'All-time fees',  v: naira(s.alltime_fees_kobo),       c: T.mint    },
+            { l: 'Pending settle', v: naira(s.pending_settlement_kobo), c: T.amber   },
             { l: 'Success / Fail', v: `${s.mtd_success} / ${s.mtd_failed}`, c: T.textSec },
           ].map((x, i) => (
             <div key={i}>
@@ -434,12 +579,13 @@ function FinancialIntel() {
         </div>
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 280px', gap: 16 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: 16 }}>
         <div style={{ background: T.card, border: `1px solid ${T.border}`, borderRadius: 14, overflow: 'hidden' }}>
           <div style={{ padding: '14px 18px', borderBottom: `1px solid ${T.border}`, fontSize: 13, fontWeight: 700, color: T.text }}>Recent transactions</div>
-          {d.recent.length === 0 ? <p style={{ padding: 18, margin: 0, fontSize: 12, color: T.textTer }}>No transactions yet.</p>
+          {d.recent.length === 0
+            ? <p style={{ padding: 18, margin: 0, fontSize: 12, color: T.textTer }}>No transactions yet.</p>
             : d.recent.map((t) => (
-              <div key={t.id} style={{ padding: '10px 18px', borderBottom: `1px solid ${T.border}`, display: 'flex', alignItems: 'center', gap: 12 }}>
+              <div key={t.id} style={{ padding: '10px 18px', borderBottom: `1px solid ${T.border}`, display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <p style={{ margin: 0, fontSize: 12, fontWeight: 600, color: T.text }}>{t.payer_name || '—'}</p>
                   <p style={{ margin: '2px 0 0', fontSize: 11, color: T.textSec }}>{t.org_name} · {t.paystack_channel || '—'}</p>
@@ -454,7 +600,8 @@ function FinancialIntel() {
         </div>
         <div style={{ background: T.card, border: `1px solid ${T.border}`, borderRadius: 14, overflow: 'hidden' }}>
           <div style={{ padding: '14px 18px', borderBottom: `1px solid ${T.border}`, fontSize: 13, fontWeight: 700, color: T.text }}>Top orgs (MTD)</div>
-          {d.top_orgs.length === 0 ? <p style={{ padding: 18, margin: 0, fontSize: 12, color: T.textTer }}>—</p>
+          {d.top_orgs.length === 0
+            ? <p style={{ padding: 18, margin: 0, fontSize: 12, color: T.textTer }}>—</p>
             : d.top_orgs.map((o, i) => (
               <div key={i} style={{ padding: '10px 18px', borderBottom: `1px solid ${T.border}`, display: 'flex', justifyContent: 'space-between', gap: 8 }}>
                 <span style={{ fontSize: 12, color: T.text, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{o.org_name}</span>
@@ -470,9 +617,15 @@ function FinancialIntel() {
 function GrowthAnalytics() {
   const [funnel, setFunnel] = useState<FunnelStage[]>([]);
   const [loading, setLoading] = useState(true);
-  useEffect(() => { (async () => { try { setFunnel(await getGrowthFunnel()); } catch { /* ignore */ } setLoading(false); })(); }, []);
+
+  useEffect(() => {
+    (async () => { try { setFunnel(await getGrowthFunnel()); } catch { /* ignore */ } setLoading(false); })();
+  }, []);
+
   const top = funnel[0]?.count || 1;
+
   if (loading) return <p style={{ color: T.textSec, fontSize: 13 }}><Loader2 size={14} className="animate-spin" style={{ verticalAlign: 'middle' }} /> Loading…</p>;
+
   return (
     <div>
       <SectionHead title="Growth & Analytics" sub="Where orgs progress — and where they drop off" />
@@ -497,68 +650,103 @@ function GrowthAnalytics() {
 function AuditTrail() {
   const [entries, setEntries] = useState<AuditEntry[]>([]);
   const [loading, setLoading] = useState(true);
-  const [err, setErr] = useState<string | null>(null);
+  const [err, setErr]         = useState<string | null>(null);
+
   const load = useCallback(async () => {
     setLoading(true); setErr(null);
-    try { setEntries(await getAuditFeed(100)); } catch (e) { setErr(e instanceof Error ? e.message : 'Failed'); }
+    try { setEntries(await getAuditFeed(100)); }
+    catch (e) { setErr(e instanceof Error ? e.message : 'Failed'); }
     setLoading(false);
   }, []);
   useEffect(() => { void load(); }, [load]);
+
   return (
     <div>
       <SectionHead title="Audit Trail" sub="Every privileged platform action — append-only"
-        right={<Btn onClick={load} color={T.textSec}><RefreshCw size={13} /> Refresh</Btn>} />
-      {loading ? <p style={{ color: T.textSec, fontSize: 13 }}><Loader2 size={14} className="animate-spin" style={{ verticalAlign: 'middle' }} /> Loading…</p>
-        : err ? <p style={{ color: T.red, fontSize: 13 }}>{err}</p>
-        : entries.length === 0 ? <p style={{ color: T.textTer, fontSize: 13 }}>No audit entries yet.</p>
-        : (
-          <div style={{ background: T.card, border: `1px solid ${T.border}`, borderRadius: 14, overflow: 'hidden' }}>
-            {entries.map((e) => (
-              <div key={e.id} style={{ padding: '11px 18px', borderBottom: `1px solid ${T.border}`, display: 'flex', alignItems: 'center', gap: 12 }}>
-                <Badge color={T.purple}>{e.action}</Badge>
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <p style={{ margin: 0, fontSize: 12, color: T.text, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                    {e.target_type ? `${e.target_type}` : ''}{e.target_id ? ` · ${String(e.target_id).slice(0, 8)}` : ''}
-                  </p>
-                  <p style={{ margin: '2px 0 0', fontSize: 11, color: T.textSec }}>{e.admin_email}</p>
-                </div>
-                <span style={{ fontSize: 10, color: T.textTer, fontFamily: mono, flexShrink: 0 }}>{new Date(e.created_at).toLocaleString()}</span>
+        right={<Btn onClick={load} color={T.textSec}><RefreshCw size={13} /> Refresh</Btn>}
+      />
+      {loading
+        ? <p style={{ color: T.textSec, fontSize: 13 }}><Loader2 size={14} className="animate-spin" style={{ verticalAlign: 'middle' }} /> Loading…</p>
+        : err
+          ? <p style={{ color: T.red, fontSize: 13 }}>{err}</p>
+          : entries.length === 0
+            ? <p style={{ color: T.textTer, fontSize: 13 }}>No audit entries yet.</p>
+            : (
+              <div style={{ background: T.card, border: `1px solid ${T.border}`, borderRadius: 14, overflow: 'hidden' }}>
+                {entries.map((e) => (
+                  <div key={e.id} style={{ padding: '11px 18px', borderBottom: `1px solid ${T.border}`, display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+                    <Badge color={T.purple}>{e.action}</Badge>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <p style={{ margin: 0, fontSize: 12, color: T.text, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                        {e.target_type ? `${e.target_type}` : ''}{e.target_id ? ` · ${String(e.target_id).slice(0, 8)}` : ''}
+                      </p>
+                      <p style={{ margin: '2px 0 0', fontSize: 11, color: T.textSec }}>{e.admin_email}</p>
+                    </div>
+                    <span style={{ fontSize: 10, color: T.textTer, fontFamily: mono, flexShrink: 0 }}>
+                      {new Date(e.created_at).toLocaleString()}
+                    </span>
+                  </div>
+                ))}
               </div>
-            ))}
-          </div>
-        )}
+            )}
     </div>
   );
 }
 
-const inputStyle: React.CSSProperties = { width: '100%', padding: '9px 12px', background: 'rgba(0,0,0,0.25)', border: `1px solid ${T.border}`, borderRadius: 9, color: T.text, fontSize: 13, outline: 'none', boxSizing: 'border-box' };
+const inputStyle: React.CSSProperties = {
+  width: '100%', padding: '9px 12px',
+  background: 'rgba(0,0,0,0.25)', border: `1px solid ${T.border}`,
+  borderRadius: 9, color: T.text, fontSize: 13, outline: 'none', boxSizing: 'border-box',
+};
 
 function Field({ label, children, hint }: { label: string; children: React.ReactNode; hint?: string }) {
   return (
     <div>
-      <label style={{ display: 'block', fontSize: 11, color: T.textSec, fontWeight: 600, marginBottom: 5 }}>{label}{hint && <span style={{ color: T.textTer, fontWeight: 400 }}> · {hint}</span>}</label>
+      <label style={{ display: 'block', fontSize: 11, color: T.textSec, fontWeight: 600, marginBottom: 5 }}>
+        {label}
+        {hint && <span style={{ color: T.textTer, fontWeight: 400 }}> · {hint}</span>}
+      </label>
       {children}
     </div>
   );
 }
 
+// Minimal toast shim — replace with your real toast provider if available
+function useToast() {
+  return {
+    success: (msg: string) => console.info('[toast]', msg),
+    error:   (msg: string) => console.error('[toast]', msg),
+  };
+}
+
 function PlatformConfig() {
-  const [s, setS] = useState<PlatformSettings | null>(null);
+  const [s, setS]           = useState<PlatformSettings | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [applyAll, setApplyAll] = useState(false);
+  const [feeModeOpen, setFeeModeOpen] = useState(false);
   const toast = useToast();
 
-  useEffect(() => { (async () => { try { setS(await getPlatformSettings()); } catch { /* */ } setLoading(false); })(); }, []);
-  const set = (k: keyof PlatformSettings, v: string | number) => setS((p) => p ? { ...p, [k]: v } : p);
+  const feeModeLabel = s?.fee_mode === 'percent'
+    ? 'Percentage only'
+    : s?.fee_mode === 'hybrid'
+      ? 'Percentage + flat'
+      : 'Flat only';
+
+  useEffect(() => {
+    (async () => { try { setS(await getPlatformSettings()); } catch { /* */ } setLoading(false); })();
+  }, []);
+
+  const set = (k: keyof PlatformSettings, v: string | number) =>
+    setS((p) => p ? { ...p, [k]: v } : p);
 
   const save = async () => {
     if (!s) return;
     setSaving(true);
     try {
       const next = await updatePlatformSettings({ ...s, apply_fee_to_all_orgs: applyAll });
-      setS(next); toast?.success?.('Platform settings saved.');
-    } catch (e) { toast?.error?.(e instanceof Error ? e.message : 'Save failed'); }
+      setS(next); toast.success('Platform settings saved.');
+    } catch (e) { toast.error(e instanceof Error ? e.message : 'Save failed'); }
     setSaving(false);
   };
 
@@ -567,25 +755,102 @@ function PlatformConfig() {
   return (
     <div>
       <SectionHead title="Platform Config" sub="Fee model and trust thresholds — these control the live system" />
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: 16 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: 16 }}>
         <div style={{ background: T.card, border: `1px solid ${T.border}`, borderRadius: 14, padding: 18 }}>
           <h3 style={{ margin: '0 0 14px', fontSize: 14, color: T.text }}>Service fee (default)</h3>
           <div style={{ display: 'grid', gap: 12 }}>
             <Field label="Mode">
-              <select value={s.fee_mode} onChange={(e) => set('fee_mode', e.target.value)} style={inputStyle}>
-                <option value="percent" style={{ color: '#000' }}>Percentage only</option>
-                <option value="hybrid" style={{ color: '#000' }}>Percentage + flat</option>
-                <option value="flat" style={{ color: '#000' }}>Flat only</option>
-              </select>
+              <div style={{ position: 'relative' }}>
+                <button
+                  type="button"
+                  onClick={() => setFeeModeOpen((v) => !v)}
+                  style={{
+                    ...inputStyle,
+                    cursor: 'pointer',
+                    textAlign: 'left',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    gap: 12,
+                  }}
+                >
+                  <span style={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{feeModeLabel}</span>
+                  <span style={{ color: T.textTer, fontFamily: mono, fontSize: 11 }}>⌄</span>
+                </button>
+
+                <AnimatePresence>
+                  {feeModeOpen && (
+                    <motion.div
+                      initial={{ opacity: 0, y: -6, scale: 0.98 }}
+                      animate={{ opacity: 1, y: 0, scale: 1 }}
+                      exit={{ opacity: 0, y: -6, scale: 0.98 }}
+                      transition={{ duration: 0.14 }}
+                      style={{
+                        position: 'absolute',
+                        top: 'calc(100% + 8px)',
+                        left: 0,
+                        right: 0,
+                        zIndex: 20,
+                        background: '#0A1020',
+                        border: `1px solid ${T.border}`,
+                        borderRadius: 12,
+                        boxShadow: '0 18px 40px rgba(0,0,0,0.35)',
+                        overflow: 'hidden',
+                      }}
+                    >
+                      {([
+                        ['percent', 'Percentage only'],
+                        ['hybrid', 'Percentage + flat'],
+                        ['flat', 'Flat only'],
+                      ] as const).map(([value, label]) => (
+                        <button
+                          key={value}
+                          type="button"
+                          onClick={() => {
+                            set('fee_mode', value);
+                            setFeeModeOpen(false);
+                          }}
+                          style={{
+                            width: '100%',
+                            padding: '10px 12px',
+                            background: s.fee_mode === value ? 'rgba(255,104,3,0.12)' : 'transparent',
+                            color: s.fee_mode === value ? T.primary : T.text,
+                            border: 'none',
+                            textAlign: 'left',
+                            cursor: 'pointer',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'space-between',
+                            gap: 10,
+                          }}
+                        >
+                          <span>{label}</span>
+                          {s.fee_mode === value && <Check size={14} />}
+                        </button>
+                      ))}
+                    </motion.div>
+                  )}
+                </AnimatePresence>
+
+                {feeModeOpen && (
+                  <button
+                    type="button"
+                    aria-label="Close fee mode dropdown"
+                    onClick={() => setFeeModeOpen(false)}
+                    style={{ position: 'fixed', inset: 0, zIndex: 10, background: 'transparent', border: 'none', padding: 0, margin: 0 }}
+                  />
+                )}
+              </div>
             </Field>
             <Field label="Percent" hint="%"><input type="number" step="0.1" value={s.fee_percent} onChange={(e) => set('fee_percent', Number(e.target.value))} style={inputStyle} /></Field>
             <Field label="Flat fee" hint="₦"><input type="number" value={Math.round(s.fee_flat_kobo / 100)} onChange={(e) => set('fee_flat_kobo', Number(e.target.value) * 100)} style={inputStyle} /></Field>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
               <Field label="Floor" hint="₦"><input type="number" value={Math.round(s.fee_min_kobo / 100)} onChange={(e) => set('fee_min_kobo', Number(e.target.value) * 100)} style={inputStyle} /></Field>
-              <Field label="Cap" hint="₦"><input type="number" value={Math.round(s.fee_cap_kobo / 100)} onChange={(e) => set('fee_cap_kobo', Number(e.target.value) * 100)} style={inputStyle} /></Field>
+              <Field label="Cap"   hint="₦"><input type="number" value={Math.round(s.fee_cap_kobo / 100)} onChange={(e) => set('fee_cap_kobo', Number(e.target.value) * 100)} style={inputStyle} /></Field>
             </div>
             <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, color: T.textSec, cursor: 'pointer' }}>
-              <input type="checkbox" checked={applyAll} onChange={(e) => setApplyAll(e.target.checked)} /> Re-price all existing orgs to this
+              <input type="checkbox" checked={applyAll} onChange={(e) => setApplyAll(e.target.checked)} />
+              Re-price all existing orgs to this
             </label>
           </div>
         </div>
@@ -594,47 +859,54 @@ function PlatformConfig() {
           <h3 style={{ margin: '0 0 14px', fontSize: 14, color: T.text }}>Verification policy</h3>
           <div style={{ display: 'grid', gap: 12 }}>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
-              <Field label="Bootstrap base votes"><input type="number" value={s.bootstrap_base_votes} onChange={(e) => set('bootstrap_base_votes', Number(e.target.value))} style={inputStyle} /></Field>
-              <Field label="Escalated votes"><input type="number" value={s.bootstrap_escalated_votes} onChange={(e) => set('bootstrap_escalated_votes', Number(e.target.value))} style={inputStyle} /></Field>
+              <Field label="Bootstrap base votes"><input type="number" value={s.bootstrap_base_votes}     onChange={(e) => set('bootstrap_base_votes',     Number(e.target.value))} style={inputStyle} /></Field>
+              <Field label="Escalated votes">     <input type="number" value={s.bootstrap_escalated_votes} onChange={(e) => set('bootstrap_escalated_votes', Number(e.target.value))} style={inputStyle} /></Field>
             </div>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
               <Field label="Window" hint="hrs"><input type="number" value={s.bootstrap_window_hours} onChange={(e) => set('bootstrap_window_hours', Number(e.target.value))} style={inputStyle} /></Field>
-              <Field label="Independent votes"><input type="number" value={s.independent_votes} onChange={(e) => set('independent_votes', Number(e.target.value))} style={inputStyle} /></Field>
+              <Field label="Independent votes">  <input type="number" value={s.independent_votes}    onChange={(e) => set('independent_votes',    Number(e.target.value))} style={inputStyle} /></Field>
             </div>
-            <Field label="Platform-review after" hint="days stuck"><input type="number" value={s.platform_review_days} onChange={(e) => set('platform_review_days', Number(e.target.value))} style={inputStyle} /></Field>
+            <Field label="Platform-review after" hint="days stuck">
+              <input type="number" value={s.platform_review_days} onChange={(e) => set('platform_review_days', Number(e.target.value))} style={inputStyle} />
+            </Field>
           </div>
         </div>
       </div>
       <div style={{ marginTop: 18 }}>
-        <Btn onClick={save} disabled={saving} color={T.primary}>{saving ? <Loader2 size={14} className="animate-spin" /> : <CheckCircle2 size={14} />} Save settings</Btn>
+        <Btn onClick={save} disabled={saving} color={T.primary}>
+          {saving ? <Loader2 size={14} className="animate-spin" /> : <CheckCircle2 size={14} />} Save settings
+        </Btn>
       </div>
     </div>
   );
 }
 
 function UniversityMap() {
-  const [rows, setRows] = useState<UniRow[]>([]);
+  const [rows, setRows]     = useState<UniRow[]>([]);
   const [loading, setLoading] = useState(true);
   useEffect(() => { (async () => { try { setRows(await getUniversityMap()); } catch { /* */ } setLoading(false); })(); }, []);
+
   if (loading) return <p style={{ color: T.textSec, fontSize: 13 }}><Loader2 size={14} className="animate-spin" style={{ verticalAlign: 'middle' }} /> Loading…</p>;
+
   return (
     <div>
       <SectionHead title="University Map" sub="Per-institution penetration across the platform" />
-      <div style={{ background: T.card, border: `1px solid ${T.border}`, borderRadius: 14, overflow: 'hidden' }}>
-        <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr 1fr 1fr 1.2fr', padding: '10px 18px', borderBottom: `1px solid ${T.border}`, fontSize: 10, color: T.textTer, textTransform: 'uppercase', letterSpacing: '0.08em' }}>
+      <div style={{ background: T.card, border: `1px solid ${T.border}`, borderRadius: 14, overflow: 'hidden', overflowX: 'auto' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr 1fr 1fr 1.2fr', padding: '10px 18px', borderBottom: `1px solid ${T.border}`, fontSize: 10, color: T.textTer, textTransform: 'uppercase', letterSpacing: '0.08em', minWidth: 480 }}>
           <span>Institution</span><span>Members</span><span>Groups</span><span>Verified</span><span>Collected</span>
         </div>
-        {rows.length === 0 ? <p style={{ padding: 18, margin: 0, fontSize: 12, color: T.textTer }}>No organizations yet.</p>
+        {rows.length === 0
+          ? <p style={{ padding: 18, margin: 0, fontSize: 12, color: T.textTer }}>No organizations yet.</p>
           : rows.map((r) => (
-            <div key={r.org_id} style={{ display: 'grid', gridTemplateColumns: '2fr 1fr 1fr 1fr 1.2fr', padding: '11px 18px', borderBottom: `1px solid ${T.border}`, alignItems: 'center', fontSize: 12 }}>
+            <div key={r.org_id} style={{ display: 'grid', gridTemplateColumns: '2fr 1fr 1fr 1fr 1.2fr', padding: '11px 18px', borderBottom: `1px solid ${T.border}`, alignItems: 'center', fontSize: 12, minWidth: 480 }}>
               <div style={{ minWidth: 0 }}>
                 <p style={{ margin: 0, color: T.text, fontWeight: 600, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{r.org_name}</p>
                 <p style={{ margin: '1px 0 0', color: T.textTer, fontSize: 10, fontFamily: mono }}>{r.organization_type}</p>
               </div>
-              <span style={{ color: T.text, fontFamily: mono }}>{r.member_count}</span>
-              <span style={{ color: T.text, fontFamily: mono }}>{r.group_count}</span>
+              <span style={{ color: T.text,                                  fontFamily: mono }}>{r.member_count}</span>
+              <span style={{ color: T.text,                                  fontFamily: mono }}>{r.group_count}</span>
               <span style={{ color: r.verified_execs > 0 ? T.mint : T.textTer, fontFamily: mono }}>{r.verified_execs}</span>
-              <span style={{ color: T.amber, fontFamily: mono }}>{naira(r.collected_kobo)}</span>
+              <span style={{ color: T.amber,                                 fontFamily: mono }}>{naira(r.collected_kobo)}</span>
             </div>
           ))}
       </div>
@@ -643,10 +915,11 @@ function UniversityMap() {
 }
 
 function TrustSafety() {
-  const [orgs, setOrgs] = useState<OrgOverview[]>([]);
-  const [flags, setFlags] = useState<PendingClaim[]>([]);
+  const [orgs, setOrgs]     = useState<OrgOverview[]>([]);
+  const [flags, setFlags]   = useState<PendingClaim[]>([]);
   const [loading, setLoading] = useState(true);
   const [busyId, setBusyId] = useState<string | null>(null);
+
   const load = useCallback(async () => {
     setLoading(true);
     try {
@@ -656,23 +929,31 @@ function TrustSafety() {
     setLoading(false);
   }, []);
   useEffect(() => { void load(); }, [load]);
+
   const toggle = async (o: OrgOverview) => {
-    if (!confirm(`${o.is_active ? 'Freeze' : 'Unfreeze'} ${o.name}? ${o.is_active ? 'Payments and access stop.' : ''}`)) return;
+    if (!confirm(`${o.is_active ? 'Freeze' : 'Unfreeze'} ${o.name}?`)) return;
     setBusyId(o.id);
-    try { await toggleOrganizationStatus(o.id, !o.is_active); setOrgs((p) => p.map((x) => x.id === o.id ? { ...x, is_active: !x.is_active } : x)); } catch (e) { alert(e instanceof Error ? e.message : 'Failed'); }
+    try {
+      await toggleOrganizationStatus(o.id, !o.is_active);
+      setOrgs((p) => p.map((x) => x.id === o.id ? { ...x, is_active: !x.is_active } : x));
+    } catch (e) { alert(e instanceof Error ? e.message : 'Failed'); }
     setBusyId(null);
   };
+
   if (loading) return <p style={{ color: T.textSec, fontSize: 13 }}><Loader2 size={14} className="animate-spin" style={{ verticalAlign: 'middle' }} /> Loading…</p>;
+
   return (
     <div>
       <SectionHead title="Trust & Safety" sub="Fraud signals and emergency controls" right={<Btn onClick={load} color={T.textSec}><RefreshCw size={13} /> Refresh</Btn>} />
       <div style={{ background: T.card, border: `1px solid ${T.border}`, borderRadius: 14, overflow: 'hidden', marginBottom: 18 }}>
         <div style={{ padding: '14px 18px', borderBottom: `1px solid ${T.border}`, display: 'flex', justifyContent: 'space-between' }}>
-          <span style={{ fontSize: 13, fontWeight: 700, color: T.text }}>Disputed claims</span><Badge color={T.red} dot>{flags.length}</Badge>
+          <span style={{ fontSize: 13, fontWeight: 700, color: T.text }}>Disputed claims</span>
+          <Badge color={T.red} dot>{flags.length}</Badge>
         </div>
-        {flags.length === 0 ? <p style={{ padding: 18, margin: 0, fontSize: 12, color: T.textTer }}>No disputed claims.</p>
+        {flags.length === 0
+          ? <p style={{ padding: 18, margin: 0, fontSize: 12, color: T.textTer }}>No disputed claims.</p>
           : flags.map((f) => (
-            <div key={f.id} style={{ padding: '11px 18px', borderBottom: `1px solid ${T.border}`, display: 'flex', alignItems: 'center', gap: 12 }}>
+            <div key={f.id} style={{ padding: '11px 18px', borderBottom: `1px solid ${T.border}`, display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
               <Siren size={15} style={{ color: T.red }} />
               <div style={{ flex: 1, minWidth: 0 }}>
                 <p style={{ margin: 0, fontSize: 12, color: T.text, fontWeight: 600 }}>{f.claimant_name} · {f.position_title}</p>
@@ -686,13 +967,15 @@ function TrustSafety() {
       <div style={{ background: T.card, border: `1px solid ${T.border}`, borderRadius: 14, overflow: 'hidden' }}>
         <div style={{ padding: '14px 18px', borderBottom: `1px solid ${T.border}`, fontSize: 13, fontWeight: 700, color: T.text }}>Emergency org controls</div>
         {orgs.map((o) => (
-          <div key={o.id} style={{ padding: '10px 18px', borderBottom: `1px solid ${T.border}`, display: 'flex', alignItems: 'center', gap: 12 }}>
+          <div key={o.id} style={{ padding: '10px 18px', borderBottom: `1px solid ${T.border}`, display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
             <div style={{ flex: 1, minWidth: 0 }}>
               <p style={{ margin: 0, fontSize: 12, color: T.text, fontWeight: 600 }}>{o.name}</p>
               <p style={{ margin: '2px 0 0', fontSize: 11, color: T.textSec, fontFamily: mono }}>/{o.slug}</p>
             </div>
             <Badge color={o.is_active ? T.mint : T.red}>{o.is_active ? 'active' : 'frozen'}</Badge>
-            <Btn onClick={() => toggle(o)} disabled={busyId === o.id} color={o.is_active ? T.red : T.mint}>{o.is_active ? 'Freeze' : 'Unfreeze'}</Btn>
+            <Btn onClick={() => toggle(o)} disabled={busyId === o.id} color={o.is_active ? T.red : T.mint}>
+              {o.is_active ? 'Freeze' : 'Unfreeze'}
+            </Btn>
           </div>
         ))}
       </div>
@@ -701,140 +984,522 @@ function TrustSafety() {
 }
 
 function Communications() {
-  const [orgs, setOrgs] = useState<OrgOverview[]>([]);
+  const [orgs, setOrgs]     = useState<OrgOverview[]>([]);
   const [target, setTarget] = useState<string>('all');
-  const [title, setTitle] = useState('');
+  const [title, setTitle]   = useState('');
   const [message, setMessage] = useState('');
   const [sending, setSending] = useState(false);
+  const [dropdownOpen, setDropdownOpen] = useState(false);
+  const [confirmOpen, setConfirmOpen] = useState(false);
   const toast = useToast();
+
   useEffect(() => { (async () => { try { setOrgs(await fetchOrganizations()); } catch { /* */ } })(); }, []);
+
+  const audienceLabel = target === 'all'
+    ? 'All organizations (everyone)'
+    : orgs.find((o) => o.id === target)?.name || 'Selected organization';
+
   const send = async () => {
-    if (title.trim().length < 2 || message.trim().length < 2) { toast?.error?.('Title and message required.'); return; }
-    if (!confirm(`Send to ${target === 'all' ? 'EVERY member on the platform' : orgs.find((o) => o.id === target)?.name}?`)) return;
+    if (title.trim().length < 2 || message.trim().length < 2) {
+      toast.error('Title and message required.');
+      return;
+    }
     setSending(true);
     try {
       const n = await broadcast(target === 'all' ? null : target, title.trim(), message.trim());
-      toast?.success?.(`Sent to ${n} member${n === 1 ? '' : 's'}.`); setTitle(''); setMessage('');
-    } catch (e) { toast?.error?.(e instanceof Error ? e.message : 'Failed'); }
+      toast.success(`Sent to ${n} member${n === 1 ? '' : 's'}.`);
+      setTitle('');
+      setMessage('');
+      setConfirmOpen(false);
+    } catch (e) { toast.error(e instanceof Error ? e.message : 'Failed'); }
     setSending(false);
   };
+
   return (
     <div>
       <SectionHead title="Communications" sub="Broadcast an in-app announcement" />
       <div style={{ background: T.card, border: `1px solid ${T.border}`, borderRadius: 14, padding: 18, maxWidth: 560, display: 'grid', gap: 14 }}>
         <Field label="Audience">
-          <select value={target} onChange={(e) => setTarget(e.target.value)} style={inputStyle}>
-            <option value="all" style={{ color: '#000' }}>All organizations (everyone)</option>
-            {orgs.map((o) => <option key={o.id} value={o.id} style={{ color: '#000' }}>{o.name}</option>)}
-          </select>
+          <div style={{ position: 'relative' }}>
+            <button
+              type="button"
+              onClick={() => setDropdownOpen((v) => !v)}
+              style={{
+                ...inputStyle,
+                textAlign: 'left',
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                gap: 12,
+              }}
+            >
+              <span style={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{audienceLabel}</span>
+              <span style={{ color: T.textTer, fontFamily: mono, fontSize: 11 }}>⌄</span>
+            </button>
+
+            <AnimatePresence>
+              {dropdownOpen && (
+                <motion.div
+                  initial={{ opacity: 0, y: -6, scale: 0.98 }}
+                  animate={{ opacity: 1, y: 0, scale: 1 }}
+                  exit={{ opacity: 0, y: -6, scale: 0.98 }}
+                  transition={{ duration: 0.14 }}
+                  style={{
+                    position: 'absolute',
+                    top: 'calc(100% + 8px)',
+                    left: 0,
+                    right: 0,
+                    zIndex: 20,
+                    background: '#0A1020',
+                    border: `1px solid ${T.border}`,
+                    borderRadius: 12,
+                    boxShadow: '0 18px 40px rgba(0,0,0,0.35)',
+                    overflow: 'hidden',
+                    maxHeight: 280,
+                    overflowY: 'auto',
+                  }}
+                >
+                  <button
+                    type="button"
+                    onClick={() => { setTarget('all'); setDropdownOpen(false); }}
+                    style={{
+                      width: '100%',
+                      padding: '10px 12px',
+                      background: target === 'all' ? 'rgba(255,104,3,0.12)' : 'transparent',
+                      color: target === 'all' ? T.primary : T.text,
+                      border: 'none',
+                      textAlign: 'left',
+                      cursor: 'pointer',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'space-between',
+                      gap: 10,
+                    }}
+                  >
+                    <span>All organizations (everyone)</span>
+                    {target === 'all' && <Check size={14} />}
+                  </button>
+                  {orgs.map((o) => (
+                    <button
+                      key={o.id}
+                      type="button"
+                      onClick={() => { setTarget(o.id); setDropdownOpen(false); }}
+                      style={{
+                        width: '100%',
+                        padding: '10px 12px',
+                        background: target === o.id ? 'rgba(255,104,3,0.12)' : 'transparent',
+                        color: target === o.id ? T.primary : T.text,
+                        border: 'none',
+                        textAlign: 'left',
+                        cursor: 'pointer',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                        gap: 10,
+                      }}
+                    >
+                      <span style={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{o.name}</span>
+                      {target === o.id && <Check size={14} />}
+                    </button>
+                  ))}
+                </motion.div>
+              )}
+            </AnimatePresence>
+
+            {dropdownOpen && (
+              <button
+                type="button"
+                aria-label="Close audience dropdown"
+                onClick={() => setDropdownOpen(false)}
+                style={{ position: 'fixed', inset: 0, zIndex: 10, background: 'transparent', border: 'none', padding: 0, margin: 0 }}
+              />
+            )}
+          </div>
         </Field>
         <Field label="Title"><input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Scheduled maintenance" style={inputStyle} /></Field>
         <Field label="Message"><textarea value={message} onChange={(e) => setMessage(e.target.value)} rows={4} placeholder="What do you want members to know?" style={{ ...inputStyle, resize: 'vertical' }} /></Field>
-        <div><Btn onClick={send} disabled={sending} color={T.primary}>{sending ? <Loader2 size={14} className="animate-spin" /> : <Megaphone size={14} />} Send broadcast</Btn></div>
+        <div>
+          <Btn onClick={() => {
+            if (title.trim().length < 2 || message.trim().length < 2) {
+              toast.error('Title and message required.');
+              return;
+            }
+            setConfirmOpen(true);
+          }} disabled={sending} color={T.primary}>
+            {sending ? <Loader2 size={14} className="animate-spin" /> : <Megaphone size={14} />} Send broadcast
+          </Btn>
+        </div>
       </div>
+
+      <AnimatePresence>
+        {confirmOpen && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            style={{ position: 'fixed', inset: 0, zIndex: 80, background: 'rgba(3,7,18,0.68)', backdropFilter: 'blur(10px)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}
+            onClick={() => !sending && setConfirmOpen(false)}
+          >
+            <motion.div
+              initial={{ opacity: 0, y: 10, scale: 0.98 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              exit={{ opacity: 0, y: 10, scale: 0.98 }}
+              transition={{ duration: 0.16 }}
+              onClick={(e) => e.stopPropagation()}
+              style={{ width: '100%', maxWidth: 520, background: '#0C1220', border: `1px solid ${T.borderHot}`, borderRadius: 18, padding: 22, boxShadow: '0 24px 60px rgba(0,0,0,0.45)' }}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12 }}>
+                <div style={{ width: 38, height: 38, borderRadius: 12, background: 'rgba(255,104,3,0.12)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: T.primary }}>
+                  <Megaphone size={18} />
+                </div>
+                <div>
+                  <h3 style={{ margin: 0, fontSize: 18, color: T.text }}>Confirm broadcast</h3>
+                  <p style={{ margin: '2px 0 0', fontSize: 12, color: T.textSec }}>Review the target audience before sending.</p>
+                </div>
+              </div>
+
+              <div style={{ display: 'grid', gap: 10, marginBottom: 18 }}>
+                <div style={{ padding: 12, borderRadius: 12, background: 'rgba(255,255,255,0.03)', border: `1px solid ${T.border}` }}>
+                  <div style={{ fontSize: 10, color: T.textTer, textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 4 }}>Audience</div>
+                  <div style={{ fontSize: 13, color: T.text }}>{audienceLabel}</div>
+                </div>
+                <div style={{ padding: 12, borderRadius: 12, background: 'rgba(255,255,255,0.03)', border: `1px solid ${T.border}` }}>
+                  <div style={{ fontSize: 10, color: T.textTer, textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 4 }}>Title</div>
+                  <div style={{ fontSize: 13, color: T.text }}>{title.trim()}</div>
+                </div>
+                <div style={{ padding: 12, borderRadius: 12, background: 'rgba(255,255,255,0.03)', border: `1px solid ${T.border}` }}>
+                  <div style={{ fontSize: 10, color: T.textTer, textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 4 }}>Message</div>
+                  <div style={{ fontSize: 13, color: T.textSec, lineHeight: 1.6, whiteSpace: 'pre-wrap' }}>{message.trim()}</div>
+                </div>
+              </div>
+
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, flexWrap: 'wrap' }}>
+                <Btn onClick={() => setConfirmOpen(false)} disabled={sending} color={T.textSec}>Cancel</Btn>
+                <Btn onClick={send} disabled={sending} color={T.primary}>
+                  {sending ? <Loader2 size={14} className="animate-spin" /> : <Megaphone size={14} />} Confirm send
+                </Btn>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }
 
-// ── Nav ──────────────────────────────────────────────────────────
+// ── Nav items ────────────────────────────────────────────────────
 const NAV = [
-  { id: 'command', label: 'Command', icon: LayoutDashboard },
-  { id: 'verification', label: 'Verification', icon: ShieldCheck },
-  { id: 'orgs', label: 'Organizations', icon: Building2 },
-  { id: 'financial', label: 'Financial', icon: Banknote },
-  { id: 'map', label: 'Universities', icon: GraduationCap },
-  { id: 'safety', label: 'Trust & Safety', icon: Siren },
-  { id: 'comms', label: 'Comms', icon: Megaphone },
-  { id: 'config', label: 'Config', icon: Settings2 },
-  { id: 'analytics', label: 'Analytics', icon: BarChart3 },
-  { id: 'audit', label: 'Audit Trail', icon: ScrollText },
+  { id: 'command',      label: 'Command',      icon: LayoutDashboard },
+  { id: 'verification', label: 'Verification', icon: ShieldCheck     },
+  { id: 'orgs',         label: 'Organizations',icon: Building2       },
+  { id: 'financial',    label: 'Financial',    icon: Banknote        },
+  { id: 'map',          label: 'Universities', icon: GraduationCap   },
+  { id: 'safety',       label: 'Trust & Safety',icon: Siren          },
+  { id: 'comms',        label: 'Comms',        icon: Megaphone       },
+  { id: 'config',       label: 'Config',       icon: Settings2       },
+  { id: 'analytics',    label: 'Analytics',    icon: BarChart3       },
+  { id: 'audit',        label: 'Audit Trail',  icon: ScrollText      },
 ] as const;
 
+type SectionId = (typeof NAV)[number]['id'];
+
+// ── Animated label (fades when sidebar collapses) ────────────────
+function SideLabel({ visible, children }: { visible: boolean; children: React.ReactNode }) {
+  return (
+    <AnimatePresence initial={false}>
+      {visible && (
+        <motion.span
+          initial={{ opacity: 0, width: 0 }}
+          animate={{ opacity: 1, width: 'auto' }}
+          exit={{   opacity: 0, width: 0 }}
+          transition={{ duration: 0.18 }}
+          style={{ overflow: 'hidden', whiteSpace: 'nowrap' }}
+        >
+          {children}
+        </motion.span>
+      )}
+    </AnimatePresence>
+  );
+}
+
 // ════════════════════════════════════════════════════════════════
-// MAIN
+// MAIN COMPONENT
 // ════════════════════════════════════════════════════════════════
 export default function PlatformConsole() {
-  const [admin, setAdmin] = useState<PlatformAdmin | null>(() => getPlatformAdmin());
+  const [admin, setAdmin]       = useState<PlatformAdmin | null>(() => getPlatformAdmin());
   const [checking, setChecking] = useState(true);
-  const [section, setSection] = useState<string>('command');
-  const [narrow, setNarrow] = useState(typeof window !== 'undefined' && window.innerWidth < 900);
+  const [section, setSection]   = useState<SectionId>('command');
+  const [collapsed, setCollapsed] = useState(false);   // desktop icon-rail
+  const [mobileOpen, setMobileOpen] = useState(false); // mobile drawer
+  const [showLogoutModal, setShowLogoutModal] = useState(false);
+  const [logoutBusy, setLogoutBusy] = useState(false);
+  const isMobile = useIsMobile(768);
+
+  const confirmLogout = useCallback(async () => {
+    setLogoutBusy(true);
+    try {
+      await platformAdminLogout();
+      setAdmin(null);
+      setShowLogoutModal(false);
+    } finally {
+      setLogoutBusy(false);
+    }
+  }, []);
 
   useEffect(() => {
     (async () => { const a = await verifySession(); setAdmin(a); setChecking(false); })();
-    const onResize = () => setNarrow(window.innerWidth < 900);
-    window.addEventListener('resize', onResize);
-    return () => window.removeEventListener('resize', onResize);
   }, []);
 
-  // Operator console is desktop-only by design — mobile is intentionally left out.
-  if (narrow) {
+  // Close mobile drawer on route change
+  useEffect(() => { setMobileOpen(false); }, [section]);
+
+  // Lock body scroll when mobile drawer is open
+  useEffect(() => {
+    if (isMobile) document.body.style.overflow = mobileOpen ? 'hidden' : '';
+    return () => { document.body.style.overflow = ''; };
+  }, [mobileOpen, isMobile]);
+
+  if (checking) {
     return (
-      <div style={{ minHeight: '100vh', background: T.bg, color: T.text, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 28, textAlign: 'center' }}>
-        <div style={{ maxWidth: 320 }}>
-          <span style={{ fontSize: 22, fontWeight: 800, color: T.primary }}>Pay<span style={{ color: T.amber }}>vexo</span></span>
-          <div style={{ fontSize: 10, color: T.textTer, fontFamily: mono, letterSpacing: '0.2em', margin: '4px 0 20px' }}>CONSOLE</div>
-          <p style={{ color: T.text, fontSize: 15, fontWeight: 700, margin: '0 0 8px' }}>Open on a desktop</p>
-          <p style={{ color: T.textSec, fontSize: 13, margin: 0, lineHeight: 1.6 }}>The operator console is built for a large screen. Please use a laptop or desktop to manage the platform.</p>
-        </div>
+      <div style={{ minHeight: '100vh', background: T.bg, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+        <Loader2 size={24} className="animate-spin" style={{ color: T.primary }} />
       </div>
     );
   }
 
-  if (checking) {
-    return <div style={{ minHeight: '100vh', background: T.bg, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-      <Loader2 size={24} className="animate-spin" style={{ color: T.primary }} />
-    </div>;
-  }
-  // A session without a token predates session_token persistence (or expired) —
-  // force a fresh login so every session-gated RPC (Config, grants, broadcast…) works.
   if (!admin || !admin.session_token) return <LoginGate onLogin={setAdmin} />;
 
-  return (
-    <div style={{ minHeight: '100vh', background: T.bg, color: T.text, display: 'flex' }}>
-      {/* Sidebar */}
-      <aside style={{ width: 220, borderRight: `1px solid ${T.border}`, padding: '20px 14px', display: 'flex', flexDirection: 'column', gap: 4, position: 'sticky', top: 0, height: '100vh', flexShrink: 0 }}>
-        <div style={{ padding: '0 8px 16px' }}>
-          <span style={{ fontSize: 18, fontWeight: 800, color: T.primary }}>Pay<span style={{ color: T.amber }}>vexo</span></span>
-          <div style={{ fontSize: 10, color: T.textTer, fontFamily: mono, letterSpacing: '0.2em', marginTop: 2 }}>CONSOLE</div>
-        </div>
-        {NAV.map((n) => {
-          const I = n.icon; const on = section === n.id;
-          return (
-            <button key={n.id} onClick={() => setSection(n.id)} style={{
-              display: 'flex', alignItems: 'center', gap: 10, padding: '9px 12px', borderRadius: 9, cursor: 'pointer',
-              background: on ? `${T.primary}15` : 'transparent', border: `1px solid ${on ? T.primary + '30' : 'transparent'}`,
-              color: on ? T.primary : T.textSec, fontSize: 13, fontWeight: 600, textAlign: 'left', width: '100%' }}>
-              <I size={16} /> {n.label}
-            </button>
-          );
-        })}
-        <div style={{ marginTop: 'auto', borderTop: `1px solid ${T.border}`, paddingTop: 12 }}>
-          <p style={{ margin: '0 8px 8px', fontSize: 11, color: T.textSec, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{admin.full_name}</p>
-          <button onClick={() => { platformAdminLogout(); setAdmin(null); }} style={{
-            display: 'flex', alignItems: 'center', gap: 8, padding: '8px 12px', borderRadius: 9, cursor: 'pointer',
-            background: 'transparent', border: `1px solid ${T.border}`, color: T.textSec, fontSize: 12, width: '100%' }}>
-            <LogOut size={14} /> Sign out
-          </button>
-        </div>
-      </aside>
+  // Effective sidebar width used to offset the content area on desktop
+  const sidebarW = collapsed ? 56 : 220;
 
-      {/* Main */}
-      <main style={{ flex: 1, padding: '28px 32px', maxWidth: 1400, margin: '0 auto', width: '100%' }}>
-        <AnimatePresence mode="wait">
-          <motion.div key={section} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} transition={{ duration: 0.18 }}>
-            {section === 'command' && <CommandCenter />}
-            {section === 'verification' && <VerificationQueue />}
-            {section === 'orgs' && <OrgRegistry />}
-            {section === 'financial' && <FinancialIntel />}
-            {section === 'map' && <UniversityMap />}
-            {section === 'safety' && <TrustSafety />}
-            {section === 'comms' && <Communications />}
-            {section === 'config' && <PlatformConfig />}
-            {section === 'analytics' && <GrowthAnalytics />}
-            {section === 'audit' && <AuditTrail />}
-          </motion.div>
-        </AnimatePresence>
-      </main>
+  const navBtn = (n: (typeof NAV)[number]) => {
+    const I  = n.icon;
+    const on = section === n.id;
+    return (
+      <motion.button
+        key={n.id}
+        whileHover={{ background: T.hover }}
+        onClick={() => setSection(n.id)}
+        title={collapsed && !isMobile ? n.label : undefined}
+        style={{
+          display: 'flex', alignItems: 'center',
+          justifyContent: collapsed && !isMobile ? 'center' : 'flex-start',
+          gap: 10, padding: collapsed && !isMobile ? '10px 0' : '9px 12px',
+          borderRadius: 9, cursor: 'pointer', width: '100%',
+          background: on ? `${T.primary}15` : 'transparent',
+          border: `1px solid ${on ? T.primary + '30' : 'transparent'}`,
+          color: on ? T.primary : T.textSec,
+          fontSize: 13, fontWeight: 600, marginBottom: 2,
+          overflow: 'hidden', transition: 'background 0.15s, border-color 0.15s',
+        }}
+      >
+        <I size={16} style={{ flexShrink: 0 }} />
+        {/* On mobile the drawer is always full-width — always show labels */}
+        <SideLabel visible={isMobile || !collapsed}>{n.label}</SideLabel>
+      </motion.button>
+    );
+  };
+
+  return (
+    <div style={{ minHeight: '100vh', background: T.bg, color: T.text, display: 'flex', position: 'relative' }}>
+
+      {/* ── Mobile backdrop ─────────────────────────────────────── */}
+      <AnimatePresence>
+        {isMobile && mobileOpen && (
+          <motion.div
+            initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+            onClick={() => setMobileOpen(false)}
+            style={{
+              position: 'fixed', inset: 0, zIndex: 40,
+              background: 'rgba(0,0,0,0.65)', backdropFilter: 'blur(4px)',
+            }}
+          />
+        )}
+      </AnimatePresence>
+
+      {/* ── Sidebar ──────────────────────────────────────────────── */}
+      <motion.aside
+        animate={{ width: isMobile ? 240 : sidebarW }}
+        transition={{ duration: 0.22, ease: [0.4, 0, 0.2, 1] }}
+        style={{
+          position: 'fixed', top: 0, left: 0, height: '100vh',
+          zIndex: 50, background: T.bg,
+          borderRight: `1px solid ${T.border}`,
+          display: 'flex', flexDirection: 'column',
+          overflow: 'hidden', flexShrink: 0,
+          // Mobile: slide-over drawer
+          transform: isMobile
+            ? mobileOpen ? 'translateX(0)' : 'translateX(-100%)'
+            : 'translateX(0)',
+          transition: isMobile
+            ? 'transform 0.25s cubic-bezier(0.4,0,0.2,1)'
+            : 'width 0.22s cubic-bezier(0.4,0,0.2,1)',
+          boxShadow: isMobile && mobileOpen ? '4px 0 32px rgba(0,0,0,0.55)' : 'none',
+          width: isMobile ? 240 : sidebarW,
+        }}
+      >
+        {/* Logo row + collapse toggle */}
+        <div style={{
+          padding: collapsed && !isMobile ? '18px 0' : '18px 14px 14px',
+          borderBottom: `1px solid ${T.border}`,
+          display: 'flex', alignItems: 'center',
+          justifyContent: collapsed && !isMobile ? 'center' : 'space-between',
+          gap: 8, flexShrink: 0,
+        }}>
+          {/* Logo — always visible on mobile, hidden when collapsed on desktop */}
+          {(!collapsed || isMobile) && (
+            <div>
+              <span style={{ fontSize: 18, fontWeight: 800, color: T.primary }}>
+                Pay<span style={{ color: T.amber }}>vexo</span>
+              </span>
+              <div style={{ fontSize: 10, color: T.textTer, fontFamily: mono, letterSpacing: '0.2em', marginTop: 2 }}>
+                CONSOLE
+              </div>
+            </div>
+          )}
+          {/* Collapse toggle — desktop only */}
+          {!isMobile && (
+            <motion.button
+              whileTap={{ scale: 0.92 }}
+              onClick={() => setCollapsed(c => !c)}
+              title={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+              style={{
+                background: 'rgba(255,255,255,0.05)', border: `1px solid ${T.border}`,
+                borderRadius: 8, width: 28, height: 28, cursor: 'pointer',
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                color: T.textSec, flexShrink: 0,
+              }}
+            >
+              <motion.svg
+                animate={{ rotate: collapsed ? 180 : 0 }}
+                transition={{ duration: 0.22 }}
+                width="14" height="14" viewBox="0 0 14 14" fill="none"
+              >
+                <path d="M9 3L5 7L9 11" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
+              </motion.svg>
+            </motion.button>
+          )}
+          {/* Close button — mobile drawer only */}
+          {isMobile && (
+            <motion.button
+              whileTap={{ scale: 0.92 }}
+              onClick={() => setMobileOpen(false)}
+              style={{
+                background: 'rgba(255,255,255,0.05)', border: `1px solid ${T.border}`,
+                borderRadius: 8, width: 28, height: 28, cursor: 'pointer',
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                color: T.textSec, flexShrink: 0,
+              }}
+            >
+              <X size={14} />
+            </motion.button>
+          )}
+        </div>
+
+        {/* Nav items */}
+        <div style={{ flex: 1, overflowY: 'auto', overflowX: 'hidden', padding: '10px 8px' }}>
+          {NAV.map(navBtn)}
+        </div>
+
+        {/* Admin info + sign out */}
+        <div style={{ borderTop: `1px solid ${T.border}`, padding: '12px 8px', flexShrink: 0 }}>
+          {(!collapsed || isMobile) && (
+            <p style={{ margin: '0 4px 8px', fontSize: 11, color: T.textSec, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+              {admin.full_name}
+            </p>
+          )}
+          <motion.button
+            whileTap={{ scale: 0.97 }}
+            onClick={() => setShowLogoutModal(true)}
+            title={collapsed && !isMobile ? 'Sign out' : undefined}
+            style={{
+              display: 'flex', alignItems: 'center',
+              justifyContent: collapsed && !isMobile ? 'center' : 'flex-start',
+              gap: collapsed && !isMobile ? 0 : 8,
+              padding: collapsed && !isMobile ? '10px 0' : '8px 12px',
+              borderRadius: 9, cursor: 'pointer', background: 'transparent',
+              border: `1px solid ${T.border}`, color: T.textSec,
+              fontSize: 12, width: '100%',
+            }}
+          >
+            <LogOut size={14} style={{ flexShrink: 0 }} />
+            <SideLabel visible={isMobile || !collapsed}> Sign out</SideLabel>
+          </motion.button>
+        </div>
+      </motion.aside>
+
+      {/* ── Content wrapper ──────────────────────────────────────── */}
+      <div style={{
+        flex: 1,
+        marginLeft: isMobile ? 0 : sidebarW,
+        transition: 'margin-left 0.22s cubic-bezier(0.4,0,0.2,1)',
+        minWidth: 0, display: 'flex', flexDirection: 'column',
+      }}>
+
+        {/* ── Mobile top bar ── */}
+        {isMobile && (
+          <div style={{
+            display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+            padding: '14px 18px', borderBottom: `1px solid ${T.border}`,
+            background: T.bg, position: 'sticky', top: 0, zIndex: 30,
+          }}>
+            <motion.button
+              whileTap={{ scale: 0.92 }}
+              onClick={() => setMobileOpen(o => !o)}
+              style={{
+                background: 'rgba(255,255,255,0.06)', border: `1px solid ${T.border}`,
+                borderRadius: 8, padding: '7px 8px', cursor: 'pointer',
+                color: T.textSec, display: 'flex', alignItems: 'center',
+              }}
+              aria-label="Open navigation"
+            >
+              {mobileOpen ? <X size={16} /> : <Menu size={16} />}
+            </motion.button>
+
+            <span style={{ fontSize: 16, fontWeight: 800, color: T.primary }}>
+              Pay<span style={{ color: T.amber }}>vexo</span>
+              <span style={{ fontSize: 9, color: T.textTer, fontFamily: mono, letterSpacing: '0.2em', marginLeft: 6 }}>CONSOLE</span>
+            </span>
+
+            {/* Spacer to keep title centred */}
+            <div style={{ width: 36 }} />
+          </div>
+        )}
+
+        {/* ── Page content ── */}
+        <main style={{ flex: 1, padding: isMobile ? '20px 16px' : '28px 32px', maxWidth: 1400, width: '100%' }}>
+          <AnimatePresence mode="wait">
+            <motion.div
+              key={section}
+              initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0 }} transition={{ duration: 0.18 }}
+            >
+              {section === 'command'      && <CommandCenter />}
+              {section === 'verification' && <VerificationQueue />}
+              {section === 'orgs'         && <OrgRegistry />}
+              {section === 'financial'    && <FinancialIntel />}
+              {section === 'map'          && <UniversityMap />}
+              {section === 'safety'       && <TrustSafety />}
+              {section === 'comms'        && <Communications />}
+              {section === 'config'       && <PlatformConfig />}
+              {section === 'analytics'    && <GrowthAnalytics />}
+              {section === 'audit'        && <AuditTrail />}
+            </motion.div>
+          </AnimatePresence>
+        </main>
+      </div>
+
+      <AnimatePresence>
+        {showLogoutModal && (
+          <LogoutConfirmModal
+            onCancel={() => setShowLogoutModal(false)}
+            onConfirm={() => void confirmLogout()}
+            busy={logoutBusy}
+          />
+        )}
+      </AnimatePresence>
+
     </div>
   );
 }

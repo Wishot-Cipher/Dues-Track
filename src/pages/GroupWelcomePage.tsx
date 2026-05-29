@@ -40,7 +40,9 @@ import {
   UserPlus,
   Users,
 } from 'lucide-react';
+import { useMultiTenantAuth } from '@/hooks/useMultiTenantAuth';
 import { organizationService } from '@/services/organizationService';
+import { groupMembershipService } from '@/services/groupMembershipService';
 import TrustBadge from '@/components/trust/TrustBadge';
 import { APP_NAME, levelFieldLabel } from '@/config/constants';
 import { getDashboardTokens, useTheme } from '@/hooks/useTheme';
@@ -113,6 +115,7 @@ type Mode = 'choose' | 'signup';
 export default function GroupWelcomePage() {
   const { orgSlug, groupShortName } = useParams<{ orgSlug: string; groupShortName: string }>();
   const navigate = useNavigate();
+  const { user, organization: activeOrganization } = useMultiTenantAuth();
   const { theme } = useTheme();
   const tk = buildGroupWelcomeTokens(theme);
 
@@ -140,11 +143,13 @@ export default function GroupWelcomePage() {
     level: '',
   });
   const [submitting, setSubmitting] = useState(false);
+  const [joiningGroup, setJoiningGroup] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<{
     member_login_id: string;
     requires_approval: boolean;
   } | null>(null);
+  const [joinSuccess, setJoinSuccess] = useState<string | null>(null);
 
   // ── Load org + group + settings ──
   useEffect(() => {
@@ -256,6 +261,23 @@ export default function GroupWelcomePage() {
     navigate(`/${res.slug}/dashboard`);
   };
 
+  const handleJoinExistingAccount = async () => {
+    if (!org || !group || !user?.id) return;
+    setJoiningGroup(true);
+    setError(null);
+    setJoinSuccess(null);
+
+    const result = await groupMembershipService.joinGroup(user.id, group.id);
+    if (!result.ok) {
+      setError(result.error || `Could not add ${group.name} to your account.`);
+      setJoiningGroup(false);
+      return;
+    }
+
+    setJoinSuccess(group.name);
+    setJoiningGroup(false);
+  };
+
   // ─────────────────────────────────────────────────────────────────────────
   // Loading / not found
   // ─────────────────────────────────────────────────────────────────────────
@@ -330,6 +352,41 @@ export default function GroupWelcomePage() {
             whileTap={{ scale: 0.97 }}
           >
             Back to {org.short_name}
+          </motion.button>
+        </motion.div>
+      </FullCenter>
+    );
+  }
+
+  if (joinSuccess) {
+    return (
+      <FullCenter tk={tk}>
+        <motion.div
+          initial={{ opacity: 0, y: 12, scale: 0.98 }}
+          animate={{ opacity: 1, y: 0, scale: 1 }}
+          className="max-w-md w-full rounded-3xl p-7"
+          style={{ background: tk.panel, border: `1px solid ${tk.border}` }}
+        >
+          <div
+            className="w-14 h-14 mx-auto mb-5 rounded-2xl flex items-center justify-center"
+            style={{ background: 'rgba(48,255,172,0.10)', border: '1px solid rgba(48,255,172,0.20)' }}
+          >
+            <Check className="w-7 h-7" style={{ color: tk.mint }} />
+          </div>
+          <h1 className="text-2xl font-bold text-center mb-3 tracking-tight" style={{ color: tk.text }}>
+            Group added
+          </h1>
+          <p className="text-sm leading-6 text-center" style={{ color: tk.textSec }}>
+            {joinSuccess} is now attached to your account. Its dues and activity will show up in your member hub.
+          </p>
+          <motion.button
+            onClick={() => navigate(`/${org?.slug || orgSlug}/groups`)}
+            className="w-full mt-6 px-6 py-3 rounded-xl font-semibold text-sm text-white"
+            style={{ background: tk.gradPrimary }}
+            whileHover={{ scale: 1.02 }}
+            whileTap={{ scale: 0.97 }}
+          >
+            Open My Groups
           </motion.button>
         </motion.div>
       </FullCenter>
@@ -486,6 +543,19 @@ export default function GroupWelcomePage() {
                   navigate(`/${org.slug}/login?group=${encodeURIComponent(group.id)}`)
                 }
               />
+
+              {user && activeOrganization?.id === org.id && (
+                <ChoiceCard
+                  tk={tk}
+                  icon={<Check className="w-5 h-5" />}
+                  iconColor={tk.mint}
+                  title="Add this group to my account"
+                  description="Keep one login and let this group's dues show up in your member hub automatically."
+                  ctaLabel={joiningGroup ? 'Adding…' : 'Join group'}
+                  emphasis
+                  onClick={() => void handleJoinExistingAccount()}
+                />
+              )}
 
               {/* Invite code */}
               <ChoiceCard

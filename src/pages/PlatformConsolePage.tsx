@@ -59,25 +59,8 @@ import {
 import ConsoleUniversitiesPage from '@/pages/admin/ConsoleUniversitiesPage';
 import ConsoleRoleManagementPage from '@/pages/admin/ConsoleRoleManagementPage';
 import ConsoleEmailCodeLogin from '@/components/platform/ConsoleEmailCodeLogin';
-
-// ── Theme constants (matching app design language) ──
-const colors = {
-  primary: '#FF6803',
-  accentMint: '#30FFAC',
-  bg: '#0F0703',
-  cardBg: 'rgba(255, 255, 255, 0.03)',
-  cardBorder: 'rgba(255, 255, 255, 0.08)',
-  textPrimary: '#FFFFFF',
-  textSecondary: 'rgba(255, 255, 255, 0.5)',
-  statusActive: '#22c55e',
-  statusInactive: '#ef4444',
-};
-
-const gradients = {
-  primary: 'linear-gradient(135deg, #FF6803 0%, #FFAC5F 100%)',
-  mint: 'linear-gradient(135deg, #30FFAC 0%, #1BD88A 100%)',
-  dark: 'linear-gradient(135deg, #1a1a2e 0%, #0F0703 100%)',
-};
+import { consoleColors as colors, consoleGradients as gradients } from '@/pages/admin/consoleTheme';
+import ConsoleStatCard from '@/pages/admin/ConsoleStatCard';
 
 function formatCurrency(amount: number): string {
   return `₦${amount.toLocaleString()}`;
@@ -214,48 +197,6 @@ function PlatformLoginForm({ onLogin }: { onLogin: (admin: PlatformAdmin) => voi
         </p>
       </motion.div>
     </div>
-  );
-}
-
-// ── Stats Card ──
-function StatCard({
-  label,
-  value,
-  icon: Icon,
-  color,
-  subtext,
-}: {
-  label: string;
-  value: string | number;
-  icon: React.ElementType;
-  color: string;
-  subtext?: string;
-}) {
-  return (
-    <motion.div
-      className="p-4 rounded-xl relative overflow-hidden"
-      style={{ background: colors.cardBg, border: `1px solid ${colors.cardBorder}` }}
-      whileHover={{ scale: 1.02 }}
-    >
-      <div className="absolute top-0 left-0 right-0 h-0.5" style={{ background: color }} />
-      <div className="flex items-center justify-between mb-2">
-        <span className="text-[10px] sm:text-xs font-medium uppercase tracking-wider" style={{ color: colors.textSecondary }}>
-          {label}
-        </span>
-        <div
-          className="w-8 h-8 rounded-lg flex items-center justify-center"
-          style={{ background: `${color}15` }}
-        >
-          <Icon className="w-4 h-4" style={{ color }} />
-        </div>
-      </div>
-      <p className="text-xl sm:text-2xl font-bold text-white">{value}</p>
-      {subtext && (
-        <p className="text-[10px] mt-1" style={{ color: colors.textSecondary }}>
-          {subtext}
-        </p>
-      )}
-    </motion.div>
   );
 }
 
@@ -978,19 +919,19 @@ function PlatformDashboard({ admin, onLogout }: { admin: PlatformAdmin; onLogout
               icon={Users}
               color="#3b82f6"
             />
-            <StatCard
+            <ConsoleStatCard
               label="Payments"
               value={stats.totalPayments.toLocaleString()}
               icon={TrendingUp}
               color={colors.accentMint}
             />
-            <StatCard
+            <ConsoleStatCard
               label="Collected"
               value={formatCurrency(stats.totalCollected)}
               icon={Banknote}
               color="#22c55e"
             />
-            <StatCard
+            <ConsoleStatCard
               label="Platform"
               value="Active"
               icon={Activity}

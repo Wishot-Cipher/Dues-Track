@@ -186,6 +186,7 @@ export default function OrgLayout() {
   const memberNav: NavItem[] = [
     { path: '/dashboard', label: 'Home', icon: <LayoutDashboard size={20} />, section: 'member' },
     { path: '/payments', label: organization.payment_label || 'Payments', icon: <CreditCard size={20} />, section: 'member' },
+    { path: '/groups', label: organization.group_label_plural || 'Groups', icon: <Users size={20} />, section: 'member' },
   ];
 
   const adminNav: NavItem[] = showAdmin ? [
@@ -240,6 +241,7 @@ export default function OrgLayout() {
   const moreSheetItems: NavItem[] = showAdmin
     ? adminNav.filter(item => !['/admin/dashboard', '/admin/members', '/admin/review', '/admin/manage-dues'].includes(item.path))
     : [
+        { path: '/groups',        label: organization.group_label_plural || 'Groups', icon: <Users size={20} />, section: 'member' },
         { path: '/profile',         label: 'My Profile',     icon: <Building2 size={20} />, section: 'member' },
         { path: '/settings',        label: 'Settings',       icon: <Settings size={20} />,  section: 'member' },
         { path: '/change-password', label: 'Change Password', icon: <UserCog size={20} />,  section: 'member' },

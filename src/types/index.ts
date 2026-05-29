@@ -99,6 +99,7 @@ export interface PaymentType {
   account_number: string;
   created_by?: string;
   approver_id?: string;
+  group_id?: string;
   target_levels?: string[];
   target_departments?: string[];
   is_active: boolean;

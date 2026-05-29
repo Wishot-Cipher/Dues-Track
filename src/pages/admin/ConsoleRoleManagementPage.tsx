@@ -36,6 +36,8 @@ import { supabase } from '@/config/supabase';
 import { organizationService } from '@/services/organizationService';
 import Modal from '@/components/ui/Modal';
 import type { Organization, OrganizationMember, MemberAdmin } from '@/types/multiTenant';
+import { consoleColors as colors } from './consoleTheme';
+import ConsoleStatCard from './ConsoleStatCard';
 
 interface MemberWithRoles extends OrganizationMember {
   member_admins?: MemberAdmin[];
@@ -58,21 +60,6 @@ function normalizeMemberAdmins(member: MemberWithRoles): MemberWithRoles {
 
   return { ...member, member_admins: admins };
 }
-
-// ── Shared theme (matches PlatformConsolePage) ──
-const colors = {
-  primary: '#FF6803',
-  accentMint: '#30FFAC',
-  bg: '#0F0703',
-  cardBg: 'rgba(255, 255, 255, 0.03)',
-  cardBorder: 'rgba(255, 255, 255, 0.08)',
-  textPrimary: '#FFFFFF',
-  textSecondary: 'rgba(255, 255, 255, 0.5)',
-  textTertiary: 'rgba(255, 255, 255, 0.3)',
-  success: '#22c55e',
-  warning: '#f59e0b',
-  danger: '#ef4444',
-};
 
 const AVAILABLE_ROLES = [
   { value: 'class_rep',  label: 'Class Representative', icon: '👥', color: '#8b5cf6' },
@@ -161,51 +148,6 @@ const PERMISSION_META: { key: PermKey; label: string; icon: React.ElementType }[
   { key: 'can_export_data',      label: 'Export Data',      icon: Download },
   { key: 'can_manage_settings',  label: 'Manage Settings',  icon: Settings },
 ];
-
-// ── Stat Card (matching PlatformConsolePage's StatCard) ──
-function StatCard({
-  label,
-  value,
-  icon: Icon,
-  color,
-  subtext,
-}: {
-  label: string;
-  value: string | number;
-  icon: React.ElementType;
-  color: string;
-  subtext?: string;
-}) {
-  return (
-    <motion.div
-      className="p-4 rounded-xl relative overflow-hidden"
-      style={{ background: colors.cardBg, border: `1px solid ${colors.cardBorder}` }}
-      whileHover={{ scale: 1.02 }}
-    >
-      <div className="absolute top-0 left-0 right-0 h-0.5" style={{ background: color }} />
-      <div className="flex items-center justify-between mb-2">
-        <span
-          className="text-[10px] sm:text-xs font-medium uppercase tracking-wider"
-          style={{ color: colors.textSecondary }}
-        >
-          {label}
-        </span>
-        <div
-          className="w-8 h-8 rounded-lg flex items-center justify-center"
-          style={{ background: `${color}15` }}
-        >
-          <Icon className="w-4 h-4" style={{ color }} />
-        </div>
-      </div>
-      <p className="text-xl sm:text-2xl font-bold text-white">{value}</p>
-      {subtext && (
-        <p className="text-[10px] mt-1" style={{ color: colors.textSecondary }}>
-          {subtext}
-        </p>
-      )}
-    </motion.div>
-  );
-}
 
 // ── Role Assignment Modal ──
 function RoleModal({
@@ -695,19 +637,19 @@ export default function ConsoleRoleManagementPage() {
 
           {/* Stat cards */}
           <div className="grid grid-cols-3 gap-3 min-w-[300px]">
-            <StatCard
+            <ConsoleStatCard
               label="Orgs"
               value={organizations.length}
               icon={Building2}
               color={colors.primary}
             />
-            <StatCard
+            <ConsoleStatCard
               label="Members"
               value={members.length}
               icon={Users}
               color="#3b82f6"
             />
-            <StatCard
+            <ConsoleStatCard
               label="With Roles"
               value={assignedCount}
               icon={UserCheck}

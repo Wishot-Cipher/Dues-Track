@@ -28,8 +28,8 @@ import {
   ChevronRight,
   Sparkles,
   CreditCard,
-  TrendingUp,
   User as UserIcon,
+  Users,
   AlertCircle,
   CheckCircle2,
   Loader2,
@@ -417,12 +417,13 @@ export default function StudentDashboardPage() {
                 onClick: () => go('/payments'),
               },
               {
-                icon: TrendingUp,
-                label: 'Spending',
-                hint: 'transparency',
-                // Mature amber/gold — not the bright #F59E0B
-                tint: theme === 'light' ? '#B45309' : '#FBBF24',
-                onClick: () => go('/payments'),
+                icon: Users,
+                label: 'Groups',
+                hint: 'see & join',
+                // Calm teal — distinct from the payment actions without
+                // feeling like a third finance tile.
+                tint: theme === 'light' ? '#0F766E' : '#2DD4BF',
+                onClick: () => go('/groups'),
               },
               {
                 icon: UserIcon,
