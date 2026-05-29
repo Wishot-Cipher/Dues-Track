@@ -402,7 +402,7 @@ export const multiTenantAuthService = {
   async requestSchoolEmailCode(
     memberId: string,
     email: string,
-  ): Promise<{ ok: boolean; error?: string; sentTo?: string; devCode?: string }> {
+  ): Promise<{ ok: boolean; error?: string; sentTo?: string }> {
     try {
       const res = await fetch('/api/auth/verify-email', {
         method: 'POST',

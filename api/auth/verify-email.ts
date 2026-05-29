@@ -17,7 +17,7 @@
 
 import { createClient } from '@supabase/supabase-js';
 import { verifyMember } from '../_lib/auth.js';
-import { sendEmail, isEmailConfigured, schoolEmailVerifyEmail } from '../_lib/email.js';
+import { sendEmail, schoolEmailVerifyEmail } from '../_lib/email.js';
 
 const TRUSTED = ['email_verified', 'document_verified', 'admin_verified', 'member_confirmed'];
 const PURPOSE = 'exec_school_email';
@@ -118,13 +118,10 @@ export default async function handler(req: any, res: any) {
         schoolEmailVerifyEmail({ memberName: member.full_name || 'there', orgName: org?.name || 'your organization', code }),
       );
 
-      return res.status(200).json({
-        ok: true,
-        sentTo: maskEmail(email),
-        emailSent: sent,
-        // Dev convenience only when SMTP isn't configured — never in production
-        ...(!isEmailConfigured() ? { devCode: code } : {}),
-      });
+      if (!sent) {
+        return res.status(502).json({ ok: false, error: 'Could not send the verification email. Try again shortly.' });
+      }
+      return res.status(200).json({ ok: true, sentTo: maskEmail(email) });
     }
 
     if (action === 'confirm') {

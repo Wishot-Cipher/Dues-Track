@@ -231,12 +231,12 @@ async function handleVerifyCodeCore(req: any, res: any) {
     return res.status(500).json({ ok: false, error: 'Could not verify sign-in code.' });
   }
 
-  if (data?.ok === false) {
-    return res.status(401).json({ ok: false, error: data?.error || 'Invalid or expired code.' });
-  }
-
-  const admin = data?.admin || data?.platform_admin || data?.data || data;
-  if (!admin) {
+  // verify_admin_login_code RETURNS TABLE → Supabase gives an array of rows.
+  // A wrong/expired code yields an EMPTY array (the RPC RETURNs with no row).
+  // We must check rows[0], not truthiness of the array (an empty array is truthy).
+  const rows = Array.isArray(data) ? data : (data ? [data] : []);
+  const admin = rows[0];
+  if (!admin || !admin.id) {
     return res.status(401).json({ ok: false, error: 'Invalid or expired code.' });
   }
 

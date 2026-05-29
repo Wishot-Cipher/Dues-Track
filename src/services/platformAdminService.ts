@@ -22,6 +22,10 @@ export interface PlatformAdmin {
   can_manage_platform_admins: boolean;
   is_active: boolean;
   last_login_at: string | null;
+  // Session secret — required to call session-validated platform RPCs
+  // (e.g. platform_grant_claim). Stored in sessionStorage only.
+  session_token?: string | null;
+  session_expires_at?: string | null;
 }
 
 export interface OrgOverview {
@@ -74,6 +78,8 @@ function savePlatformSession(admin: PlatformAdmin): PlatformAdmin {
     can_manage_platform_admins: admin.can_manage_platform_admins,
     is_active: admin.is_active,
     last_login_at: admin.last_login_at,
+    session_token: admin.session_token ?? null,
+    session_expires_at: admin.session_expires_at ?? null,
     ts: Date.now(),
   };
   sessionStorage.setItem(PLATFORM_KEY, JSON.stringify(session));
@@ -215,6 +221,53 @@ export async function verifySession(): Promise<PlatformAdmin | null> {
  */
 export function platformAdminLogout(): void {
   sessionStorage.removeItem(PLATFORM_KEY);
+}
+
+// ── Verification queue (graduated trust) ─────────────────────────
+
+export interface PendingClaim {
+  id: string;
+  claimant_name: string;
+  position_title: string;
+  claimed_role: string;
+  claimed_scope: string;
+  votes_received: number;
+  votes_required: number;
+  current_layer: number;
+  layer3_reached_at: string | null;
+  platform_review_requested_at: string | null;
+  has_financial_history: boolean;
+  institutional_email: string | null;
+  created_at: string;
+  org_name: string;
+  org_slug: string;
+  organization_type: string;
+  target_group_name: string | null;
+  is_independent: boolean;
+  dispute_count: number;
+  higher_exec_exists: boolean;
+}
+
+/** Full verification queue — every in-flight claim with computed context. */
+export async function listPendingClaims(): Promise<PendingClaim[]> {
+  const admin = getPlatformAdmin();
+  if (!admin?.session_token) throw new Error('Not authenticated');
+  const { data, error } = await supabase.rpc('platform_list_pending_claims', { p_session_token: admin.session_token });
+  if (error) throw new Error(error.message);
+  if (!data?.ok) throw new Error(data?.error || 'Could not load the verification queue');
+  return (data.claims || []) as PendingClaim[];
+}
+
+/** Path-D override: grant Layer 4 to a stuck claim (session-validated server-side). */
+export async function grantClaimOverride(claimId: string): Promise<void> {
+  const admin = getPlatformAdmin();
+  if (!admin?.session_token) throw new Error('Not authenticated');
+  const { data, error } = await supabase.rpc('platform_grant_claim', {
+    p_session_token: admin.session_token,
+    p_claim_id: claimId,
+  });
+  if (error) throw new Error(error.message);
+  if (!data?.ok) throw new Error(data?.error || 'Grant failed');
 }
 
 /**

@@ -62,7 +62,8 @@ import AddDepartmentPage from '@/pages/AddDepartmentPage';
 import AddFacultyPage from '@/pages/AddFacultyPage';
 import ClaimSubmitPage from '@/pages/ClaimSubmitPage';
 import ClaimDecisionPage from '@/pages/ClaimDecisionPage';
-import PlatformConsolePage from '@/pages/PlatformConsolePage';
+// Legacy console kept on disk as a backup; the active console is the new command-room build.
+import PlatformConsole from '@/pages/PlatformConsole';
 import ForgotPasswordPage from '@/pages/student/ForgotPasswordPage';
 import ResetPasswordPage from '@/pages/student/ResetPasswordPage';
 
@@ -98,7 +99,7 @@ function App() {
               <Route path="/join-org" element={<Navigate to="/bring-school" replace />} />
 
               {/* Platform console (hidden, not linked in navigation) */}
-              <Route path="/pvx-console" element={<PlatformConsolePage />} />
+              <Route path="/pvx-console" element={<PlatformConsole />} />
 
               {/* Org-scoped login */}
               <Route path="/:orgSlug/overview" element={<OrgOverviewPage />} />
@@ -164,7 +165,7 @@ function App() {
                 <Route path="admin/contributions" element={<OrgProtectedRoute requiredPermission="can_approve_payments" requireVerified><PublicContributionsPage /></OrgProtectedRoute>} />
                 <Route path="admin/donation-settings" element={<OrgProtectedRoute requiredPermission="can_approve_payments" requireVerified><DonationSettingsPage /></OrgProtectedRoute>} />
                 <Route path="admin/billing" element={<OrgProtectedRoute requireAdmin requireVerified><BillingPage /></OrgProtectedRoute>} />
-                <Route path="admin/payout" element={<OrgProtectedRoute requiredPermission="can_manage_settings requireVerified"><PayoutSetupPage /></OrgProtectedRoute>} />
+                <Route path="admin/payout" element={<OrgProtectedRoute requiredPermission="can_manage_settings" requireVerified><PayoutSetupPage /></OrgProtectedRoute>} />
               </Route>
 
               {/* ============================================ */}

@@ -560,6 +560,30 @@ export const organizationService = {
     return (data ?? { ok: false, error: 'Empty response' }) as { ok: boolean; error?: string };
   },
 
+  // Graduated-trust status for the claimant's own claim (runs the decision
+  // tree lazily server-side, so the 72h escalation + auto-grant happen on read).
+  async getClaimStatus(claimId: string): Promise<Record<string, unknown> & { ok: boolean; error?: string }> {
+    const { data, error } = await supabase.rpc('get_claim_status', { p_claim_id: claimId });
+    if (error) {
+      console.error('getClaimStatus RPC error', error);
+      return { ok: false, error: error.message };
+    }
+    return (data ?? { ok: false, error: 'Empty response' }) as Record<string, unknown> & { ok: boolean; error?: string };
+  },
+
+  // Path D — claimant asks for a platform review after 7 days stuck.
+  async requestPlatformReview(input: { claimId: string; callerMemberId: string }): Promise<{ ok: boolean; error?: string }> {
+    const { data, error } = await supabase.rpc('request_platform_review', {
+      p_claim_id: input.claimId,
+      p_caller_member_id: input.callerMemberId,
+    });
+    if (error) {
+      console.error('requestPlatformReview RPC error', error);
+      return { ok: false, error: error.message };
+    }
+    return (data ?? { ok: false, error: 'Empty response' }) as { ok: boolean; error?: string };
+  },
+
   // Claims that require a parent exec decision.
   async listPendingConfirmationsForExec(callerMemberId: string): Promise<Array<{
     id: string;

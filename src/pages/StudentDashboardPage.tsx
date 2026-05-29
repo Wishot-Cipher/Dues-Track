@@ -44,6 +44,7 @@ import { formatCurrency, formatDate } from '@/utils/formatters';
 import type { Payment, PaymentType, PaymentStats } from '@/types';
 import VerificationStatusBanner from '@/components/claims/VerificationStatusBanner';
 import VoteUrgencyBanner from '@/components/claims/VoteUrgencyBanner';
+import MyClaimStatus from '@/components/claims/MyClaimStatus';
 // ── Phase-2 dashboard redesign (matches the polished mockup) ──
 // Theme system + decorative page background + hero + the new
 // quick-actions / due-next / promo surfaces. The legacy BentoGrid
@@ -305,6 +306,11 @@ export default function StudentDashboardPage() {
             <ChevronRight className="w-4 h-4 shrink-0" style={{ color: '#FF6803' }} />
           </button>
         )}
+
+        {/* ───────────── MY CLAIM STATUS ─────────────
+            Graduated-trust progress for the claimant's own pending claim
+            (path, vote progress, 72h window, platform-review escape valve). */}
+        <MyClaimStatus />
 
         {/* ───────────── VOTE URGENCY BANNER ─────────────
             Compact at-a-glance banner that hides itself when there's

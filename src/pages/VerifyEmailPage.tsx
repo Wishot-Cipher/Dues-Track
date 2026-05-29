@@ -48,12 +48,7 @@ export default function VerifyEmailPage() {
     if (!res.ok) { toast?.error?.(res.error || 'Could not send the code.'); return; }
     setSentTo(res.sentTo || e);
     setStep('code');
-    if (res.devCode) {
-      setCode(res.devCode);
-      toast?.info?.(`Dev mode: code is ${res.devCode}`);
-    } else {
-      toast?.success?.('Code sent — check your email.');
-    }
+    toast?.success?.('Code sent — check your email.');
   };
 
   const confirmCode = async () => {
