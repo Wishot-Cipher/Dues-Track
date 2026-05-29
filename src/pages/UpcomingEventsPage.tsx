@@ -4,8 +4,6 @@ import { motion, AnimatePresence } from 'framer-motion';
 import {
   ArrowLeft,
   CalendarDays,
-  Loader2,
-  MapPin,
   Search,
   Ticket as TicketIcon,
   SlidersHorizontal,

@@ -180,7 +180,7 @@ export default function StudentDashboardPage() {
   }, [paymentTypes, payments]);
 
   const duesOnly = useMemo(
-    () => enriched.filter((e) => e.category !== 'event'),
+    () => enriched.filter((e) => (String(e.category ?? '').toLowerCase()) !== 'event'),
     [enriched]
   );
 

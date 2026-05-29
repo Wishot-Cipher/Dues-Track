@@ -176,7 +176,8 @@ export default function MakePaymentPage() {
     [myPayments],
   );
   const isEvent     = (pt?.category || '').toLowerCase() === 'event';
-  const eventEnded  = isEvent && Boolean(pt?.event_date) && new Date(pt.event_date as string).getTime() < Date.now();
+  const eventDate   = pt?.event_date ?? null;
+  const eventEnded  = isEvent && Boolean(eventDate) && new Date(eventDate).getTime() < Date.now();
   const selectedTier = useMemo(() => tiers.find(t => t.id === selectedTierId) || null, [tiers, selectedTierId]);
   const tierSoldOut = (t: TierRow) => t.quantity != null && t.sold_count >= t.quantity;
   const eventSoldOut = tiers.length > 0 && tiers.every(tierSoldOut);

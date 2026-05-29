@@ -149,11 +149,6 @@ export default function ManageDuesPage() {
   const [searchTerm, setSearchTerm] = useState('')
   const [filterStatus, setFilterStatus] = useState<'all' | 'active' | 'inactive'>('all')
   const [filterCategory, setFilterCategory] = useState<string>('all')
-  const publicEventLink = useMemo(() => {
-    if (!orgSlug || !editingPaymentType?.id) return ''
-    if (editingPaymentType.category !== 'event' || !editingPaymentType.is_public) return ''
-    return `${window.location.origin}/${orgSlug}/events/${editingPaymentType.id}`
-  }, [editingPaymentType, orgSlug])
   
   // Modals
   const [showEditModal, setShowEditModal] = useState(false)
@@ -162,6 +157,12 @@ export default function ManageDuesPage() {
   const [showEditConfirm, setShowEditConfirm] = useState(false)
   const [editingPaymentType, setEditingPaymentType] = useState<EditPaymentTypeForm | null>(null)
   const [selectedPaymentType, setSelectedPaymentType] = useState<PaymentType | null>(null)
+
+  const publicEventLink = useMemo(() => {
+    if (!orgSlug || !editingPaymentType?.id) return ''
+    if (editingPaymentType.category !== 'event' || !editingPaymentType.is_public) return ''
+    return `${window.location.origin}/${orgSlug}/events/${editingPaymentType.id}`
+  }, [editingPaymentType, orgSlug])
   
   // Stats
   const [stats, setStats] = useState({
