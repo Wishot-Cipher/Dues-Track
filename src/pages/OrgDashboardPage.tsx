@@ -4,7 +4,7 @@
  * Professional summary with progress ring, stats, quick actions, activity feed
  */
 
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect } from 'react';
 import type { Dispatch, SetStateAction } from 'react';
 import { motion } from 'framer-motion';
 import {
@@ -23,8 +23,6 @@ import {
   ChevronRight,
   ChevronsRight,
   Calendar,
-  Sparkles,
-  TrendingUp,
   Flame,
 } from 'lucide-react';
 import { colors } from '@/config/colors';
@@ -285,11 +283,23 @@ function UnpaidDuesList({ organization, user, unpaidPage, unpaidPerPage, setUnpa
             {pageItems.map((it) => {
               const isDismissed = dismissedIds.includes(String(it.paymentType.id));
               const isOptional = !it.paymentType.is_mandatory;
+              const days = daysUntil(it.paymentType.deadline ?? null);
+              const badge = deadlineBadge(days, tk);
               return (
               <div key={it.paymentType.id} className="p-3 rounded-xl bg-white/3 flex items-start justify-between">
                 <div className="min-w-0">
                   <p className="font-semibold text-white text-sm truncate">{it.paymentType.title}</p>
-                  <p className="text-xs mt-1" style={{ color: colors.textTertiary }}>{it.paymentType.category || '—'}</p>
+                  <div className="flex items-center gap-2 mt-1 flex-wrap">
+                    <p className="text-xs" style={{ color: colors.textTertiary }}>{it.paymentType.category || '—'}</p>
+                    {badge && (
+                      <span
+                        className="inline-flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-full"
+                        style={{ color: badge.color, background: `${badge.color}1a`, border: `1px solid ${badge.color}35` }}
+                      >
+                        {badge.icon}{badge.label}
+                      </span>
+                    )}
+                  </div>
                 </div>
                 <div className="text-right">
                   <p className="font-bold text-white">{organization?.currency_symbol || '₦'}{Number(it.remaining).toLocaleString('en-NG')}</p>
@@ -398,6 +408,7 @@ export default function OrgDashboardPage() {
   const { orgSlug } = useParams<{ orgSlug: string }>();
   const { user, organization, group, isAnyAdmin } = useMultiTenantAuth();
   const navigate = useNavigate();
+  const tk = useThemeTokens();
   const [stats, setStats] = useState<DashboardStats>({ totalDue: 0, totalPaid: 0, pendingCount: 0, approvedCount: 0, totalPaymentTypes: 0 });
   const [recentPayments, setRecentPayments] = useState<Array<Record<string, unknown>>>([]);
   const [loading, setLoading] = useState(true);
@@ -516,7 +527,7 @@ export default function OrgDashboardPage() {
                   </div>
                 ) : (
                   <>
-                    <ProgressRing progress={progressPercent} />
+                    <ProgressRing progress={progressPercent} tk={tk} />
                     <div className="absolute inset-0 flex flex-col items-center justify-center">
                       <span className="text-2xl font-bold text-white">{progressPercent}%</span>
                       <span className="text-[10px] uppercase tracking-wider" style={{ color: colors.textTertiary }}>
@@ -657,6 +668,7 @@ export default function OrgDashboardPage() {
               unpaidPage={unpaidPage}
               unpaidPerPage={unpaidPerPage}
               setUnpaidPage={setUnpaidPage}
+              tk={tk}
             />
           </div>
         </GlassCard>

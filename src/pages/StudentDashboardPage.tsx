@@ -45,7 +45,6 @@ import type { Payment, PaymentType, PaymentStats } from '@/types';
 import VerificationStatusBanner from '@/components/claims/VerificationStatusBanner';
 import VoteUrgencyBanner from '@/components/claims/VoteUrgencyBanner';
 import MyClaimStatus from '@/components/claims/MyClaimStatus';
-import VerificationPanel from '@/components/claims/VerificationPanel';
 // ── Phase-2 dashboard redesign (matches the polished mockup) ──
 // Theme system + decorative page background + hero + the new
 // quick-actions / due-next / promo surfaces. The legacy BentoGrid
