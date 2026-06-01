@@ -15,6 +15,7 @@ import {
   Network,
 } from 'lucide-react';
 import { useMultiTenantAuth } from '@/hooks/useMultiTenantAuth';
+import { supabase } from '@/config/supabase';
 import organizationService from '@/services/organizationService';
 import type { OrganizationGroup, GroupKind } from '@/types/multiTenant';
 import PageWrapper from '@/components/ui/PageWrapper';
@@ -259,8 +260,37 @@ function SInput({ value, onChange, placeholder, type = 'text', maxLength }: {
 }
 
 // ── Main page ────────────────────────────────────────────────────────────────
+// ── Orphan / misplaced group cleanup ──────────────────────────────────────
+//   Drives the panel that fixes the state left over before migration 079
+//   (e.g. a "CVE" group that's a sibling of its faculty instead of a child,
+//   or a class with no department parent). Calls the find / reparent / merge
+//   / delete RPCs from mig 079.
+
+interface Orphan {
+  id: string;
+  name: string;
+  short_name: string;
+  kind: string;
+  parent_group_id: string | null;
+  parent_kind: string | null;
+  parent_name: string | null;
+  member_count: number;
+  issue:
+    | 'department_orphan' | 'department_wrong_parent'
+    | 'class_orphan' | 'class_wrong_parent'
+    | 'faculty_has_parent';
+}
+
+const ISSUE_LABEL: Record<Orphan['issue'], string> = {
+  department_orphan:       'Department has no faculty',
+  department_wrong_parent: 'Department under the wrong kind of parent',
+  class_orphan:            'Class has no department',
+  class_wrong_parent:      'Class under the wrong kind of parent',
+  faculty_has_parent:      'Faculty should be top-level',
+};
+
 export default function OrgGroupsPage() {
-  const { organization } = useMultiTenantAuth()
+  const { organization, user } = useMultiTenantAuth()
   const [groups, setGroups]         = useState<OrganizationGroup[]>([])
   const [loading, setLoading]       = useState(true)
   const [error, setError]           = useState('')
@@ -271,6 +301,17 @@ export default function OrgGroupsPage() {
   const [formError, setFormError]   = useState('')
   const [form, setForm]             = useState<GroupFormData>(DEFAULT_FORM)
   const [editTarget, setEditTarget] = useState<OrganizationGroup | null>(null)
+
+  // ── Orphan cleanup state ────────────────────────────────────────────────
+  const [orphans, setOrphans] = useState<Orphan[]>([])
+  const [orphansLoading, setOrphansLoading] = useState(true)
+  const [orphanBusy, setOrphanBusy] = useState<string | null>(null)
+  const [orphanAction, setOrphanAction] = useState<
+    | { kind: 'reparent' | 'merge' | 'delete'; target: Orphan }
+    | null
+  >(null)
+  const [orphanPickId, setOrphanPickId] = useState<string>('')
+  const [orphanError, setOrphanError] = useState<string>('')
 
   const isAcademicOrg    = organization?.organization_type === 'university' || organization?.organization_type === 'school'
   const classLabel       = (organization?.organization_type === 'university' || organization?.organization_type === 'school')
@@ -291,6 +332,78 @@ export default function OrgGroupsPage() {
   }, [organization])
 
   useEffect(() => { void fetchGroups() }, [fetchGroups])
+
+  // ── Orphan detection: pull every group that violates faculty→dept→class.
+  //    Academic orgs only — the RPC short-circuits for everything else.
+  const loadOrphans = useCallback(async () => {
+    if (!organization) { setOrphans([]); setOrphansLoading(false); return }
+    setOrphansLoading(true)
+    const { data } = await supabase.rpc('find_misplaced_groups', { p_org_id: organization.id })
+    if (data && (data as { ok?: boolean }).ok) {
+      setOrphans(((data as { orphans?: Orphan[] }).orphans) || [])
+    } else {
+      setOrphans([])
+    }
+    setOrphansLoading(false)
+  }, [organization])
+  useEffect(() => { void loadOrphans() }, [loadOrphans])
+
+  // ── Action runner — calls reparent / merge / delete RPCs. Refreshes both
+  //    the orphans list and the main groups list on success.
+  const runOrphanAction = async () => {
+    if (!orphanAction || !user?.id) return
+    setOrphanError('')
+    setOrphanBusy(orphanAction.target.id)
+    try {
+      if (orphanAction.kind === 'reparent') {
+        if (!orphanPickId) { setOrphanError('Pick a new parent.'); setOrphanBusy(null); return }
+        const { data } = await supabase.rpc('reparent_group', {
+          p_caller_member_id: user.id,
+          p_group_id:         orphanAction.target.id,
+          p_new_parent_id:    orphanPickId,
+        })
+        if (!data?.ok) { setOrphanError(data?.error || 'Could not move that group.'); setOrphanBusy(null); return }
+      } else if (orphanAction.kind === 'merge') {
+        if (!orphanPickId) { setOrphanError('Pick a target group to merge into.'); setOrphanBusy(null); return }
+        const { data } = await supabase.rpc('merge_groups', {
+          p_caller_member_id: user.id,
+          p_source_group_id:  orphanAction.target.id,
+          p_target_group_id:  orphanPickId,
+        })
+        if (!data?.ok) { setOrphanError(data?.error || 'Could not merge those groups.'); setOrphanBusy(null); return }
+      } else if (orphanAction.kind === 'delete') {
+        const { data } = await supabase.rpc('delete_empty_group', {
+          p_caller_member_id: user.id,
+          p_group_id:         orphanAction.target.id,
+        })
+        if (!data?.ok) { setOrphanError(data?.error || 'Could not delete that group.'); setOrphanBusy(null); return }
+      }
+      setOrphanAction(null); setOrphanPickId('')
+      await Promise.all([loadOrphans(), fetchGroups()])
+    } catch (e) {
+      setOrphanError(e instanceof Error ? e.message : 'Action failed.')
+    } finally {
+      setOrphanBusy(null)
+    }
+  }
+
+  // What groups can serve as a new parent for THIS orphan?
+  //   class  → list active departments
+  //   department → list active faculties/colleges
+  //   faculty (with parent) → must clear parent — handled by passing NULL
+  const validParentsFor = useCallback((orphan: Orphan): OrganizationGroup[] => {
+    const k = orphan.kind?.toLowerCase()
+    if (k === 'class' || k === 'level') return groups.filter(g => g.kind === 'department')
+    if (k === 'department') return groups.filter(g => g.kind === 'faculty' || g.kind === 'college')
+    return []
+  }, [groups])
+
+  // For merge: another group of the SAME kind that isn't itself an orphan
+  // (so we don't merge a broken group into another broken one).
+  const validMergeTargetsFor = useCallback((orphan: Orphan): OrganizationGroup[] => {
+    const orphanIds = new Set(orphans.map(o => o.id))
+    return groups.filter(g => g.kind === orphan.kind && g.id !== orphan.id && !orphanIds.has(g.id))
+  }, [groups, orphans])
 
   const facultyGroups = useMemo(() => groups.filter(g => g.kind === 'faculty'), [groups])
   const classGroups   = useMemo(() => groups.filter(g => g.kind !== 'faculty'), [groups])
@@ -410,6 +523,79 @@ export default function OrgGroupsPage() {
               </div>
             </div>
           </motion.div>
+
+          {/* ── ORPHANS / MISPLACED GROUPS ────────────────────────────────
+              Only renders when the academic-org rules turn up violations
+              (anything that breaks faculty → dept → class). Lets the admin
+              re-parent, merge, or delete each one without touching SQL. */}
+          {!orphansLoading && orphans.length > 0 && (
+            <motion.div {...fadeUp(0.04)}>
+              <div className="rounded-[24px] p-5 sm:p-6" style={{ background: `${tk.amber}10`, border: `1px solid ${tk.amber}40` }}>
+                <div className="flex items-start gap-3 mb-3">
+                  <div className="w-10 h-10 rounded-2xl shrink-0 flex items-center justify-center" style={{ background: `${tk.amber}20`, color: tk.amber }}>
+                    <AlertCircle className="w-5 h-5" />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <h3 className="text-white font-black text-base sm:text-lg leading-tight">
+                      {orphans.length} group{orphans.length === 1 ? '' : 's'} need attention
+                    </h3>
+                    <p className="text-xs leading-5 mt-1" style={{ color: tk.textSec }}>
+                      These break the faculty → department → class hierarchy. A class without a department won't receive dues from its dept; a department without a faculty is invisible to higher execs. Fix each one below.
+                    </p>
+                  </div>
+                </div>
+                <div className="space-y-2">
+                  {orphans.map((o) => {
+                    const isBusy = orphanBusy === o.id
+                    return (
+                      <div key={o.id} className="rounded-2xl p-3 sm:p-4 flex flex-col sm:flex-row sm:items-center gap-3" style={{ background: 'rgba(0,0,0,0.25)', border: `1px solid ${tk.cardBorder}` }}>
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <span className="font-bold text-white truncate">{o.name}</span>
+                            <span className="text-[10px] font-mono px-1.5 py-0.5 rounded-md" style={{ background: 'rgba(255,255,255,0.08)', color: tk.textSec }}>{o.short_name}</span>
+                            <KindPill kind={o.kind} />
+                          </div>
+                          <p className="text-[11px] mt-1" style={{ color: tk.amber }}>
+                            {ISSUE_LABEL[o.issue]}
+                            {o.parent_name && <> · currently under <span className="font-semibold">{o.parent_name}</span> ({o.parent_kind})</>}
+                            {o.member_count > 0 && <> · {o.member_count} {o.member_count === 1 ? 'member' : 'members'}</>}
+                          </p>
+                        </div>
+                        <div className="flex gap-2 shrink-0 flex-wrap">
+                          <button
+                            disabled={isBusy}
+                            onClick={() => { setOrphanAction({ kind: 'reparent', target: o }); setOrphanPickId(''); setOrphanError('') }}
+                            className="px-3 py-1.5 rounded-lg text-xs font-bold disabled:opacity-40"
+                            style={{ background: `${tk.primary}18`, color: tk.primary, border: `1px solid ${tk.primary}40` }}
+                          >
+                            Move into…
+                          </button>
+                          <button
+                            disabled={isBusy}
+                            onClick={() => { setOrphanAction({ kind: 'merge', target: o }); setOrphanPickId(''); setOrphanError('') }}
+                            className="px-3 py-1.5 rounded-lg text-xs font-bold disabled:opacity-40"
+                            style={{ background: `${tk.blue}18`, color: tk.blue, border: `1px solid ${tk.blue}40` }}
+                          >
+                            Merge into…
+                          </button>
+                          {o.member_count === 0 && (
+                            <button
+                              disabled={isBusy}
+                              onClick={() => { setOrphanAction({ kind: 'delete', target: o }); setOrphanError('') }}
+                              className="px-3 py-1.5 rounded-lg text-xs font-bold disabled:opacity-40"
+                              style={{ background: 'rgba(239,68,68,0.15)', color: '#ef4444', border: '1px solid rgba(239,68,68,0.35)' }}
+                            >
+                              Delete
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    )
+                  })}
+                </div>
+              </div>
+            </motion.div>
+          )}
 
           {/* ── STATS ── */}
           <div className="grid grid-cols-3 gap-4">
@@ -584,6 +770,98 @@ export default function OrgGroupsPage() {
             {editTarget ? 'Save Changes' : `Create ${isAcademicOrg ? classLabel : groupLabel}`}
           </motion.button>
         </div>
+      </Modal>
+
+      {/* ── Orphan action modal: reparent / merge / delete ─────────────── */}
+      <Modal
+        isOpen={!!orphanAction}
+        onClose={() => { if (!orphanBusy) { setOrphanAction(null); setOrphanPickId(''); setOrphanError('') } }}
+        title={
+          !orphanAction ? '' :
+          orphanAction.kind === 'reparent' ? `Move "${orphanAction.target.name}" under…` :
+          orphanAction.kind === 'merge'    ? `Merge "${orphanAction.target.name}" into…` :
+                                              `Delete "${orphanAction.target.name}"?`
+        }
+        size="md"
+      >
+        {orphanAction && (
+          <div className="space-y-4">
+            <p className="text-sm leading-6" style={{ color: tk.textSec }}>
+              {orphanAction.kind === 'reparent' && 'Pick the correct parent. The DB will check the kind matches the hierarchy.'}
+              {orphanAction.kind === 'merge'    && `Members, admins, payment types and child groups move into the target. "${orphanAction.target.name}" is deleted afterwards.`}
+              {orphanAction.kind === 'delete'   && 'This permanently deletes the group. Only allowed if it has no members and no child groups.'}
+            </p>
+
+            {/* Picker (reparent / merge) */}
+            {orphanAction.kind !== 'delete' && (() => {
+              const options = orphanAction.kind === 'reparent'
+                ? validParentsFor(orphanAction.target)
+                : validMergeTargetsFor(orphanAction.target)
+              if (options.length === 0) {
+                return (
+                  <div className="p-3 rounded-xl text-xs leading-5" style={{ background: 'rgba(245,158,11,0.10)', border: `1px solid ${tk.amber}40`, color: tk.amber }}>
+                    {orphanAction.kind === 'reparent'
+                      ? `No valid parents exist yet. Create a ${orphanAction.target.kind === 'class' || orphanAction.target.kind === 'level' ? 'department' : 'faculty'} first, then come back.`
+                      : 'No matching group of the same kind to merge into.'}
+                  </div>
+                )
+              }
+              return (
+                <div>
+                  <FL required>{orphanAction.kind === 'reparent' ? 'New parent' : 'Merge target'}</FL>
+                  <select
+                    value={orphanPickId}
+                    onChange={(e) => setOrphanPickId(e.target.value)}
+                    className="w-full px-4 py-3 rounded-xl text-white text-sm outline-none"
+                    style={{ background: tk.inputBg, border: `1px solid ${tk.inputBor}` }}
+                  >
+                    <option value="">— Pick one —</option>
+                    {options.map(g => (
+                      <option key={g.id} value={g.id}>
+                        {g.name} {g.short_name ? `(${g.short_name})` : ''} · {g.kind}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )
+            })()}
+
+            {orphanError && (
+              <div className="p-3 rounded-xl text-xs leading-5" style={{ background: 'rgba(239,68,68,0.10)', border: '1px solid rgba(239,68,68,0.40)', color: '#ef4444' }}>
+                {orphanError}
+              </div>
+            )}
+
+            <div className="flex justify-end gap-2 pt-1">
+              <button
+                onClick={() => { if (!orphanBusy) { setOrphanAction(null); setOrphanPickId(''); setOrphanError('') } }}
+                disabled={!!orphanBusy}
+                className="px-4 py-2.5 rounded-xl text-sm font-bold"
+                style={{ background: 'rgba(255,255,255,0.05)', color: tk.textSec, border: `1px solid ${tk.cardBorder}` }}
+              >
+                Cancel
+              </button>
+              <motion.button
+                whileTap={{ scale: 0.97 }}
+                onClick={runOrphanAction}
+                disabled={!!orphanBusy}
+                className="px-5 py-2.5 rounded-xl text-sm font-bold text-white disabled:opacity-60"
+                style={{
+                  background:
+                    orphanAction.kind === 'delete' ? 'linear-gradient(135deg, #ef4444, #b91c1c)'
+                    : orphanAction.kind === 'merge' ? `linear-gradient(135deg, ${tk.blue}, #1d4ed8)`
+                    : `linear-gradient(135deg, ${tk.primary}, #c2410c)`,
+                }}
+              >
+                {orphanBusy
+                  ? 'Working…'
+                  : orphanAction.kind === 'delete'   ? 'Delete group'
+                  : orphanAction.kind === 'merge'    ? 'Merge'
+                  :                                    'Move it'}
+              </motion.button>
+            </div>
+          </div>
+        )}
       </Modal>
     </div>
   )

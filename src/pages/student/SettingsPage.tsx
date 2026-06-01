@@ -19,7 +19,8 @@ import {
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useAppNav } from '@/hooks/useAppNav';
-import { colors, gradients } from '@/config/colors';
+import { gradients } from '@/config/colors';
+import { useThemeTokens, type ThemeTokens } from '@/hooks/useThemeTokens';
 import { useAuth } from '@/hooks/useAppAuth';
 import { useMultiTenantAuth } from '@/hooks/useMultiTenantAuth';
 import { useSettings } from '@/contexts/SettingsContext';
@@ -54,19 +55,23 @@ interface SettingItem {
   onClick?: () => void;
 }
 
-// Glass style constant
-const glassStyle = {
-  background: 'rgba(255, 255, 255, 0.03)',
-  backdropFilter: 'blur(10px)',
-  border: '1px solid rgba(255, 255, 255, 0.1)',
-};
+// Themed glass style — derived from the live theme so light + dark both work.
+function glassFor(t: ThemeTokens): React.CSSProperties {
+  return {
+    background: t.card,
+    backdropFilter: 'blur(10px)',
+    border: `1px solid ${t.cardBorder}`,
+  };
+}
 
 // Settings Skeleton Component
 function SettingsSkeleton() {
+  const t = useThemeTokens();
+  const glass = glassFor(t);
   return (
     <div className="space-y-6">
       {[1, 2, 3].map((section) => (
-        <div key={section} className="rounded-2xl p-5" style={glassStyle}>
+        <div key={section} className="rounded-2xl p-5" style={glass}>
           <div className="flex items-center gap-3 mb-4">
             <Skeleton variant="circular" width="40px" height="40px" />
             <div className="flex-1">
@@ -76,7 +81,7 @@ function SettingsSkeleton() {
           </div>
           <div className="space-y-3">
             {[1, 2, 3].map((item) => (
-              <div key={item} className="flex items-center justify-between p-3 rounded-xl" style={{ background: 'rgba(255, 255, 255, 0.02)' }}>
+              <div key={item} className="flex items-center justify-between p-3 rounded-xl" style={{ background: t.overlay }}>
                 <div className="flex-1">
                   <Skeleton variant="text" width="100px" height="1rem" className="mb-1" />
                   <Skeleton variant="text" width="150px" height="0.75rem" />
@@ -92,21 +97,22 @@ function SettingsSkeleton() {
 }
 
 // Toggle Switch Component
-function ToggleSwitch({ 
-  enabled, 
-  onChange, 
-  disabled = false 
-}: { 
-  enabled: boolean; 
+function ToggleSwitch({
+  enabled,
+  onChange,
+  disabled = false,
+}: {
+  enabled: boolean;
   onChange: (value: boolean) => void;
   disabled?: boolean;
 }) {
+  const t = useThemeTokens();
   return (
     <motion.button
       onClick={() => !disabled && onChange(!enabled)}
       className={`relative w-12 h-7 rounded-full transition-colors duration-300 ${disabled ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}
       style={{ 
-        background: enabled ? gradients.primary : 'rgba(255, 255, 255, 0.1)',
+        background: enabled ? gradients.primary : t.cardBorder,
         boxShadow: enabled ? '0 0 20px rgba(255, 107, 53, 0.3)' : 'none'
       }}
       whileHover={!disabled ? { scale: 1.05 } : {}}
@@ -123,6 +129,7 @@ function ToggleSwitch({
 
 // Setting Item Component
 function SettingItemRow({ item }: { item: SettingItem }) {
+  const t = useThemeTokens();
   const [localValue, setLocalValue] = useState(item.value);
 
   useEffect(() => {
@@ -137,13 +144,13 @@ function SettingItemRow({ item }: { item: SettingItem }) {
   return (
     <motion.div
       className={`flex items-center justify-between p-3.5 rounded-xl transition-all duration-200 ${item.disabled ? 'opacity-60' : ''}`}
-      style={{ background: 'rgba(255, 255, 255, 0.02)' }}
-      whileHover={!item.disabled ? { background: 'rgba(255, 255, 255, 0.05)' } : {}}
+      style={{ background: t.overlay }}
+      whileHover={!item.disabled ? { background: t.cardHover } : {}}
     >
       <div className="flex-1 mr-4">
-        <p className="text-sm font-medium text-white">{item.label}</p>
+        <p className="text-sm font-medium">{item.label}</p>
         {item.description && (
-          <p className="text-xs mt-0.5" style={{ color: colors.textSecondary }}>
+          <p className="text-xs mt-0.5" style={{ color: t.textSec }}>
             {item.description}
           </p>
         )}
@@ -162,7 +169,7 @@ function SettingItemRow({ item }: { item: SettingItem }) {
           onClick={item.onClick}
           className="flex items-center gap-1 px-3 py-1.5 rounded-lg text-sm font-medium transition-all"
           style={{ 
-            color: colors.primary,
+            color: t.primary,
             background: 'rgba(255, 107, 53, 0.1)'
           }}
           whileHover={{ background: 'rgba(255, 107, 53, 0.2)' }}
@@ -192,6 +199,7 @@ function SettingItemRow({ item }: { item: SettingItem }) {
 
 // Section Card Component
 function SettingSectionCard({ section, index }: { section: SettingSection; index: number }) {
+  const t = useThemeTokens();
   return (
     <motion.div
       initial={{ opacity: 0, y: 20 }}
@@ -203,13 +211,13 @@ function SettingSectionCard({ section, index }: { section: SettingSection; index
         <div className="flex items-center gap-3 mb-4">
           <div
             className="w-10 h-10 rounded-xl flex items-center justify-center"
-            style={{ background: `${colors.primary}15` }}
+            style={{ background: `${t.primary}15` }}
           >
             {section.icon}
           </div>
           <div>
-            <h3 className="font-semibold text-white">{section.title}</h3>
-            <p className="text-xs" style={{ color: colors.textSecondary }}>
+            <h3 className="font-semibold">{section.title}</h3>
+            <p className="text-xs" style={{ color: t.textSec }}>
               {section.description}
             </p>
           </div>
@@ -228,21 +236,22 @@ function SettingSectionCard({ section, index }: { section: SettingSection; index
 
 // Quick Actions Component
 function QuickActions({ onChangePassword, onTestSound }: { onChangePassword: () => void; onTestSound: () => void }) {
+  const t = useThemeTokens();
   const quickActions = [
     {
-      icon: <Key size={20} style={{ color: colors.primary }} />,
+      icon: <Key size={20} style={{ color: t.primary }} />,
       label: 'Change Password',
       description: 'Update your account password',
       onClick: onChangePassword,
     },
     {
-      icon: <User size={20} style={{ color: colors.accentMint }} />,
+      icon: <User size={20} style={{ color: t.mint }} />,
       label: 'Edit Profile',
       description: 'Update your personal info',
       onClick: () => window.location.href = '/profile',
     },
     {
-      icon: <Volume2 size={20} style={{ color: colors.accentPurple }} />,
+      icon: <Volume2 size={20} style={{ color: t.purple }} />,
       label: 'Test Sound',
       description: 'Play notification sound',
       onClick: onTestSound,
@@ -259,13 +268,13 @@ function QuickActions({ onChangePassword, onTestSound }: { onChangePassword: () 
         <div className="flex items-center gap-3 mb-4">
           <div
             className="w-10 h-10 rounded-xl flex items-center justify-center"
-            style={{ background: `${colors.accentPurple}15` }}
+            style={{ background: `${t.purple}15` }}
           >
-            <Zap size={20} style={{ color: colors.accentPurple }} />
+            <Zap size={20} style={{ color: t.purple }} />
           </div>
           <div>
-            <h3 className="font-semibold text-white">Quick Actions</h3>
-            <p className="text-xs" style={{ color: colors.textSecondary }}>
+            <h3 className="font-semibold">Quick Actions</h3>
+            <p className="text-xs" style={{ color: t.textSec }}>
               Frequently used settings
             </p>
           </div>
@@ -278,20 +287,20 @@ function QuickActions({ onChangePassword, onTestSound }: { onChangePassword: () 
               onClick={action.onClick}
               className="p-4 rounded-xl text-left transition-all"
               style={{ 
-                background: 'rgba(255, 255, 255, 0.02)',
-                border: '1px solid rgba(255, 255, 255, 0.05)'
+                background: t.overlay,
+                border: `1px solid ${t.divider}`
               }}
               whileHover={{ 
-                background: 'rgba(255, 255, 255, 0.05)',
+                background: t.cardHover,
                 borderColor: 'rgba(255, 107, 53, 0.3)'
               }}
               whileTap={{ scale: 0.98 }}
             >
-              <div className="w-10 h-10 rounded-xl flex items-center justify-center mb-3" style={{ background: 'rgba(255, 255, 255, 0.05)' }}>
+              <div className="w-10 h-10 rounded-xl flex items-center justify-center mb-3" style={{ background: t.cardHover }}>
                 {action.icon}
               </div>
-              <p className="text-sm font-medium text-white">{action.label}</p>
-              <p className="text-xs mt-0.5" style={{ color: colors.textSecondary }}>
+              <p className="text-sm font-medium">{action.label}</p>
+              <p className="text-xs mt-0.5" style={{ color: t.textSec }}>
                 {action.description}
               </p>
             </motion.button>
@@ -304,6 +313,7 @@ function QuickActions({ onChangePassword, onTestSound }: { onChangePassword: () 
 
 // App Info Component
 function AppInfo() {
+  const t = useThemeTokens();
   const tapCountRef = useRef(0);
   const tapTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const nav = useNavigate();
@@ -326,25 +336,25 @@ function AppInfo() {
       transition={{ delay: 0.5 }}
       className="mt-6"
     >
-      <div 
+      <div
         className="rounded-2xl p-5 text-center"
-        style={glassStyle}
+        style={glassFor(t)}
       >
         <div 
           className="w-16 h-16 mx-auto mb-3 rounded-2xl flex items-center justify-center"
           style={{ background: gradients.primary }}
         >
-          <span className="text-2xl font-bold text-white">PVX</span>
+          <span className="text-2xl font-bold">PVX</span>
         </div>
-        <h4 className="font-semibold text-white mb-1">Payvexo</h4>
+        <h4 className="font-semibold mb-1">Payvexo</h4>
         <p
           className="text-xs mb-3 cursor-default select-none"
-          style={{ color: colors.textSecondary }}
+          style={{ color: t.textSec }}
           onClick={handleVersionTap}
         >
           Version 2.0.0
         </p>
-        <div className="flex items-center justify-center gap-4 text-xs" style={{ color: colors.textSecondary }}>
+        <div className="flex items-center justify-center gap-4 text-xs" style={{ color: t.textSec }}>
           <span>© 2026 Payvexo</span>
           <span>•</span>
           <span>All Rights Reserved</span>
@@ -355,6 +365,7 @@ function AppInfo() {
 }
 
 export default function SettingsPage() {
+  const t = useThemeTokens();
   const { user } = useAuth();
   const { isAnyAdmin } = useMultiTenantAuth();
   const { settings, updateSetting, testNotificationSound } = useSettings();
@@ -431,7 +442,7 @@ export default function SettingsPage() {
       id: 'notifications',
       title: 'Notifications',
       description: 'Manage how you receive updates',
-      icon: <Bell size={20} style={{ color: colors.primary }} />,
+      icon: <Bell size={20} style={{ color: t.primary }} />,
       items: [
         {
           id: 'push',
@@ -463,7 +474,7 @@ export default function SettingsPage() {
       id: 'appearance',
       title: 'Appearance',
       description: 'Customize how the app looks',
-      icon: <Palette size={20} style={{ color: colors.accentMint }} />,
+      icon: <Palette size={20} style={{ color: t.mint }} />,
       items: [
         {
           id: 'compact',
@@ -495,7 +506,7 @@ export default function SettingsPage() {
       id: 'privacy',
       title: 'Privacy & Security',
       description: 'Control your data and privacy',
-      icon: <Shield size={20} style={{ color: colors.accentPurple }} />,
+      icon: <Shield size={20} style={{ color: t.purple }} />,
       items: [
         {
           id: 'activity',
@@ -517,7 +528,7 @@ export default function SettingsPage() {
   ];
 
   return (
-    <PageWrapper noPadding>
+    <PageWrapper noPadding style={{ background: t.bg, backgroundImage: t.bgWash, color: t.text }}>
       <div className="relative max-w-3xl mx-auto px-4 sm:px-6 lg:px-8 py-4 sm:py-6 lg:py-8">
         {/* Header */}
         <motion.div
@@ -530,18 +541,18 @@ export default function SettingsPage() {
               onClick={() => navigate('/dashboard')}
               className="flex items-center justify-center px-3 py-2 rounded-lg transition-all duration-300"
               style={{ 
-                color: colors.textSecondary,
-                outline: `1px solid ${colors.primary}`,
+                color: t.textSec,
+                outline: `1px solid ${t.primary}`,
                 background: 'rgba(255, 107, 53, 0.1)'
               }}
               whileHover={{ scale: 1.05, background: 'rgba(255, 107, 53, 0.2)' }}
               whileTap={{ scale: 0.95 }}
             >
-              <ArrowLeft size={20} style={{ color: colors.primary }} />
+              <ArrowLeft size={20} style={{ color: t.primary }} />
             </motion.button>
             <div>
-              <h1 className="text-2xl sm:text-3xl font-bold text-white">Settings</h1>
-              <p className="text-sm" style={{ color: colors.textSecondary }}>
+              <h1 className="text-2xl sm:text-3xl font-bold">Settings</h1>
+              <p className="text-sm" style={{ color: t.textSec }}>
                 Customize your app experience
               </p>
             </div>
@@ -565,8 +576,8 @@ export default function SettingsPage() {
               {user?.full_name?.charAt(0).toUpperCase() || 'U'}
             </div>
             <div className="flex-1 min-w-0">
-              <p className="font-semibold text-white truncate">{user?.full_name || 'User'}</p>
-              <p className="text-sm truncate" style={{ color: colors.textSecondary }}>
+              <p className="font-semibold truncate">{user?.full_name || 'User'}</p>
+              <p className="text-sm truncate" style={{ color: t.textSec }}>
                 {user?.reg_number || 'Student'}
               </p>
             </div>
@@ -612,9 +623,9 @@ export default function SettingsPage() {
                 <div
                   className="rounded-2xl overflow-hidden"
                   style={{
-                    background: 'rgba(255, 255, 255, 0.03)',
+                    background: t.overlay,
                     backdropFilter: 'blur(12px)',
-                    border: '1px solid rgba(255, 255, 255, 0.08)',
+                    border: `1px solid ${t.cardBorder}`,
                   }}
                 >
                   {/* Top accent gradient line */}
@@ -626,11 +637,11 @@ export default function SettingsPage() {
                       className="w-10 h-10 rounded-xl flex items-center justify-center"
                       style={{ background: 'linear-gradient(135deg, rgba(255,107,53,0.12), rgba(139,92,246,0.08))' }}
                     >
-                      <ShieldCheck size={18} style={{ color: colors.primary }} />
+                      <ShieldCheck size={18} style={{ color: t.primary }} />
                     </div>
                     <div className="flex-1">
-                      <h3 className="text-sm font-semibold text-white">Admin Controls</h3>
-                      <p className="text-[11px] mt-0.5" style={{ color: colors.textSecondary }}>
+                      <h3 className="text-sm font-semibold">Admin Controls</h3>
+                      <p className="text-[11px] mt-0.5" style={{ color: t.textSec }}>
                         Manage features & visibility for members
                       </p>
                     </div>
@@ -644,31 +655,31 @@ export default function SettingsPage() {
 
                   {adminLoading ? (
                     <div className="p-8 flex items-center justify-center">
-                      <Loader2 size={20} className="animate-spin" style={{ color: colors.primary }} />
+                      <Loader2 size={20} className="animate-spin" style={{ color: t.primary }} />
                     </div>
                   ) : (
                     <div className="px-4 pb-4 flex flex-col gap-2">
                       {/* ── Member Features (collapsible) ── */}
                       <div
                         className="rounded-xl overflow-hidden"
-                        style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.04)' }}
+                        style={{ background: t.overlay, border: `1px solid ${t.divider}` }}
                       >
                         <button
                           type="button"
                           onClick={() => setAdminOpen(p => ({ ...p, features: !p.features }))}
                           className="w-full px-4 py-2.5 flex items-center gap-2 transition-colors hover:bg-white/2"
                         >
-                          <div className="w-6 h-6 rounded-lg flex items-center justify-center" style={{ background: `${colors.primary}12` }}>
-                            <Sliders size={12} style={{ color: colors.primary }} />
+                          <div className="w-6 h-6 rounded-lg flex items-center justify-center" style={{ background: `${t.primary}12` }}>
+                            <Sliders size={12} style={{ color: t.primary }} />
                           </div>
-                          <span className="text-xs font-semibold text-white">Member Features</span>
-                          <span className="text-[10px] px-1.5 py-0.5 rounded-md ml-auto" style={{ background: 'rgba(255,107,53,0.08)', color: colors.primary }}>
+                          <span className="text-xs font-semibold">Member Features</span>
+                          <span className="text-[10px] px-1.5 py-0.5 rounded-md ml-auto" style={{ background: 'rgba(255,107,53,0.08)', color: t.primary }}>
                             {featureSettings.filter(f => f.is_enabled).length}/{featureSettings.length}
                           </span>
                           <ChevronDown
                             size={14}
                             className="transition-transform duration-200"
-                            style={{ color: colors.textSecondary, transform: adminOpen.features ? 'rotate(180deg)' : 'rotate(0deg)' }}
+                            style={{ color: t.textSec, transform: adminOpen.features ? 'rotate(180deg)' : 'rotate(0deg)' }}
                           />
                         </button>
                         <AnimatePresence initial={false}>
@@ -680,13 +691,13 @@ export default function SettingsPage() {
                               transition={{ duration: 0.2, ease: 'easeInOut' }}
                               className="overflow-hidden"
                             >
-                              <div style={{ borderTop: '1px solid rgba(255,255,255,0.04)' }}>
+                              <div style={{ borderTop: `1px solid ${t.divider}` }}>
                                 {featureSettings.map((feature) => (
-                                  <div key={feature.feature_key} className="px-4 py-2.5 flex items-center justify-between gap-3" style={{ borderBottom: '1px solid rgba(255,255,255,0.03)' }}>
+                                  <div key={feature.feature_key} className="px-4 py-2.5 flex items-center justify-between gap-3" style={{ borderBottom: `1px solid ${t.divider}` }}>
                                     <div className="flex-1 min-w-0">
-                                      <p className="text-[13px] font-medium text-white">{feature.display_name}</p>
+                                      <p className="text-[13px] font-medium">{feature.display_name}</p>
                                       {feature.description && (
-                                        <p className="text-[11px] mt-0.5" style={{ color: colors.textTertiary }}>{feature.description}</p>
+                                        <p className="text-[11px] mt-0.5" style={{ color: t.textTer }}>{feature.description}</p>
                                       )}
                                     </div>
                                     <ToggleSwitch
@@ -705,24 +716,24 @@ export default function SettingsPage() {
                       {/* ── Expense Visibility (collapsible) ── */}
                       <div
                         className="rounded-xl overflow-hidden"
-                        style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.04)' }}
+                        style={{ background: t.overlay, border: `1px solid ${t.divider}` }}
                       >
                         <button
                           type="button"
                           onClick={() => setAdminOpen(p => ({ ...p, visibility: !p.visibility }))}
                           className="w-full px-4 py-2.5 flex items-center gap-2 transition-colors hover:bg-white/2"
                         >
-                          <div className="w-6 h-6 rounded-lg flex items-center justify-center" style={{ background: `${colors.accentMint}12` }}>
-                            <Eye size={12} style={{ color: colors.accentMint }} />
+                          <div className="w-6 h-6 rounded-lg flex items-center justify-center" style={{ background: `${t.mint}12` }}>
+                            <Eye size={12} style={{ color: t.mint }} />
                           </div>
-                          <span className="text-xs font-semibold text-white">Expense Visibility</span>
-                          <span className="text-[10px] px-1.5 py-0.5 rounded-md ml-auto" style={{ background: 'rgba(34,197,94,0.08)', color: colors.accentMint }}>
+                          <span className="text-xs font-semibold">Expense Visibility</span>
+                          <span className="text-[10px] px-1.5 py-0.5 rounded-md ml-auto" style={{ background: 'rgba(34,197,94,0.08)', color: t.mint }}>
                             {visibilitySettings.filter(v => v.is_visible).length}/{visibilitySettings.length}
                           </span>
                           <ChevronDown
                             size={14}
                             className="transition-transform duration-200"
-                            style={{ color: colors.textSecondary, transform: adminOpen.visibility ? 'rotate(180deg)' : 'rotate(0deg)' }}
+                            style={{ color: t.textSec, transform: adminOpen.visibility ? 'rotate(180deg)' : 'rotate(0deg)' }}
                           />
                         </button>
                         <AnimatePresence initial={false}>
@@ -734,13 +745,13 @@ export default function SettingsPage() {
                               transition={{ duration: 0.2, ease: 'easeInOut' }}
                               className="overflow-hidden"
                             >
-                              <div style={{ borderTop: '1px solid rgba(255,255,255,0.04)' }}>
+                              <div style={{ borderTop: `1px solid ${t.divider}` }}>
                                 {visibilitySettings.map((setting) => (
-                                  <div key={setting.setting_key} className="px-4 py-2.5 flex items-center justify-between gap-3" style={{ borderBottom: '1px solid rgba(255,255,255,0.03)' }}>
+                                  <div key={setting.setting_key} className="px-4 py-2.5 flex items-center justify-between gap-3" style={{ borderBottom: `1px solid ${t.divider}` }}>
                                     <div className="flex-1 min-w-0">
-                                      <p className="text-[13px] font-medium text-white">{setting.display_name}</p>
+                                      <p className="text-[13px] font-medium">{setting.display_name}</p>
                                       {setting.description && (
-                                        <p className="text-[11px] mt-0.5" style={{ color: colors.textTertiary }}>{setting.description}</p>
+                                        <p className="text-[11px] mt-0.5" style={{ color: t.textTer }}>{setting.description}</p>
                                       )}
                                     </div>
                                     <ToggleSwitch

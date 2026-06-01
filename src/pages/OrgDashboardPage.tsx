@@ -4,7 +4,7 @@
  * Professional summary with progress ring, stats, quick actions, activity feed
  */
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import type { Dispatch, SetStateAction } from 'react';
 import { motion } from 'framer-motion';
 import {
@@ -22,12 +22,17 @@ import {
   ChevronLeft,
   ChevronRight,
   ChevronsRight,
+  Calendar,
+  Sparkles,
+  TrendingUp,
+  Flame,
 } from 'lucide-react';
 import { colors } from '@/config/colors';
 import { useMultiTenantAuth } from '@/hooks/useMultiTenantAuth';
 import { useNavigate, useParams } from 'react-router-dom';
 import { supabase } from '@/config/supabase';
 import GlassCard from '@/components/ui/GlassCard';
+import { useThemeTokens, type ThemeTokens } from '@/hooks/useThemeTokens';
 
 interface DashboardStats {
   totalDue: number;
@@ -79,20 +84,29 @@ type UnpaidItem = {
   amountPaid: number;
 };
 
-// Progress Ring SVG component
-function ProgressRing({ progress, size = 120, strokeWidth = 8 }: { progress: number; size?: number; strokeWidth?: number }) {
+// Progress Ring SVG — theme-aware
+function ProgressRing({
+  progress, size = 132, strokeWidth = 10, tk,
+}: { progress: number; size?: number; strokeWidth?: number; tk: ThemeTokens }) {
   const radius = (size - strokeWidth) / 2;
   const circumference = radius * 2 * Math.PI;
   const offset = circumference - (progress / 100) * circumference;
-  const progressColor = progress >= 100 ? colors.success : progress >= 50 ? colors.primary : colors.warning;
+  const progressColor = progress >= 100 ? tk.mint : progress >= 50 ? tk.primary : tk.amber;
+  const trackColor = tk.isLight ? 'rgba(15,7,3,0.07)' : 'rgba(255,255,255,0.07)';
 
   return (
     <svg width={size} height={size} className="transform -rotate-90">
+      <defs>
+        <linearGradient id="ring-grad" x1="0%" y1="0%" x2="100%" y2="100%">
+          <stop offset="0%" stopColor={progressColor} stopOpacity="0.95" />
+          <stop offset="100%" stopColor={progressColor} stopOpacity="0.65" />
+        </linearGradient>
+      </defs>
       <circle
         cx={size / 2}
         cy={size / 2}
         r={radius}
-        stroke="rgba(255,255,255,0.06)"
+        stroke={trackColor}
         strokeWidth={strokeWidth}
         fill="none"
       />
@@ -100,7 +114,7 @@ function ProgressRing({ progress, size = 120, strokeWidth = 8 }: { progress: num
         cx={size / 2}
         cy={size / 2}
         r={radius}
-        stroke={progressColor}
+        stroke="url(#ring-grad)"
         strokeWidth={strokeWidth}
         fill="none"
         strokeLinecap="round"
@@ -108,18 +122,42 @@ function ProgressRing({ progress, size = 120, strokeWidth = 8 }: { progress: num
         initial={{ strokeDashoffset: circumference }}
         animate={{ strokeDashoffset: offset }}
         transition={{ duration: 1.2, ease: 'easeOut' }}
+        style={{ filter: `drop-shadow(0 0 8px ${progressColor}55)` }}
       />
     </svg>
   );
 }
 
+/**
+ * Compute days until a deadline (negative if past).
+ * Returns null if no deadline was set.
+ */
+function daysUntil(deadline?: string | null): number | null {
+  if (!deadline) return null;
+  const d = new Date(deadline);
+  if (isNaN(d.getTime())) return null;
+  const ms = d.getTime() - Date.now();
+  return Math.ceil(ms / (1000 * 60 * 60 * 24));
+}
+
+/** Map a "due in X days" number to an urgency band. */
+function deadlineBadge(days: number | null, tk: ThemeTokens) {
+  if (days === null) return null;
+  if (days < 0) return { label: `${Math.abs(days)}d overdue`, color: tk.danger, icon: <Flame size={11} /> };
+  if (days === 0) return { label: 'Due today', color: tk.danger, icon: <Flame size={11} /> };
+  if (days <= 3) return { label: `${days}d left`, color: tk.amber, icon: <Clock size={11} /> };
+  if (days <= 14) return { label: `${days}d left`, color: tk.blue, icon: <Calendar size={11} /> };
+  return { label: `${days}d left`, color: tk.textTer, icon: <Calendar size={11} /> };
+}
+
 // Small paginated unpaid dues list used on Org dashboard
-function UnpaidDuesList({ organization, user, unpaidPage, unpaidPerPage, setUnpaidPage }: {
+function UnpaidDuesList({ organization, user, unpaidPage, unpaidPerPage, setUnpaidPage, tk }: {
   organization: Organization | null | undefined;
   user: User | null | undefined;
   unpaidPage: number;
   unpaidPerPage: number;
   setUnpaidPage: Dispatch<SetStateAction<number>>;
+  tk: ThemeTokens;
 }) {
   const [items, setItems] = useState<UnpaidItem[]>([]);
   const [loading, setLoading] = useState(true);

@@ -152,6 +152,33 @@ export default function JoinOrganizationPage() {
     use_id_as_password: true,
   });
 
+  // When the invite is org-wide (no group_id), the joiner must pick a class.
+  // We load the org's joinable groups + force an explicit selection — never
+  // auto-dump someone into the "first" class.
+  type JoinableGroup = { id: string; name: string; short_name: string; kind: string };
+  const [orgGroups, setOrgGroups] = useState<JoinableGroup[]>([]);
+  const [selectedGroupId, setSelectedGroupId] = useState<string>('');
+  const [groupsLoading, setGroupsLoading] = useState(false);
+
+  useEffect(() => {
+    // Load joinable groups only when the invite is org-wide.
+    if (!invite || invite.group_id) { setOrgGroups([]); return; }
+    let cancelled = false;
+    (async () => {
+      setGroupsLoading(true);
+      const { data } = await supabase
+        .from('organization_groups')
+        .select('id, name, short_name, kind')
+        .eq('organization_id', invite.organization.id)
+        .eq('is_active', true)
+        .order('name');
+      if (cancelled) return;
+      setOrgGroups((data as JoinableGroup[]) || []);
+      setGroupsLoading(false);
+    })();
+    return () => { cancelled = true; };
+  }, [invite]);
+
   const codeJoined = useMemo(() => codeChars.join(''), [codeChars]);
 
   // ── Auto-validate when URL prefilled or all cells filled ──
@@ -249,44 +276,36 @@ export default function JoinOrganizationPage() {
   };
 
   // ── Submit form ──
+  // All sign-up logic moved into the signup_member_via_invite RPC (mig 078):
+  // RLS-safe (SECURITY DEFINER), validates the invite + member-id uniqueness
+  // server-side, hashes the password inline, and REFUSES to dump a joiner into
+  // a random class — for org-wide invites the joiner picks below.
   const handleSubmit = async () => {
+    if (!invite) { setError('Invalid invite.'); return; }
     if (!form.full_name.trim()) { setError('Your full name is required.'); return; }
     if (!form.member_id.trim()) { setError('Your member ID is required.'); return; }
+
     const password = form.use_id_as_password ? form.member_id.trim() : form.password;
     if (!form.use_id_as_password) {
       if (!form.password || form.password.length < 6) { setError('Password must be at least 6 characters.'); return; }
       if (form.password !== form.password_confirm) { setError('Passwords do not match.'); return; }
     }
-    if (!invite) { setError('Invalid invite.'); return; }
+    if (!invite.group_id && !selectedGroupId) {
+      setError('Pick the class or group you’re joining.');
+      return;
+    }
 
     setLoading(true);
     setError('');
 
     try {
-      const orgId = invite.organization.id;
-      const groupId = invite.group_id;
-
-      const { data: hashedPw, error: hashErr } = await supabase.rpc('hash_password', { p_password: password });
-      if (hashErr) throw new Error('Failed to secure password.');
-
-      const { data: existing } = await supabase
-        .from('organization_members')
-        .select('id')
-        .eq('organization_id', orgId)
-        .eq('member_id', form.member_id.trim())
-        .maybeSingle();
-
-      if (existing) {
-        setError('This member ID is already registered in this organization. Try logging in instead.');
-        setLoading(false);
-        return;
-      }
-
+      // Soft pre-check on the org's member limit; the RPC ignores billing, so
+      // we surface this here for a friendly error before sign-up.
       try {
-        const limitResult = await billingService.checkLimit(orgId, 'members');
+        const limitResult = await billingService.checkLimit(invite.organization.id, 'members');
         if (limitResult && !limitResult.allowed) {
           setError(
-            `This organization has reached its member limit (${limitResult.current}/${limitResult.limit} on the ${limitResult.planName} plan). Please contact the administrator.`
+            `This organization has reached its member limit (${limitResult.current}/${limitResult.limit} on the ${limitResult.planName} plan). Please contact the administrator.`,
           );
           setLoading(false);
           return;
@@ -295,76 +314,60 @@ export default function JoinOrganizationPage() {
         // fail-open if billing check fails
       }
 
-      let finalGroupId = groupId;
-      if (!finalGroupId) {
-        const { data: groups } = await supabase
-          .from('organization_groups')
-          .select('id')
-          .eq('organization_id', orgId)
-          .order('created_at', { ascending: true })
-          .limit(1);
-        finalGroupId = groups?.[0]?.id || null;
-      }
+      const { data, error: rpcErr } = await supabase.rpc('signup_member_via_invite', {
+        p_invite_code:     invite.invite_code,
+        p_member_id:       form.member_id.trim(),
+        p_full_name:       form.full_name.trim(),
+        p_password:        password,
+        p_email:           form.email.trim() || null,
+        p_phone:           form.phone.trim() || null,
+        p_level:           form.level.trim() || null,
+        p_target_group_id: invite.group_id ?? selectedGroupId ?? null,
+      });
 
-      const { error: insertErr } = await supabase
-        .from('organization_members')
-        .insert({
-          organization_id: orgId,
-          group_id: finalGroupId,
-          member_id: form.member_id.trim(),
-          full_name: form.full_name.trim(),
-          email: form.email.trim() || null,
-          phone: form.phone.trim() || null,
-          level: form.level.trim() || null,
-          password_hash: hashedPw,
-          force_password_change: form.use_id_as_password,
-          is_active: true,
-        });
-
-      if (insertErr) {
-        if (insertErr.message?.includes('duplicate') || insertErr.message?.includes('unique')) {
-          setError('This member ID is already taken. Please use a different one.');
-        } else {
-          throw insertErr;
-        }
+      if (rpcErr) {
+        setError(rpcErr.message || 'Could not complete sign-up. Please try again.');
         setLoading(false);
         return;
       }
 
-      await organizationService.useInvite(invite.id);
+      const result = (data ?? {}) as {
+        ok?: boolean; code?: string; error?: string;
+        member_id?: string; member_login_id?: string;
+        force_password_change?: boolean; org_slug?: string;
+      };
 
-      const { data: newMember } = await supabase
-        .from('organization_members')
-        .select('id')
-        .eq('organization_id', orgId)
-        .eq('member_id', form.member_id.trim())
-        .maybeSingle();
-
-      if (newMember) {
-        notificationService.sendWelcomeNotification(newMember.id, form.full_name.trim()).catch(() => {});
+      if (!result.ok) {
+        setError(result.error || 'Could not complete sign-up. Please try again.');
+        setLoading(false);
+        return;
       }
 
-      if (form.email.trim()) {
+      // Best-effort welcome notification + email; failures don't block sign-up.
+      if (result.member_id) {
+        notificationService.sendWelcomeNotification(result.member_id, form.full_name.trim()).catch(() => {});
+      }
+      if (form.email.trim() && result.member_id) {
         fetch('/api/send-welcome-email', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            callerId: newMember?.id,
+            callerId: result.member_id,
             memberEmail: form.email.trim(),
             memberName: form.full_name.trim(),
           }),
         }).catch(() => {});
       }
 
-      // Auto-login
+      // Auto-login. If anything goes wrong, fall back to the success screen
+      // and the user signs in manually.
+      const slug = result.org_slug || invite.organization.slug;
       try {
-        const slug = invite.organization.slug;
         const loginResult = await login(form.member_id.trim(), password, slug);
-        if (loginResult.mustChangePassword) {
-          navigate(`/${slug}/change-password`, { replace: true, state: { justJoined: true, orgName: invite.organization.name } });
-        } else {
-          navigate(`/${slug}/dashboard`, { replace: true, state: { justJoined: true, orgName: invite.organization.name } });
-        }
+        const next = result.force_password_change || loginResult.mustChangePassword
+          ? `/${slug}/change-password`
+          : `/${slug}/dashboard`;
+        navigate(next, { replace: true, state: { justJoined: true, orgName: invite.organization.name } });
       } catch {
         setStep('success');
       }
@@ -457,16 +460,17 @@ export default function JoinOrganizationPage() {
                 </p>
               </header>
 
-              {/* Big segmented code input */}
-              <div className="rounded-3xl p-6 sm:p-8" style={{ background: tk.panel, border: `1px solid ${tk.border}` }}>
-                <div className="flex items-center justify-center gap-1.5 sm:gap-2.5">
+              {/* Big segmented code input — grid so it auto-fits any viewport */}
+              <div className="rounded-3xl p-4 sm:p-8" style={{ background: tk.panel, border: `1px solid ${tk.border}` }}>
+                <div
+                  className="grid gap-1 sm:gap-2.5 w-full max-w-full"
+                  style={{ gridTemplateColumns: 'repeat(8, minmax(0, 1fr))' }}
+                >
                   {codeChars.map((c, i) => (
                     <CodeCell
-                      tk={tk}
                       key={i}
                       value={c}
                       filled={Boolean(c)}
-                      separator={i === 3}
                       inputRef={(el) => { codeRefs.current[i] = el; }}
                       onChange={(v) => handleCellChange(i, v)}
                       onKeyDown={(e) => handleCellKeyDown(i, e)}
@@ -597,6 +601,60 @@ export default function JoinOrganizationPage() {
                   </div>
                 </div>
               </motion.div>
+
+              {/* ── Group picker (org-wide invites only) ── */}
+              {!invite.group_id && (
+                <motion.div
+                  initial={{ opacity: 0, y: 10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: 0.12 }}
+                  className="rounded-3xl p-5 sm:p-6 mb-5"
+                  style={{ background: tk.panel, border: `1px solid ${tk.border}` }}
+                >
+                  <div className="flex items-center gap-2 mb-1">
+                    <Globe className="w-4 h-4" style={{ color: tk.primary }} />
+                    <h2 className="text-base font-bold" style={{ color: tk.text }}>Which class are you joining?</h2>
+                  </div>
+                  <p className="text-xs leading-5 mb-4" style={{ color: tk.textSec }}>
+                    This invite is org-wide, so pick the class/group you belong to. Your dues will only come from that group.
+                  </p>
+
+                  {groupsLoading ? (
+                    <div className="flex items-center gap-2" style={{ color: tk.textTer }}>
+                      <Loader2 className="w-4 h-4 animate-spin" /> Loading classes…
+                    </div>
+                  ) : orgGroups.length === 0 ? (
+                    <p className="text-xs" style={{ color: tk.textTer }}>
+                      No groups configured yet. Ask your admin for a class-specific invite code.
+                    </p>
+                  ) : (
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 max-h-64 overflow-y-auto pr-1">
+                      {orgGroups.map((g) => {
+                        const active = selectedGroupId === g.id;
+                        return (
+                          <button
+                            key={g.id}
+                            type="button"
+                            onClick={() => setSelectedGroupId(g.id)}
+                            className="text-left rounded-xl px-3 py-2.5 transition-colors"
+                            style={{
+                              background: active ? `${tk.primary}14` : 'rgba(255,255,255,0.03)',
+                              border: `1px solid ${active ? tk.borderHov : tk.border}`,
+                            }}
+                          >
+                            <p className="text-sm font-semibold truncate" style={{ color: active ? tk.primary : tk.text }}>
+                              {g.name}
+                            </p>
+                            <p className="text-[10px] uppercase tracking-wider mt-0.5" style={{ color: tk.textTer }}>
+                              {g.short_name} · {g.kind}
+                            </p>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  )}
+                </motion.div>
+              )}
 
               {/* Member details */}
               <motion.div
@@ -818,75 +876,67 @@ export default function JoinOrganizationPage() {
 // Code cell — 1 character, focused/filled styling, separator divider
 // ────────────────────────────────────────────────────────────────────────────
 function CodeCell({
-  tk,
   value,
   filled,
-  separator,
   inputRef,
   onChange,
   onKeyDown,
   onPaste,
 }: {
-  tk: JoinTokens;
   value: string;
   filled: boolean;
-  separator: boolean;
   inputRef: (el: HTMLInputElement | null) => void;
   onChange: (v: string) => void;
   onKeyDown: (e: React.KeyboardEvent<HTMLInputElement>) => void;
   onPaste?: (e: React.ClipboardEvent<HTMLInputElement>) => void;
 }) {
   return (
-    <>
-      <motion.div
-        whileHover={{ y: -1 }}
-        className="relative"
-      >
-        <input
-          ref={inputRef}
-          type="text"
-          inputMode="text"
-          maxLength={1}
-          value={value}
-          onChange={(e) => onChange(e.target.value)}
-          onKeyDown={onKeyDown}
-          onPaste={onPaste}
-          autoComplete="off"
-          spellCheck={false}
-          className="
-            w-10 h-12 sm:w-12 sm:h-14
-            text-center font-mono font-bold uppercase
-            text-lg sm:text-2xl
-            rounded-xl outline-none transition-all
-          "
-          style={{
-            background: filled ? 'rgba(255,104,3,0.10)' : 'rgba(26,14,9,0.85)',
-            border: `1.5px solid ${filled ? 'rgba(255,104,3,0.35)' : 'rgba(255,255,255,0.10)'}`,
-            color: tk.text,
-            caretColor: '#FF6803',
-            boxShadow: filled ? '0 4px 12px rgba(255,104,3,0.15)' : 'none',
-          }}
-          onFocus={(e) => {
-            e.currentTarget.style.borderColor = 'rgba(255,104,3,0.60)';
-            e.currentTarget.style.boxShadow = '0 0 0 3px rgba(255,104,3,0.15)';
-            e.currentTarget.select();
-          }}
-          onBlur={(e) => {
-            e.currentTarget.style.borderColor = filled ? 'rgba(255,104,3,0.35)' : 'rgba(255,255,255,0.10)';
-            e.currentTarget.style.boxShadow = filled ? '0 4px 12px rgba(255,104,3,0.15)' : 'none';
-          }}
+    <motion.div whileHover={{ y: -1 }} className="relative w-full">
+      <input
+        ref={inputRef}
+        type="text"
+        inputMode="text"
+        maxLength={1}
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        onKeyDown={onKeyDown}
+        onPaste={onPaste}
+        autoComplete="off"
+        spellCheck={false}
+        className="
+          w-full h-12 sm:h-14
+          text-center font-mono font-bold uppercase
+          text-lg sm:text-2xl
+          rounded-xl outline-none transition-all
+        "
+        style={{
+          background: filled ? 'rgba(255,104,3,0.10)' : 'rgba(26,14,9,0.85)',
+          border: `1.5px solid ${filled ? 'rgba(255,104,3,0.35)' : 'rgba(255,255,255,0.10)'}`,
+          // Bg is dark in both themes, so white text is correct here.
+          color: '#FFFFFF',
+          caretColor: '#FF6803',
+          boxShadow: filled ? '0 4px 12px rgba(255,104,3,0.15)' : 'none',
+          minWidth: 0,
+        }}
+        onFocus={(e) => {
+          e.currentTarget.style.borderColor = 'rgba(255,104,3,0.60)';
+          e.currentTarget.style.boxShadow = '0 0 0 3px rgba(255,104,3,0.15)';
+          e.currentTarget.select();
+        }}
+        onBlur={(e) => {
+          e.currentTarget.style.borderColor = filled ? 'rgba(255,104,3,0.35)' : 'rgba(255,255,255,0.10)';
+          e.currentTarget.style.boxShadow = filled ? '0 4px 12px rgba(255,104,3,0.15)' : 'none';
+        }}
+      />
+      {filled && (
+        <motion.div
+          initial={{ scale: 0 }}
+          animate={{ scale: 1 }}
+          className="absolute -bottom-1 left-1/2 -translate-x-1/2 w-1 h-1 rounded-full"
+          style={{ background: '#FF6803' }}
         />
-        {filled && (
-          <motion.div
-            initial={{ scale: 0 }}
-            animate={{ scale: 1 }}
-            className="absolute -bottom-1 left-1/2 -translate-x-1/2 w-1 h-1 rounded-full"
-            style={{ background: '#FF6803' }}
-          />
-        )}
-      </motion.div>
-      {separator && <span className="px-1" style={{ color: tk.textTer }}>•</span>}
-    </>
+      )}
+    </motion.div>
   );
 }
 

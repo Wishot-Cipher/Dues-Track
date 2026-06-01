@@ -41,6 +41,7 @@ import TrustBadge from '@/components/trust/TrustBadge';
 // ── Design tokens ─────────────────────────────────────────────────────────────
 type OverviewTokens = {
   bg: string;
+  bgWash: string;       // page background gradient overlay (light + dark variants)
   cardBg: string;
   cardBgHov: string;
   cardHover: string;
@@ -63,6 +64,7 @@ function buildOverviewTokens(theme: 'light' | 'dark'): OverviewTokens {
   const dtk = getDashboardTokens(theme);
   return {
     bg: dtk.bg,
+    bgWash: dtk.bgWash,
     cardBg: dtk.card,
     cardBgHov: dtk.cardHover,
     cardHover: dtk.cardHover,
@@ -235,7 +237,7 @@ function SwitchDeptModal({
 // ─────────────────────────────────────────────────────────────────────────────
 function LoadingScreen({ tk }: { tk: OverviewTokens }) {
   return (
-    <PageWrapper centered noPadding className="p-4 sm:p-6 lg:p-8">
+    <PageWrapper centered noPadding className="p-4 sm:p-6 lg:p-8" style={{ background: tk.bg, backgroundImage: tk.bgWash, color: tk.textPrimary }}>
       <div className="flex flex-col items-center justify-center py-20 gap-4">
         <motion.div
           className="w-10 h-10 border-2 rounded-full"
@@ -256,7 +258,7 @@ function LoadingScreen({ tk }: { tk: OverviewTokens }) {
 // ─────────────────────────────────────────────────────────────────────────────
 function NotFoundScreen({ orgSlug, onBack, tk }: { orgSlug?: string; onBack: () => void; tk: OverviewTokens }) {
   return (
-    <PageWrapper centered noPadding className="p-4 sm:p-6 lg:p-8">
+    <PageWrapper centered noPadding className="p-4 sm:p-6 lg:p-8" style={{ background: tk.bg, backgroundImage: tk.bgWash, color: tk.textPrimary }}>
       <motion.div
         className="w-full max-w-md rounded-[28px] p-10 text-center"
         style={{ background: tk.cardBg, border: `1px solid ${tk.cardBorder}` }}
@@ -528,7 +530,7 @@ export default function OrgOverviewPage() {
 
   return (
     <>
-      <PageWrapper centered noPadding className="p-4 sm:p-6 lg:p-8">
+      <PageWrapper centered noPadding className="p-4 sm:p-6 lg:p-8" style={{ background: tk.bg, backgroundImage: tk.bgWash, color: tk.textPrimary }}>
         <div className="w-full max-w-6xl space-y-5">
 
           {/* ── Hero ── */}

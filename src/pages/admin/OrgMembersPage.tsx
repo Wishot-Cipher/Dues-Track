@@ -4,7 +4,7 @@
  * Add, edit, import, activate/deactivate members seamlessly
  */
 
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useParams } from 'react-router-dom';
 import {
@@ -137,6 +137,13 @@ export default function OrgMembersPage() {
   const [inviteLink, setInviteLink] = useState('');
   const [inviteCode, setInviteCode] = useState('');
   const [inviteLoading, setInviteLoading] = useState(false);
+  // Scope of the invite: 'class' = one specific class, 'org' = org-wide (joiner
+  // picks on signup). A class-scope inviter sees no toggle — it's always their
+  // own class. A faculty/org-scope inviter can pick.
+  const [inviteScope, setInviteScope] = useState<'class' | 'org'>('class');
+  const [inviteTargetGroupId, setInviteTargetGroupId] = useState<string>('');
+  const [inviteClasses, setInviteClasses] = useState<Array<{ id: string; name: string; short_name: string; parent_group_id: string | null }>>([]);
+  const [inviteClassesLoading, setInviteClassesLoading] = useState(false);
   const [inviteCopied, setInviteCopied] = useState(false);
   const [inviteMaxUses, setInviteMaxUses] = useState(50);
   const [inviteExpiry, setInviteExpiry] = useState<'1d' | '7d' | '30d' | 'never'>('7d');
@@ -527,6 +534,58 @@ export default function OrgMembersPage() {
   };
 
   // ── Generate invite link ──
+  // ── Scope-aware invite: figure out the inviter's max scope and which
+  //    classes they can choose as the target. A class-scope rep is locked to
+  //    their own class; higher-scope execs see a picker. ────────────────────
+  const inviterMaxScope: 'org' | 'unit' | 'group' = useMemo(() => {
+    const admins = (user?.admin_records || []).filter((a: { is_active?: boolean }) => a.is_active !== false);
+    if (admins.some((a: { scope_level?: string }) => a.scope_level === 'org')) return 'org';
+    if (admins.some((a: { scope_level?: string }) => a.scope_level === 'unit')) return 'unit';
+    return 'group';
+  }, [user]);
+
+  const inviterUnitGroupId: string | null = useMemo(() => {
+    if (inviterMaxScope !== 'unit') return null;
+    const admins = (user?.admin_records || []) as Array<{ is_active?: boolean; scope_level?: string; group_id?: string | null }>;
+    return admins.find((a) => a.is_active !== false && a.scope_level === 'unit')?.group_id ?? null;
+  }, [user, inviterMaxScope]);
+
+  // Default the target class to the inviter's own group whenever the modal
+  // opens. A higher-scope inviter can switch via the picker; a class rep can't
+  // change it (and shouldn't see the picker at all).
+  useEffect(() => {
+    if (!showInviteModal) return;
+    setInviteTargetGroupId((prev) => prev || group?.id || '');
+    setInviteScope('class');
+  }, [showInviteModal, group?.id]);
+
+  // Load all classes the inviter is allowed to target — only when the modal is
+  // open AND they're higher than class scope (a class rep doesn't need a list).
+  useEffect(() => {
+    if (!showInviteModal || inviterMaxScope === 'group' || !organization?.id) return;
+    if (inviteClasses.length > 0) return;
+    let cancelled = false;
+    (async () => {
+      setInviteClassesLoading(true);
+      const { data } = await supabase
+        .from('organization_groups')
+        .select('id, name, short_name, kind, parent_group_id, is_active')
+        .eq('organization_id', organization.id)
+        .eq('is_active', true)
+        .in('kind', ['class', 'level'])
+        .order('name');
+      if (cancelled) return;
+      let list = (data as Array<{ id: string; name: string; short_name: string; parent_group_id: string | null }>) || [];
+      // Unit-scope inviter: filter to classes directly under their unit.
+      if (inviterMaxScope === 'unit' && inviterUnitGroupId) {
+        list = list.filter((c) => c.parent_group_id === inviterUnitGroupId);
+      }
+      setInviteClasses(list);
+      setInviteClassesLoading(false);
+    })();
+    return () => { cancelled = true; };
+  }, [showInviteModal, inviterMaxScope, inviterUnitGroupId, organization?.id, inviteClasses.length]);
+
   const generateInviteLink = async () => {
     if (!organization || !user || !adminRecord) return;
 
@@ -534,6 +593,18 @@ export default function OrgMembersPage() {
     const limitCheck = canCreate('members');
     if (!limitCheck.allowed) {
       setLimitMessage(limitCheck.message || `You've reached the member limit on the ${planName} plan.`);
+      setShowLimitModal(true);
+      return;
+    }
+
+    // Resolve the target group from scope. Class scope binds to a specific
+    // group; org scope leaves it NULL so the joiner picks on signup.
+    const resolvedGroupId: string | undefined =
+      inviteScope === 'org' ? undefined
+      : (inviterMaxScope === 'group' ? group?.id : inviteTargetGroupId) || undefined;
+
+    if (inviteScope === 'class' && !resolvedGroupId) {
+      setLimitMessage('Pick a class for this invite first.');
       setShowLimitModal(true);
       return;
     }
@@ -555,7 +626,7 @@ export default function OrgMembersPage() {
 
       const invite = await organizationService.createInvite({
         organization_id: organization.id,
-        group_id: group?.id || undefined,
+        group_id: resolvedGroupId,
         invite_type: 'bulk',
         max_uses: inviteMaxUses,
         expires_at,
@@ -1888,11 +1959,86 @@ export default function OrgMembersPage() {
                     </div>
                   </div>
 
-                  {group && (
-                    <div className="p-3 rounded-xl text-sm break-words" style={{ background: theme === 'light' ? '#FFFDF9' : 'rgba(255,255,255,0.03)', border: `1px solid ${tk.cardBorder}` }}>
-                      <p className="text-xs" style={{ color: tk.textSec }}>
-                        Members who join will be added to: <span style={{ color: tk.text, fontWeight: 500 }}>{group.name}</span>
-                      </p>
+                  {/* ── Scope card ── */}
+                  {(() => {
+                    // Resolve the breadcrumb to show. For class-scope inviters
+                    // this is fixed to their own group; for higher scopes it
+                    // follows the picker. For org-wide we say so explicitly.
+                    const selectedClass = inviterMaxScope === 'group'
+                      ? group
+                      : inviteClasses.find((c) => c.id === inviteTargetGroupId) ?? null;
+                    return (
+                      <div className="rounded-xl p-3.5 break-words" style={{ background: theme === 'light' ? '#FFFDF9' : 'rgba(255,255,255,0.03)', border: `1px solid ${tk.cardBorder}` }}>
+                        <p className="text-[10px] uppercase tracking-wider font-semibold mb-1" style={{ color: tk.textTer }}>
+                          Inviting to
+                        </p>
+                        <p className="text-sm leading-relaxed" style={{ color: tk.text }}>
+                          <span style={{ color: tk.textSec }}>{organization?.name}</span>
+                          {inviteScope === 'org'
+                            ? <> · <span className="font-semibold" style={{ color: tk.primary }}>Whole organization</span></>
+                            : selectedClass
+                              ? <> · <span className="font-semibold" style={{ color: tk.primary }}>{selectedClass.name}</span></>
+                              : <> · <span style={{ color: tk.textTer }}>Pick a class</span></>}
+                        </p>
+                        {inviteScope === 'org' && (
+                          <p className="text-[11px] mt-1.5" style={{ color: tk.textTer }}>
+                            Joiners will pick their own class on signup.
+                          </p>
+                        )}
+                      </div>
+                    );
+                  })()}
+
+                  {/* ── Scope toggle (higher-scope inviters only) ── */}
+                  {inviterMaxScope !== 'group' && (
+                    <div>
+                      <label className="block text-sm font-medium mb-1.5" style={{ color: tk.text }}>Scope</label>
+                      <div className="grid grid-cols-2 gap-2">
+                        {([['class', 'Specific class'], ['org', 'Org-wide']] as const).map(([val, label]) => (
+                          <button
+                            key={val}
+                            onClick={() => setInviteScope(val)}
+                            className="py-2 rounded-lg text-xs font-medium transition-all"
+                            style={{
+                              background: inviteScope === val ? tk.primarySoft : theme === 'light' ? '#FFF6EE' : 'rgba(255,255,255,0.03)',
+                              border: `1px solid ${inviteScope === val ? tk.primaryRing : tk.cardBorder}`,
+                              color: inviteScope === val ? tk.primary : tk.textSec,
+                            }}
+                          >
+                            {label}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* ── Class picker (when scope is 'class' AND inviter has options) ── */}
+                  {inviterMaxScope !== 'group' && inviteScope === 'class' && (
+                    <div>
+                      <label className="block text-sm font-medium mb-1.5" style={{ color: tk.text }}>
+                        {inviterMaxScope === 'unit' ? 'Class under your unit' : 'Class'}
+                      </label>
+                      {inviteClassesLoading ? (
+                        <div className="text-xs flex items-center gap-2" style={{ color: tk.textTer }}>
+                          <Loader2 size={14} className="animate-spin" /> Loading classes…
+                        </div>
+                      ) : inviteClasses.length === 0 ? (
+                        <p className="text-xs" style={{ color: tk.textTer }}>
+                          No classes available in your scope yet.
+                        </p>
+                      ) : (
+                        <select
+                          value={inviteTargetGroupId}
+                          onChange={(e) => setInviteTargetGroupId(e.target.value)}
+                          className="w-full rounded-lg px-3 py-2 text-sm outline-none"
+                          style={{ background: theme === 'light' ? '#FFFDF9' : 'rgba(0,0,0,0.25)', border: `1px solid ${tk.cardBorder}`, color: tk.text }}
+                        >
+                          <option value="">— Pick a class —</option>
+                          {inviteClasses.map((c) => (
+                            <option key={c.id} value={c.id}>{c.name} {c.short_name ? `(${c.short_name})` : ''}</option>
+                          ))}
+                        </select>
+                      )}
                     </div>
                   )}
 

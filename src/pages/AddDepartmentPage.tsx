@@ -24,6 +24,7 @@ import {
   ArrowLeft,
   ArrowRight,
   BookOpen,
+  Check,
   GraduationCap,
   Layers,
   Loader2,
@@ -34,6 +35,7 @@ import {
   User,
 } from 'lucide-react';
 import { organizationService } from '@/services/organizationService';
+import { supabase } from '@/config/supabase';
 import TrustBadge from '@/components/trust/TrustBadge';
 import { APP_NAME } from '@/config/constants';
 import type {
@@ -56,11 +58,9 @@ const tk = {
   danger:    '#ef4444',
 };
 
-const KIND_OPTIONS: { value: 'department' | 'class' | 'general'; label: string; description: string }[] = [
-  { value: 'department', label: 'Department',  description: 'A discipline within the faculty (e.g. Computer Science).' },
-  { value: 'class',      label: 'Class / Year', description: 'A specific level inside a department (e.g. EEE 300L).' },
-  { value: 'general',    label: 'Other group', description: 'Any other unit — committee, society, society chapter.' },
-];
+// Kind is now derived from the URL context (faculty page = adds dept; dept
+// page = adds class), so the legacy KIND_OPTIONS picker is gone. Migration 079
+// makes the DB enforce the same rule.
 
 const SESSION_KEYS = {
   AUTH:      'pvx_auth',
@@ -71,10 +71,29 @@ const SESSION_KEYS = {
 } as const;
 
 interface Form {
-  // Department
+  // Who is doing this? Drives which slides show + whether claim is offered.
+  // 'student'  — they belong to a class inside this structure
+  // 'staff'    — staff/faculty; no class, claim possible
+  // 'helping'  — just populating the directory; class skipped, NO claim offered
+  intent: 'student' | 'staff' | 'helping' | '';
+
+  // Department / class being created (semantic depends on the route)
   departmentName: string;
   departmentShortName: string;
   departmentKind: 'department' | 'class' | 'general';
+
+  // Founder's own class — used on /f/:short/new when intent === 'student'.
+  className: string;
+  classShortName: string;
+  // Kept for backwards compat with earlier flow; intent='staff' has the same
+  // effect (no class created).
+  isStaff: boolean;
+
+  // OPT-IN claim. wantsClaim=false → empty positionTitle goes to the RPC
+  // and no claim is filed. The founder is just a class member.
+  wantsClaim: boolean;
+  positionTitle: string;
+
   // Founder
   fullName: string;
   email: string;
@@ -86,9 +105,15 @@ interface Form {
 }
 
 const EMPTY: Form = {
+  intent: '',
   departmentName: '',
   departmentShortName: '',
   departmentKind: 'department',
+  className: '',
+  classShortName: '',
+  isStaff: false,
+  wantsClaim: false,    // safe default — wrong person who's just adding the structure isn't prompted
+  positionTitle: '',
   fullName: '',
   email: '',
   phone: '',
@@ -97,6 +122,8 @@ const EMPTY: Form = {
   passwordConfirm: '',
   userLevel: '',
 };
+
+type WizardStep = 'intent' | 'details' | 'class' | 'account' | 'claim' | 'recap';
 
 export default function AddDepartmentPage() {
   // Page handles BOTH routes:
@@ -119,8 +146,29 @@ export default function AddDepartmentPage() {
   const [form, setForm] = useState<Form>(EMPTY);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [step, setStep] = useState<WizardStep>('intent');
 
   const isAddingClass = Boolean(departmentShort);
+
+  // The slide path is computed from the route + the picked intent:
+  //   • dept flow + student → intent · details · class · account · claim? · recap
+  //   • dept flow + staff   → intent · details · account · claim? · recap
+  //   • dept flow + helping → intent · details · account · recap        (NO claim)
+  //   • class flow + student/staff → intent · details · account · claim? · recap
+  //   • class flow + helping       → intent · details · account · recap
+  const steps: WizardStep[] = useMemo(() => {
+    const out: WizardStep[] = ['intent', 'details'];
+    if (!isAddingClass && form.intent === 'student') out.push('class');
+    out.push('account');
+    if (form.intent !== 'helping' && form.intent !== '') out.push('claim');
+    out.push('recap');
+    return out;
+  }, [isAddingClass, form.intent]);
+  const stepIdx = steps.indexOf(step);
+  const isFirst = stepIdx === 0;
+  const isLast  = stepIdx === steps.length - 1;
+  const goBack = () => { if (!isFirst) setStep(steps[stepIdx - 1]); };
+  const goNext = () => { if (!isLast)  setStep(steps[stepIdx + 1]); };
 
   useEffect(() => {
     let cancelled = false;
@@ -143,10 +191,12 @@ export default function AddDepartmentPage() {
       }) ?? null;
       setFaculty(parent);
 
-      // Seed the kind picker default sensibly
+      // Seed sensible defaults: kind locked by URL, plus a starter title for
+      // the role claim so the founder isn't staring at an empty field.
       setForm((f) => ({
         ...f,
         departmentKind: isAddingClass ? 'class' : 'department',
+        positionTitle: f.positionTitle || (isAddingClass ? 'Class Rep' : 'Departmental President'),
       }));
       setLoading(false);
     })();
@@ -158,52 +208,127 @@ export default function AddDepartmentPage() {
     form.passwordConfirm.length >= 6 &&
     form.password !== form.passwordConfirm;
 
-  const canSubmit = useMemo(() => (
-    form.departmentName.trim().length > 1 &&
-    form.fullName.trim().length > 1 &&
-    form.email.includes('@') &&
-    form.memberNumber.trim().length > 1 &&
-    form.password.length >= 6 &&
-    form.password === form.passwordConfirm
-  ), [form]);
+  // Per-slide gate. Drives the Next / Submit button on each step. Final-submit
+  // re-checks the whole form for safety.
+  const canAdvance = (s: WizardStep): boolean => {
+    switch (s) {
+      case 'intent':
+        return form.intent !== '';
+      case 'details':
+        return form.departmentName.trim().length > 1 && form.departmentShortName.trim().length >= 2;
+      case 'class':
+        return form.className.trim().length > 1;
+      case 'account':
+        return form.fullName.trim().length > 1 &&
+               form.memberNumber.trim().length > 1 &&
+               form.email.includes('@') &&
+               form.password.length >= 6 &&
+               form.password === form.passwordConfirm;
+      case 'claim':
+        // Opt-in: if they didn't tick "yes claim", any value passes; if they
+        // did, a position title is required.
+        return !form.wantsClaim || form.positionTitle.trim().length > 1;
+      case 'recap':
+        return true;
+    }
+  };
+
+  // True when ALL data is valid (used at the recap step's submit button).
+  const allValid = canAdvance('intent') && canAdvance('details') &&
+    (!steps.includes('class') || canAdvance('class')) &&
+    canAdvance('account') && (!steps.includes('claim') || canAdvance('claim'));
 
   const setF = <K extends keyof Form>(k: K, v: Form[K]) => setForm((f) => ({ ...f, [k]: v }));
 
+  // Calls the right bootstrap RPC for the route (dept-with-class on /f/:short/new,
+  // class-with-rep on /d/:short/new). Both create the structure + member +
+  // pending CLAIM — no instant admin powers. The founder lands on the dashboard
+  // with a "Your role is awaiting confirmation" banner from the verification UI.
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!canSubmit || submitting || !org || !faculty) return;
+    if (!allValid || submitting || !org || !faculty) return;
     setSubmitting(true);
     setError(null);
 
-    const res = await organizationService.addSubgroupToParent({
-      orgSlug:           org.slug,
-      parentShortName:   faculty.short_name,
-      subgroupName:      form.departmentName,
-      subgroupShortName: form.departmentShortName || undefined,
-      subgroupKind:      form.departmentKind,
-      fullName:          form.fullName,
-      email:             form.email,
-      phone:             form.phone || undefined,
-      memberNumber:      form.memberNumber,
-      password:          form.password,
-      userLevel:            form.userLevel || undefined,
-    });
+    // Resolve final flags from intent + opt-in toggle.
+    const effectiveIsStaff = form.intent === 'staff';
+    const positionToSend =
+      form.wantsClaim && form.intent !== 'helping' && form.positionTitle.trim().length > 1
+        ? form.positionTitle.trim()
+        : null;
 
-    if (!res.ok || !res.slug || !res.member_id || !res.group_id || !res.org_id) {
-      setError(res.error || 'Could not create the department. Please try again.');
+    type BootstrapResult = {
+      ok: boolean;
+      error?: string;
+      org_slug?: string;
+      org_id?: string;
+      member_id?: string;
+      member_login_id?: string;
+      dept_id?: string;
+      class_id?: string;
+      claim_id?: string;
+    };
+
+    let res: BootstrapResult;
+    try {
+      if (isAddingClass) {
+        // Adding a class under a department.
+        const { data } = await supabase.rpc('bootstrap_class_with_rep', {
+          p_org_slug:          org.slug,
+          p_parent_dept_short: faculty.short_name,   // here `faculty` actually holds the parent dept
+          p_class_name:        form.departmentName,
+          p_class_short:       form.departmentShortName || null,
+          p_class_level:       form.userLevel || null,
+          p_founder_full_name: form.fullName,
+          p_founder_email:     form.email,
+          p_founder_member_id: form.memberNumber,
+          p_founder_password:  form.password,
+          p_position_title:    positionToSend,
+        });
+        res = (data ?? { ok: false }) as BootstrapResult;
+      } else {
+        // Adding a department under a faculty.
+        const { data } = await supabase.rpc('bootstrap_department_with_class', {
+          p_org_slug:             org.slug,
+          p_parent_faculty_short: faculty.short_name,
+          p_dept_name:            form.departmentName,
+          p_dept_short:           form.departmentShortName,
+          p_class_name:           effectiveIsStaff ? null : form.className,
+          p_class_short:          effectiveIsStaff ? null : (form.classShortName || null),
+          p_class_level:          form.userLevel || null,
+          p_founder_full_name:    form.fullName,
+          p_founder_email:        form.email,
+          p_founder_member_id:    form.memberNumber,
+          p_founder_password:     form.password,
+          p_position_title:       positionToSend,
+          p_is_staff:             effectiveIsStaff,
+        });
+        res = (data ?? { ok: false }) as BootstrapResult;
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Network error — please try again.');
       setSubmitting(false);
       return;
     }
 
+    if (!res.ok || !res.org_slug || !res.member_id || !res.org_id) {
+      setError(res.error || (isAddingClass ? 'Could not create the class.' : 'Could not create the department.') + ' Please try again.');
+      setSubmitting(false);
+      return;
+    }
+
+    // Stash the session locally so the landing page treats them as signed in.
+    // (Server-side JWT minting happens through the existing login endpoint;
+    // here we set the legacy localStorage keys so the dashboard renders.)
     try {
       localStorage.setItem(SESSION_KEYS.AUTH,      'active');
       localStorage.setItem(SESSION_KEYS.ORG_ID,    res.org_id);
-      localStorage.setItem(SESSION_KEYS.ORG_SLUG,  res.slug);
+      localStorage.setItem(SESSION_KEYS.ORG_SLUG,  res.org_slug);
       localStorage.setItem(SESSION_KEYS.MEMBER_ID, res.member_id);
-      localStorage.setItem(SESSION_KEYS.GROUP_ID,  res.group_id);
+      localStorage.setItem(SESSION_KEYS.GROUP_ID,  res.class_id || res.dept_id || '');
     } catch { /* best-effort */ }
 
-    navigate(`/${res.slug}/dashboard`);
+    navigate(`/${res.org_slug}/dashboard`);
   };
 
   // ── Render guards ──
@@ -341,6 +466,76 @@ export default function AddDepartmentPage() {
         onSubmit={handleSubmit}
         className="relative z-10 max-w-3xl mx-auto px-5 sm:px-6 pb-24 space-y-6"
       >
+        {/* ── Progress bar (one segment per slide) ── */}
+        <div className="space-y-1.5">
+          <div className="flex items-center gap-1.5">
+            {steps.map((s, i) => (
+              <div
+                key={s}
+                className="flex-1 h-1 rounded-full transition-colors"
+                style={{ background: i <= stepIdx ? tk.primary : tk.border }}
+              />
+            ))}
+          </div>
+          <p className="text-[10px] uppercase tracking-[0.2em] font-semibold text-center" style={{ color: tk.textTer }}>
+            Step {stepIdx + 1} of {steps.length} · {step}
+          </p>
+        </div>
+
+        {/* ── Slide: Intent (who you are here) ── */}
+        {step === 'intent' && (
+          <motion.div
+            key="intent"
+            initial={{ opacity: 0, x: 20 }}
+            animate={{ opacity: 1, x: 0 }}
+            transition={{ duration: 0.22 }}
+          >
+            <Panel
+              title="First — who are you here?"
+              subtitle="This tells us whether to put you in a class and whether to offer a role claim. Be honest — no points for picking the wrong one."
+              icon={<Sparkles className="w-4 h-4" />}
+            >
+              <div className="grid gap-3">
+                {([
+                  ['student', isAddingClass ? 'I belong to this class' : 'I’m a student in this department', 'You’ll be added to a class inside this structure.'],
+                  ['staff',   'I’m staff / faculty',                                                       'No class membership — you’re here as staff.'],
+                  ['helping', 'I’m just helping (this is missing from the directory)',                    'No claim, no role — you just add the structure so others can join.'],
+                ] as const).map(([value, label, desc]) => {
+                  const active = form.intent === value;
+                  return (
+                    <button
+                      key={value}
+                      type="button"
+                      onClick={() => {
+                        setF('intent', value);
+                        // Helping intent never claims; force the opt-in off so they
+                        // can't accidentally toggle it later.
+                        if (value === 'helping') setF('wantsClaim', false);
+                      }}
+                      className="text-left rounded-2xl px-4 py-3.5 transition-all"
+                      style={{
+                        background: active ? `${tk.primary}14` : 'rgba(255,255,255,0.04)',
+                        border: `1.5px solid ${active ? tk.primary : tk.border}`,
+                      }}
+                    >
+                      <p className="text-sm font-bold" style={{ color: active ? tk.primary : tk.text }}>{label}</p>
+                      <p className="text-[11px] mt-0.5" style={{ color: tk.textSec }}>{desc}</p>
+                    </button>
+                  );
+                })}
+              </div>
+            </Panel>
+          </motion.div>
+        )}
+
+        {/* ── Slide: Details (department or class — depends on route) ── */}
+        {step === 'details' && (
+        <motion.div
+          key="details"
+          initial={{ opacity: 0, x: 20 }}
+          animate={{ opacity: 1, x: 0 }}
+          transition={{ duration: 0.22 }}
+        >
         {/* Section 1: Department */}
         <Panel
           title="The department"
@@ -354,35 +549,91 @@ export default function AddDepartmentPage() {
             <Field label="Short name" hint="e.g. ECE">
               <Input value={form.departmentShortName} onChange={(v) => setF('departmentShortName', v.toUpperCase())} placeholder="ECE" />
             </Field>
+            {/*
+              Kind is fixed by the URL you came from:
+                /f/:short/new → adding a department under a faculty
+                /d/:short/new → adding a class    under a department
+              We show it as a read-only chip so the admin sees the rule, but
+              they can't pick the wrong one (the DB trigger in mig 079 enforces
+              it anyway — this just keeps the UI from offering invalid choices).
+            */}
             <Field label="What is this?" required>
-              <div className="grid grid-cols-3 gap-2">
-                {KIND_OPTIONS.map((k) => {
-                  const active = form.departmentKind === k.value;
-                  return (
-                    <button
-                      key={k.value}
-                      type="button"
-                      onClick={() => setF('departmentKind', k.value)}
-                      className="rounded-xl px-3 py-2 text-xs font-semibold transition-all"
-                      style={{
-                        background: active ? `${tk.primary}18` : 'rgba(255,255,255,0.04)',
-                        color: active ? tk.primary : tk.textSec,
-                        border: `1px solid ${active ? `${tk.primary}40` : tk.border}`,
-                      }}
-                    >
-                      {k.label}
-                    </button>
-                  );
-                })}
+              <div
+                className="inline-flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-semibold"
+                style={{
+                  background: `${tk.primary}18`,
+                  color: tk.primary,
+                  border: `1px solid ${tk.primary}40`,
+                }}
+              >
+                {isAddingClass ? 'Class' : 'Department'}
+                <span className="text-[10px]" style={{ color: tk.textTer }}>
+                  · inside {faculty?.name ?? 'parent'}
+                </span>
               </div>
             </Field>
           </Row>
         </Panel>
 
-        {/* Section 2: Founder account */}
+        </motion.div>
+        )}
+
+        {/* ── Slide: Your class (only when adding a dept AND intent='student') ── */}
+        {step === 'class' && !isAddingClass && form.intent === 'student' && (
+        <motion.div
+          key="class"
+          initial={{ opacity: 0, x: 20 }}
+          animate={{ opacity: 1, x: 0 }}
+          transition={{ duration: 0.22 }}
+        >
+        {/* Section 2 (dept flow only): the founder's own class.
+            Nobody is "in" a department — students belong to a class inside one.
+            This makes the dept founder also declare WHICH class they're in (the
+            class is created at the same time and becomes their primary group). */}
         <Panel
-          title="Your founding account"
-          subtitle="You become the first admin of this department. Use these credentials to sign in afterwards."
+          title="Your class in this department"
+          subtitle="We'll create this class inside the dept and put you in it. You can change details later."
+          icon={<Layers className="w-4 h-4" />}
+        >
+          <Row>
+            <Field label="Class name" required>
+              <Input
+                value={form.className}
+                onChange={(v) => setF('className', v)}
+                placeholder="300L Civil Engineering"
+                required
+              />
+            </Field>
+            <Field label="Short name" hint="e.g. 300CVE">
+              <Input
+                value={form.classShortName}
+                onChange={(v) => setF('classShortName', v.toUpperCase())}
+                placeholder="300CVE"
+              />
+            </Field>
+          </Row>
+          <Field label="Level / Year" hint="e.g. 300L, SS2, Year 1">
+            <Input
+              value={form.userLevel}
+              onChange={(v) => setF('userLevel', v)}
+              placeholder="300L"
+            />
+          </Field>
+        </Panel>
+        </motion.div>
+        )}
+
+        {/* ── Slide: Account (founder credentials) ── */}
+        {step === 'account' && (
+        <motion.div
+          key="account"
+          initial={{ opacity: 0, x: 20 }}
+          animate={{ opacity: 1, x: 0 }}
+          transition={{ duration: 0.22 }}
+        >
+        <Panel
+          title="Your account"
+          subtitle="These are the credentials you'll use to sign in. Your member ID is org-specific."
           icon={<User className="w-4 h-4" />}
         >
           <Row>
@@ -409,9 +660,6 @@ export default function AddDepartmentPage() {
               <Input value={form.passwordConfirm} onChange={(v) => setF('passwordConfirm', v)} placeholder="••••••••" type="password" autoComplete="new-password" required />
             </Field>
           </Row>
-          <Field label="Your level / position" hint="optional, e.g. 200L, SS2, Member">
-            <Input value={form.userLevel} onChange={(v) => setF('userLevel', v)} placeholder="200L" />
-          </Field>
           {pwMismatch && (
             <p className="text-xs flex items-center gap-1.5" style={{ color: tk.danger }}>
               <AlertCircle className="w-3.5 h-3.5" />
@@ -419,6 +667,95 @@ export default function AddDepartmentPage() {
             </p>
           )}
         </Panel>
+        </motion.div>
+        )}
+
+        {/* ── Slide: Claim (OPT-IN role request). Skipped entirely when intent='helping'. ── */}
+        {step === 'claim' && form.intent !== 'helping' && (
+        <motion.div
+          key="claim"
+          initial={{ opacity: 0, x: 20 }}
+          animate={{ opacity: 1, x: 0 }}
+          transition={{ duration: 0.22 }}
+        >
+        <Panel
+          title="Do you want to claim a role here?"
+          subtitle="Totally optional. Skipping means you stay a regular member; the dashboard will let you opt in later. Either way, claiming a role does NOT grant instant exec power — it goes through verification (peer votes or a higher exec confirming you)."
+          icon={<Sparkles className="w-4 h-4" />}
+        >
+          <div className="grid gap-3">
+            {([
+              [false, 'Skip — I just want to be a member', 'Recommended if you’re unsure. You can claim later from your dashboard.'],
+              [true,  'Yes, claim a role here',           'Picks the role title, then your peers or a higher exec verify it.'],
+            ] as const).map(([value, label, desc]) => {
+              const active = form.wantsClaim === value;
+              return (
+                <button
+                  key={String(value)}
+                  type="button"
+                  onClick={() => setF('wantsClaim', value)}
+                  className="text-left rounded-2xl px-4 py-3.5 transition-all"
+                  style={{
+                    background: active ? `${tk.primary}14` : 'rgba(255,255,255,0.04)',
+                    border: `1.5px solid ${active ? tk.primary : tk.border}`,
+                  }}
+                >
+                  <p className="text-sm font-bold" style={{ color: active ? tk.primary : tk.text }}>{label}</p>
+                  <p className="text-[11px] mt-0.5" style={{ color: tk.textSec }}>{desc}</p>
+                </button>
+              );
+            })}
+          </div>
+
+          {form.wantsClaim && (
+            <Field label="Role you're claiming" required hint="what shows on the verification request">
+              <Input
+                value={form.positionTitle}
+                onChange={(v) => setF('positionTitle', v)}
+                placeholder={isAddingClass ? 'Class Rep' : 'Departmental President'}
+                required
+              />
+            </Field>
+          )}
+        </Panel>
+        </motion.div>
+        )}
+
+        {/* ── Slide: Recap (the only place we actually submit) ── */}
+        {step === 'recap' && (
+        <motion.div
+          key="recap"
+          initial={{ opacity: 0, x: 20 }}
+          animate={{ opacity: 1, x: 0 }}
+          transition={{ duration: 0.22 }}
+        >
+        <Panel
+          title="Almost done — review what we'll create"
+          subtitle="Nothing is created until you tap the button below."
+          icon={<Check className="w-4 h-4" />}
+        >
+          <div className="space-y-2.5">
+            <RecapRow tk={tk} label={isAddingClass ? 'New class' : 'New department'} value={`${form.departmentName} (${form.departmentShortName || '—'})`} />
+            <RecapRow tk={tk} label="Inside" value={faculty?.name ?? '—'} />
+            {!isAddingClass && form.intent === 'student' && (
+              <RecapRow tk={tk} label="Your class" value={`${form.className} (${form.classShortName || form.userLevel || 'auto'})`} />
+            )}
+            <RecapRow tk={tk} label="Your role here" value={
+              form.intent === 'student' ? 'Student' :
+              form.intent === 'staff'   ? 'Staff / faculty' :
+                                          'Just helping populate the directory'
+            } />
+            <RecapRow tk={tk} label="Account" value={`${form.fullName} · ${form.email}`} />
+            <RecapRow tk={tk} label="Login ID" value={form.memberNumber} />
+            <RecapRow tk={tk} label="Claim a role" value={
+              form.wantsClaim && form.intent !== 'helping' && form.positionTitle.trim()
+                ? `Yes — "${form.positionTitle.trim()}" (awaits verification)`
+                : 'No — you stay a regular member'
+            } highlight={form.wantsClaim && form.intent !== 'helping'} />
+          </div>
+        </Panel>
+        </motion.div>
+        )}
 
         <AnimatePresence>
           {error && (
@@ -435,20 +772,46 @@ export default function AddDepartmentPage() {
           )}
         </AnimatePresence>
 
-        <div className="pt-2 flex items-center justify-between gap-4 flex-wrap">
-          <p className="text-xs leading-5" style={{ color: tk.textTer, maxWidth: 380 }}>
-            Other classes and faculties in this organization will not see your department's payments, members, or expenses.
-          </p>
+        {/* ── Wizard nav (Back · Next/Submit) ── */}
+        <div className="pt-2 flex items-center justify-between gap-3">
+          <motion.button
+            type="button"
+            onClick={goBack}
+            disabled={isFirst || submitting}
+            className="px-5 py-3 rounded-2xl text-sm font-semibold flex items-center gap-2 disabled:opacity-40 disabled:cursor-not-allowed"
+            style={{ background: 'rgba(255,255,255,0.05)', color: tk.textSec, border: `1px solid ${tk.border}` }}
+            whileHover={!isFirst && !submitting ? { scale: 1.02 } : undefined}
+            whileTap={!isFirst && !submitting ? { scale: 0.97 } : undefined}
+          >
+            <ArrowLeft className="w-4 h-4" /> Back
+          </motion.button>
+
+          {!isLast ? (
+            <motion.button
+              type="button"
+              onClick={goNext}
+              disabled={!canAdvance(step)}
+              className="px-7 py-3.5 rounded-2xl text-white font-bold text-sm flex items-center gap-2 disabled:opacity-40 disabled:cursor-not-allowed"
+              style={{
+                background: 'linear-gradient(135deg, #FF6803 0%, #FFAC5F 100%)',
+                boxShadow: canAdvance(step) ? '0 8px 30px rgba(255,104,3,0.4)' : 'none',
+              }}
+              whileHover={canAdvance(step) ? { scale: 1.03 } : undefined}
+              whileTap={canAdvance(step) ? { scale: 0.97 } : undefined}
+            >
+              Next <ArrowRight className="w-4 h-4" />
+            </motion.button>
+          ) : (
           <motion.button
             type="submit"
-            disabled={!canSubmit || submitting}
+            disabled={!allValid || submitting}
             className="px-7 py-3.5 rounded-2xl text-white font-bold text-sm flex items-center gap-2 disabled:opacity-40 disabled:cursor-not-allowed"
             style={{
               background: 'linear-gradient(135deg, #FF6803 0%, #FFAC5F 100%)',
-              boxShadow: canSubmit ? '0 8px 30px rgba(255,104,3,0.4)' : 'none',
+              boxShadow: allValid ? '0 8px 30px rgba(255,104,3,0.4)' : 'none',
             }}
-            whileHover={canSubmit && !submitting ? { scale: 1.03 } : undefined}
-            whileTap={canSubmit && !submitting ? { scale: 0.97 } : undefined}
+            whileHover={allValid && !submitting ? { scale: 1.03 } : undefined}
+            whileTap={allValid && !submitting ? { scale: 0.97 } : undefined}
           >
             {submitting ? (
               <>
@@ -458,11 +821,12 @@ export default function AddDepartmentPage() {
             ) : (
               <>
                 <Sparkles className="w-4 h-4" />
-                Create department
+                {isAddingClass ? 'Create class' : 'Create department'}
                 <ArrowRight className="w-4 h-4" />
               </>
             )}
           </motion.button>
+          )}
         </div>
       </form>
     </div>
@@ -517,6 +881,25 @@ function Panel({
 
 function Row({ children }: { children: React.ReactNode }) {
   return <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">{children}</div>;
+}
+
+function RecapRow({ tk, label, value, highlight }: { tk: { textTer: string; text: string; primary: string; border: string }; label: string; value: string; highlight?: boolean }) {
+  return (
+    <div
+      className="flex items-start justify-between gap-3 px-3.5 py-2.5 rounded-xl"
+      style={{
+        background: highlight ? `${tk.primary}10` : 'rgba(255,255,255,0.03)',
+        border: `1px solid ${highlight ? `${tk.primary}30` : tk.border}`,
+      }}
+    >
+      <span className="text-[11px] uppercase tracking-wider font-semibold shrink-0" style={{ color: tk.textTer }}>
+        {label}
+      </span>
+      <span className="text-sm text-right" style={{ color: highlight ? tk.primary : tk.text }}>
+        {value}
+      </span>
+    </div>
+  );
 }
 
 function Field({

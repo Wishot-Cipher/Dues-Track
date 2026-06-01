@@ -89,7 +89,7 @@ function hexToRgb(hex: string): string {
 // ── Loading ───────────────────────────────────────────────────────────────────
 function LoadingScreen({ tk }: { tk: LoginTokens }) {
   return (
-    <PageWrapper centered noPadding>
+    <PageWrapper centered noPadding style={{ background: tk.pageBase, color: tk.textPrimary }}>
       <div className="flex flex-col items-center gap-4">
         <motion.div
           className="w-9 h-9 border-[1.5px] rounded-full"
@@ -108,7 +108,7 @@ function LoadingScreen({ tk }: { tk: LoginTokens }) {
 // ── Not-found ─────────────────────────────────────────────────────────────────
 function NotFoundScreen({ orgSlug, tk }: { orgSlug?: string; tk: LoginTokens }) {
   return (
-    <PageWrapper centered noPadding className="p-6">
+    <PageWrapper centered noPadding className="p-6" style={{ background: tk.pageBase, color: tk.textPrimary }}>
       <motion.div
         className="text-center space-y-5 max-w-sm"
         initial={{ opacity: 0, y: 16 }}
@@ -120,14 +120,14 @@ function NotFoundScreen({ orgSlug, tk }: { orgSlug?: string; tk: LoginTokens }) 
         >
           <Building2 size={28} style={{ color: tk.accent }} />
         </div>
-        <h2 className="text-2xl font-bold text-white tracking-tight">Organization not found</h2>
+        <h2 className="text-2xl font-bold tracking-tight">Organization not found</h2>
         <p className="text-sm leading-6" style={{ color: tk.textSecondary }}>
-          No organization exists at <strong className="text-white">/{orgSlug}</strong>.
+          No organization exists at <strong style={{ color: tk.textPrimary }}>/{orgSlug}</strong>.
         </p>
         <Link
           to="/"
-          className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-semibold text-white"
-          style={{ background: `linear-gradient(135deg, ${tk.accent}, ${lighten(tk.accent)})` }}
+          className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-semibold"
+          style={{ background: `linear-gradient(135deg, ${tk.accent}, ${lighten(tk.accent)})`, color: '#FFFFFF' }}
         >
           <ArrowLeft size={16} /> Find your organization
         </Link>
@@ -284,7 +284,7 @@ function TextInput({
           onFocus={() => setFocused(true)}
           onBlur={() => setFocused(false)}
           autoComplete={autoComplete}
-          className="w-full pl-11 pr-4 py-4 bg-transparent text-sm font-medium text-white placeholder:font-normal outline-none"
+          className="w-full pl-11 pr-4 py-4 bg-transparent text-sm font-medium placeholder:font-normal outline-none"
           style={{ color: tk.textPrimary, caretColor: tk.accent }}
         />
         {rightSlot && <div className="absolute right-3">{rightSlot}</div>}
@@ -369,6 +369,18 @@ export default function OrgLoginPage() {
   const [orgLoading,  setOrgLoading]  = useState(true);
   const [orgNotFound, setOrgNotFound] = useState(false);
   const [selectedGroup, setSelectedGroup] = useState<OrganizationGroup | undefined>();
+
+  // Wrong-door detection: if the visitor previously signed in to a DIFFERENT
+  // org slug, we surface a non-intrusive banner so they can hop back without
+  // typing the wrong credentials here. Read once on mount.
+  const [lastOrgSlug, setLastOrgSlug] = useState<string | null>(null);
+  const [showIdHelp, setShowIdHelp] = useState(false);
+  useEffect(() => {
+    try {
+      const s = localStorage.getItem('pvx_org_slug');
+      if (s) setLastOrgSlug(s);
+    } catch { /* private mode, etc. */ }
+  }, []);
 
   const { login, isAuthenticated, user, needsPasswordChange } = useMultiTenantAuth();
   const { theme } = useTheme();
@@ -463,6 +475,7 @@ export default function OrgLoginPage() {
           flexShrink: 0,
           background: tk.leftPanel,
           borderRight: `1px solid ${tk.borderFaint}`,
+          color: tk.textPrimary,  // descendants inherit themed text (was only)
         }}
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
@@ -479,13 +492,13 @@ export default function OrgLoginPage() {
               <img src={org.logo_url} alt={org.name} className="w-8 h-8 rounded-lg object-cover" />
             ) : (
               <div
-                className="w-8 h-8 rounded-lg flex items-center justify-center text-xs font-bold text-white"
-                style={{ background: color }}
+                className="w-8 h-8 rounded-lg flex items-center justify-center text-xs font-bold"
+                style={{ background: color, color: '#FFFFFF' }}
               >
                 {org?.short_name?.charAt(0) || 'O'}
               </div>
             )}
-            <span className="text-sm font-semibold text-white tracking-tight">{org?.short_name || org?.name}</span>
+            <span className="text-sm font-semibold tracking-tight">{org?.short_name || org?.name}</span>
           </div>
           <span
             className="text-[10px] px-2.5 py-1 rounded-full font-medium uppercase tracking-wider"
@@ -512,7 +525,7 @@ export default function OrgLoginPage() {
 
             {/* Headline — large & confident */}
             <h1
-              className="text-5xl xl:text-6xl font-black leading-[1.02] tracking-[-0.03em] text-white mb-6"
+              className="text-5xl xl:text-6xl font-black leading-[1.02] tracking-[-0.03em] mb-6"
             >
               {org?.name ? (
                 <>
@@ -601,7 +614,7 @@ export default function OrgLoginPage() {
                     Level {selectedGroup.levels.join(' · ')}
                   </p>
                 ) : null}
-                <p className="text-sm font-semibold text-white truncate">{selectedGroup.name}</p>
+                <p className="text-sm font-semibold truncate">{selectedGroup.name}</p>
               </div>
               <Link
                 to={`/${orgSlug}/overview`}
@@ -620,7 +633,7 @@ export default function OrgLoginPage() {
       ══════════════════════════════════════════════ */}
       <div
         className="flex-1 flex flex-col"
-        style={{ background: tk.rightPanel }}
+        style={{ background: tk.rightPanel, color: tk.textPrimary }}
       >
         {/* Thin top accent line */}
         <div style={{ height: 2, background: `linear-gradient(90deg, ${color} 0%, transparent 60%)` }} />
@@ -638,14 +651,14 @@ export default function OrgLoginPage() {
                 <img src={org.logo_url} alt={org.name} className="w-9 h-9 rounded-xl object-cover" />
               ) : (
                 <div
-                  className="w-9 h-9 rounded-xl flex items-center justify-center text-sm font-bold text-white"
-                  style={{ background: color }}
+                  className="w-9 h-9 rounded-xl flex items-center justify-center text-sm font-bold"
+                  style={{ background: color, color: '#FFFFFF' }}
                 >
                   {org?.short_name?.charAt(0) || 'O'}
                 </div>
               )}
               <div>
-                <p className="text-sm font-semibold text-white">{org?.name}</p>
+                <p className="text-sm font-semibold">{org?.name}</p>
                 <p className="text-[10px]" style={{ color: tk.textTertiary }}>Powered by {APP_NAME}</p>
               </div>
             </motion.div>
@@ -683,7 +696,7 @@ export default function OrgLoginPage() {
               transition={{ delay: 0.15, duration: 0.4 }}
             >
               <h2
-                className="text-4xl font-black tracking-[-0.03em] text-white mb-2"
+                className="text-4xl font-black tracking-[-0.03em] mb-2"
               >
                 Sign in
               </h2>
@@ -696,6 +709,33 @@ export default function OrgLoginPage() {
             <div className="mb-7">
               <GroupChip group={selectedGroup} org={org} orgSlug={orgSlug} tk={tk} />
             </div>
+
+            {/* Wrong-door banner — your last session was a DIFFERENT org */}
+            {lastOrgSlug && orgSlug && lastOrgSlug !== orgSlug && (
+              <motion.div
+                className="flex items-start gap-2.5 p-3.5 rounded-xl mb-5"
+                style={{
+                  background: `${tk.accent}10`,
+                  border: `1px solid ${tk.accent}30`,
+                }}
+                initial={{ opacity: 0, y: -6 }}
+                animate={{ opacity: 1, y: 0 }}
+              >
+                <Building2 className="w-4 h-4 shrink-0 mt-0.5" style={{ color: tk.accent }} />
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm" style={{ color: tk.textPrimary }}>
+                    You last signed in to <span className="font-semibold">/{lastOrgSlug}</span>.
+                  </p>
+                  <p className="text-[11px] mt-0.5 leading-5" style={{ color: tk.textSecondary }}>
+                    If you're at the wrong door, jump back —{' '}
+                    <Link to={`/${lastOrgSlug}/login`} className="font-semibold underline" style={{ color: tk.accent }}>
+                      go to /{lastOrgSlug}/login
+                    </Link>
+                    {' '}or sign in here with credentials for this org.
+                  </p>
+                </div>
+              </motion.div>
+            )}
 
             {/* Error */}
             <AnimatePresence>
@@ -724,16 +764,55 @@ export default function OrgLoginPage() {
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: 0.2, duration: 0.45, ease: [0.22, 1, 0.36, 1] }}
             >
-              <TextInput
-                label={idLabel}
-                value={memberId}
-                onChange={setMemberId}
-                placeholder={idPlaceholder}
-                disabled={loading}
-                icon={User}
-                autoComplete="username"
-                tk={tk}
-              />
+              <div>
+                <TextInput
+                  label={idLabel}
+                  value={memberId}
+                  onChange={setMemberId}
+                  placeholder={idPlaceholder}
+                  disabled={loading}
+                  icon={User}
+                  autoComplete="username"
+                  tk={tk}
+                />
+                <div className="flex justify-end mt-2">
+                  <button
+                    type="button"
+                    onClick={() => setShowIdHelp((v) => !v)}
+                    className="text-[11px] font-medium transition-opacity hover:opacity-70"
+                    style={{ color: tk.textTertiary }}
+                  >
+                    Forgot your {idLabel.toLowerCase()}?
+                  </button>
+                </div>
+                <AnimatePresence>
+                  {showIdHelp && (
+                    <motion.div
+                      initial={{ opacity: 0, height: 0 }}
+                      animate={{ opacity: 1, height: 'auto' }}
+                      exit={{ opacity: 0, height: 0 }}
+                      className="overflow-hidden mt-2"
+                    >
+                      <div
+                        className="p-3 rounded-xl text-[11px] leading-5"
+                        style={{
+                          background: tk.inputBg,
+                          border: `1px solid ${tk.borderFaint}`,
+                          color: tk.textSecondary,
+                        }}
+                      >
+                        Your {idLabel.toLowerCase()} is the {isUniversity ? 'matric/registration number' : 'login ID'} you used when you joined — usually issued by your{' '}
+                        <span style={{ color: tk.textPrimary, fontWeight: 600 }}>
+                          {org?.admin_label?.toLowerCase() || 'admin'}
+                        </span>.
+                        {' '}If you've forgotten it, check the welcome email from{' '}
+                        <span style={{ color: tk.textPrimary, fontWeight: 600 }}>{org?.name}</span>
+                        {' '}or message your admin. (Your password is separate — use the "Forgot password" link below.)
+                      </div>
+                    </motion.div>
+                  )}
+                </AnimatePresence>
+              </div>
 
               <div>
                 <PasswordInput

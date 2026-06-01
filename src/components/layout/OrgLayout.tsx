@@ -48,6 +48,7 @@ import { isAcademicOrgType } from '@/config/constants';
 import { useMultiTenantAuth } from '@/hooks/useMultiTenantAuth';
 import { useActiveRole } from '@/hooks/useActiveRole';
 import { useTheme } from '@/hooks/useTheme';
+import { useThemeTokens, type ThemeTokens } from '@/hooks/useThemeTokens';
 import { supabase } from '@/config/supabase';
 import LoadingSpinner from '@/components/ui/LoadingSpinner';
 import { NotificationCenter } from '@/components/NotificationCenter';
@@ -72,7 +73,19 @@ interface NavItem {
    * (e.g. collecting for textbooks without bugging the finsec).
    */
   minScope?: 'org' | 'unit';
+  /**
+   * Admin-only grouping for the dropdown / sheet. Keeps the cluttered admin
+   * nav visually digestible: Overview · Money · Structure · Org-level.
+   */
+  adminGroup?: 'overview' | 'money' | 'structure' | 'org';
 }
+
+const ADMIN_GROUP_ORDER: Array<{ id: NonNullable<NavItem['adminGroup']>; label: string }> = [
+  { id: 'overview',  label: 'Overview' },
+  { id: 'money',     label: 'Money' },
+  { id: 'structure', label: 'Structure' },
+  { id: 'org',       label: 'Organisation' },
+];
 
 /* ─────────────────────── component ─────────────────────── */
 export default function OrgLayout() {
@@ -84,6 +97,9 @@ export default function OrgLayout() {
   // though the page itself rendered in light.
   const { theme } = useTheme();
   const isLight = theme === 'light';
+  // One theme sheet for the whole chrome — text, surfaces, borders auto-flip
+  // between light and dark. Brand colors (colors.primary/etc.) stay invariant.
+  const tk = useThemeTokens();
   const { activeRole } = useActiveRole({
     orgId: organization?.id,
     memberId: user?.id,
@@ -224,7 +240,7 @@ export default function OrgLayout() {
     { path: '/dashboard', label: 'Home', icon: <LayoutDashboard size={20} />, section: 'member' },
     { path: '/payments', label: organization.payment_label || 'Payments', icon: <CreditCard size={20} />, section: 'member' },
     { path: '/groups', label: organization.group_label_plural || 'Groups', icon: <Users size={20} />, section: 'member' },
-    { path: '/tickets', label: 'Tickets', icon: <TicketIcon size={20} />, section: 'member', hideOnMobile: true },
+    { path: '/tickets', label: 'Tickets', icon: <TicketIcon size={20} />, section: 'member' },
   ];
 
   // Every tool is tagged with the permission it needs. We then show an exec
@@ -242,24 +258,24 @@ export default function OrgLayout() {
   );
 
   const adminNavAll: NavItem[] = showAdmin ? [
-    { path: '/admin/dashboard', label: 'Overview', icon: <PieChart size={20} />, section: 'admin' },
-    { path: '/admin/members', label: organization.member_label_plural || 'Members', icon: <Users size={20} />, section: 'admin', permission: 'can_manage_members' },
+    { path: '/admin/dashboard', label: 'Overview', icon: <PieChart size={20} />, section: 'admin', adminGroup: 'overview' },
+    { path: '/admin/members', label: organization.member_label_plural || 'Members', icon: <Users size={20} />, section: 'admin', permission: 'can_manage_members', adminGroup: 'overview' },
     // Tenant structure — org/unit execs only (a class rep doesn't reshape the org tree).
-    { path: '/admin/groups', label: groupNavLabel, icon: <Building2 size={20} />, section: 'admin', hideOnMobile: true, permission: 'can_manage_settings', minScope: 'unit' },
-    ...(isAcademicOrg ? [{ path: '/admin/academic-calendar', label: 'Academic Calendar', icon: <CalendarDays size={20} />, section: 'admin' as const, hideOnMobile: true, permission: 'can_manage_settings', minScope: 'unit' as const }] : []),
+    { path: '/admin/groups', label: groupNavLabel, icon: <Building2 size={20} />, section: 'admin', hideOnMobile: true, permission: 'can_manage_settings', minScope: 'unit', adminGroup: 'structure' },
+    ...(isAcademicOrg ? [{ path: '/admin/academic-calendar', label: 'Academic Calendar', icon: <CalendarDays size={20} />, section: 'admin' as const, hideOnMobile: true, permission: 'can_manage_settings', minScope: 'unit' as const, adminGroup: 'structure' as const }] : []),
     // Money collection — available at ANY scope (class rep can collect for their own class).
-    { path: '/admin/create-payment', label: 'Create Dues', icon: <BadgeDollarSign size={20} />, section: 'admin', hideOnMobile: true, permission: 'can_create_payments' },
-    { path: '/admin/manage-dues', label: 'Manage Dues', icon: <Receipt size={20} />, section: 'admin', hideOnMobile: true, permission: 'can_create_payments' },
-    { path: '/admin/review', label: 'Review', icon: <ClipboardCheck size={20} />, section: 'admin', hideOnMobile: true, permission: 'can_approve_payments' },
-    { path: '/admin/expenses', label: 'Expenses', icon: <HandCoins size={20} />, section: 'admin', hideOnMobile: true, permission: 'can_manage_expenses' },
-    { path: '/admin/scan-qr', label: 'Scan QR', icon: <QrCode size={20} />, section: 'admin', hideOnMobile: true, permission: 'can_approve_payments' },
-    { path: '/admin/check-in', label: 'Event Check-in', icon: <ScanLine size={20} />, section: 'admin', hideOnMobile: true, permission: 'can_approve_payments' },
-    { path: '/admin/contributions', label: 'Contributions', icon: <Heart size={20} />, section: 'admin', hideOnMobile: true, permission: 'can_approve_payments' },
+    { path: '/admin/create-payment', label: 'Create Dues', icon: <BadgeDollarSign size={20} />, section: 'admin', hideOnMobile: true, permission: 'can_create_payments', adminGroup: 'money' },
+    { path: '/admin/manage-dues', label: 'Manage Dues', icon: <Receipt size={20} />, section: 'admin', hideOnMobile: true, permission: 'can_create_payments', adminGroup: 'money' },
+    { path: '/admin/review', label: 'Review', icon: <ClipboardCheck size={20} />, section: 'admin', hideOnMobile: true, permission: 'can_approve_payments', adminGroup: 'money' },
+    { path: '/admin/expenses', label: 'Expenses', icon: <HandCoins size={20} />, section: 'admin', hideOnMobile: true, permission: 'can_manage_expenses', adminGroup: 'money' },
+    { path: '/admin/scan-qr', label: 'Scan QR', icon: <QrCode size={20} />, section: 'admin', hideOnMobile: true, permission: 'can_approve_payments', adminGroup: 'money' },
+    { path: '/admin/check-in', label: 'Event Check-in', icon: <ScanLine size={20} />, section: 'admin', hideOnMobile: true, permission: 'can_approve_payments', adminGroup: 'money' },
+    { path: '/admin/contributions', label: 'Contributions', icon: <Heart size={20} />, section: 'admin', hideOnMobile: true, permission: 'can_approve_payments', adminGroup: 'money' },
     // Payout destination — a collector needs somewhere for money to land, so it's
     // NOT scope-gated; just permission-gated.
-    { path: '/admin/payout', label: 'Payout Account', icon: <Banknote size={20} />, section: 'admin', hideOnMobile: true, permission: 'can_manage_settings' },
+    { path: '/admin/payout', label: 'Payout Account', icon: <Banknote size={20} />, section: 'admin', hideOnMobile: true, permission: 'can_manage_settings', adminGroup: 'org' },
     // Platform subscription — the whole tenant's plan: org-scope owner only.
-    { path: '/admin/billing', label: 'Billing', icon: <Wallet size={20} />, section: 'admin', hideOnMobile: true, permission: 'can_manage_settings', minScope: 'org' },
+    { path: '/admin/billing', label: 'Billing', icon: <Wallet size={20} />, section: 'admin', hideOnMobile: true, permission: 'can_manage_settings', minScope: 'org', adminGroup: 'org' },
   ] : [];
   const adminNav: NavItem[] = adminNavAll.filter(
     (i) => (!i.permission || perms[i.permission]) && (!i.minScope || execScopeRank >= scopeRank(i.minScope)),
@@ -302,10 +318,11 @@ export default function OrgLayout() {
   const moreSheetItems: NavItem[] = showAdmin
     ? adminNav.filter(item => !['/admin/dashboard', '/admin/members', '/admin/review', '/admin/manage-dues'].includes(item.path))
     : [
-        { path: '/groups',        label: organization.group_label_plural || 'Groups', icon: <Users size={20} />, section: 'member' },
-        { path: '/profile',         label: 'My Profile',     icon: <Building2 size={20} />, section: 'member' },
-        { path: '/settings',        label: 'Settings',       icon: <Settings size={20} />,  section: 'member' },
-        { path: '/change-password', label: 'Change Password', icon: <UserCog size={20} />,  section: 'member' },
+        { path: '/groups',          label: organization.group_label_plural || 'Groups', icon: <Users size={20} />,   section: 'member' },
+        { path: '/tickets',         label: 'Tickets',         icon: <TicketIcon size={20} />, section: 'member' },
+        { path: '/profile',         label: 'My Profile',      icon: <Building2 size={20} />,  section: 'member' },
+        { path: '/settings',        label: 'Settings',        icon: <Settings size={20} />,   section: 'member' },
+        { path: '/change-password', label: 'Change Password', icon: <UserCog size={20} />,    section: 'member' },
       ];
 
   const handleLogout = async () => {
@@ -320,7 +337,7 @@ export default function OrgLayout() {
   return (
     <div
       className="min-h-screen flex flex-col"
-      style={{ background: isLight ? '#FFFBF7' : colors.secondary }}
+      style={{ background: isLight ? '#FFFBF7' : colors.secondary, color: tk.text }}
     >
       {/* ═══════════ TOP BAR ═══════════ */}
       <header
@@ -360,8 +377,11 @@ export default function OrgLayout() {
               />
             ) : (
               <motion.div
-                className="w-9 h-9 rounded-xl flex items-center justify-center text-white text-sm font-bold ring-1 ring-white/10 group-hover:ring-white/20 transition-all"
-                style={{ background: `linear-gradient(135deg, ${organization.primary_color || colors.primary}, ${organization.primary_color || colors.primary}88)` }}
+                className="w-9 h-9 rounded-xl flex items-center justify-center text-sm font-bold ring-1 ring-white/10 group-hover:ring-white/20 transition-all"
+                style={{
+                  background: `linear-gradient(135deg, ${organization.primary_color || colors.primary}, ${organization.primary_color || colors.primary}88)`,
+                  color: '#FFFFFF',   // always white over the brand-gradient avatar
+                }}
                 whileHover={{ scale: 1.05 }}
                 whileTap={{ scale: 0.95 }}
               >
@@ -369,7 +389,7 @@ export default function OrgLayout() {
               </motion.div>
             )}
             <div className="min-w-0">
-              <p className="text-sm font-semibold text-white leading-tight group-hover:text-orange-200 transition-colors truncate">
+              <p className="text-sm font-semibold leading-tight transition-colors truncate" style={{ color: tk.text }}>
                 {organization.short_name || organization.name}
               </p>
               <div className="flex flex-col">
@@ -417,21 +437,21 @@ export default function OrgLayout() {
             <RoleSwitcher />
             <nav className="flex items-center gap-1 relative">
               {!isExecContext && memberNav.map(item => (
-                <NavLink key={item.path} item={item} basePath={basePath} isActive={isActive(item.path)} />
+                <NavLink key={item.path} item={item} basePath={basePath} isActive={isActive(item.path)} tk={tk} />
               ))}
 
               {showAdmin && (
                 <>
-                  <div className="w-px h-6 mx-2" style={{ background: colors.borderLight }} />
-                  
+                  <div className="w-px h-6 mx-2" style={{ background: tk.divider }} />
+
                   {/* Admin nav group */}
                   <div className="relative">
                     <button
                       onClick={() => setShowAdminSubmenu(prev => !prev)}
                       className="flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-medium transition-all"
                       style={{
-                        color: isActivePrefix('/admin') ? colors.primary : colors.textSecondary,
-                        background: isActivePrefix('/admin') ? `${colors.primary}12` : 'transparent',
+                        color: isActivePrefix('/admin') ? tk.primary : tk.textSec,
+                        background: isActivePrefix('/admin') ? tk.primarySoft : 'transparent',
                       }}
                     >
                       <Shield size={18} />
@@ -441,7 +461,7 @@ export default function OrgLayout() {
                       </motion.div>
                       <span
                         className="absolute -top-1 -right-1 w-2 h-2 rounded-full"
-                        style={{ background: colors.accentMint, boxShadow: glows.mint.replace('30px', '8px') }}
+                        style={{ background: tk.mint, boxShadow: `0 0 8px ${tk.mint}` }}
                       />
                     </button>
 
@@ -461,28 +481,42 @@ export default function OrgLayout() {
                             }}
                           >
                             <div className="p-1.5">
-                              {adminNav.map(item => (
-                                <Link
-                                  key={item.path}
-                                  to={`${basePath}${item.path}`}
-                                  className="flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-sm transition-all"
-                                  style={{
-                                    color: isActive(item.path) ? '#fff' : colors.textSecondary,
-                                    background: isActive(item.path) ? `${colors.primary}20` : 'transparent',
-                                  }}
-                                  onClick={() => setShowAdminSubmenu(false)}
-                                >
-                                  <span style={{ color: isActive(item.path) ? colors.primary : colors.textTertiary }}>
-                                    {item.icon}
-                                  </span>
-                                  {item.label}
-                                  {isActive(item.path) && (
-                                    <motion.div layoutId="admin-check" className="ml-auto">
-                                      <CheckCircle2 size={14} style={{ color: colors.primary }} />
-                                    </motion.div>
-                                  )}
-                                </Link>
-                              ))}
+                              {ADMIN_GROUP_ORDER.map((g) => {
+                                const items = adminNav.filter((i) => (i.adminGroup ?? 'overview') === g.id);
+                                if (items.length === 0) return null;
+                                return (
+                                  <div key={g.id} className="mb-1.5 last:mb-0">
+                                    <p
+                                      className="px-3.5 pt-2 pb-1 text-[10px] font-bold uppercase tracking-[0.14em]"
+                                      style={{ color: tk.textTer }}
+                                    >
+                                      {g.label}
+                                    </p>
+                                    {items.map(item => (
+                                      <Link
+                                        key={item.path}
+                                        to={`${basePath}${item.path}`}
+                                        className="flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-sm transition-all"
+                                        style={{
+                                          color: isActive(item.path) ? tk.text : tk.textSec,
+                                          background: isActive(item.path) ? tk.primarySoft : 'transparent',
+                                        }}
+                                        onClick={() => setShowAdminSubmenu(false)}
+                                      >
+                                        <span style={{ color: isActive(item.path) ? tk.primary : tk.textTer }}>
+                                          {item.icon}
+                                        </span>
+                                        {item.label}
+                                        {isActive(item.path) && (
+                                          <motion.div layoutId="admin-check" className="ml-auto">
+                                            <CheckCircle2 size={14} style={{ color: tk.primary }} />
+                                          </motion.div>
+                                        )}
+                                      </Link>
+                                    ))}
+                                  </div>
+                                );
+                              })}
                             </div>
                           </motion.div>
                         </>
@@ -796,6 +830,7 @@ export default function OrgLayout() {
                 item={item}
                 basePath={basePath}
                 active={isActive(item.path)}
+                tk={tk}
               />
             ))}
           </div>
@@ -813,6 +848,7 @@ export default function OrgLayout() {
                   item={item}
                   basePath={basePath}
                   active={active}
+                  tk={tk}
                 />
               );
             })}
@@ -825,11 +861,12 @@ export default function OrgLayout() {
               onClick={() => setShowMoreSheet(true)}
               whileTap={{ scale: 0.92 }}
               whileHover={{ scale: 1.04 }}
-              className="w-14 h-14 rounded-full flex items-center justify-center text-white"
+              className="w-14 h-14 rounded-full flex items-center justify-center"
               style={{
                 background: `linear-gradient(135deg, ${colors.primary} 0%, ${colors.primary}dd 100%)`,
                 boxShadow: `0 12px 28px -8px ${colors.primary}, 0 4px 10px -2px rgba(0,0,0,0.35)`,
                 border: '4px solid ' + (isLight ? '#FFFBF7' : '#0F0703'),
+                color: '#FFFFFF',   // always white over the brand-gradient FAB
               }}
               aria-label="Open quick actions"
             >
@@ -876,58 +913,61 @@ export default function OrgLayout() {
               <div className="flex justify-center pt-3 pb-1">
                 <span
                   className="block w-10 h-1 rounded-full"
-                  style={{ background: 'rgba(255,255,255,0.18)' }}
+                  style={{ background: tk.divider }}
                 />
               </div>
 
               {/* Header */}
               <div className="px-5 pt-2 pb-3 flex items-center justify-between">
                 <div>
-                  <p className="text-[10px] uppercase tracking-[0.18em] font-bold" style={{ color: colors.primary }}>
+                  <p className="text-[10px] uppercase tracking-[0.18em] font-bold" style={{ color: tk.primary }}>
                     {isExecContext ? 'Admin tools' : 'Quick actions'}
                   </p>
-                  <h3 className="text-base font-bold text-white">More</h3>
+                  <h3 className="text-base font-bold" style={{ color: tk.text }}>More</h3>
                 </div>
                 <button
                   onClick={() => setShowMoreSheet(false)}
                   className="w-9 h-9 rounded-xl flex items-center justify-center"
-                  style={{ background: 'rgba(255,255,255,0.05)' }}
+                  style={{ background: tk.overlay }}
                   aria-label="Close"
                 >
-                  <XIcon className="w-4 h-4" style={{ color: colors.textSecondary }} />
+                  <XIcon className="w-4 h-4" style={{ color: tk.textSec }} />
                 </button>
               </div>
 
               {/* Role switcher (mobile) */}
               <RoleSwitcherSheet onSelect={() => setShowMoreSheet(false)} />
 
-              {/* Items */}
+              {/* Items — grouped on the admin side (Overview · Money ·
+                  Structure · Org); flat on the member side. */}
               <div className="px-3 pb-3 overflow-y-auto" style={{ maxHeight: 'calc(80vh - 80px)' }}>
-                <div className="grid grid-cols-2 gap-2">
-                  {moreSheetItems.map(item => (
-                    <Link
-                      key={item.path}
-                      to={`${basePath}${item.path}`}
-                      onClick={() => setShowMoreSheet(false)}
-                      className="flex items-center gap-3 px-3.5 py-3 rounded-2xl transition-all"
-                      style={{
-                        background: isActive(item.path) ? `${colors.primary}18` : 'rgba(255,255,255,0.03)',
-                        border: `1px solid ${isActive(item.path) ? `${colors.primary}30` : colors.borderLight}`,
-                      }}
-                    >
-                      <span
-                        className="w-8 h-8 rounded-lg flex items-center justify-center shrink-0"
-                        style={{
-                          background: isActive(item.path) ? `${colors.primary}22` : 'rgba(255,255,255,0.04)',
-                          color: isActive(item.path) ? colors.primary : colors.textSecondary,
-                        }}
-                      >
-                        {item.icon}
-                      </span>
-                      <span className="text-xs font-semibold text-white truncate">{item.label}</span>
-                    </Link>
-                  ))}
-                </div>
+                {showAdmin ? (
+                  ADMIN_GROUP_ORDER.map((g) => {
+                    const items = moreSheetItems.filter((i) => (i.adminGroup ?? 'overview') === g.id);
+                    if (items.length === 0) return null;
+                    return (
+                      <div key={g.id} className="mb-3 last:mb-0">
+                        <p
+                          className="px-1.5 pt-1 pb-1.5 text-[10px] font-bold uppercase tracking-[0.16em]"
+                          style={{ color: colors.textTertiary }}
+                        >
+                          {g.label}
+                        </p>
+                        <div className="grid grid-cols-2 gap-2">
+                          {items.map(item => (
+                            <MoreSheetTile key={item.path} item={item} basePath={basePath} isActive={isActive(item.path)} onClose={() => setShowMoreSheet(false)} />
+                          ))}
+                        </div>
+                      </div>
+                    );
+                  })
+                ) : (
+                  <div className="grid grid-cols-2 gap-2">
+                    {moreSheetItems.map(item => (
+                      <MoreSheetTile key={item.path} item={item} basePath={basePath} isActive={isActive(item.path)} onClose={() => setShowMoreSheet(false)} />
+                    ))}
+                  </div>
+                )}
               </div>
             </motion.div>
           </>
@@ -958,9 +998,9 @@ export default function OrgLayout() {
             <motion.div
               className="relative w-full max-w-sm rounded-3xl overflow-hidden"
               style={{
-                background: `linear-gradient(145deg, ${colors.cardBg} 0%, rgba(15, 7, 3, 0.98) 100%)`,
-                border: `1px solid ${colors.borderLight}`,
-                boxShadow: `0 25px 60px rgba(0, 0, 0, 0.5), 0 0 40px rgba(239, 68, 68, 0.08)`,
+                background: tk.card,
+                border: `1px solid ${tk.cardBorder}`,
+                boxShadow: `0 25px 60px ${tk.shadowLg}, 0 0 40px rgba(239, 68, 68, 0.08)`,
               }}
               initial={{ opacity: 0, scale: 0.9, y: 20 }}
               animate={{ opacity: 1, scale: 1, y: 0 }}
@@ -986,10 +1026,10 @@ export default function OrgLayout() {
                 </motion.div>
 
                 {/* Text */}
-                <h3 className="text-xl font-bold text-white mb-2">Sign Out?</h3>
-                <p className="text-sm leading-relaxed mb-6" style={{ color: colors.textSecondary }}>
+                <h3 className="text-xl font-bold mb-2" style={{ color: tk.text }}>Sign Out?</h3>
+                <p className="text-sm leading-relaxed mb-6" style={{ color: tk.textSec }}>
                   You'll need to sign back in to access<br />
-                  <span className="font-medium text-white/80">{organization.name}</span>
+                  <span className="font-medium" style={{ color: tk.text }}>{organization.name}</span>
                 </p>
 
                 {/* Buttons */}
@@ -997,11 +1037,10 @@ export default function OrgLayout() {
                   <motion.button
                     className="flex-1 py-3 px-4 rounded-xl text-sm font-semibold transition-all"
                     style={{
-                      background: 'rgba(255, 255, 255, 0.06)',
-                      color: colors.textSecondary,
-                      border: `1px solid ${colors.borderLight}`,
+                      background: tk.overlay,
+                      color: tk.textSec,
+                      border: `1px solid ${tk.cardBorder}`,
                     }}
-                    whileHover={{ scale: 1.02, background: 'rgba(255, 255, 255, 0.1)' }}
                     whileTap={{ scale: 0.98 }}
                     onClick={() => setShowLogoutModal(false)}
                   >
@@ -1011,7 +1050,7 @@ export default function OrgLayout() {
                     className="flex-1 py-3 px-4 rounded-xl text-sm font-semibold flex items-center justify-center gap-2 transition-all"
                     style={{
                       background: 'linear-gradient(135deg, #ef4444, #dc2626)',
-                      color: 'white',
+                      color: '#FFFFFF',
                       boxShadow: '0 4px 14px rgba(239, 68, 68, 0.3)',
                     }}
                     whileHover={{ scale: 1.02, boxShadow: '0 6px 20px rgba(239, 68, 68, 0.4)' }}
@@ -1033,12 +1072,46 @@ export default function OrgLayout() {
 
 /* ─────────────────── Sub-components ─────────────────── */
 
+/** A single tile inside the mobile More sheet — used by both the grouped
+ *  admin layout and the flat member layout so the visual is identical. */
+function MoreSheetTile({
+  item, basePath, isActive, onClose,
+}: {
+  item: NavItem;
+  basePath: string;
+  isActive: boolean;
+  onClose: () => void;
+}) {
+  return (
+    <Link
+      to={`${basePath}${item.path}`}
+      onClick={onClose}
+      className="flex items-center gap-3 px-3.5 py-3 rounded-2xl transition-all"
+      style={{
+        background: isActive ? `${colors.primary}18` : 'rgba(255,255,255,0.03)',
+        border: `1px solid ${isActive ? `${colors.primary}30` : colors.borderLight}`,
+      }}
+    >
+      <span
+        className="w-8 h-8 rounded-lg flex items-center justify-center shrink-0"
+        style={{
+          background: isActive ? `${colors.primary}22` : 'rgba(255,255,255,0.04)',
+          color: isActive ? colors.primary : colors.textSecondary,
+        }}
+      >
+        {item.icon}
+      </span>
+      <span className="text-xs font-semibold truncate" style={{ color: '#FFFFFF' }}>{item.label}</span>
+    </Link>
+  );
+}
+
 /** Bottom tab — a single tab in the mobile 2+FAB+2 nav bar.
  *  Active state: brand-orange icon + label + tiny top-dot. Inactive:
  *  textTertiary so the inactive row stays calm. */
 function BottomTab({
-  item, basePath, active,
-}: { item: NavItem; basePath: string; active: boolean }) {
+  item, basePath, active, tk,
+}: { item: NavItem; basePath: string; active: boolean; tk: ThemeTokens }) {
   return (
     <Link
       to={`${basePath}${item.path}`}
@@ -1047,13 +1120,13 @@ function BottomTab({
     >
       <span
         className="relative z-10 transition-colors"
-        style={{ color: active ? colors.primary : colors.textTertiary }}
+        style={{ color: active ? tk.primary : tk.textTer }}
       >
         {item.icon}
       </span>
       <span
         className="relative z-10 text-[10px] font-semibold transition-colors"
-        style={{ color: active ? colors.primary : colors.textTertiary }}
+        style={{ color: active ? tk.primary : tk.textTer }}
       >
         {item.label}
       </span>
@@ -1061,7 +1134,7 @@ function BottomTab({
         <motion.span
           layoutId="bottomTabDot"
           className="absolute -top-0.5 w-1 h-1 rounded-full"
-          style={{ background: colors.primary, boxShadow: `0 0 8px ${colors.primary}` }}
+          style={{ background: tk.primary, boxShadow: `0 0 8px ${tk.primary}` }}
           transition={{ type: 'spring', stiffness: 400, damping: 30 }}
         />
       )}
@@ -1069,14 +1142,21 @@ function BottomTab({
   );
 }
 
-/** Desktop nav link with animated active indicator */
-function NavLink({ item, basePath, isActive }: { item: NavItem; basePath: string; isActive: boolean }) {
+/** Desktop nav link with animated active indicator — theme-aware (light + dark). */
+function NavLink({
+  item, basePath, isActive, tk,
+}: {
+  item: NavItem;
+  basePath: string;
+  isActive: boolean;
+  tk: ThemeTokens;
+}) {
   return (
     <Link
       to={`${basePath}${item.path}`}
       className="relative flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-medium transition-all"
       style={{
-        color: isActive ? '#fff' : colors.textSecondary,
+        color: isActive ? tk.primary : tk.textSec,
       }}
     >
       {/* Active background pill */}
@@ -1085,14 +1165,14 @@ function NavLink({ item, basePath, isActive }: { item: NavItem; basePath: string
           layoutId="activeNavPill"
           className="absolute inset-0 rounded-xl"
           style={{
-            background: `${colors.primary}18`,
-            border: `1px solid ${colors.primary}25`,
-            boxShadow: `0 0 20px ${colors.primary}10`,
+            background: tk.primarySoft,
+            border: `1px solid ${tk.primaryRing}`,
+            boxShadow: `0 0 20px ${tk.primary}10`,
           }}
           transition={{ type: 'spring', stiffness: 400, damping: 30 }}
         />
       )}
-      <span className="relative z-10" style={{ color: isActive ? colors.primary : colors.textTertiary }}>
+      <span className="relative z-10" style={{ color: isActive ? tk.primary : tk.textTer }}>
         {item.icon}
       </span>
       <span className="relative z-10">{item.label}</span>

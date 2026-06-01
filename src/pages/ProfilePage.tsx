@@ -28,7 +28,8 @@ import {
   Loader2
 } from 'lucide-react';
 import Footer from '@/components/Footer';
-import { colors, gradients } from '@/config/colors';
+import { gradients } from '@/config/colors';
+import { useThemeTokens } from '@/hooks/useThemeTokens';
 import { useAuth } from '@/hooks/useAppAuth';
 import {  } from 'react-router-dom';
 import { useAppNav } from '@/hooks/useAppNav';
@@ -46,6 +47,7 @@ import { organizationService } from '@/services/organizationService';
 import { supabase } from '@/config/supabase';
 
 export default function ProfilePage() {
+  const t = useThemeTokens();
   const { user, updateProfile, loading: authLoading } = useAuth();
   const { organization, group, isAnyAdmin, refreshSession } = useMultiTenantAuth();
   const { go: navigate } = useAppNav();
@@ -257,19 +259,19 @@ export default function ProfilePage() {
   // Show skeleton while loading
   if (authLoading || (!user && pageLoading)) {
     return (
-      <PageWrapper noPadding>
+      <PageWrapper noPadding style={{ background: t.bg, backgroundImage: t.bgWash, color: t.text }}>
         <div className="relative max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-4 sm:py-6 lg:py-8">
           {/* Header Skeleton */}
           <div className="mb-6 sm:mb-8">
             <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-4">
               <div className="flex items-center gap-3 sm:gap-4">
-                <div className="w-10 h-10 rounded-lg animate-pulse" style={{ background: 'rgba(255, 255, 255, 0.1)' }} />
+                <div className="w-10 h-10 rounded-lg animate-pulse" style={{ background: t.cardBorder }} />
                 <div>
-                  <div className="h-8 w-32 rounded-lg animate-pulse mb-2" style={{ background: 'rgba(255, 255, 255, 0.1)' }} />
-                  <div className="h-4 w-64 rounded-lg animate-pulse" style={{ background: 'rgba(255, 255, 255, 0.05)' }} />
+                  <div className="h-8 w-32 rounded-lg animate-pulse mb-2" style={{ background: t.cardBorder }} />
+                  <div className="h-4 w-64 rounded-lg animate-pulse" style={{ background: t.cardHover }} />
                 </div>
               </div>
-              <div className="h-10 w-32 rounded-lg animate-pulse" style={{ background: 'rgba(255, 255, 255, 0.1)' }} />
+              <div className="h-10 w-32 rounded-lg animate-pulse" style={{ background: t.cardBorder }} />
             </div>
           </div>
           <ProfileSkeleton />
@@ -279,7 +281,7 @@ export default function ProfilePage() {
   }
 
   return (
-    <PageWrapper noPadding>
+    <PageWrapper noPadding style={{ background: t.bg, backgroundImage: t.bgWash, color: t.text }}>
       {/* Main Content */}
       <div className="relative max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-4 sm:py-6 lg:py-8">
         {/* Header */}
@@ -294,18 +296,18 @@ export default function ProfilePage() {
                 onClick={() => navigate('/dashboard')}
                 className="flex items-center justify-center px-3 py-2 rounded-lg transition-all duration-300 outline-1"
                 style={{ 
-                  color: colors.textSecondary,
-                  outlineColor: colors.primary,
+                  color: t.textSec,
+                  outlineColor: t.primary,
                   background: 'rgba(255, 107, 53, 0.1)'
                 }}
                 whileHover={{ scale: 1.05, background: 'rgba(255, 107, 53, 0.2)' }}
                 whileTap={{ scale: 0.95 }}
               >
-                <ArrowLeft size={20} style={{ color: colors.primary }} />
+                <ArrowLeft size={20} style={{ color: t.primary }} />
               </motion.button>
               <div>
-                <h1 className="text-2xl sm:text-3xl font-bold text-white">My Profile</h1>
-                <p className="text-sm" style={{ color: colors.textSecondary }}>
+                <h1 className="text-2xl sm:text-3xl font-bold">My Profile</h1>
+                <p className="text-sm" style={{ color: t.textSec }}>
                   Manage your personal information and view payment summary
                 </p>
               </div>
@@ -391,42 +393,42 @@ export default function ProfilePage() {
                 {user?.full_name?.charAt(0).toUpperCase() || 'U'}
               </motion.div>
 
-              <h2 className="text-xl sm:text-2xl font-bold text-white mb-1">{user?.full_name}</h2>
-              <p className="text-sm mb-4" style={{ color: colors.textSecondary }}>
+              <h2 className="text-xl sm:text-2xl font-bold mb-1">{user?.full_name}</h2>
+              <p className="text-sm mb-4" style={{ color: t.textSec }}>
                 {user?.reg_number}
               </p>
 
               {/* Role Badge */}
               <div
                 className="inline-flex items-center gap-2 px-4 py-2 rounded-full mb-6"
-                style={{ background: `${colors.accentMint}20`, border: `1px solid ${colors.accentMint}40` }}
+                style={{ background: `${t.mint}20`, border: `1px solid ${t.mint}40` }}
               >
-                <Shield size={16} style={{ color: colors.accentMint }} />
-                <span className="text-sm font-medium" style={{ color: colors.accentMint }}>
+                <Shield size={16} style={{ color: t.mint }} />
+                <span className="text-sm font-medium" style={{ color: t.mint }}>
                   Student
                 </span>
               </div>
 
               {/* Quick Stats */}
-              <div className="space-y-3 pt-6 border-t" style={{ borderColor: 'rgba(255, 255, 255, 0.1)' }}>
+              <div className="space-y-3 pt-6 border-t" style={{ borderColor: t.cardBorder }}>
                 <div className="flex items-center justify-between">
-                  <span className="text-sm" style={{ color: colors.textSecondary }}>Status</span>
+                  <span className="text-sm" style={{ color: t.textSec }}>Status</span>
                   <span className="text-sm font-medium px-3 py-1 rounded-full" style={{ 
                     background: 'rgba(34, 197, 94, 0.2)',
                     color: '#22c55e'
                   }}>Active</span>
                 </div>
                 <div className="flex items-center justify-between">
-                  <span className="text-sm" style={{ color: colors.textSecondary }}>Level</span>
-                  <span className="text-sm font-medium text-white">{user?.level || groupPrimary || fetchedLevel || academicInfo?.academic_level || 'N/A'}</span>
+                  <span className="text-sm" style={{ color: t.textSec }}>Level</span>
+                  <span className="text-sm font-medium">{user?.level || groupPrimary || fetchedLevel || academicInfo?.academic_level || 'N/A'}</span>
                 </div>
                 <div className="flex items-center justify-between">
-                  <span className="text-sm" style={{ color: colors.textSecondary }}>Department</span>
-                  <span className="text-sm font-medium text-white">{user?.department || 'N/A'}</span>
+                  <span className="text-sm" style={{ color: t.textSec }}>Department</span>
+                  <span className="text-sm font-medium">{user?.department || 'N/A'}</span>
                 </div>
                 <div className="flex items-center justify-between">
-                  <span className="text-sm" style={{ color: colors.textSecondary }}>Section</span>
-                  <span className="text-sm font-medium text-white">{user?.section || 'Not set'}</span>
+                  <span className="text-sm" style={{ color: t.textSec }}>Section</span>
+                  <span className="text-sm font-medium">{user?.section || 'Not set'}</span>
                 </div>
               </div>
             </GlassCard>
@@ -440,18 +442,18 @@ export default function ProfilePage() {
             >
               <GlassCard className="p-0! overflow-hidden">
                 <div className="px-4 pt-4 pb-2">
-                  <h3 className="text-sm font-semibold text-white">Quick Actions</h3>
+                  <h3 className="text-sm font-semibold">Quick Actions</h3>
                 </div>
                 {[
-                  { icon: KeyRound, label: 'Change Password', path: '/change-password', color: colors.primary },
-                  { icon: History, label: 'Payment History', path: '/dashboard', color: colors.accentMint },
+                  { icon: KeyRound, label: 'Change Password', path: '/change-password', color: t.primary },
+                  { icon: History, label: 'Payment History', path: '/dashboard', color: t.mint },
                 ].map((action, i) => (
                   <motion.button
                     key={action.path}
                     onClick={() => navigate(action.path)}
                     className="w-full flex items-center gap-3 px-4 py-3 transition-all text-left"
-                    style={{ borderTop: '1px solid rgba(255, 255, 255, 0.06)' }}
-                    whileHover={{ background: 'rgba(255, 255, 255, 0.04)' }}
+                    style={{ borderTop: `1px solid ${t.divider}` }}
+                    whileHover={{ background: t.overlay }}
                     whileTap={{ scale: 0.98 }}
                     initial={{ opacity: 0, x: -10 }}
                     animate={{ opacity: 1, x: 0 }}
@@ -463,8 +465,8 @@ export default function ProfilePage() {
                     >
                       <action.icon size={16} style={{ color: action.color }} />
                     </div>
-                    <span className="text-sm font-medium text-white flex-1">{action.label}</span>
-                    <ChevronRight size={16} style={{ color: colors.textSecondary }} />
+                    <span className="text-sm font-medium flex-1">{action.label}</span>
+                    <ChevronRight size={16} style={{ color: t.textSec }} />
                   </motion.button>
                 ))}
               </GlassCard>
@@ -482,13 +484,13 @@ export default function ProfilePage() {
                   <div className="flex items-center gap-3 mb-4">
                     <div
                       className="w-8 h-8 rounded-lg flex items-center justify-center shrink-0"
-                      style={{ background: `${colors.primary}15` }}
+                      style={{ background: `${t.primary}15` }}
                     >
-                      <Building2 size={16} style={{ color: colors.primary }} />
+                      <Building2 size={16} style={{ color: t.primary }} />
                     </div>
                     <div>
-                      <h3 className="text-sm font-semibold text-white">Organization Logo</h3>
-                      <p className="text-[11px]" style={{ color: colors.textSecondary }}>
+                      <h3 className="text-sm font-semibold">Organization Logo</h3>
+                      <p className="text-[11px]" style={{ color: t.textSec }}>
                         {organization.short_name || organization.name}
                       </p>
                     </div>
@@ -506,7 +508,7 @@ export default function ProfilePage() {
                       ) : (
                         <div
                           className="w-20 h-20 rounded-xl flex items-center justify-center text-2xl font-bold ring-2 ring-white/10"
-                          style={{ background: `linear-gradient(135deg, ${organization.primary_color || colors.primary}, ${organization.primary_color || colors.primary}88)` }}
+                          style={{ background: `linear-gradient(135deg, ${organization.primary_color || t.primary}, ${organization.primary_color || t.primary}88)` }}
                         >
                           {organization.short_name?.charAt(0) || 'O'}
                         </div>
@@ -521,7 +523,7 @@ export default function ProfilePage() {
                         whileTap={{ scale: 0.95 }}
                       >
                         {logoUploading ? (
-                          <Loader2 size={20} className="text-white animate-spin" />
+                          <Loader2 size={20} className="animate-spin" />
                         ) : (
                           <Camera size={20} className="text-white" />
                         )}
@@ -545,7 +547,7 @@ export default function ProfilePage() {
                         onClick={() => logoInputRef.current?.click()}
                         disabled={logoUploading}
                         className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors"
-                        style={{ background: `${colors.primary}20`, color: colors.primary }}
+                        style={{ background: `${t.primary}20`, color: t.primary }}
                         whileHover={{ scale: 1.02 }}
                         whileTap={{ scale: 0.98 }}
                       >
@@ -567,7 +569,7 @@ export default function ProfilePage() {
                       )}
                     </div>
 
-                    <p className="text-[10px] text-center" style={{ color: colors.textSecondary }}>
+                    <p className="text-[10px] text-center" style={{ color: t.textSec }}>
                       PNG, JPG or WebP • Max 2MB
                     </p>
                   </div>
@@ -608,33 +610,33 @@ export default function ProfilePage() {
                 <div className="flex items-center gap-3 mb-4">
                   <div
                     className="w-10 h-10 rounded-xl flex items-center justify-center"
-                    style={{ background: `${colors.primary}20` }}
+                    style={{ background: `${t.primary}20` }}
                   >
-                    <Wallet size={20} style={{ color: colors.primary }} />
+                    <Wallet size={20} style={{ color: t.primary }} />
                   </div>
-                  <h3 className="text-base font-bold text-white">Payment Summary</h3>
+                  <h3 className="text-base font-bold">Payment Summary</h3>
                 </div>
                 
                 <div className="grid grid-cols-2 gap-3">
-                  <div className="p-3 rounded-xl" style={{ background: 'rgba(255, 255, 255, 0.03)', border: '1px solid rgba(255, 255, 255, 0.1)' }}>
-                    <p className="text-xs font-medium mb-1" style={{ color: colors.textSecondary }}>
+                  <div className="p-3 rounded-xl" style={{ background: t.overlay, border: `1px solid ${t.cardBorder}` }}>
+                    <p className="text-xs font-medium mb-1" style={{ color: t.textSec }}>
                       Total Paid
                     </p>
-                    <p className="text-lg font-bold text-white">
+                    <p className="text-lg font-bold">
                       <PrivacyMask>{formatCurrency(paymentSummary.totalPaid)}</PrivacyMask>
                     </p>
-                    <p className="text-[10px] mt-1" style={{ color: colors.textSecondary }}>
+                    <p className="text-[10px] mt-1" style={{ color: t.textSec }}>
                       {paymentSummary.completedPayments} payment{paymentSummary.completedPayments !== 1 ? 's' : ''}
                     </p>
                   </div>
-                  <div className="p-3 rounded-xl" style={{ background: 'rgba(255, 255, 255, 0.03)', border: '1px solid rgba(255, 255, 255, 0.1)' }}>
-                    <p className="text-xs font-medium mb-1" style={{ color: colors.textSecondary }}>
+                  <div className="p-3 rounded-xl" style={{ background: t.overlay, border: `1px solid ${t.cardBorder}` }}>
+                    <p className="text-xs font-medium mb-1" style={{ color: t.textSec }}>
                       Outstanding
                     </p>
-                    <p className="text-lg font-bold" style={{ color: colors.warning }}>
+                    <p className="text-lg font-bold" style={{ color: t.amber }}>
                       <PrivacyMask>{formatCurrency(paymentSummary.totalOutstanding)}</PrivacyMask>
                     </p>
-                    <p className="text-[10px] mt-1" style={{ color: colors.textSecondary }}>
+                    <p className="text-[10px] mt-1" style={{ color: t.textSec }}>
                       {paymentSummary.pendingPayments} pending
                     </p>
                   </div>
@@ -653,10 +655,10 @@ export default function ProfilePage() {
             {/* Personal Information Section */}
             <GlassCard>
               <div className="flex items-center justify-between mb-6">
-                <h3 className="text-lg sm:text-xl font-bold text-white">Personal Information</h3>
+                <h3 className="text-lg sm:text-xl font-bold">Personal Information</h3>
                 {!isEditing && (
                   <div className="flex items-center gap-2 text-xs px-3 py-1 rounded-full" 
-                    style={{ background: 'rgba(255, 255, 255, 0.05)', color: colors.textSecondary }}>
+                    style={{ background: t.cardHover, color: t.textSec }}>
                     <Lock size={12} />
                     <span>Some fields are read-only</span>
                   </div>
@@ -668,8 +670,8 @@ export default function ProfilePage() {
                 <motion.div
                   className="p-4 rounded-xl border"
                   style={{ 
-                    background: 'rgba(255, 255, 255, 0.02)',
-                    borderColor: 'rgba(255, 255, 255, 0.1)'
+                    background: t.overlay,
+                    borderColor: t.cardBorder
                   }}
                   initial={{ opacity: 0, y: 10 }}
                   animate={{ opacity: 1, y: 0 }}
@@ -678,21 +680,21 @@ export default function ProfilePage() {
                   <div className="flex items-start gap-3">
                     <div
                       className="w-10 h-10 rounded-lg flex items-center justify-center shrink-0"
-                      style={{ background: `${colors.primary}15` }}
+                      style={{ background: `${t.primary}15` }}
                     >
-                      <Hash size={18} style={{ color: colors.primary }} />
+                      <Hash size={18} style={{ color: t.primary }} />
                     </div>
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2 mb-1">
-                        <p className="text-xs font-medium" style={{ color: colors.textSecondary }}>
+                        <p className="text-xs font-medium" style={{ color: t.textSec }}>
                           Registration Number
                         </p>
                         <span className="text-[10px] px-2 py-0.5 rounded-full" 
-                          style={{ background: 'rgba(255, 255, 255, 0.1)', color: colors.textSecondary }}>
+                          style={{ background: t.cardBorder, color: t.textSec }}>
                           Read-only
                         </span>
                       </div>
-                      <p className="text-sm font-semibold text-white truncate">{user?.reg_number}</p>
+                      <p className="text-sm font-semibold truncate">{user?.reg_number}</p>
                     </div>
                   </div>
                 </motion.div>
@@ -719,8 +721,8 @@ export default function ProfilePage() {
                   <motion.div
                     className="p-4 rounded-xl border"
                     style={{ 
-                      background: 'rgba(255, 255, 255, 0.02)',
-                      borderColor: 'rgba(255, 255, 255, 0.1)'
+                      background: t.overlay,
+                      borderColor: t.cardBorder
                     }}
                     initial={{ opacity: 0, y: 10 }}
                     animate={{ opacity: 1, y: 0 }}
@@ -729,15 +731,15 @@ export default function ProfilePage() {
                     <div className="flex items-start gap-3">
                       <div
                         className="w-10 h-10 rounded-lg flex items-center justify-center shrink-0"
-                        style={{ background: `${colors.accentMint}15` }}
+                        style={{ background: `${t.mint}15` }}
                       >
-                        <User size={18} style={{ color: colors.accentMint }} />
+                        <User size={18} style={{ color: t.mint }} />
                       </div>
                       <div className="flex-1 min-w-0">
-                        <p className="text-xs font-medium mb-1" style={{ color: colors.textSecondary }}>
+                        <p className="text-xs font-medium mb-1" style={{ color: t.textSec }}>
                           Full Name
                         </p>
-                        <p className="text-sm font-semibold text-white truncate">{user?.full_name}</p>
+                        <p className="text-sm font-semibold truncate">{user?.full_name}</p>
                       </div>
                     </div>
                   </motion.div>
@@ -764,8 +766,8 @@ export default function ProfilePage() {
                   <motion.div
                     className="p-4 rounded-xl border"
                     style={{ 
-                      background: 'rgba(255, 255, 255, 0.02)',
-                      borderColor: 'rgba(255, 255, 255, 0.1)'
+                      background: t.overlay,
+                      borderColor: t.cardBorder
                     }}
                     initial={{ opacity: 0, y: 10 }}
                     animate={{ opacity: 1, y: 0 }}
@@ -774,15 +776,15 @@ export default function ProfilePage() {
                     <div className="flex items-start gap-3">
                       <div
                         className="w-10 h-10 rounded-lg flex items-center justify-center shrink-0"
-                        style={{ background: `${colors.statusPaid}15` }}
+                        style={{ background: `${t.mint}15` }}
                       >
-                        <Mail size={18} style={{ color: colors.statusPaid }} />
+                        <Mail size={18} style={{ color: t.mint }} />
                       </div>
                       <div className="flex-1 min-w-0">
-                        <p className="text-xs font-medium mb-1" style={{ color: colors.textSecondary }}>
+                        <p className="text-xs font-medium mb-1" style={{ color: t.textSec }}>
                           Email Address
                         </p>
-                        <p className="text-sm font-semibold text-white truncate">{user?.email || 'Not set'}</p>
+                        <p className="text-sm font-semibold truncate">{user?.email || 'Not set'}</p>
                       </div>
                     </div>
                   </motion.div>
@@ -809,8 +811,8 @@ export default function ProfilePage() {
                   <motion.div
                     className="p-4 rounded-xl border"
                     style={{ 
-                      background: 'rgba(255, 255, 255, 0.02)',
-                      borderColor: 'rgba(255, 255, 255, 0.1)'
+                      background: t.overlay,
+                      borderColor: t.cardBorder
                     }}
                     initial={{ opacity: 0, y: 10 }}
                     animate={{ opacity: 1, y: 0 }}
@@ -819,15 +821,15 @@ export default function ProfilePage() {
                     <div className="flex items-start gap-3">
                       <div
                         className="w-10 h-10 rounded-lg flex items-center justify-center shrink-0"
-                        style={{ background: `${colors.warning}15` }}
+                        style={{ background: `${t.amber}15` }}
                       >
-                        <Phone size={18} style={{ color: colors.warning }} />
+                        <Phone size={18} style={{ color: t.amber }} />
                       </div>
                       <div className="flex-1 min-w-0">
-                        <p className="text-xs font-medium mb-1" style={{ color: colors.textSecondary }}>
+                        <p className="text-xs font-medium mb-1" style={{ color: t.textSec }}>
                           Phone Number
                         </p>
-                        <p className="text-sm font-semibold text-white truncate">{user?.phone || 'Not set'}</p>
+                        <p className="text-sm font-semibold truncate">{user?.phone || 'Not set'}</p>
                       </div>
                     </div>
                   </motion.div>
@@ -854,8 +856,8 @@ export default function ProfilePage() {
                   <motion.div
                     className="p-4 rounded-xl border"
                     style={{ 
-                      background: 'rgba(255, 255, 255, 0.02)',
-                      borderColor: 'rgba(255, 255, 255, 0.1)'
+                      background: t.overlay,
+                      borderColor: t.cardBorder
                     }}
                     initial={{ opacity: 0, y: 10 }}
                     animate={{ opacity: 1, y: 0 }}
@@ -864,15 +866,15 @@ export default function ProfilePage() {
                     <div className="flex items-start gap-3">
                       <div
                         className="w-10 h-10 rounded-lg flex items-center justify-center shrink-0"
-                        style={{ background: `${colors.primary}15` }}
+                        style={{ background: `${t.primary}15` }}
                       >
-                        <BookOpen size={18} style={{ color: colors.primary }} />
+                        <BookOpen size={18} style={{ color: t.primary }} />
                       </div>
                       <div className="flex-1 min-w-0">
-                        <p className="text-xs font-medium mb-1" style={{ color: colors.textSecondary }}>
+                        <p className="text-xs font-medium mb-1" style={{ color: t.textSec }}>
                           Section
                         </p>
-                        <p className="text-sm font-semibold text-white truncate">{user?.section || 'Not set'}</p>
+                        <p className="text-sm font-semibold truncate">{user?.section || 'Not set'}</p>
                       </div>
                     </div>
                   </motion.div>
@@ -882,8 +884,8 @@ export default function ProfilePage() {
                 <motion.div
                   className="p-4 rounded-xl border"
                   style={{ 
-                    background: 'rgba(255, 255, 255, 0.02)',
-                    borderColor: 'rgba(255, 255, 255, 0.1)'
+                    background: t.overlay,
+                    borderColor: t.cardBorder
                   }}
                   initial={{ opacity: 0, y: 10 }}
                   animate={{ opacity: 1, y: 0 }}
@@ -892,21 +894,21 @@ export default function ProfilePage() {
                   <div className="flex items-start gap-3">
                     <div
                       className="w-10 h-10 rounded-lg flex items-center justify-center shrink-0"
-                      style={{ background: `${colors.accentMint}15` }}
+                      style={{ background: `${t.mint}15` }}
                     >
-                      <GraduationCap size={18} style={{ color: colors.accentMint }} />
+                      <GraduationCap size={18} style={{ color: t.mint }} />
                     </div>
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2 mb-1">
-                        <p className="text-xs font-medium" style={{ color: colors.textSecondary }}>
+                        <p className="text-xs font-medium" style={{ color: t.textSec }}>
                           Current Level
                         </p>
                         <span className="text-[10px] px-2 py-0.5 rounded-full" 
-                          style={{ background: 'rgba(255, 255, 255, 0.1)', color: colors.textSecondary }}>
+                          style={{ background: t.cardBorder, color: t.textSec }}>
                           Read-only
                         </span>
                       </div>
-                      <p className="text-sm font-semibold text-white">{user?.level || groupPrimary || fetchedLevel || academicInfo?.academic_level || 'N/A'}</p>
+                      <p className="text-sm font-semibold">{user?.level || groupPrimary || fetchedLevel || academicInfo?.academic_level || 'N/A'}</p>
                     </div>
                   </div>
                 </motion.div>
@@ -915,8 +917,8 @@ export default function ProfilePage() {
                 <motion.div
                   className="p-4 rounded-xl border"
                   style={{ 
-                    background: 'rgba(255, 255, 255, 0.02)',
-                    borderColor: 'rgba(255, 255, 255, 0.1)'
+                    background: t.overlay,
+                    borderColor: t.cardBorder
                   }}
                   initial={{ opacity: 0, y: 10 }}
                   animate={{ opacity: 1, y: 0 }}
@@ -925,21 +927,21 @@ export default function ProfilePage() {
                   <div className="flex items-start gap-3">
                     <div
                       className="w-10 h-10 rounded-lg flex items-center justify-center shrink-0"
-                      style={{ background: `${colors.statusPaid}15` }}
+                      style={{ background: `${t.mint}15` }}
                     >
-                      <Calendar size={18} style={{ color: colors.statusPaid }} />
+                      <Calendar size={18} style={{ color: t.mint }} />
                     </div>
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2 mb-1">
-                        <p className="text-xs font-medium" style={{ color: colors.textSecondary }}>
+                        <p className="text-xs font-medium" style={{ color: t.textSec }}>
                           Member Since
                         </p>
                         <span className="text-[10px] px-2 py-0.5 rounded-full" 
-                          style={{ background: 'rgba(255, 255, 255, 0.1)', color: colors.textSecondary }}>
+                          style={{ background: t.cardBorder, color: t.textSec }}>
                           Read-only
                         </span>
                       </div>
-                      <p className="text-sm font-semibold text-white">
+                      <p className="text-sm font-semibold">
                         {user?.created_at ? formatDate(user.created_at, 'long') : 'N/A'}
                       </p>
                     </div>
@@ -975,16 +977,16 @@ export default function ProfilePage() {
                 <div className="flex items-center gap-3 mb-4">
                   <div
                     className="w-10 h-10 rounded-xl flex items-center justify-center"
-                    style={{ background: `${colors.primary}20` }}
+                    style={{ background: `${t.primary}20` }}
                   >
-                    <Wallet size={20} style={{ color: colors.primary }} />
+                    <Wallet size={20} style={{ color: t.primary }} />
                   </div>
-                  <h3 className="text-base sm:text-lg font-bold text-white">Payment Summary</h3>
+                  <h3 className="text-base sm:text-lg font-bold">Payment Summary</h3>
                 </div>
                 
                 <div className="grid grid-cols-2 gap-4">
                   <div className="p-4 rounded-xl border" style={{ 
-                    background: 'rgba(255, 255, 255, 0.02)',
+                    background: t.overlay,
                     borderColor: 'rgba(34, 197, 94, 0.3)' 
                   }}>
                     <div className="flex items-center gap-2 mb-2">
@@ -993,27 +995,27 @@ export default function ProfilePage() {
                         Total Paid
                       </p>
                     </div>
-                    <p className="text-xl sm:text-2xl font-bold text-white mb-1">
+                    <p className="text-xl sm:text-2xl font-bold mb-1">
                       <PrivacyMask>{formatCurrency(paymentSummary.totalPaid)}</PrivacyMask>
                     </p>
-                    <p className="text-xs" style={{ color: colors.textSecondary }}>
+                    <p className="text-xs" style={{ color: t.textSec }}>
                       {paymentSummary.completedPayments} completed payment{paymentSummary.completedPayments !== 1 ? 's' : ''}
                     </p>
                   </div>
                   <div className="p-4 rounded-xl border" style={{ 
-                    background: 'rgba(255, 255, 255, 0.02)',
+                    background: t.overlay,
                     borderColor: 'rgba(251, 146, 60, 0.3)'
                   }}>
                     <div className="flex items-center gap-2 mb-2">
-                      <AlertCircle size={16} style={{ color: colors.warning }} />
-                      <p className="text-xs font-medium" style={{ color: colors.warning }}>
+                      <AlertCircle size={16} style={{ color: t.amber }} />
+                      <p className="text-xs font-medium" style={{ color: t.amber }}>
                         Outstanding
                       </p>
                     </div>
-                    <p className="text-xl sm:text-2xl font-bold" style={{ color: colors.warning }}>
+                    <p className="text-xl sm:text-2xl font-bold" style={{ color: t.amber }}>
                       <PrivacyMask>{formatCurrency(paymentSummary.totalOutstanding)}</PrivacyMask>
                     </p>
-                    <p className="text-xs" style={{ color: colors.textSecondary }}>
+                    <p className="text-xs" style={{ color: t.textSec }}>
                       {paymentSummary.pendingPayments} pending payment{paymentSummary.pendingPayments !== 1 ? 's' : ''}
                     </p>
                   </div>

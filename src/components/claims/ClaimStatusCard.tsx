@@ -8,9 +8,10 @@
  * escape valve once eligible (7 days stuck).
  */
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { motion } from 'framer-motion';
 import { ShieldCheck, Loader2, Vote, Clock, CheckCircle2, LifeBuoy, Hourglass } from 'lucide-react';
+import { supabase } from '@/config/supabase';
 import { organizationService } from '@/services/organizationService';
 import { useMultiTenantAuth } from '@/hooks/useMultiTenantAuth';
 import { useToast } from '@/hooks/useToast';
@@ -38,19 +39,55 @@ interface Status {
 }
 
 export default function ClaimStatusCard({ claimId }: { claimId: string }) {
-  const { user } = useMultiTenantAuth();
+  const { user, refreshSession } = useMultiTenantAuth();
   const toast = useToast();
   const [s, setS] = useState<Status | null>(null);
   const [loading, setLoading] = useState(true);
   const [requesting, setRequesting] = useState(false);
+  // Track whether we've already triggered a session refresh for this approval
+  const refreshedRef = useRef(false);
 
   const load = useCallback(async () => {
     const res = (await organizationService.getClaimStatus(claimId)) as Status;
     setS(res);
     setLoading(false);
-  }, [claimId]);
+
+    // When the claim is newly approved and session hasn't refreshed yet,
+    // call refreshSession() so the auth context picks up the new member_admins
+    // row (updated verification_layer, can_create_payments, etc.) without
+    // requiring the user to log out.
+    if ((res.status === 'approved' || res.granted) && !refreshedRef.current) {
+      refreshedRef.current = true;
+      try {
+        await refreshSession();
+        toast?.success?.('Your exec role is now verified — admin access is live.');
+      } catch {
+        // Non-critical: user can refresh the page if needed
+      }
+    }
+  }, [claimId, refreshSession, toast]);
 
   useEffect(() => { void load(); }, [load]);
+
+  // Real-time subscription: listen for vote_received changes on this claim
+  // so the claimant sees live progress without manually refreshing.
+  useEffect(() => {
+    const channel = supabase
+      .channel(`claim_status_${claimId}`)
+      .on(
+        'postgres_changes',
+        {
+          event: 'UPDATE',
+          schema: 'public',
+          table: 'claim_requests',
+          filter: `id=eq.${claimId}`,
+        },
+        () => { void load(); }
+      )
+      .subscribe();
+
+    return () => { void supabase.removeChannel(channel); };
+  }, [claimId, load]);
 
   const requestReview = useCallback(async () => {
     if (!user?.id) return;

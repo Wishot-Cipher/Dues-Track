@@ -610,6 +610,7 @@ export const organizationService = {
       .select('id, full_name, position_title, claimed_role, claimed_scope, institutional_email, votes_received, votes_required, current_layer, bootstrap_path, created_at')
       .eq('organization_id', me.organization_id)
       .eq('status', 'awaiting_votes')
+      .eq('bootstrap_path', false)   // bootstrap claims self-finalize; parent exec not needed
       .neq('claimant_user_id', callerMemberId)
       .order('created_at', { ascending: false });
 
