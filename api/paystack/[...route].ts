@@ -721,7 +721,12 @@ async function handleSubaccount(req: any, res: any, body: any) {
   if (!paystackSecret) return res.status(500).json({ ok: false, error: 'Server config error: PAYSTACK_SECRET_KEY missing' });
 
   const supabase = createClient(supabaseUrl, serviceRole);
-  const { memberId, bankCode, accountNumber, businessName } = body || {};
+  // `groupId` is the new tier-aware extension: when present, the
+  // subaccount is persisted on organization_groups (via mig 092's
+  // set_group_payout RPC) instead of on the org. Each tier owns its
+  // own money plumbing — strict ownership, no cascade — so a class
+  // rep's class collects to the class's bank, not the org's.
+  const { memberId, bankCode, accountNumber, businessName, groupId } = body || {};
 
   // Caller must be an admin with settings permission...
   const auth = await verifyAdmin(supabase, memberId, 'can_manage_settings');
@@ -765,13 +770,42 @@ async function handleSubaccount(req: any, res: any, body: any) {
   }
   const accountName = resolveJson?.data?.account_name || null;
 
-  // 2) Org context (business name + any existing subaccount)
-  const { data: org } = await supabase
-    .from('organizations')
-    .select('id, name, paystack_subaccount_code')
-    .eq('id', orgId)
-    .maybeSingle();
-  const subBusinessName = (businessName && String(businessName).trim()) || org?.name || accountName || 'Payvexo Org';
+  // 2) Resolve the BUSINESS context. For a tier-scoped setup we pull
+  //    the group's name + any existing subaccount; otherwise we pull
+  //    the org's. Either way we read the existing subaccount so a
+  //    re-setup updates Paystack in place rather than creating a
+  //    duplicate.
+  let businessLabel: string | null = null;
+  let existingSubaccount: string | null = null;
+
+  if (groupId) {
+    const { data: g } = await supabase
+      .from('organization_groups')
+      .select('id, organization_id, name, paystack_subaccount_code')
+      .eq('id', groupId)
+      .maybeSingle();
+    if (!g) {
+      return res.status(400).json({ ok: false, error: 'Target group not found.' });
+    }
+    if (g.organization_id !== orgId) {
+      return res.status(403).json({ ok: false, error: "Target group isn't in your organization." });
+    }
+    businessLabel      = g.name as string;
+    existingSubaccount = (g.paystack_subaccount_code as string) || null;
+  } else {
+    const { data: org } = await supabase
+      .from('organizations')
+      .select('id, name, paystack_subaccount_code')
+      .eq('id', orgId)
+      .maybeSingle();
+    businessLabel      = (org?.name as string) || null;
+    existingSubaccount = (org?.paystack_subaccount_code as string) || null;
+  }
+
+  const subBusinessName = (businessName && String(businessName).trim())
+    || businessLabel
+    || accountName
+    || 'Payvexo Org';
 
   // 3) Create or update the subaccount (percentage_charge 0 — the platform
   //    keeps its fee via transaction_charge on each payment, not here)
@@ -784,12 +818,11 @@ async function handleSubaccount(req: any, res: any, body: any) {
 
   let saJson: any;
   try {
-    const existing = org?.paystack_subaccount_code;
-    const url = existing
-      ? `https://api.paystack.co/subaccount/${encodeURIComponent(existing)}`
+    const url = existingSubaccount
+      ? `https://api.paystack.co/subaccount/${encodeURIComponent(existingSubaccount)}`
       : 'https://api.paystack.co/subaccount';
     const sr = await fetch(url, {
-      method: existing ? 'PUT' : 'POST',
+      method: existingSubaccount ? 'PUT' : 'POST',
       headers: { Authorization: `Bearer ${paystackSecret}`, 'Content-Type': 'application/json' },
       body: JSON.stringify(payload),
     });
@@ -802,23 +835,49 @@ async function handleSubaccount(req: any, res: any, body: any) {
   }
 
   const subaccountCode = saJson?.data?.subaccount_code;
+  const subaccountId   = saJson?.data?.id != null ? String(saJson.data.id) : null;
 
-  // 4) Persist on the org
-  const { error: updErr } = await supabase
-    .from('organizations')
-    .update({
-      paystack_subaccount_code: subaccountCode,
-      paystack_settlement_bank: bankCode,
-      paystack_account_number: acctNum,
-      paystack_account_name: accountName,
-      paystack_business_name: subBusinessName,
-      paystack_verified: true,
-      updated_at: new Date().toISOString(),
-    })
-    .eq('id', orgId);
-  if (updErr) {
-    console.error('[paystack/subaccount] org update error', updErr);
-    return res.status(500).json({ ok: false, error: 'Payout account created but could not be saved. Contact support.' });
+  // 4) Persist — tier-aware. Groups go through set_group_payout (mig 092)
+  //    which validates that the caller actually owns this tier. Org
+  //    falls back to the legacy direct UPDATE on organizations.
+  if (groupId) {
+    const { data: setResult, error: setErr } = await supabase.rpc('set_group_payout', {
+      p_caller_member_id:         auth.data.id,
+      p_group_id:                 groupId,
+      p_paystack_subaccount_code: subaccountCode,
+      p_paystack_subaccount_id:   subaccountId,
+      p_bank_name:                null,        // can be enriched later from listBanks()
+      p_bank_code:                bankCode,
+      p_account_name:             accountName,
+      p_account_number:           acctNum,
+    });
+    if (setErr || !(setResult as { ok?: boolean })?.ok) {
+      const code = (setResult as { code?: string })?.code;
+      console.error('[paystack/subaccount] set_group_payout error', setErr, setResult);
+      return res.status(500).json({
+        ok: false,
+        error: code === 'not_your_group'
+          ? "You're not authorised to set payout for this tier."
+          : 'Payout account created with Paystack but could not be saved on the tier. Contact support.',
+      });
+    }
+  } else {
+    const { error: updErr } = await supabase
+      .from('organizations')
+      .update({
+        paystack_subaccount_code: subaccountCode,
+        paystack_settlement_bank: bankCode,
+        paystack_account_number: acctNum,
+        paystack_account_name: accountName,
+        paystack_business_name: subBusinessName,
+        paystack_verified: true,
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', orgId);
+    if (updErr) {
+      console.error('[paystack/subaccount] org update error', updErr);
+      return res.status(500).json({ ok: false, error: 'Payout account created but could not be saved. Contact support.' });
+    }
   }
 
   return res.status(200).json({
@@ -827,5 +886,6 @@ async function handleSubaccount(req: any, res: any, body: any) {
     account_name: accountName,
     bank_code: bankCode,
     account_number: acctNum,
+    group_id: groupId || null,
   });
 }

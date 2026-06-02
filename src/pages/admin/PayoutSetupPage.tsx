@@ -11,12 +11,16 @@
  */
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { ArrowLeft, Banknote, CheckCircle2, Loader2, ShieldCheck, AlertTriangle } from 'lucide-react';
+import { ArrowLeft, Banknote, CheckCircle2, Loader2, ShieldCheck, AlertTriangle, Building2 } from 'lucide-react';
 import { useAppNav } from '@/hooks/useAppNav';
 import { useMultiTenantAuth } from '@/hooks/useMultiTenantAuth';
+import { useActiveRole } from '@/hooks/useActiveRole';
 import { useToast } from '@/hooks/useToast';
 import { paystackService, type PaystackBank } from '@/services/paystackService';
+import { supabase } from '@/config/supabase';
+import ProfessionalDropdown from '@/components/ui/ProfessionalDropdown';
 
 const tk = {
   bg:       '#0F0703',
@@ -36,8 +40,75 @@ export default function PayoutSetupPage() {
   const { user, organization, refreshSession } = useMultiTenantAuth();
   const toast = useToast();
 
+  // Tier-aware: when ?groupId is on the URL, this page configures
+  // THAT group's subaccount instead of the org's. Used by the
+  // CreateDuePage "set up payout first" gate, the dept-exec
+  // dashboard, and the class-rep dashboard.
+  //
+  // If no ?groupId is present, we look at the user's ACTIVE role.
+  //   • org-scope active role        → configure the org's payout
+  //   • group / unit-scope active    → configure THAT scope's group
+  //   • no exec active role          → fall back to org (legacy)
+  //
+  // Without this fallback, a class rep clicking "Payout Account" in
+  // the admin dropdown would land on the org's payout — which they
+  // typically can't edit AND isn't the bucket they collect to.
+  const [searchParams] = useSearchParams();
+  const { activeRole } = useActiveRole({
+    orgId: organization?.id,
+    memberId: user?.id,
+  });
+  const groupId = useMemo(() => {
+    const fromUrl = searchParams.get('groupId');
+    if (fromUrl) return fromUrl;
+    if (activeRole?.kind !== 'exec') return null;
+    if (activeRole.scopeLevel === 'org') return null;
+    return activeRole.groupId ?? null;
+  }, [searchParams, activeRole?.kind, activeRole?.scopeLevel, activeRole?.groupId]);
+
+  const [groupCtx, setGroupCtx] = useState<{
+    id: string; name: string; kind: string;
+    subaccount_code: string | null;
+    account_name: string | null;
+    account_number: string | null;
+    settlement_bank: string | null;
+  } | null>(null);
+
+  // Whenever we have a groupId, resolve that group's existing payout
+  // (if any) so we can show "Connected" state and pre-fill / disable
+  // accordingly. No-op for the org-wide flow.
+  useEffect(() => {
+    if (!groupId) { setGroupCtx(null); return; }
+    let cancelled = false;
+    (async () => {
+      const { data } = await supabase
+        .from('organization_groups')
+        .select('id, name, kind, paystack_subaccount_code, account_name, account_number, bank_code')
+        .eq('id', groupId)
+        .maybeSingle();
+      if (cancelled) return;
+      if (data) {
+        setGroupCtx({
+          id:              data.id as string,
+          name:            (data.name as string) || 'this group',
+          kind:            ((data.kind as string) || 'group').toLowerCase(),
+          subaccount_code: (data.paystack_subaccount_code as string) || null,
+          account_name:    (data.account_name as string) || null,
+          account_number:  (data.account_number as string) || null,
+          settlement_bank: (data.bank_code as string) || null,
+        });
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [groupId]);
+
   const org = organization as unknown as Record<string, unknown> | null;
-  const initialConnected = Boolean(org?.paystack_subaccount_code);
+
+  // Pick the right source-of-truth for the "are we already connected?"
+  // banner based on whether we're in tier mode or org mode.
+  const initialConnected = groupId
+    ? Boolean(groupCtx?.subaccount_code)
+    : Boolean(org?.paystack_subaccount_code);
 
   const [banks, setBanks] = useState<PaystackBank[]>([]);
   const [loadingBanks, setLoadingBanks] = useState(true);
@@ -45,13 +116,26 @@ export default function PayoutSetupPage() {
   const [accountNumber, setAccountNumber] = useState('');
   const [saving, setSaving] = useState(false);
   const [connected, setConnected] = useState(initialConnected);
-  const [connectedName, setConnectedName] = useState<string | null>((org?.paystack_account_name as string) || null);
+  const [connectedName, setConnectedName] = useState<string | null>(
+    groupId ? (groupCtx?.account_name ?? null) : ((org?.paystack_account_name as string) || null),
+  );
   const [editing, setEditing] = useState(!initialConnected);
 
+  // When the tier context resolves async, re-seed the "connected" UI.
+  useEffect(() => {
+    if (!groupId) return;
+    const c = Boolean(groupCtx?.subaccount_code);
+    setConnected(c);
+    setConnectedName(groupCtx?.account_name ?? null);
+    setEditing(!c);
+  }, [groupId, groupCtx?.subaccount_code, groupCtx?.account_name]);
+
   const connectedBankName = useMemo(() => {
-    const code = org?.paystack_settlement_bank as string | undefined;
+    const code = groupId
+      ? groupCtx?.settlement_bank ?? null
+      : (org?.paystack_settlement_bank as string | undefined) ?? null;
     return banks.find((b) => b.code === code)?.name || code || null;
-  }, [banks, org]);
+  }, [banks, org, groupId, groupCtx?.settlement_bank]);
 
   useEffect(() => {
     let active = true;
@@ -77,6 +161,7 @@ export default function PayoutSetupPage() {
       memberId: user.id,
       bankCode,
       accountNumber: digits,
+      groupId: groupId || null,
     });
     setSaving(false);
 
@@ -85,9 +170,26 @@ export default function PayoutSetupPage() {
     setConnected(true);
     setConnectedName(res.account_name || null);
     setEditing(false);
-    toast?.success?.(`Payout account connected: ${res.account_name || 'verified'}.`);
-    void refreshSession();
-  }, [user?.id, bankCode, accountNumber, toast, refreshSession]);
+    // Update local group context so the "Connected" panel reflects
+    // the new state without a full refresh.
+    if (groupId && groupCtx) {
+      setGroupCtx({
+        ...groupCtx,
+        subaccount_code: res.subaccount_code || groupCtx.subaccount_code,
+        account_name:    res.account_name || groupCtx.account_name,
+        account_number:  digits,
+        settlement_bank: bankCode,
+      });
+    }
+    toast?.success?.(
+      groupId
+        ? `Payout connected for ${groupCtx?.name ?? 'this tier'}: ${res.account_name || 'verified'}.`
+        : `Payout account connected: ${res.account_name || 'verified'}.`,
+    );
+    // Org-wide flow refreshes the session because org fields move
+    // into the auth context. Tier-scoped flow doesn't need that.
+    if (!groupId) void refreshSession();
+  }, [user?.id, bankCode, accountNumber, toast, refreshSession, groupId, groupCtx]);
 
   return (
     <div className="min-h-screen px-4 sm:px-6 py-6" style={{ background: tk.bg }}>
@@ -103,10 +205,35 @@ export default function PayoutSetupPage() {
 
         <div className="flex items-center gap-2 mb-1">
           <Banknote className="w-5 h-5" style={{ color: tk.primary }} />
-          <h1 className="text-xl font-bold" style={{ color: tk.text }}>Payout account</h1>
+          <h1 className="text-xl font-bold" style={{ color: tk.text }}>
+            {groupId ? 'Tier payout account' : 'Payout account'}
+          </h1>
         </div>
+        {/* Context: when configuring a tier (class / dept / faculty),
+            spell out which one — no ambiguity about which bucket
+            money will land in. */}
+        {groupId && groupCtx && (
+          <div
+            className="mb-4 rounded-xl px-3 py-2 flex items-center gap-2 text-[12px]"
+            style={{
+              background: `${tk.primary}12`,
+              border: `1px solid ${tk.primary}30`,
+              color: tk.textSec,
+            }}
+          >
+            <Building2 className="w-4 h-4 shrink-0" style={{ color: tk.primary }} />
+            <span>
+              Configuring payout for{' '}
+              <span className="font-bold" style={{ color: tk.text }}>{groupCtx.name}</span>{' '}
+              <span style={{ color: tk.textTer }}>({groupCtx.kind})</span>. Each tier
+              collects to its own bank — no cascading.
+            </span>
+          </div>
+        )}
         <p className="text-sm mb-6" style={{ color: tk.textSec }}>
-          Where your collected dues are settled. Until this is set, payments are held in the platform account.
+          {groupId
+            ? "Where THIS tier's collected dues are settled. Until this is set, no one can publish dues here."
+            : 'Where your collected dues are settled. Until this is set, payments are held in the platform account.'}
         </p>
 
         {/* Connected state */}
@@ -123,7 +250,11 @@ export default function PayoutSetupPage() {
             <dl className="space-y-1.5 text-sm">
               <div className="flex justify-between"><dt style={{ color: tk.textTer }}>Account name</dt><dd style={{ color: tk.text }}>{connectedName || '—'}</dd></div>
               <div className="flex justify-between"><dt style={{ color: tk.textTer }}>Bank</dt><dd style={{ color: tk.text }}>{connectedBankName || '—'}</dd></div>
-              <div className="flex justify-between"><dt style={{ color: tk.textTer }}>Account number</dt><dd style={{ color: tk.text }}>{(org?.paystack_account_number as string) || '—'}</dd></div>
+              <div className="flex justify-between"><dt style={{ color: tk.textTer }}>Account number</dt><dd style={{ color: tk.text }}>{
+                groupId
+                  ? (groupCtx?.account_number ? `••••••${groupCtx.account_number.slice(-4)}` : '—')
+                  : ((org?.paystack_account_number as string) || '—')
+              }</dd></div>
             </dl>
             <p className="text-xs mt-3 flex items-center gap-1.5" style={{ color: tk.textTer }}>
               <ShieldCheck className="w-3.5 h-3.5" style={{ color: tk.mint }} />
@@ -146,19 +277,20 @@ export default function PayoutSetupPage() {
             className="rounded-2xl p-5"
             style={{ background: tk.panel, border: `1px solid ${tk.border}` }}
           >
-            <label className="block text-xs font-semibold mb-1.5" style={{ color: tk.textSec }}>Bank</label>
-            <select
-              value={bankCode}
-              onChange={(e) => setBankCode(e.target.value)}
-              disabled={loadingBanks || saving}
-              className="w-full rounded-xl px-3 py-2.5 text-sm outline-none mb-4"
-              style={{ background: tk.inputBg, border: `1px solid ${tk.border}`, color: tk.text }}
-            >
-              <option value="">{loadingBanks ? 'Loading banks…' : 'Select your bank'}</option>
-              {banks.map((b) => (
-                <option key={b.code} value={b.code} style={{ color: '#000' }}>{b.name}</option>
-              ))}
-            </select>
+            <div className="mb-4">
+              <label className="block text-xs font-semibold mb-1.5" style={{ color: tk.textSec }}>Bank</label>
+              <ProfessionalDropdown
+                value={bankCode}
+                onChange={(v) => setBankCode(Array.isArray(v) ? (v[0] ?? '') : v)}
+                placeholder={loadingBanks ? 'Loading banks…' : 'Select your bank'}
+                searchable
+                disabled={loadingBanks || saving}
+                options={banks.map((b) => ({
+                  value: b.code,
+                  label: b.name,
+                }))}
+              />
+            </div>
 
             <label className="block text-xs font-semibold mb-1.5" style={{ color: tk.textSec }}>Account number</label>
             <input

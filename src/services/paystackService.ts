@@ -162,6 +162,13 @@ export const paystackService = {
     bankCode: string;
     accountNumber: string;
     businessName?: string;
+    /**
+     * Optional tier targeting. When set, the subaccount is persisted
+     * on `organization_groups.paystack_subaccount_code` (via mig 092)
+     * instead of on the org. Each tier collects to its own bank
+     * account — no cascading fallback to a parent tier.
+     */
+    groupId?: string | null;
   }): Promise<SubaccountResult> {
     try {
       const res = await fetch('/api/paystack/subaccount', {
@@ -172,6 +179,7 @@ export const paystackService = {
           bankCode: input.bankCode,
           accountNumber: input.accountNumber,
           businessName: input.businessName,
+          groupId: input.groupId || null,
         }),
       });
       const json = (await res.json().catch(() => ({}))) as SubaccountResult;
