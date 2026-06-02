@@ -14,7 +14,7 @@ import {
   Key, AlertTriangle, CheckCircle, UserCheck,
   FileSpreadsheet, FileText, FileUp, Eye, RotateCcw,
   Link2, Share2, Crown, CheckSquare, Square, MinusSquare,
-  UserCog, Sparkles, Filter, Plus, User, XCircle,
+  UserCog, Plus, User, XCircle,
 } from 'lucide-react';
 import { colors, gradients } from '@/config/colors';
 import AnimatedCounter from '@/components/ui/AnimatedCounter';
