@@ -14,6 +14,14 @@ export interface RoleTab {
   adminId?: string;
   groupId?: string | null;
   scopeLevel?: RoleScopeLevel;
+  /**
+   * Kind of the group this role is scoped to (faculty / department /
+   * class / level / ...). The role-switcher uses this to pick the
+   * right landing dashboard: scope='unit' + groupKind='department'
+   * lands on /admin/dept, scope='unit' + groupKind='faculty' lands
+   * on /admin/faculty, otherwise we fall back to /admin/dashboard.
+   */
+  groupKind?: string | null;
   verified: boolean;
   pending?: boolean;
   role?: string;
@@ -150,6 +158,7 @@ export function useUserRoles() {
             subLabel: groupLabel ? `${scopeLabel} • ${groupLabel}` : scopeLabel,
             adminId: ar.id,
             groupId: ar.group_id ?? null,
+            groupKind: groupInfo?.kind ?? null,
             scopeLevel,
             verified,
             pending: !verified,
@@ -176,6 +185,7 @@ export function useUserRoles() {
           label,
           subLabel: groupLabel ? `${scopeLabel} • ${groupLabel}` : scopeLabel,
           groupId: claimGroupId ?? null,
+          groupKind: groupInfo?.kind ?? null,
           scopeLevel,
           verified: false,
           pending: true,

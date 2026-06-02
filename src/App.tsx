@@ -32,6 +32,7 @@ import TicketCheckInPage from '@/pages/admin/TicketCheckInPage';
 import PaymentVerifyPage from '@/pages/PaymentVerifyPage';
 import ReceiptPage from '@/pages/ReceiptPage';
 import AdminDashboardPage from '@/pages/admin/AdminDashboardPage';
+import DepartmentExecDashboardPage from '@/pages/admin/DepartmentExecDashboardPage';
 // NOTE: src/pages/admin/CreatePaymentTypePage.tsx is the legacy create-due page.
 // It stays on disk as a safe-revert backup but is no longer routed.
 import CreateDuePage from '@/pages/admin/CreateDuePage';
@@ -166,6 +167,11 @@ function App() {
                       FULL  (Layer 4, fully verified)         → money + members + sensitive
                     A pending founder (Layer < 2) is bounced to the member dashboard. */}
                 <Route path="admin/dashboard" element={<OrgProtectedRoute requireActing><AdminDashboardPage /></OrgProtectedRoute>} />
+                {/* Departmental exec dashboard — Layer-4 unit-scope admins
+                    whose group is a department. The page does its own
+                    "is this the right kind of admin?" check and bounces
+                    non-matching callers, so requireVerified is enough. */}
+                <Route path="admin/dept" element={<OrgProtectedRoute requireVerified><DepartmentExecDashboardPage /></OrgProtectedRoute>} />
                 <Route path="admin/groups" element={<OrgProtectedRoute requireActing><OrgGroupsPage /></OrgProtectedRoute>} />
                 <Route path="admin/academic-calendar" element={<OrgProtectedRoute requireActing><OrgAcademicCalendarPage /></OrgProtectedRoute>} />
                 <Route path="admin/members" element={<OrgProtectedRoute requiredPermission="can_manage_members" requireVerified><OrgMembersPage /></OrgProtectedRoute>} />

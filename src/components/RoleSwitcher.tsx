@@ -37,11 +37,26 @@ function toActiveRole(
     kind: role.kind,
     adminId: role.adminId,
     groupId: role.groupId ?? null,
+    groupKind: role.groupKind ?? null,
     scopeLevel: role.scopeLevel,
     label: role.label,
     orgId,
     memberId,
   };
+}
+
+/**
+ * Where an exec role should land its holder after they pick it from
+ * the switcher. Dept exec → /admin/dept; faculty exec → /admin/faculty
+ * (still being built; falls back gracefully); everyone else → the
+ * generic /admin/dashboard.
+ */
+function landingPathForExec(role: RoleTab): string {
+  const scope = role.scopeLevel;
+  const kind = (role.groupKind || '').toLowerCase();
+  if (scope === 'unit' && kind === 'department') return '/admin/dept';
+  if (scope === 'unit' && (kind === 'faculty' || kind === 'college')) return '/admin/faculty';
+  return '/admin/dashboard';
 }
 
 export default function RoleSwitcher() {
@@ -174,7 +189,8 @@ export default function RoleSwitcher() {
                       if (role.kind === 'student') {
                         go('/dashboard');
                       } else {
-                        go('/admin/dashboard');
+                        // Pick the right exec dashboard for this scope/kind.
+                        go(landingPathForExec(role));
                       }
                     }}
                     className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-left text-xs transition-all disabled:cursor-not-allowed"
