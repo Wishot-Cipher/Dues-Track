@@ -250,12 +250,26 @@ export default function OrgLayout() {
   // admin_permissions (see multiTenantAuthService.aggregatePermissions).
   const perms = (user.admin_permissions || {}) as Record<string, boolean>;
 
-  // Highest scope this exec holds across their admin rows (org > unit > group).
-  // Drives which TENANT-level tools appear; money tools ignore scope on purpose.
+  // What scope drives the visible TENANT-level tools.
+  //
+  // Old behaviour: max scope across ALL admin rows. That meant a user
+  // who's both a class rep AND a faculty exec saw Faculty / Calendar
+  // items in their nav even when they had explicitly switched to their
+  // class-rep role from the role switcher — which is wrong, because
+  // those tools belong to the faculty exec context.
+  //
+  // New behaviour: when the user is actively in an exec role, we use
+  // THAT role's scope. We still fall back to the max across admin
+  // rows for callers who haven't picked an active role yet (legacy
+  // sessions or first-load before the switcher has settled).
   const scopeRank = (s?: string) => (s === 'org' ? 2 : s === 'unit' ? 1 : 0);
-  const execScopeRank = (user.admin_records || []).reduce(
+  const maxScopeRank = (user.admin_records || []).reduce(
     (max, a) => Math.max(max, scopeRank((a as { scope_level?: string }).scope_level)), 0,
   );
+  const activeScopeRank = activeRole?.kind === 'exec' && activeRole.scopeLevel
+    ? scopeRank(activeRole.scopeLevel)
+    : null;
+  const execScopeRank = activeScopeRank !== null ? activeScopeRank : maxScopeRank;
 
   const adminNavAll: NavItem[] = showAdmin ? [
     { path: '/admin/dashboard', label: 'Overview', icon: <PieChart size={20} />, section: 'admin', adminGroup: 'overview' },
