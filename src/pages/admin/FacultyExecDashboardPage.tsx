@@ -28,6 +28,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import {
   ArrowRight,
+  Banknote,
   Building2,
   CalendarClock,
   GraduationCap,
@@ -141,12 +142,32 @@ export default function FacultyExecDashboardPage() {
       // Direct children of the faculty (mostly departments; could also
       // include leaf groups for non-academic shapes).
       const deptGroups = groups.filter((g) => g.parent_group_id === facultyGroup.id);
-
-      // All classes that sit under any of those departments.
       const deptIds = deptGroups.map((g) => g.id);
-      const classGroups = groups.filter(
-        (g) => g.parent_group_id && deptIds.includes(g.parent_group_id),
-      );
+
+      // EVERY class under this faculty, regardless of depth. The
+      // previous code only walked ONE tier (dept → class). If the org
+      // has dept → level → class, the classes were invisible.
+      // We collect every descendant of any dept under this faculty
+      // that is not itself a dept-shaped group.
+      const classGroups: OrganizationGroup[] = (() => {
+        const out: OrganizationGroup[] = [];
+        const seen = new Set<string>(deptIds);
+        const stack = [...deptIds];
+        while (stack.length) {
+          const id = stack.pop()!;
+          for (const g of groups) {
+            if (g.parent_group_id === id && !seen.has(g.id)) {
+              seen.add(g.id);
+              const kind = (g.kind || '').toLowerCase();
+              if (kind !== 'department' && kind !== 'college' && kind !== 'faculty') {
+                out.push(g);
+              }
+              stack.push(g.id);
+            }
+          }
+        }
+        return out;
+      })();
 
       // For each dept, count classes + sum member_count + count active
       // dues targeted at it or at any of its classes. Single IN() query
@@ -373,6 +394,42 @@ export default function FacultyExecDashboardPage() {
         <Stat label="Members"     value={totals.memberTotal} icon={<Users className="w-3.5 h-3.5" />}     tk={tk} color={tk.blue} />
         <Stat label="Active dues" value={totals.duesTotal}   icon={<Receipt className="w-3.5 h-3.5" />}   tk={tk} color={tk.mint} />
       </motion.div>
+
+      {/* ── Payout shortcut ──────────────────────────────────────
+          Faculty-level payout — the bucket money lands in when a
+          faculty exec publishes anything at faculty scope. Each
+          dept under this faculty configures its OWN payout
+          separately; this card only sets the faculty's. */}
+      <motion.button
+        type="button"
+        onClick={() => navigate(`/${orgSlug}/admin/payout?groupId=${faculty.id}`)}
+        initial={{ opacity: 0, y: 12 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ delay: 0.08 }}
+        className="w-full text-left rounded-2xl p-4 flex items-center gap-3 transition-all hover:-translate-y-0.5 active:scale-[0.995]"
+        style={{
+          background: tk.card,
+          border: `1px solid ${tk.cardBorder}`,
+          boxShadow: tk.shadow,
+        }}
+      >
+        <span
+          className="w-10 h-10 rounded-xl flex items-center justify-center shrink-0"
+          style={{ background: tk.primarySoft, color: tk.primary, border: `1px solid ${tk.primaryRing}` }}
+        >
+          <Banknote className="w-5 h-5" />
+        </span>
+        <div className="flex-1 min-w-0">
+          <p className="text-sm font-bold" style={{ color: tk.text }}>
+            Faculty payout account
+          </p>
+          <p className="text-[11px] mt-0.5" style={{ color: tk.textTer }}>
+            Where {faculty.name}'s own dues collect. Each department
+            under this faculty sets up its own bank separately.
+          </p>
+        </div>
+        <ArrowRight className="w-4 h-4 shrink-0" style={{ color: tk.primary }} />
+      </motion.button>
 
       {/* ── Publish a due — targeting CTAs ──────────────────────── */}
       <motion.section

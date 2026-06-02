@@ -29,6 +29,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import {
   ArrowRight,
+  Banknote,
   CalendarClock,
   CheckCircle2,
   Clock,
@@ -287,12 +288,23 @@ export default function ClassExecDashboardView({ admin, klass }: ClassExecDashbo
       </motion.div>
 
       {/* ── Quick actions ──────────────────────────────────────── */}
+      {/* 5 actions on wide screens, wraps to 2-col on mobile. Payout
+          is intentionally first now — without it, "Publish a due"
+          will be gated by the no-payout modal. */}
       <motion.section
         initial={{ opacity: 0, y: 12 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ delay: 0.1 }}
-        className="grid grid-cols-2 sm:grid-cols-4 gap-3"
+        className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3"
       >
+        <ActionCard
+          icon={<Banknote className="w-5 h-5" />}
+          title="Payout account"
+          sub="Where your class collects."
+          tk={tk}
+          accent={tk.mint}
+          onClick={() => navigate(`/${orgSlug}/admin/payout?groupId=${klass.id}`)}
+        />
         <ActionCard
           icon={<Plus className="w-5 h-5" />}
           title="Publish a due"

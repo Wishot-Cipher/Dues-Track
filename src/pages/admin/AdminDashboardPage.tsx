@@ -161,7 +161,17 @@ export default function AdminDashboardPage() {
   useEffect(() => {
     if (!orgSlug || !user) return;
 
+    // If the user is explicitly acting as a class rep (or org owner),
+    // NEVER redirect — they came here to use the class / org-wide
+    // dashboard. The bug we're fixing: the previous code matched
+    // ANY admin row by activeRole.adminId, then forwarded to
+    // /admin/dept even when that record was group-scope. A verified
+    // class rep who held no other admin role would still get bounced.
+    if (activeRole?.kind === 'exec' && activeRole.scopeLevel === 'group') return;
+    if (activeRole?.kind === 'exec' && activeRole.scopeLevel === 'org')   return;
+
     type AdminRowMin = {
+      id?: string;
       is_active?: boolean;
       verification_layer?: number;
       scope_level?: string;
@@ -169,13 +179,14 @@ export default function AdminDashboardPage() {
     };
     const records = (user.admin_records ?? []) as AdminRowMin[];
 
-    // Pick which admin row is "active". Prefer the one matching the
-    // role switcher's adminId (held inside activeRole.adminId), then
-    // fall back to the first verified unit-scope row so deep-link +
-    // refresh still work for a single-role dept/faculty exec.
-    type AdminRecordsByAdminId = AdminRowMin & { id?: string };
+    // Pick which admin row drives the redirect:
+    //   • If active role points at a specific admin row AND that row
+    //     is unit-scope → use it.
+    //   • Otherwise fall back to the first verified unit-scope row so
+    //     a single-role dept/faculty exec deep-linking to
+    //     /admin/dashboard still ends up on their own dashboard.
     const byId = activeRole?.adminId
-      ? (records as AdminRecordsByAdminId[]).find((r) => r.id === activeRole.adminId)
+      ? records.find((r) => r.id === activeRole.adminId && r.scope_level === 'unit')
       : null;
     const unitRow = byId
       ?? records.find((r) =>

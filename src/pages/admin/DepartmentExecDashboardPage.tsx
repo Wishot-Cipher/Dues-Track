@@ -29,6 +29,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import {
   ArrowRight,
+  Banknote,
   Building2,
   CalendarClock,
   Layers,
@@ -149,10 +150,35 @@ export default function DepartmentExecDashboardPage() {
       setAdminRow(admin);
       setDept(deptGroup);
 
-      // 2. Direct children of the dept = classes/levels
-      const classGroups = groups.filter(
-        (g) => g.parent_group_id === deptGroup.id,
-      );
+      // 2. Everything under the dept, at any depth. The previous code
+      //    only matched DIRECT children, which broke for orgs whose
+      //    hierarchy is deeper (e.g. dept → level → class). We now walk
+      //    the tree so a faculty whose classes sit two tiers down still
+      //    counts them. Includes only leaf-like kinds so we don't list
+      //    intermediate level groups as "classes".
+      const classGroups: OrganizationGroup[] = (() => {
+        const out: OrganizationGroup[] = [];
+        const seen = new Set<string>();
+        const stack: string[] = [deptGroup.id];
+        while (stack.length) {
+          const id = stack.pop()!;
+          if (seen.has(id)) continue;
+          seen.add(id);
+          for (const g of groups) {
+            if (g.parent_group_id === id) {
+              stack.push(g.id);
+              const kind = (g.kind || '').toLowerCase();
+              // Skip the dept itself + any further department-shaped
+              // groups; everything else under the dept is a "class"
+              // for this page's purposes.
+              if (kind !== 'department' && kind !== 'college' && kind !== 'faculty') {
+                out.push(g);
+              }
+            }
+          }
+        }
+        return out;
+      })();
 
       // 3. For each class, fetch active dues count in parallel. We do
       //    this server-side as a single IN() query so we don't fan out
@@ -375,6 +401,41 @@ export default function DepartmentExecDashboardPage() {
         <Stat label="Members total"  value={totals.memberTotal} icon={<Users className="w-3.5 h-3.5" />}  tk={tk} color={tk.blue} />
         <Stat label="Active dues"    value={totals.duesTotal}   icon={<Receipt className="w-3.5 h-3.5" />} tk={tk} color={tk.mint} />
       </motion.div>
+
+      {/* ── Payout shortcut ──────────────────────────────────────
+          Without a payout set on this dept, the "Publish a due"
+          flow will hit the no_payout gate. Surface the entry here
+          so the dept exec lands on it BEFORE they hit the modal. */}
+      <motion.button
+        type="button"
+        onClick={() => navigate(`/${orgSlug}/admin/payout?groupId=${dept.id}`)}
+        initial={{ opacity: 0, y: 12 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ delay: 0.08 }}
+        className="w-full text-left rounded-2xl p-4 flex items-center gap-3 transition-all hover:-translate-y-0.5 active:scale-[0.995]"
+        style={{
+          background: tk.card,
+          border: `1px solid ${tk.cardBorder}`,
+          boxShadow: tk.shadow,
+        }}
+      >
+        <span
+          className="w-10 h-10 rounded-xl flex items-center justify-center shrink-0"
+          style={{ background: tk.primarySoft, color: tk.primary, border: `1px solid ${tk.primaryRing}` }}
+        >
+          <Banknote className="w-5 h-5" />
+        </span>
+        <div className="flex-1 min-w-0">
+          <p className="text-sm font-bold" style={{ color: tk.text }}>
+            Department payout account
+          </p>
+          <p className="text-[11px] mt-0.5" style={{ color: tk.textTer }}>
+            Where {dept.name}'s dues are collected. Each tier owns its
+            own bank — no cascading from a parent.
+          </p>
+        </div>
+        <ArrowRight className="w-4 h-4 shrink-0" style={{ color: tk.primary }} />
+      </motion.button>
 
       {/* ── Publish a due — quick targeting CTAs ────────────────── */}
       <motion.section
