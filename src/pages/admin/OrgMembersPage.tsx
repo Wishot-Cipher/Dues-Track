@@ -1021,40 +1021,17 @@ export default function OrgMembersPage() {
   };
 
   return (
-    <div className="min-h-screen py-4 sm:py-6 pb-24 lg:pb-6 relative overflow-x-hidden" style={pageSurface}>
-      {/* Background Grid Pattern */}
-      <div
-        className="absolute inset-0 opacity-20 pointer-events-none"
-        style={{
-          backgroundImage: `
-            linear-gradient(${theme === 'light' ? 'rgba(255, 104, 3, 0.12)' : 'rgba(255, 104, 3, 0.24)'} 1px, transparent 1px),
-            linear-gradient(90deg, ${theme === 'light' ? 'rgba(255, 104, 3, 0.12)' : 'rgba(255, 104, 3, 0.24)'} 1px, transparent 1px)
-          `,
-          backgroundSize: '50px 50px',
-        }}
+    <div className="min-h-screen py-4 sm:py-6 pb-24 lg:pb-6 relative" style={pageSurface}>
+      {/* Single brand blob — replaces the previous grid pattern + two
+          animated gradient orbs that made the page feel decorative
+          rather than professional. Matches the calmer recipe the new
+          exec-dashboard pages (DepartmentExecDashboardPage etc.) use
+          so the whole admin surface reads as one design language. */}
+      <span
+        aria-hidden
+        className="fixed -right-24 -top-24 w-[440px] h-[440px] rounded-full pointer-events-none"
+        style={{ background: tk.blob1, filter: 'blur(80px)' }}
       />
-
-      {/* Animated Gradient Orbs */}
-      <div className="fixed inset-0 overflow-hidden pointer-events-none">
-        <div
-          className="absolute w-[500px] h-[500px] rounded-full blur-[120px] opacity-30 animate-pulse"
-          style={{
-            background: `radial-gradient(circle, ${tk.primary} 0%, transparent 70%)`,
-            top: '-10%',
-            right: '-5%',
-            animationDuration: '4s',
-          }}
-        />
-        <div
-          className="absolute w-[400px] h-[400px] rounded-full blur-[100px] opacity-20"
-          style={{
-            background: `radial-gradient(circle, ${tk.mint} 0%, transparent 70%)`,
-            bottom: '-5%',
-            left: '-5%',
-            animation: 'pulse 6s ease-in-out infinite',
-          }}
-        />
-      </div>
 
       <div className="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         {/* Header */}
@@ -1075,38 +1052,41 @@ export default function OrgMembersPage() {
 
             <div className="relative z-10">
               <div className="flex flex-col sm:flex-row items-center sm:items-start gap-3 mb-2">
-                <motion.div
-                  initial={{ scale: 0.9 }}
-                  animate={{ scale: 1 }}
-                  className="w-14 h-14 rounded-xl flex items-center justify-center shrink-0 shadow-lg"
-                  style={{
-                    background: `linear-gradient(135deg, ${tk.primary}30, ${tk.primary}10)`,
-                    border: `1px solid ${tk.primaryRing}`,
-                    boxShadow: `0 4px 15px ${tk.primary}20`
-                  }}
-                >
-                  <Users className="w-7 h-7" style={{ color: tk.primary }} />
-                </motion.div>
-                <div className="text-center sm:text-left">
-                  {/* Badge */}
-                  <motion.div
-                    initial={{ opacity: 0, scale: 0.9 }}
-                    animate={{ opacity: 1, scale: 1 }}
-                    transition={{ delay: 0.1 }}
-                    className="inline-flex items-center gap-2 px-3 py-1 rounded-full text-xs font-semibold mb-2"
-                    style={{
-                      background: theme === 'light' ? tk.primarySoft : `linear-gradient(135deg, ${tk.primary}30, ${tk.primary}10)`,
-                      border: `1px solid ${tk.primaryRing}`,
-                      color: tk.primary,
-                    }}
-                  >
-                    <Sparkles className="w-3 h-3" />
-                    {memberLabelPlural.toUpperCase()} MANAGEMENT
-                  </motion.div>
-                  <h1 className="text-2xl sm:text-3xl font-bold" style={{ color: tk.text }}>Manage {memberLabelPlural}</h1>
-                  <p className="flex items-center justify-center sm:justify-start gap-2" style={{ color: tk.textSec }}>
-                    <Filter className="w-4 h-4" />
-                    {organization?.name} &bull; {group?.name || 'All Groups'}
+                {/* Header — matches DepartmentExecDashboardPage's
+                    chip → H1 → subtitle shape. Replaces the heavy
+                    14×14 brand-gradient icon block + Sparkle badge
+                    + Filter-icon subtitle the page used to lead with.
+                    Adds a tier-context chip on the right (org · group)
+                    so the admin always sees which scope they're
+                    editing. */}
+                <div className="text-left flex-1 min-w-0">
+                  <div className="flex items-center gap-2 flex-wrap mb-2">
+                    <span
+                      className="inline-flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-[0.18em] px-2 py-1 rounded-full"
+                      style={{
+                        background: tk.primarySoft,
+                        color: tk.primary,
+                        border: `1px solid ${tk.primaryRing}`,
+                      }}
+                    >
+                      <Users className="w-3 h-3" />
+                      {memberLabelPlural} management
+                    </span>
+                    <span
+                      className="inline-flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wider"
+                      style={{ color: tk.textTer }}
+                    >
+                      {organization?.name}
+                      {group?.name ? ` · ${group.name}` : ''}
+                    </span>
+                  </div>
+                  <h1 className="text-2xl sm:text-[28px] font-extrabold tracking-tight" style={{ color: tk.text }}>
+                    Manage {memberLabelPlural.toLowerCase()}
+                  </h1>
+                  <p className="text-sm mt-1" style={{ color: tk.textSec }}>
+                    Add, edit, suspend, and onboard people in your scope.
+                    Class reps see their class; dept and faculty execs see
+                    their whole subtree.
                   </p>
                 </div>
 
