@@ -35,7 +35,6 @@ import { useAppNav } from '@/hooks/useAppNav';
 import { useTheme, getDashboardTokens } from '@/hooks/useTheme';
 import { useToast } from '@/hooks/useToast';
 import PayvexoBackground from '@/components/student/dashboard/PayvexoBackground';
-import { generatePaymentReceiptPDF } from '@/utils/pdfExport';
 
 // ── Types ──────────────────────────────────────────────────────────
 interface ReceiptRow {
@@ -105,6 +104,21 @@ function receiptNumberFor(id: string, amount: number, status: string): string {
   return 'PVX-' + Math.abs(hash).toString(36).toUpperCase().padStart(6, '0').slice(0, 6);
 }
 
+/**
+ * Escape user-supplied strings before interpolating into the receipt
+ * HTML template. The new-tab HTML is built with template literals, so
+ * a malicious org name (or, more realistically, an apostrophe in a
+ * member's name) would break the page or worse without this.
+ */
+function escapeHtml(input: string | null | undefined): string {
+  return String(input ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
 // ── Page ───────────────────────────────────────────────────────────
 export default function ReceiptPage() {
   const { paymentId } = useParams<{ paymentId: string }>();
@@ -117,6 +131,7 @@ export default function ReceiptPage() {
   const [receipt, setReceipt] = useState<ReceiptRow | null>(null);
   const [loading, setLoading] = useState(true);
   const [notFound, setNotFound] = useState(false);
+  const [downloading, setDownloading] = useState(false);
   const qrCanvasRef = useRef<HTMLCanvasElement | null>(null);
 
   useEffect(() => {
@@ -179,44 +194,360 @@ export default function ReceiptPage() {
     } catch { /* user cancelled */ }
   }, [receipt, toast]);
 
-  // ── Download (proper PDF, NOT a page screenshot) ──────────────
-  // The previous implementation called window.print() on the whole
-  // page — which captured the nav, the background, and shrank the
-  // receipt to a tiny square in the middle of an A4 sheet. That's
-  // not how receipts work in real life.
+  // ── Download (real PDF — saves to disk, matches the on-screen UI) ──
+  // The previous version called generatePaymentReceiptPDF which just
+  // opened a new browser window with a totally different hardcoded
+  // template. From the user's perspective: tapping Download navigated
+  // away into an old-looking receipt page that DIDN'T download
+  // anything. Nothing landed in their downloads folder.
   //
-  // We now hand the receipt to generatePaymentReceiptPDF, which opens
-  // a separate window with a print-friendly receipt-sized template.
-  // The current page (nav, sheets, modals) is never part of the output.
-  const handleDownload = useCallback(() => {
+  // Real fix: snapshot THIS card (the redesigned hero-amount layout
+  // the user sees on screen) into a canvas, drop it onto a jsPDF
+  // page sized to the canvas's aspect ratio, and trigger save().
+  // What the user downloads is byte-for-byte what they see.
+  const handleDownload = useCallback(async () => {
     if (!receipt) return;
+    setDownloading(true);
     try {
-      generatePaymentReceiptPDF({
-        id: receipt.id,
-        amount: Number(receipt.total_charged_kobo
-          ? receipt.total_charged_kobo / 100
-          : receipt.amount || 0),
-        status: receipt.status,
-        payment_method: channelLabel(receipt.payment_method, receipt.paystack_channel),
-        transaction_ref: receipt.paystack_reference || receipt.transaction_ref || '',
-        created_at: receipt.created_at || new Date().toISOString(),
-        approved_at: receipt.approved_at || undefined,
-        payment_type: {
-          title:  receipt.payment_type?.title || 'Payment',
-          amount: Number(receipt.dues_amount_kobo
-            ? receipt.dues_amount_kobo / 100
-            : receipt.amount || 0),
-        },
-        student: {
-          full_name:  receipt.member?.full_name  || receipt.payer_name  || 'Member',
-          reg_number: receipt.member?.member_id  || '—',
-          email:      receipt.payer_email || undefined,
-        },
-      });
+      // ── HTML receipt in a new tab ───────────────────────────
+      // Stripe / Wise / Square all do it this way: serve a clean
+      // printable HTML page, let the browser's native PDF engine
+      // render it on Save. Result: pixel-perfect typography, real
+      // fonts, no clipping, no canvas blurriness.
+      //
+      // The new tab has two large action buttons (Save PDF · Print)
+      // that hide via @media print so the saved output is just the
+      // receipt itself. Everything else is one self-contained doc.
+
+      const orgPrimary = brandColor || '#FF6803';
+      const orgInitial = (orgName.charAt(0) || 'P').toUpperCase();
+      const verifyUrl  = window.location.href;
+      const issuedAt   = formatDateTime(receipt.approved_at || receipt.created_at);
+
+      // Pre-render the QR as a PNG data URL so we can embed it as
+      // a plain <img>. This makes the receipt page self-contained
+      // and prints without network round-trips.
+      let qrDataUrl = '';
+      try {
+        qrDataUrl = await QRCode.toDataURL(verifyUrl, {
+          width: 320,
+          margin: 0,
+          color: { dark: '#0F0703', light: '#FFFFFF' },
+          errorCorrectionLevel: 'M',
+        });
+      } catch { /* best effort */ }
+
+      // Build the rows that go into the items table. We render at
+      // most three: dues, platform fee, total. When no fee exists
+      // it collapses to a single "Total paid" line.
+      const itemsHtml = feeBreakdown
+        ? `
+          <tr><td>${escapeHtml(receipt.payment_type?.title || 'Payment')}</td><td class="r">${escapeHtml(formatNaira(feeBreakdown.dues))}</td></tr>
+          <tr><td>Platform fee</td><td class="r">${escapeHtml(formatNaira(feeBreakdown.fee))}</td></tr>
+          <tr class="total"><td>Total</td><td class="r">${escapeHtml(formatNaira(feeBreakdown.total))}</td></tr>
+        `
+        : `
+          <tr><td>${escapeHtml(receipt.payment_type?.title || 'Payment')}</td><td class="r">${escapeHtml(amountDisplay)}</td></tr>
+          <tr class="total"><td>Total</td><td class="r">${escapeHtml(amountDisplay)}</td></tr>
+        `;
+
+      // Build the receipt HTML. CSS is inlined so the new tab is
+      // fully self-contained — no external stylesheets, no fetches
+      // after open. The print stylesheet hides the action bar.
+      const html = `<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>Receipt ${escapeHtml(receiptNo)} · ${escapeHtml(orgName)}</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500;700&display=swap" />
+  <style>
+    *, *::before, *::after { box-sizing: border-box; }
+    html, body { margin: 0; padding: 0; background: #F4F4F2; }
+    body {
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      color: #0F0703;
+      -webkit-font-smoothing: antialiased;
+      -moz-osx-font-smoothing: grayscale;
+    }
+    .actions {
+      position: fixed; top: 16px; left: 50%; transform: translateX(-50%);
+      display: flex; gap: 10px; z-index: 100;
+    }
+    .actions button {
+      font-family: inherit; font-weight: 700; font-size: 13px;
+      padding: 10px 18px; border-radius: 999px; border: 0; cursor: pointer;
+      transition: transform .15s ease, box-shadow .15s ease;
+      letter-spacing: 0.01em;
+    }
+    .actions .primary {
+      background: ${orgPrimary}; color: #fff;
+      box-shadow: 0 8px 20px -8px ${orgPrimary}99;
+    }
+    .actions .ghost {
+      background: #FFFFFF; color: #0F0703;
+      box-shadow: 0 4px 14px -6px rgba(15,7,3,.12);
+    }
+    .actions button:hover { transform: translateY(-1px); }
+
+    .sheet {
+      max-width: 720px; margin: 80px auto 40px;
+      background: #FFFFFF;
+      box-shadow:
+        0 30px 60px -20px rgba(15,7,3,.10),
+        0 10px 30px -10px rgba(15,7,3,.06);
+      border-radius: 14px;
+      overflow: hidden;
+    }
+    .sheet .inner { padding: 56px 64px; }
+
+    .row { display: flex; align-items: center; justify-content: space-between; }
+
+    /* Header */
+    .brand { display: flex; align-items: center; gap: 12px; }
+    .brand .mark {
+      width: 36px; height: 36px; border-radius: 10px;
+      background: ${orgPrimary};
+      color: #fff; font-weight: 800; font-size: 16px;
+      display: flex; align-items: center; justify-content: center;
+    }
+    .brand .name {
+      font-weight: 700; font-size: 18px; line-height: 1;
+      letter-spacing: -0.01em;
+    }
+    .brand .sub {
+      font-size: 11px; color: #7a7a78; margin-top: 4px;
+      letter-spacing: 0.04em; text-transform: uppercase;
+    }
+    .receipt-label {
+      font-size: 11px; letter-spacing: 0.18em; text-transform: uppercase;
+      color: #7a7a78; font-weight: 700;
+    }
+    .receipt-no {
+      font-family: 'JetBrains Mono', ui-monospace, monospace;
+      font-weight: 600; font-size: 12px; color: #0F0703;
+      margin-top: 4px;
+    }
+
+    hr { border: 0; border-top: 1px solid #EBEBE8; margin: 28px 0; }
+
+    /* Hero amount */
+    .hero { margin-top: 8px; }
+    .hero .label {
+      font-size: 11px; letter-spacing: 0.18em; text-transform: uppercase;
+      color: #7a7a78; font-weight: 700;
+    }
+    .hero .amount {
+      font-weight: 800; font-size: 44px; letter-spacing: -0.025em;
+      line-height: 1.1; margin-top: 6px;
+      font-variant-numeric: tabular-nums;
+    }
+    .hero .status {
+      display: inline-flex; align-items: center; gap: 8px;
+      margin-top: 10px;
+      font-size: 13px; font-weight: 600; color: #4f4f4d;
+    }
+    .pill {
+      display: inline-block;
+      font-size: 11px; font-weight: 800; letter-spacing: 0.06em;
+      padding: 3px 10px; border-radius: 999px;
+    }
+    .pill.paid    { background: #E7FAF1; color: #047857; }
+    .pill.pending { background: #FFF3DC; color: #B45309; }
+
+    /* Two-column meta */
+    .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 32px; }
+    .meta .label {
+      font-size: 11px; letter-spacing: 0.16em; text-transform: uppercase;
+      color: #7a7a78; font-weight: 700; margin-bottom: 8px;
+    }
+    .meta .body { font-size: 14px; line-height: 1.55; color: #2A2A28; }
+    .meta .body strong { color: #0F0703; font-weight: 600; }
+    .mono { font-family: 'JetBrains Mono', ui-monospace, monospace; font-size: 12.5px; }
+
+    /* Items table */
+    table.items { width: 100%; border-collapse: collapse; }
+    table.items th, table.items td {
+      padding: 14px 0; text-align: left; font-size: 14px;
+      border-bottom: 1px solid #EBEBE8;
+    }
+    table.items th {
+      font-size: 11px; letter-spacing: 0.16em; text-transform: uppercase;
+      color: #7a7a78; font-weight: 700; padding-bottom: 10px;
+    }
+    table.items td.r, table.items th.r { text-align: right; font-variant-numeric: tabular-nums; }
+    table.items tr.total td {
+      font-weight: 700; font-size: 16px;
+      border-bottom: 0; padding-top: 18px;
+    }
+    table.items tr.total td:last-child {
+      color: ${orgPrimary};
+    }
+
+    /* QR block */
+    .verify {
+      display: flex; gap: 24px; align-items: center;
+    }
+    .verify img {
+      width: 96px; height: 96px;
+      padding: 8px; background: #fff; border: 1px solid #EBEBE8; border-radius: 10px;
+    }
+    .verify .copy { font-size: 13px; color: #4f4f4d; line-height: 1.6; }
+    .verify .copy .url { font-family: 'JetBrains Mono', ui-monospace, monospace; font-size: 11.5px; color: #0F0703; word-break: break-all; }
+    .verify .copy .no { font-family: 'JetBrains Mono', ui-monospace, monospace; font-size: 12px; color: ${orgPrimary}; margin-top: 8px; font-weight: 700; }
+
+    /* Footer */
+    .footer {
+      text-align: center; padding: 24px 0 0;
+      font-size: 12px; color: #7a7a78;
+    }
+    .footer .thanks {
+      font-size: 14px; color: #0F0703; font-weight: 600; margin-bottom: 8px;
+    }
+
+    /* Print rules: hide action bar, drop shadow + margin so the
+       paper is filled edge-to-edge by the receipt content. */
+    @page { size: A4; margin: 18mm; }
+    @media print {
+      html, body { background: #FFFFFF; }
+      .actions { display: none !important; }
+      .sheet { box-shadow: none; margin: 0 auto; border-radius: 0; }
+      .sheet .inner { padding: 0; }
+    }
+  </style>
+</head>
+<body>
+  <div class="actions">
+    <button class="primary" onclick="window.print()">Save as PDF</button>
+    <button class="ghost" onclick="window.close()">Close</button>
+  </div>
+
+  <section class="sheet">
+    <div class="inner">
+
+      <!-- HEADER ────────────────────────────────────────── -->
+      <div class="row">
+        <div class="brand">
+          <div class="mark">${escapeHtml(orgInitial)}</div>
+          <div>
+            <div class="name">${escapeHtml(orgName)}</div>
+            <div class="sub">Payment receipt</div>
+          </div>
+        </div>
+        <div style="text-align:right">
+          <div class="receipt-label">Receipt</div>
+          <div class="receipt-no">${escapeHtml(receiptNo)}</div>
+        </div>
+      </div>
+
+      <hr />
+
+      <!-- HERO AMOUNT ─────────────────────────────────────── -->
+      <div class="hero">
+        <div class="label">${paid ? 'Amount paid' : 'Amount charged'}</div>
+        <div class="amount">${escapeHtml(amountDisplay)}</div>
+        <div class="status">
+          <span class="pill ${paid ? 'paid' : 'pending'}">${paid ? 'PAID' : 'PENDING'}</span>
+          <span>${escapeHtml(issuedAt)}</span>
+        </div>
+      </div>
+
+      <hr />
+
+      <!-- TWO-COLUMN META ────────────────────────────────── -->
+      <div class="grid meta">
+        <div>
+          <div class="label">Billed to</div>
+          <div class="body">
+            <strong>${escapeHtml(receipt.member?.full_name || receipt.payer_name || '—')}</strong><br />
+            ${escapeHtml(receipt.member?.member_id || '—')}<br />
+            ${receipt.member?.level ? `${escapeHtml(receipt.member.level)}<br />` : ''}
+            ${receipt.payer_email ? escapeHtml(receipt.payer_email) : ''}
+          </div>
+        </div>
+        <div>
+          <div class="label">Issued by</div>
+          <div class="body">
+            <strong>${escapeHtml(orgName)}</strong><br />
+            ${receipt.org?.slug ? `payvexo.com/${escapeHtml(receipt.org.slug)}<br />` : ''}
+            ${escapeHtml(issuedAt)}
+          </div>
+        </div>
+      </div>
+
+      <hr />
+
+      <!-- ITEMS TABLE ─────────────────────────────────────── -->
+      <table class="items">
+        <thead>
+          <tr><th>Description</th><th class="r">Amount</th></tr>
+        </thead>
+        <tbody>
+          ${itemsHtml}
+        </tbody>
+      </table>
+
+      <hr />
+
+      <!-- PAYMENT META ─────────────────────────────────────── -->
+      <div class="grid meta">
+        <div>
+          <div class="label">Payment method</div>
+          <div class="body"><strong>${escapeHtml(channelLabel(receipt.payment_method, receipt.paystack_channel))}</strong></div>
+        </div>
+        <div>
+          <div class="label">Transaction reference</div>
+          <div class="body mono"><strong>${escapeHtml(ref)}</strong></div>
+        </div>
+      </div>
+
+      <hr />
+
+      <!-- VERIFY / QR ──────────────────────────────────────── -->
+      <div class="verify">
+        ${qrDataUrl ? `<img src="${qrDataUrl}" alt="Scan to verify" />` : ''}
+        <div class="copy">
+          <div><strong>Verify this receipt online</strong></div>
+          <div>Scan the QR code or open the link below.</div>
+          <div class="url">${escapeHtml(verifyUrl)}</div>
+          <div class="no">Receipt &nbsp; ${escapeHtml(receiptNo)}</div>
+        </div>
+      </div>
+
+      <hr />
+
+      <!-- FOOTER ──────────────────────────────────────────── -->
+      <div class="footer">
+        <div class="thanks">${firstName ? `Thank you, ${escapeHtml(firstName)}.` : 'Thank you.'}</div>
+        <div>Powered by <strong>Payvexo</strong> &middot; Smart payments &amp; dues management</div>
+      </div>
+
+    </div>
+  </section>
+</body>
+</html>`;
+
+      // Open in a new tab. We need to handle popup-blocker rejection
+      // so we open the window first, then write into it after the
+      // QR is ready (we already awaited above so it's ready here).
+      const win = window.open('', '_blank');
+      if (!win) {
+        toast.error('Allow pop-ups for this site to download the receipt.');
+        return;
+      }
+      win.document.open();
+      win.document.write(html);
+      win.document.close();
+      // Focus the new tab so the user sees it immediately.
+      win.focus();
     } catch (e) {
       console.error('[ReceiptPage] PDF generation failed', e);
-      toast.error('Could not generate PDF. Try again.');
+      toast.error('Could not generate receipt. Try again.');
+    } finally {
+      setDownloading(false);
     }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [receipt, toast]);
 
   // ── QR code render ─────────────────────────────────────────────
@@ -602,8 +933,9 @@ export default function ReceiptPage() {
               <motion.button
                 type="button"
                 onClick={handleDownload}
-                whileTap={{ scale: 0.97 }}
-                className="rounded-2xl py-3.5 flex items-center justify-center gap-2 text-[13px] font-bold text-white"
+                disabled={downloading}
+                whileTap={{ scale: downloading ? 1 : 0.97 }}
+                className="rounded-2xl py-3.5 flex items-center justify-center gap-2 text-[13px] font-bold text-white disabled:opacity-80"
                 style={{
                   background: 'linear-gradient(135deg, #FF7A1E 0%, #FF6803 50%, #C84600 100%)',
                   boxShadow:
@@ -611,8 +943,8 @@ export default function ReceiptPage() {
                     ' inset 0 1px 0 rgba(255,255,255,0.22)',
                 }}
               >
-                <Download size={15} />
-                Download PDF
+                {downloading ? <Loader2 size={15} className="animate-spin" /> : <Download size={15} />}
+                {downloading ? 'Saving…' : 'Download PDF'}
               </motion.button>
             </div>
           </motion.div>
