@@ -69,10 +69,12 @@ interface RecentDue {
 }
 
 /**
- * Resolves "is the caller a verified FACULTY exec?". Same shape as the
- * dept-exec resolver — we look for an active admin row with
- * verification_layer >= 4, scope_level='unit', and a group_id that
- * points at a faculty/college (NOT a department).
+ * Resolves "is the caller a verified FACULTY exec?". We accept either:
+ *   • kind='faculty' or kind='college' (the explicit signal), OR
+ *   • a top-level unit group (parent_group_id IS NULL) — which is
+ *     what a faculty IS structurally, regardless of what kind text
+ *     someone typed.
+ * Anything below the top level falls through to the dept exec page.
  */
 function pickFacultyAdmin(records: MemberAdmin[], groups: OrganizationGroup[]):
   { admin: MemberAdmin; faculty: OrganizationGroup } | null
@@ -85,7 +87,8 @@ function pickFacultyAdmin(records: MemberAdmin[], groups: OrganizationGroup[]):
     const group = groups.find((g) => g.id === a.group_id);
     if (!group) continue;
     const kind = (group.kind || '').toLowerCase();
-    if (kind !== 'faculty' && kind !== 'college') continue;
+    const isTopLevel = !group.parent_group_id;
+    if (kind !== 'faculty' && kind !== 'college' && !isTopLevel) continue;
     return { admin: a, faculty: group };
   }
   return null;

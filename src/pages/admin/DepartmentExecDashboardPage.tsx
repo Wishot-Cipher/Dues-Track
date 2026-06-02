@@ -73,10 +73,16 @@ interface RecentDue {
  * records. We look for an active row with:
  *   • verification_layer >= 4 (fully verified, money unlocked)
  *   • scope_level = 'unit'
- *   • group_id pointing at a department (not a faculty)
+ *   • group_id pointing at something that is NOT a faculty/college
  *
- * Returns null when the caller doesn't qualify — the page redirects
- * away in that case.
+ * We don't insist on kind='department' exactly because real data
+ * sometimes uses 'unit', 'subgroup', or a NULL kind for the level
+ * below faculty. Anything that has a parent_group_id (i.e. it sits
+ * under a faculty) qualifies; the FacultyExecDashboardPage takes care
+ * of the kind='faculty'|'college' case.
+ *
+ * Returns null when the caller doesn't qualify — the page renders a
+ * friendly "this area is for verified department execs" panel instead.
  */
 function pickDeptAdmin(records: MemberAdmin[], groups: OrganizationGroup[]):
   { admin: MemberAdmin; dept: OrganizationGroup } | null
@@ -88,7 +94,10 @@ function pickDeptAdmin(records: MemberAdmin[], groups: OrganizationGroup[]):
     if (!a.group_id) continue;
     const group = groups.find((g) => g.id === a.group_id);
     if (!group) continue;
-    if ((group.kind || '').toLowerCase() !== 'department') continue;
+    const kind = (group.kind || '').toLowerCase();
+    // Reject only the faculty/college tier — everything else at
+    // scope=unit is treated as a department for dashboard purposes.
+    if (kind === 'faculty' || kind === 'college') continue;
     return { admin: a, dept: group };
   }
   return null;

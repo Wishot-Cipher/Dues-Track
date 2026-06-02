@@ -1,9 +1,14 @@
-﻿import { useState, useEffect } from 'react';
+﻿import { useState, useEffect, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {  } from 'react-router-dom';
 import { useAppNav } from '@/hooks/useAppNav';
 import { useAuth } from '@/hooks/useAppAuth';
+import { useMultiTenantAuth } from '@/hooks/useMultiTenantAuth';
+import { useActiveRole } from '@/hooks/useActiveRole';
 import { supabase } from '@/config/supabase';
+import { organizationService } from '@/services/organizationService';
+import ClassExecDashboardView, { pickClassAdmin } from '@/pages/admin/ClassExecDashboardView';
+import type { OrganizationGroup, MemberAdmin } from '@/types/multiTenant';
 import { getOrgScope } from '@/utils/orgScope';
 import { gradients } from '@/config/colors';
 import GlassCard from '@/components/ui/GlassCard';
@@ -79,6 +84,134 @@ export default function AdminDashboardPage() {
   const { theme } = useTheme();
   const tk = getDashboardTokens(theme);
   const isMultiTenant = !!orgSlug;
+
+  // ── Tier-aware redirect ────────────────────────────────────────
+  // /admin/dashboard is the GENERIC admin landing (org-wide or class
+  // exec). When the caller's active role is a dept-exec or faculty-exec
+  // they have their own dedicated dashboard (/admin/dept or /admin/faculty)
+  // that surfaces the right tools and hides what they have no power
+  // over. Without this redirect, hitting the "Overview" nav link, a
+  // bookmark, or a deep-link from the role switcher's `/dashboard`
+  // default landed dept/faculty execs on the wrong dashboard with
+  // class-rep-shaped widgets.
+  //
+  // We look at:
+  //   • activeRole.scopeLevel  — set by the role switcher
+  //   • the admin_records list — fallback when no active role yet
+  //     (lets dept/faculty execs deep-link work even before they've
+  //     opened the role switcher this session)
+  //
+  // Resolving the active admin record's group kind tells us where to
+  // redirect:  department → /admin/dept,  faculty/college → /admin/faculty.
+  const { user, organization } = useMultiTenantAuth();
+  const { activeRole } = useActiveRole({
+    orgId: organization?.id,
+    memberId: user?.id,
+  });
+
+  // ── Class-rep view resolution ──────────────────────────────────
+  // If the caller's active role is class-scoped (group, Layer 4+),
+  // we delegate the whole page to ClassExecDashboardView so they see
+  // a class-focused dashboard instead of the legacy org-wide widgets.
+  // We resolve it via a tiny groups fetch so we have the class row
+  // for the header / data scoping.
+  const [classView, setClassView] = useState<{ admin: MemberAdmin; klass: OrganizationGroup } | null>(null);
+  const [classProbeDone, setClassProbeDone] = useState(false);
+
+  useEffect(() => {
+    if (!user || !organization) {
+      setClassProbeDone(true);
+      return;
+    }
+    // Cheap pre-check before fetching groups — only bother when we
+    // actually have a class-scoped admin row to point at.
+    const records = (user.admin_records ?? []) as MemberAdmin[];
+    const hasGroupAdmin = records.some(
+      (r) => r.is_active && (r.verification_layer ?? 0) >= 4 && r.scope_level === 'group' && r.group_id,
+    );
+    if (!hasGroupAdmin) {
+      setClassView(null);
+      setClassProbeDone(true);
+      return;
+    }
+    let cancelled = false;
+    (async () => {
+      try {
+        const groups = await organizationService.getGroups(organization.id);
+        if (cancelled) return;
+        setClassView(pickClassAdmin(records, groups));
+      } catch {
+        if (!cancelled) setClassView(null);
+      } finally {
+        if (!cancelled) setClassProbeDone(true);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [user, organization]);
+
+  // If the active role explicitly points at a different admin row
+  // (e.g. the user holds BOTH class rep and org owner and just
+  // switched to org), respect that and let the legacy view render.
+  const renderClassView = useMemo(() => {
+    if (!classView) return false;
+    if (activeRole?.adminId && activeRole.adminId !== classView.admin.id) return false;
+    return true;
+  }, [classView, activeRole?.adminId]);
+
+  useEffect(() => {
+    if (!orgSlug || !user) return;
+
+    type AdminRowMin = {
+      is_active?: boolean;
+      verification_layer?: number;
+      scope_level?: string;
+      group_id?: string | null;
+    };
+    const records = (user.admin_records ?? []) as AdminRowMin[];
+
+    // Pick which admin row is "active". Prefer the one matching the
+    // role switcher's adminId (held inside activeRole.adminId), then
+    // fall back to the first verified unit-scope row so deep-link +
+    // refresh still work for a single-role dept/faculty exec.
+    type AdminRecordsByAdminId = AdminRowMin & { id?: string };
+    const byId = activeRole?.adminId
+      ? (records as AdminRecordsByAdminId[]).find((r) => r.id === activeRole.adminId)
+      : null;
+    const unitRow = byId
+      ?? records.find((r) =>
+        r.is_active !== false
+        && (r.verification_layer ?? 0) >= 4
+        && r.scope_level === 'unit'
+        && Boolean(r.group_id),
+      );
+    if (!unitRow?.group_id) return;
+
+    // Look up the group's kind AND its parent so we can decide which
+    // dashboard fits — `kind` alone isn't always reliable across orgs
+    // (some 'unit' groups have NULL kind or use non-standard labels).
+    // Decision tree:
+    //   • kind = faculty/college  →  /admin/faculty
+    //   • parent_group_id IS NULL →  /admin/faculty (top-level unit)
+    //   • everything else         →  /admin/dept
+    let cancelled = false;
+    (async () => {
+      const { data } = await supabase
+        .from('organization_groups')
+        .select('kind, parent_group_id')
+        .eq('id', unitRow.group_id as string)
+        .maybeSingle();
+      if (cancelled) return;
+      const kind = String(data?.kind || '').toLowerCase();
+      const isTopLevel = data && !data.parent_group_id;
+      if (kind === 'faculty' || kind === 'college' || isTopLevel) {
+        navigate('/admin/faculty');
+      } else {
+        navigate('/admin/dept');
+      }
+    })();
+    return () => { cancelled = true; };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [orgSlug, user?.id, activeRole?.adminId, activeRole?.scopeLevel]);
   
   // Debug: Check permissions
   // Debug logs removed for production security
@@ -337,6 +470,14 @@ export default function AdminDashboardPage() {
         return tk.textSec;
     }
   };
+
+  // Class-rep view takes over when the caller's active role is
+  // class-scoped. The legacy widgets below this short-circuit are
+  // kept for org-scope admins (and during the brief probe window
+  // before classProbeDone flips true).
+  if (classProbeDone && renderClassView && classView) {
+    return <ClassExecDashboardView admin={classView.admin} klass={classView.klass} />;
+  }
 
   return (
     <div className="min-h-screen py-6 px-4 relative overflow-hidden"  style={{

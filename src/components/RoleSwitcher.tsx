@@ -47,15 +47,27 @@ function toActiveRole(
 
 /**
  * Where an exec role should land its holder after they pick it from
- * the switcher. Dept exec → /admin/dept; faculty exec → /admin/faculty
- * (still being built; falls back gracefully); everyone else → the
- * generic /admin/dashboard.
+ * the switcher.
+ *
+ *   scope='unit' + faculty-shaped group → /admin/faculty
+ *   scope='unit' + anything else        → /admin/dept
+ *   scope='org' or scope='group'        → /admin/dashboard
+ *
+ * "Faculty-shaped" means kind='faculty'/'college' OR the group has no
+ * parent (i.e. it's at the top of the hierarchy). We don't rely on
+ * `kind` alone because real data sometimes has it blank or
+ * non-standard. AdminDashboardPage carries an identical fallback
+ * redirect, so even if this returns /admin/dashboard the user still
+ * arrives at the right exec dashboard.
  */
 function landingPathForExec(role: RoleTab): string {
-  const scope = role.scopeLevel;
+  if (role.scopeLevel !== 'unit') return '/admin/dashboard';
   const kind = (role.groupKind || '').toLowerCase();
-  if (scope === 'unit' && kind === 'department') return '/admin/dept';
-  if (scope === 'unit' && (kind === 'faculty' || kind === 'college')) return '/admin/faculty';
+  if (kind === 'faculty' || kind === 'college') return '/admin/faculty';
+  // scope=unit with a group → dept dashboard by default. The page
+  // resolver inside DepartmentExecDashboardPage handles the
+  // "is this really a dept?" check.
+  if (role.groupId) return '/admin/dept';
   return '/admin/dashboard';
 }
 
