@@ -519,6 +519,15 @@ export interface MemberAdmin {
   verification_layer?: number;
   verified_at?: string;
 
+  // Session lifecycle (mig 091): unit-scope (dept/faculty) admins
+  // are seated for an academic session. tenure_start is set on
+  // bootstrap; tenure_expires_at + academic_session are stamped by
+  // _stamp_unit_admin_session() on insert. archive_expired_unit_admins
+  // sweeps expired rows back to layer 0 / session_ended each rollover.
+  tenure_start?: string;
+  tenure_expires_at?: string;
+  academic_session?: string;
+
   // Audit
   created_at: string;
   updated_at: string;

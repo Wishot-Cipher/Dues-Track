@@ -1,4 +1,4 @@
-﻿import { useState, useEffect, useCallback, useMemo } from 'react'
+﻿import { useState, useEffect, useCallback } from 'react'
 import { motion} from 'framer-motion'
 import {  } from 'react-router-dom'
 import { useAppNav } from '@/hooks/useAppNav';
@@ -8,7 +8,6 @@ import ConfirmDialog from '@/components/ui/ConfirmDialog'
 import ProfessionalDropdown from '@/components/ui/ProfessionalDropdown'
 import ProfessionalDateTimePicker from '@/components/ui/ProfessionalDateTimePicker'
 import { colors } from '@/config/colors'
-import Pagination, { usePagination } from '@/components/ui/Pagination'
 import { useAuth } from '@/hooks/useAppAuth'
 import { useToast } from '@/hooks/useToast'
 import { supabase } from '@/config/supabase'
@@ -29,8 +28,7 @@ import {
   CheckCircle,
   ArrowLeft,
   Search,
-  Tag,
-  Copy
+  Tag
 } from 'lucide-react'
 
 interface PaymentType {
@@ -157,12 +155,6 @@ export default function ManageDuesPage() {
   const [showEditConfirm, setShowEditConfirm] = useState(false)
   const [editingPaymentType, setEditingPaymentType] = useState<EditPaymentTypeForm | null>(null)
   const [selectedPaymentType, setSelectedPaymentType] = useState<PaymentType | null>(null)
-
-  const publicEventLink = useMemo(() => {
-    if (!orgSlug || !editingPaymentType?.id) return ''
-    if (editingPaymentType.category !== 'event' || !editingPaymentType.is_public) return ''
-    return `${window.location.origin}/${orgSlug}/events/${editingPaymentType.id}`
-  }, [editingPaymentType, orgSlug])
   
   // Stats
   const [stats, setStats] = useState({
@@ -170,16 +162,6 @@ export default function ManageDuesPage() {
     active: 0,
     totalAmount: 0
   })
-
-  const handleCopyPublicLink = useCallback(async () => {
-    if (!publicEventLink) return
-    try {
-      await navigator.clipboard.writeText(publicEventLink)
-      success('Public event link copied')
-    } catch {
-      showError('Could not copy the public link')
-    }
-  }, [publicEventLink, success, showError])
 
   const loadPaymentTypes = useCallback(async () => {
     try {
@@ -379,8 +361,6 @@ export default function ManageDuesPage() {
     const matchesCategory = filterCategory === 'all' || pt.category === filterCategory
     return matchesSearch && matchesStatus && matchesCategory
   })
-
-  const duesPager = usePagination(filteredPaymentTypes, 12)
 
   const getCategoryLabel = (category: string) => {
     const cat = CATEGORIES.find(c => c.value === category)
@@ -696,7 +676,7 @@ export default function ManageDuesPage() {
 
               {!loading && filteredPaymentTypes.length > 0 && (
                 <div className="space-y-4 pt-6">
-                  {duesPager.pageItems.map((pt, index) => (
+                  {filteredPaymentTypes.map((pt, index) => (
                     <motion.div
                       key={pt.id}
                       initial={{ opacity: 0, y: 20 }}
@@ -864,14 +844,6 @@ export default function ManageDuesPage() {
                       </div>
                     </motion.div>
                   ))}
-                  <Pagination
-                    page={duesPager.page}
-                    pageCount={duesPager.pageCount}
-                    onChange={duesPager.setPage}
-                    range={duesPager.range}
-                    total={duesPager.total}
-                    noun="dues"
-                  />
                 </div>
               )}
             </div>
@@ -1171,18 +1143,6 @@ export default function ManageDuesPage() {
                       </span>
                     )}
                   </div>
-
-                  {publicEventLink && (
-                    <button
-                      type="button"
-                      onClick={handleCopyPublicLink}
-                      className="inline-flex items-center gap-2 px-3 py-2 rounded-xl text-sm font-semibold border"
-                      style={{ background: 'rgba(255,255,255,0.04)', borderColor: 'rgba(255,255,255,0.08)', color: '#fff' }}
-                    >
-                      <Copy className="w-4 h-4" />
-                      Copy public event link
-                    </button>
-                  )}
 
                   <div className="grid grid-cols-2 gap-3 pt-2">
                     <div className="p-3 rounded-xl" style={{ background: 'rgba(255,255,255,0.04)' }}>

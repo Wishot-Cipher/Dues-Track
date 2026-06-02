@@ -837,6 +837,13 @@ export const organizationService = {
   }): Promise<{
     ok: boolean;
     error?: string;
+    /**
+     * Structured error code (e.g. 'no_payout'). The UI uses this to
+     * branch behaviour — for instance, 'no_payout' triggers a "set
+     * up your tier's payout" modal instead of showing the raw error
+     * text.
+     */
+    code?: string;
     payment_type_id?: string;
     target_scope?: string;
     target_group_id?: string | null;
@@ -844,6 +851,11 @@ export const organizationService = {
     session_label?: string | null;
     notified_count?: number;
     target_count?: number;
+    /** When code='no_payout': which group the publisher needs to wire payout for. */
+    group_id?: string;
+    group_kind?: string;
+    scope?: string;
+    detail?: string;
   }> {
     const { data, error } = await supabase.rpc('create_due_with_scope_check', {
       p_caller_member_id: input.callerMemberId,
@@ -858,6 +870,7 @@ export const organizationService = {
     return (data ?? { ok: false, error: 'Empty response' }) as {
       ok: boolean;
       error?: string;
+      code?: string;
       payment_type_id?: string;
       target_scope?: string;
       target_group_id?: string | null;
@@ -865,6 +878,10 @@ export const organizationService = {
       session_label?: string | null;
       notified_count?: number;
       target_count?: number;
+      group_id?: string;
+      group_kind?: string;
+      scope?: string;
+      detail?: string;
     };
   },
 

@@ -191,6 +191,14 @@ export default function CreateDuePage() {
   const [form, setForm] = useState<FormState>(EMPTY);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Payout-gate state — when the RPC returns code='no_payout', we hold
+  // the offending group's id + scope so the modal can deep-link to
+  // the right tier's payout setup. Null = no gate active.
+  const [payoutGate, setPayoutGate] = useState<{
+    groupId: string | null;
+    scope: string;
+    detail: string;
+  } | null>(null);
   const [coverUploading, setCoverUploading] = useState(false);
   const [coverFileName, setCoverFileName] = useState<string | null>(null);
   const [coverWarning, setCoverWarning] = useState<string | null>(null);
@@ -558,6 +566,20 @@ export default function CreateDuePage() {
       targetGroupId: targetScope === 'org' ? null : targetGroupId,
       payload,
     });
+
+    // Special-case: the target tier has no payout account on file
+    // (mig 093 returns code='no_payout'). Show the dedicated "set up
+    // payout first" modal so the user has a clear next step instead
+    // of a vague error — they're one click from solving it.
+    if (!res.ok && res.code === 'no_payout') {
+      setPayoutGate({
+        groupId: res.group_id ?? (targetScope !== 'org' ? targetGroupId : null),
+        scope:   res.scope ?? targetScope,
+        detail:  res.detail || 'This tier has no payout account on file. Set it up first so members can pay.',
+      });
+      setSubmitting(false);
+      return;
+    }
 
     if (!res.ok || !res.payment_type_id) {
       setError(res.error || 'Could not publish. Please try again.');
@@ -942,8 +964,11 @@ export default function CreateDuePage() {
                   <div
                     className="mb-3 rounded-xl px-3 py-2 flex items-start gap-2 text-[11px]"
                     style={{
-                      background: tk.primarySoft,
-                      border: `1px solid ${tk.primaryRing}`,
+                      // tk in this file is a hardcoded dark-theme const
+                      // (no primarySoft/primaryRing tokens). Compose the
+                      // tints inline from the primary brand colour.
+                      background: `${tk.primary}18`,
+                      border: `1px solid ${tk.primary}38`,
                       color: tk.textSec,
                     }}
                   >
@@ -1193,6 +1218,99 @@ export default function CreateDuePage() {
           )}
         </aside>
       </form>
+
+      {/* ── PAYOUT-GATE MODAL ────────────────────────────────────
+          Shown when the dues-creation RPC returns code='no_payout'.
+          The target tier (class / dept / faculty / org) hasn't set
+          their subaccount yet, so we can't route the money. Members
+          would pay into nothing. Send the user to the right payout
+          page rather than letting them publish blindly. */}
+      <AnimatePresence>
+        {payoutGate && (
+          <motion.div
+            className="fixed inset-0 z-[120] flex items-center justify-center p-4"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+          >
+            <motion.div
+              className="absolute inset-0"
+              style={{ background: 'rgba(0,0,0,0.55)', backdropFilter: 'blur(6px)' }}
+              onClick={() => setPayoutGate(null)}
+              initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+            />
+            <motion.div
+              className="relative w-full max-w-md rounded-3xl overflow-hidden"
+              style={{
+                // Modal surface — use the page's own panel tint over a
+                // dark base. tk has no `card` token; this matches the
+                // visual weight of other modals on the page.
+                background: `linear-gradient(180deg, ${tk.panel} 0%, #1A0E09 100%)`,
+                border: `1px solid ${tk.border}`,
+                boxShadow: '0 24px 60px rgba(0,0,0,0.45)',
+                color: tk.text,
+              }}
+              initial={{ y: 18, opacity: 0, scale: 0.97 }}
+              animate={{ y: 0, opacity: 1, scale: 1 }}
+              exit={{ y: 12, opacity: 0, scale: 0.98 }}
+              transition={{ type: 'spring', stiffness: 380, damping: 32 }}
+            >
+              <div className="h-1.5" style={{ background: `linear-gradient(90deg, ${tk.primary}, ${tk.primary}80)` }} />
+              <div className="p-6">
+                <div
+                  className="w-12 h-12 rounded-2xl flex items-center justify-center mb-3"
+                  style={{ background: `${tk.primary}18`, color: tk.primary, border: `1px solid ${tk.primary}40` }}
+                >
+                  <CreditCard className="w-6 h-6" />
+                </div>
+                <h3 className="text-lg font-extrabold tracking-tight" style={{ color: tk.text }}>
+                  Set up your payout first
+                </h3>
+                <p className="text-sm leading-relaxed mt-2" style={{ color: tk.textSec }}>
+                  {payoutGate.detail}
+                </p>
+                <p className="text-[12px] leading-relaxed mt-3" style={{ color: tk.textTer }}>
+                  Each tier collects to its OWN bank account — no cascading. The{' '}
+                  <span className="font-bold" style={{ color: tk.text }}>{payoutGate.scope}</span>{' '}
+                  tier needs an account on file before anyone can pay this due.
+                </p>
+                <div className="mt-5 flex gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setPayoutGate(null)}
+                    className="flex-1 py-2.5 rounded-xl text-sm font-semibold"
+                    style={{
+                      background: 'rgba(255,255,255,0.04)',
+                      color: tk.textSec,
+                      border: `1px solid ${tk.border}`,
+                    }}
+                  >
+                    Not now
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const path = payoutGate.groupId
+                        ? `/admin/payout?groupId=${payoutGate.groupId}`
+                        : '/admin/payout';
+                      setPayoutGate(null);
+                      go(path);
+                    }}
+                    className="flex-1 py-2.5 rounded-xl text-sm font-bold inline-flex items-center justify-center gap-1.5"
+                    style={{
+                      background: `linear-gradient(135deg, ${tk.primary} 0%, ${tk.primary}cc 100%)`,
+                      color: '#FFFFFF',
+                      boxShadow: `0 8px 22px -8px ${tk.primary}`,
+                    }}
+                  >
+                    Set up payout <ArrowRight className="w-4 h-4" />
+                  </button>
+                </div>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }

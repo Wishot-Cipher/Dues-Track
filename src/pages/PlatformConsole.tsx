@@ -19,21 +19,17 @@ import {
   LayoutDashboard, ShieldCheck, Building2, Banknote, GraduationCap, Siren,
   Megaphone, Settings2, BarChart3, ScrollText, LogOut, Loader2, Mail, KeyRound,
   Check, CheckCircle2, AlertTriangle, RefreshCw, Clock, Vote, Menu, X,
-  MoreHorizontal, XCircle, UserX, ShieldOff, ChevronDown, Users,
 } from 'lucide-react';
 import {
   platformAdminRequestCode, platformAdminVerifyCode, getPlatformAdmin,
   verifySession, platformAdminLogout, fetchPlatformStats, fetchOrganizations,
-  toggleOrganizationStatus, listPendingClaims, grantClaimOverride, rejectClaim,
+  toggleOrganizationStatus, listPendingClaims, grantClaimOverride,
   getFinancialSummary, getAuditFeed, getGrowthFunnel,
   getPlatformSettings, updatePlatformSettings, getUniversityMap, broadcast,
-  listOrgAdmins, setAdminActive,
   type PlatformAdmin, type PlatformStats, type OrgOverview, type PendingClaim,
   type FinancialSummary, type AuditEntry, type FunnelStage,
-  type PlatformSettings, type UniRow, type OrgAdminRow,
+  type PlatformSettings, type UniRow,
 } from '@/services/platformAdminService';
-import { useToast } from '@/hooks/useToast';
-import Pagination, { usePagination } from '@/components/ui/Pagination';
 
 const naira = (kobo: number) => '₦' + Math.round((kobo || 0) / 100).toLocaleString();
 
@@ -200,76 +196,6 @@ function SafetyConfirmModal({
           <Btn onClick={onCancel} disabled={busy} color={T.textSec}>Cancel</Btn>
           <Btn onClick={onConfirm} disabled={busy} color={freezing ? T.red : T.mint}>
             {busy ? <Loader2 size={14} className="animate-spin" /> : <Siren size={14} />} {freezing ? 'Freeze' : 'Unfreeze'}
-          </Btn>
-        </div>
-      </motion.div>
-    </motion.div>
-  );
-}
-
-// Generic action-confirm modal with an optional reason field. Used for
-// granting/rejecting claims and revoking admin roles — never window.confirm.
-function ActionConfirmModal({
-  icon, title, subtitle, rows, confirmLabel, color, busy,
-  reasonLabel, reasonValue, onReason, onCancel, onConfirm,
-}: {
-  icon: React.ReactNode;
-  title: string;
-  subtitle?: string;
-  rows: Array<{ label: string; value: string }>;
-  confirmLabel: string;
-  color: string;
-  busy: boolean;
-  reasonLabel?: string;
-  reasonValue?: string;
-  onReason?: (v: string) => void;
-  onCancel: () => void;
-  onConfirm: () => void;
-}) {
-  return (
-    <motion.div
-      className="fixed inset-0 z-[120] flex items-end sm:items-center justify-center p-4"
-      initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-      style={{ background: 'rgba(3,7,18,0.68)', backdropFilter: 'blur(10px)' }}
-      onClick={() => !busy && onCancel()}
-    >
-      <motion.div
-        initial={{ opacity: 0, y: 10, scale: 0.98 }} animate={{ opacity: 1, y: 0, scale: 1 }}
-        exit={{ opacity: 0, y: 10, scale: 0.98 }} transition={{ duration: 0.16 }}
-        onClick={(e) => e.stopPropagation()}
-        style={{ width: '100%', maxWidth: 520, background: '#0C1220', border: `1px solid ${color}55`, borderRadius: 18, padding: 22, boxShadow: '0 24px 60px rgba(0,0,0,0.45)' }}
-      >
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12 }}>
-          <div style={{ width: 38, height: 38, borderRadius: 12, background: `${color}1f`, display: 'flex', alignItems: 'center', justifyContent: 'center', color }}>
-            {icon}
-          </div>
-          <div>
-            <h3 style={{ margin: 0, fontSize: 18, color: T.text }}>{title}</h3>
-            {subtitle && <p style={{ margin: '2px 0 0', fontSize: 12, color: T.textSec }}>{subtitle}</p>}
-          </div>
-        </div>
-        <div style={{ display: 'grid', gap: 10, marginBottom: 18 }}>
-          {rows.map((r) => (
-            <div key={r.label} style={{ padding: 12, borderRadius: 12, background: 'rgba(255,255,255,0.03)', border: `1px solid ${T.border}` }}>
-              <div style={{ fontSize: 10, color: T.textTer, textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 4 }}>{r.label}</div>
-              <div style={{ fontSize: 13, color: T.text, lineHeight: 1.6, whiteSpace: 'pre-wrap' }}>{r.value}</div>
-            </div>
-          ))}
-          {reasonLabel && (
-            <div>
-              <label style={{ display: 'block', fontSize: 11, color: T.textSec, fontWeight: 600, marginBottom: 5 }}>{reasonLabel}</label>
-              <textarea
-                value={reasonValue ?? ''} onChange={(e) => onReason?.(e.target.value)} rows={2}
-                placeholder="Optional — recorded in the audit log"
-                style={{ ...inputStyle, resize: 'vertical' }}
-              />
-            </div>
-          )}
-        </div>
-        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, flexWrap: 'wrap' }}>
-          <Btn onClick={onCancel} disabled={busy} color={T.textSec}>Cancel</Btn>
-          <Btn onClick={onConfirm} disabled={busy} color={color}>
-            {busy ? <Loader2 size={14} className="animate-spin" /> : null} {confirmLabel}
           </Btn>
         </div>
       </motion.div>
@@ -457,10 +383,6 @@ function VerificationQueue() {
   const [err, setErr]         = useState<string | null>(null);
   const [filter, setFilter]   = useState<'all' | Cat>('all');
   const [busyId, setBusyId]   = useState<string | null>(null);
-  const [menuId, setMenuId]   = useState<string | null>(null);
-  const [action, setAction]   = useState<{ claim: PendingClaim; kind: 'grant' | 'reject' } | null>(null);
-  const [reason, setReason]   = useState('');
-  const toast = useToast();
 
   const load = useCallback(async () => {
     setLoading(true); setErr(null);
@@ -470,21 +392,11 @@ function VerificationQueue() {
   }, []);
   useEffect(() => { void load(); }, [load]);
 
-  const runAction = async () => {
-    if (!action) return;
-    const { claim, kind } = action;
-    setBusyId(claim.id);
-    try {
-      if (kind === 'grant') {
-        await grantClaimOverride(claim.id);
-        toast.success(`Granted Layer 4 to ${claim.claimant_name}.`);
-      } else {
-        await rejectClaim(claim.id, reason.trim() || undefined);
-        toast.success(`Rejected ${claim.claimant_name}'s claim.`);
-      }
-      setClaims((p) => p.filter((x) => x.id !== claim.id));
-      setAction(null); setReason('');
-    } catch (e) { toast.error(e instanceof Error ? e.message : 'Action failed'); }
+  const grant = async (c: PendingClaim) => {
+    if (!confirm(`Grant Layer 4 to ${c.claimant_name} (${c.position_title}) at ${c.org_name}? This unlocks money for their group.`)) return;
+    setBusyId(c.id);
+    try { await grantClaimOverride(c.id); setClaims((p) => p.filter((x) => x.id !== c.id)); }
+    catch (e) { alert(e instanceof Error ? e.message : 'Grant failed'); }
     setBusyId(null);
   };
 
@@ -499,7 +411,7 @@ function VerificationQueue() {
     <div>
       <SectionHead
         title="Verification Queue"
-        sub="Every in-flight exec claim — review, then grant or reject"
+        sub="Every in-flight exec claim — review, then grant or let the system resolve it"
         right={<Btn onClick={load} color={T.textSec}><RefreshCw size={13} /> Refresh</Btn>}
       />
       <div style={{ display: 'flex', gap: 8, marginBottom: 18, flexWrap: 'wrap' }}>
@@ -556,74 +468,18 @@ function VerificationQueue() {
                             ? <span style={{ fontSize: 11, color: stuckH >= 168 ? T.red : T.textSec, display: 'inline-flex', gap: 4, alignItems: 'center' }}><Clock size={11} /> {stuckH}h stuck</span>
                             : <span style={{ fontSize: 11, color: T.textTer }}>L{c.current_layer}</span>}
                         </div>
-                        <div style={{ position: 'relative', flexShrink: 0 }}>
-                          <Btn onClick={() => setMenuId(menuId === c.id ? null : c.id)} disabled={busyId === c.id} color={T.textSec}>
-                            {busyId === c.id ? <Loader2 size={13} className="animate-spin" /> : <MoreHorizontal size={14} />} Actions
-                          </Btn>
-                          <AnimatePresence>
-                            {menuId === c.id && (
-                              <>
-                                <button
-                                  type="button" aria-label="Close menu" onClick={() => setMenuId(null)}
-                                  style={{ position: 'fixed', inset: 0, zIndex: 10, background: 'transparent', border: 'none' }}
-                                />
-                                <motion.div
-                                  initial={{ opacity: 0, y: -6, scale: 0.98 }} animate={{ opacity: 1, y: 0, scale: 1 }}
-                                  exit={{ opacity: 0, y: -6, scale: 0.98 }} transition={{ duration: 0.14 }}
-                                  style={{ position: 'absolute', top: 'calc(100% + 6px)', right: 0, zIndex: 20, minWidth: 180, background: '#0A1020', border: `1px solid ${T.border}`, borderRadius: 12, boxShadow: '0 18px 40px rgba(0,0,0,0.35)', overflow: 'hidden' }}
-                                >
-                                  <button type="button" onClick={() => { setMenuId(null); setReason(''); setAction({ claim: c, kind: 'grant' }); }}
-                                    style={menuItemStyle(T.mint)}>
-                                    <ShieldCheck size={14} /> Grant Layer 4
-                                  </button>
-                                  <button type="button" onClick={() => { setMenuId(null); setReason(''); setAction({ claim: c, kind: 'reject' }); }}
-                                    style={menuItemStyle(T.red)}>
-                                    <XCircle size={14} /> Reject claim
-                                  </button>
-                                </motion.div>
-                              </>
-                            )}
-                          </AnimatePresence>
-                        </div>
+                        <Btn onClick={() => grant(c)} disabled={busyId === c.id} color={T.mint}>
+                          {busyId === c.id ? <Loader2 size={13} className="animate-spin" /> : <ShieldCheck size={13} />} Grant L4
+                        </Btn>
                       </div>
                     </div>
                   );
                 })}
               </div>
             )}
-
-      <AnimatePresence>
-        {action && (
-          <ActionConfirmModal
-            icon={action.kind === 'grant' ? <ShieldCheck size={18} /> : <XCircle size={18} />}
-            title={action.kind === 'grant' ? 'Grant Layer 4' : 'Reject claim'}
-            subtitle={action.kind === 'grant'
-              ? 'This unlocks money for their group.'
-              : 'The claimant stays a normal member; they can re-apply later.'}
-            color={action.kind === 'grant' ? T.mint : T.red}
-            confirmLabel={action.kind === 'grant' ? 'Grant Layer 4' : 'Reject claim'}
-            busy={busyId === action.claim.id}
-            rows={[
-              { label: 'Claimant', value: `${action.claim.claimant_name} · ${action.claim.position_title}` },
-              { label: 'Organization', value: `${action.claim.org_name} · ${action.claim.target_group_name || action.claim.claimed_scope}` },
-            ]}
-            reasonLabel={action.kind === 'reject' ? 'Reason' : undefined}
-            reasonValue={reason}
-            onReason={setReason}
-            onCancel={() => { setAction(null); setReason(''); }}
-            onConfirm={runAction}
-          />
-        )}
-      </AnimatePresence>
     </div>
   );
 }
-
-const menuItemStyle = (color: string): React.CSSProperties => ({
-  width: '100%', padding: '10px 14px', background: 'transparent', color,
-  border: 'none', textAlign: 'left', cursor: 'pointer', fontSize: 12, fontWeight: 600,
-  display: 'flex', alignItems: 'center', gap: 8, fontFamily: mono,
-});
 
 function CommandCenter() {
   const [stats, setStats]   = useState<PlatformStats | null>(null);
@@ -690,7 +546,6 @@ function OrgRegistry() {
   const [loading, setLoading] = useState(true);
   const [q, setQ]           = useState('');
   const [busyId, setBusyId] = useState<string | null>(null);
-  const toast = useToast();
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -704,15 +559,13 @@ function OrgRegistry() {
     try {
       await toggleOrganizationStatus(o.id, !o.is_active);
       setOrgs((p) => p.map((x) => x.id === o.id ? { ...x, is_active: !x.is_active } : x));
-      toast.success(o.is_active ? `${o.name} suspended.` : `${o.name} reactivated.`);
-    } catch (e) { toast.error(e instanceof Error ? e.message : 'Failed'); }
+    } catch (e) { alert(e instanceof Error ? e.message : 'Failed'); }
     setBusyId(null);
   };
 
   const filtered = orgs.filter((o) =>
     !q || o.name.toLowerCase().includes(q.toLowerCase()) || o.slug.includes(q.toLowerCase())
   );
-  const { page, setPage, pageItems, pageCount, range, total } = usePagination(filtered, 18);
 
   return (
     <div>
@@ -725,9 +578,8 @@ function OrgRegistry() {
       {loading
         ? <p style={{ color: T.textSec, fontSize: 13 }}><Loader2 size={14} className="animate-spin" style={{ verticalAlign: 'middle' }} /> Loading…</p>
         : (
-          <>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: 12 }}>
-            {pageItems.map((o) => (
+            {filtered.map((o) => (
               <div key={o.id} style={{ background: T.card, border: `1px solid ${T.border}`, borderRadius: 12, padding: 16 }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 8 }}>
                   <div style={{ minWidth: 0 }}>
@@ -747,8 +599,6 @@ function OrgRegistry() {
               </div>
             ))}
           </div>
-          <Pagination page={page} pageCount={pageCount} onChange={setPage} range={range} total={total} noun="orgs" />
-          </>
         )}
     </div>
   );
@@ -870,11 +720,10 @@ function AuditTrail() {
   const [entries, setEntries] = useState<AuditEntry[]>([]);
   const [loading, setLoading] = useState(true);
   const [err, setErr]         = useState<string | null>(null);
-  const { page, setPage, pageItems, pageCount, range, total } = usePagination(entries, 20);
 
   const load = useCallback(async () => {
     setLoading(true); setErr(null);
-    try { setEntries(await getAuditFeed(200)); }
+    try { setEntries(await getAuditFeed(100)); }
     catch (e) { setErr(e instanceof Error ? e.message : 'Failed'); }
     setLoading(false);
   }, []);
@@ -892,25 +741,22 @@ function AuditTrail() {
           : entries.length === 0
             ? <p style={{ color: T.textTer, fontSize: 13 }}>No audit entries yet.</p>
             : (
-              <>
-                <div style={{ background: T.card, border: `1px solid ${T.border}`, borderRadius: 14, overflow: 'hidden' }}>
-                  {pageItems.map((e) => (
-                    <div key={e.id} style={{ padding: '11px 18px', borderBottom: `1px solid ${T.border}`, display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
-                      <Badge color={T.purple}>{e.action}</Badge>
-                      <div style={{ flex: 1, minWidth: 0 }}>
-                        <p style={{ margin: 0, fontSize: 12, color: T.text, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                          {e.target_type ? `${e.target_type}` : ''}{e.target_id ? ` · ${String(e.target_id).slice(0, 8)}` : ''}
-                        </p>
-                        <p style={{ margin: '2px 0 0', fontSize: 11, color: T.textSec }}>{e.admin_email}</p>
-                      </div>
-                      <span style={{ fontSize: 10, color: T.textTer, fontFamily: mono, flexShrink: 0 }}>
-                        {new Date(e.created_at).toLocaleString()}
-                      </span>
+              <div style={{ background: T.card, border: `1px solid ${T.border}`, borderRadius: 14, overflow: 'hidden' }}>
+                {entries.map((e) => (
+                  <div key={e.id} style={{ padding: '11px 18px', borderBottom: `1px solid ${T.border}`, display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+                    <Badge color={T.purple}>{e.action}</Badge>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <p style={{ margin: 0, fontSize: 12, color: T.text, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                        {e.target_type ? `${e.target_type}` : ''}{e.target_id ? ` · ${String(e.target_id).slice(0, 8)}` : ''}
+                      </p>
+                      <p style={{ margin: '2px 0 0', fontSize: 11, color: T.textSec }}>{e.admin_email}</p>
                     </div>
-                  ))}
-                </div>
-                <Pagination page={page} pageCount={pageCount} onChange={setPage} range={range} total={total} noun="entries" />
-              </>
+                    <span style={{ fontSize: 10, color: T.textTer, fontFamily: mono, flexShrink: 0 }}>
+                      {new Date(e.created_at).toLocaleString()}
+                    </span>
+                  </div>
+                ))}
+              </div>
             )}
     </div>
   );
@@ -932,6 +778,14 @@ function Field({ label, children, hint }: { label: string; children: React.React
       {children}
     </div>
   );
+}
+
+// Minimal toast shim — replace with your real toast provider if available
+function useToast() {
+  return {
+    success: (msg: string) => console.info('[toast]', msg),
+    error:   (msg: string) => console.error('[toast]', msg),
+  };
 }
 
 function PlatformConfig() {
@@ -1135,16 +989,6 @@ function TrustSafety() {
   const [loading, setLoading] = useState(true);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [confirmOrg, setConfirmOrg] = useState<OrgOverview | null>(null);
-  const toast = useToast();
-
-  // Admin / role management
-  const [adminOrgId, setAdminOrgId] = useState<string>('');
-  const [adminOrgOpen, setAdminOrgOpen] = useState(false);
-  const [admins, setAdmins] = useState<OrgAdminRow[]>([]);
-  const [adminsLoading, setAdminsLoading] = useState(false);
-  const [adminAction, setAdminAction] = useState<{ row: OrgAdminRow; activate: boolean } | null>(null);
-  const [adminReason, setAdminReason] = useState('');
-  const [adminBusy, setAdminBusy] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -1155,28 +999,6 @@ function TrustSafety() {
     setLoading(false);
   }, []);
   useEffect(() => { void load(); }, [load]);
-
-  const loadAdmins = useCallback(async (orgId: string) => {
-    if (!orgId) { setAdmins([]); return; }
-    setAdminsLoading(true);
-    try { setAdmins(await listOrgAdmins(orgId)); }
-    catch (e) { toast.error(e instanceof Error ? e.message : 'Could not load admins'); }
-    setAdminsLoading(false);
-  }, [toast]);
-  useEffect(() => { void loadAdmins(adminOrgId); }, [adminOrgId, loadAdmins]);
-
-  const runAdminAction = async () => {
-    if (!adminAction) return;
-    const { row, activate } = adminAction;
-    setAdminBusy(true);
-    try {
-      await setAdminActive(row.admin_id, activate, adminReason.trim() || undefined);
-      setAdmins((p) => p.map((x) => x.admin_id === row.admin_id ? { ...x, is_active: activate } : x));
-      toast.success(activate ? `Restored ${row.full_name}'s role.` : `Revoked ${row.full_name}'s role.`);
-      setAdminAction(null); setAdminReason('');
-    } catch (e) { toast.error(e instanceof Error ? e.message : 'Action failed'); }
-    setAdminBusy(false);
-  };
 
   const toggle = async (o: OrgOverview) => {
     setConfirmOrg(o);
@@ -1189,13 +1011,10 @@ function TrustSafety() {
     try {
       await toggleOrganizationStatus(o.id, !o.is_active);
       setOrgs((p) => p.map((x) => x.id === o.id ? { ...x, is_active: !x.is_active } : x));
-      toast.success(o.is_active ? `${o.name} frozen.` : `${o.name} unfrozen.`);
       setConfirmOrg(null);
-    } catch (e) { toast.error(e instanceof Error ? e.message : 'Failed'); }
+    } catch (e) { alert(e instanceof Error ? e.message : 'Failed'); }
     setBusyId(null);
   };
-
-  const adminOrgLabel = orgs.find((o) => o.id === adminOrgId)?.name || 'Select an organization…';
 
   if (loading) return <p style={{ color: T.textSec, fontSize: 13 }}><Loader2 size={14} className="animate-spin" style={{ verticalAlign: 'middle' }} /> Loading…</p>;
 
@@ -1237,70 +1056,6 @@ function TrustSafety() {
         ))}
       </div>
 
-      {/* ── Admins & roles: revoke a suspicious exec ── */}
-      <div style={{ background: T.card, border: `1px solid ${T.border}`, borderRadius: 14, overflow: 'visible', marginTop: 18 }}>
-        <div style={{ padding: '14px 18px', borderBottom: `1px solid ${T.border}`, display: 'flex', alignItems: 'center', gap: 8 }}>
-          <Users size={15} style={{ color: T.amber }} />
-          <span style={{ fontSize: 13, fontWeight: 700, color: T.text }}>Admins &amp; roles</span>
-          <span style={{ fontSize: 11, color: T.textTer }}>— revoke or restore an exec role</span>
-        </div>
-        <div style={{ padding: 18 }}>
-          <div style={{ position: 'relative', maxWidth: 360, marginBottom: 14 }}>
-            <button type="button" onClick={() => setAdminOrgOpen((v) => !v)}
-              style={{ ...inputStyle, cursor: 'pointer', textAlign: 'left', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
-              <span style={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{adminOrgLabel}</span>
-              <ChevronDown size={14} style={{ color: T.textTer, flexShrink: 0 }} />
-            </button>
-            <AnimatePresence>
-              {adminOrgOpen && (
-                <>
-                  <button type="button" aria-label="Close" onClick={() => setAdminOrgOpen(false)}
-                    style={{ position: 'fixed', inset: 0, zIndex: 10, background: 'transparent', border: 'none' }} />
-                  <motion.div
-                    initial={{ opacity: 0, y: -6, scale: 0.98 }} animate={{ opacity: 1, y: 0, scale: 1 }}
-                    exit={{ opacity: 0, y: -6, scale: 0.98 }} transition={{ duration: 0.14 }}
-                    style={{ position: 'absolute', top: 'calc(100% + 6px)', left: 0, right: 0, zIndex: 20, background: '#0A1020', border: `1px solid ${T.border}`, borderRadius: 12, boxShadow: '0 18px 40px rgba(0,0,0,0.35)', overflow: 'hidden', maxHeight: 280, overflowY: 'auto' }}
-                  >
-                    {orgs.map((o) => (
-                      <button key={o.id} type="button" onClick={() => { setAdminOrgId(o.id); setAdminOrgOpen(false); }}
-                        style={{ width: '100%', padding: '10px 12px', background: adminOrgId === o.id ? 'rgba(255,104,3,0.12)' : 'transparent', color: adminOrgId === o.id ? T.primary : T.text, border: 'none', textAlign: 'left', cursor: 'pointer', fontSize: 13 }}>
-                        {o.name}
-                      </button>
-                    ))}
-                  </motion.div>
-                </>
-              )}
-            </AnimatePresence>
-          </div>
-
-          {!adminOrgId
-            ? <p style={{ margin: 0, fontSize: 12, color: T.textTer }}>Pick an organization to see its admins.</p>
-            : adminsLoading
-              ? <p style={{ margin: 0, fontSize: 12, color: T.textSec }}><Loader2 size={13} className="animate-spin" style={{ verticalAlign: 'middle' }} /> Loading admins…</p>
-              : admins.length === 0
-                ? <p style={{ margin: 0, fontSize: 12, color: T.textTer }}>No admins in this organization.</p>
-                : (
-                  <div style={{ display: 'grid', gap: 8 }}>
-                    {admins.map((a) => (
-                      <div key={a.admin_id} style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap', padding: '10px 12px', borderRadius: 10, background: 'rgba(255,255,255,0.02)', border: `1px solid ${T.border}` }}>
-                        <div style={{ flex: 1, minWidth: 160 }}>
-                          <p style={{ margin: 0, fontSize: 12, fontWeight: 600, color: T.text }}>
-                            {a.full_name} {!a.is_active && <Badge color={T.textTer}>revoked</Badge>}
-                          </p>
-                          <p style={{ margin: '2px 0 0', fontSize: 11, color: T.textSec }}>
-                            {(a.role_label || a.role || 'admin')} · {a.group_name || a.scope_level} · L{a.verification_layer}
-                          </p>
-                        </div>
-                        {a.is_active
-                          ? <Btn onClick={() => { setAdminReason(''); setAdminAction({ row: a, activate: false }); }} color={T.red}><ShieldOff size={13} /> Revoke</Btn>
-                          : <Btn onClick={() => { setAdminReason(''); setAdminAction({ row: a, activate: true }); }} color={T.mint}><ShieldCheck size={13} /> Restore</Btn>}
-                      </div>
-                    ))}
-                  </div>
-                )}
-        </div>
-      </div>
-
       <AnimatePresence>
         {confirmOrg && (
           <SafetyConfirmModal
@@ -1308,27 +1063,6 @@ function TrustSafety() {
             onCancel={() => setConfirmOrg(null)}
             onConfirm={runToggle}
             busy={busyId === confirmOrg.id}
-          />
-        )}
-        {adminAction && (
-          <ActionConfirmModal
-            icon={adminAction.activate ? <ShieldCheck size={18} /> : <UserX size={18} />}
-            title={adminAction.activate ? 'Restore admin role' : 'Revoke admin role'}
-            subtitle={adminAction.activate
-              ? 'This re-enables their exec powers.'
-              : 'This immediately removes their exec powers (dues, members, money).'}
-            color={adminAction.activate ? T.mint : T.red}
-            confirmLabel={adminAction.activate ? 'Restore role' : 'Revoke role'}
-            busy={adminBusy}
-            rows={[
-              { label: 'Admin', value: `${adminAction.row.full_name} · ${adminAction.row.role_label || adminAction.row.role || 'admin'}` },
-              { label: 'Scope', value: adminAction.row.group_name || adminAction.row.scope_level },
-            ]}
-            reasonLabel="Reason"
-            reasonValue={adminReason}
-            onReason={setAdminReason}
-            onCancel={() => { setAdminAction(null); setAdminReason(''); }}
-            onConfirm={runAdminAction}
           />
         )}
       </AnimatePresence>
