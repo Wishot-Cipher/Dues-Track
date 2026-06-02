@@ -26,7 +26,8 @@ import { useParams } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import {
   ArrowLeft, Share2, CheckCircle2, Download, Loader2, AlertCircle,
-  Hash, Mail, Building2,
+  Hash, Mail, Building2, Sparkles, ShieldCheck, Calendar, CreditCard,
+  UserRound, FileText,
 } from 'lucide-react';
 import QRCode from 'qrcode';
 import { supabase } from '@/config/supabase';
@@ -56,8 +57,8 @@ interface ReceiptRow {
   payer_name:         string | null;
   // joins
   payment_type: { title: string; category: string | null } | null;
-  org:          { name: string; short_name: string | null; slug: string | null } | null;
-  member:       { full_name: string; member_id: string } | null;
+  org:          { name: string; short_name: string | null; slug: string | null; primary_color: string | null } | null;
+  member:       { full_name: string; member_id: string; level: string | null } | null;
 }
 
 // ── Helpers ────────────────────────────────────────────────────────
@@ -137,8 +138,8 @@ export default function ReceiptPage() {
             total_charged_kobo, dues_amount_kobo, platform_fee_kobo, currency_code,
             created_at, approved_at, payer_email, payer_name,
             payment_type:payment_type_id ( title, category ),
-            org:organization_id ( name, short_name, slug ),
-            member:member_id ( full_name, member_id )
+            org:organization_id ( name, short_name, slug, primary_color ),
+            member:member_id ( full_name, member_id, level )
           `)
           .eq('id', paymentId)
           .maybeSingle();
@@ -239,6 +240,19 @@ export default function ReceiptPage() {
 
   const orgName = receipt?.org?.name || 'Payvexo';
   const ref     = receipt?.paystack_reference || receipt?.transaction_ref || '—';
+
+  // Brand colour for the hero accents. Falls back to the theme's
+  // primary so the receipt still reads correctly when the org hasn't
+  // configured their own colour yet.
+  const brandColor = receipt?.org?.primary_color || t.primary;
+
+  // First name for the friendly "Thank you, Wisdom" line. We split on
+  // whitespace and fall back to nothing if the name isn't usable.
+  const firstName = (() => {
+    const full = receipt?.member?.full_name || receipt?.payer_name || '';
+    const f = full.trim().split(/\s+/)[0] || '';
+    return f.length > 1 ? f : '';
+  })();
 
   // Receipt number — used in the header, the QR caption, and the PDF.
   const receiptNo = useMemo(() => {
@@ -369,66 +383,91 @@ export default function ReceiptPage() {
                 WebkitMaskComposite: 'source-over',
               }}
             >
-              {/* Top gradient accent line */}
+              {/* Top brand accent — uses the ORG's primary_color when set
+                  so a church receipt feels church-coloured, a class
+                  feels class-coloured, etc. Falls back to brand orange. */}
               <div
-                className="h-1"
-                style={{ background: 'linear-gradient(90deg, #FF7A1E 0%, #FF6803 50%, #C84600 100%)' }}
+                className="h-1.5"
+                style={{
+                  background: `linear-gradient(90deg, ${brandColor} 0%, ${brandColor}cc 50%, ${brandColor}99 100%)`,
+                }}
               />
 
-              {/* Brand row */}
-              <div className="px-6 pt-6 pb-4 flex items-start justify-between gap-4">
-                <div className="min-w-0">
-                  <div className="flex items-center gap-2">
+              {/* ── HERO BLOCK ───────────────────────────────────
+                  The amount is the star of the show. Org context sits
+                  above it; the payment title sits beneath it. Status
+                  pill anchors the top-right corner. */}
+              <div
+                className="relative px-6 pt-6 pb-7"
+                style={{
+                  background: `linear-gradient(180deg, ${brandColor}10 0%, transparent 100%)`,
+                }}
+              >
+                <div className="flex items-start justify-between gap-3 mb-4">
+                  <div className="flex items-center gap-2.5 min-w-0">
                     <div
-                      className="w-9 h-9 rounded-xl flex items-center justify-center text-white text-base font-extrabold shrink-0"
+                      className="w-10 h-10 rounded-xl flex items-center justify-center text-base font-extrabold shrink-0"
                       style={{
-                        background: 'linear-gradient(135deg, #FF7A1E 0%, #C84600 100%)',
-                        boxShadow: '0 6px 14px -6px rgba(255,104,3,0.45)',
+                        background: `linear-gradient(135deg, ${brandColor} 0%, ${brandColor}cc 100%)`,
+                        color: '#FFFFFF',
+                        boxShadow: `0 6px 14px -6px ${brandColor}80`,
                       }}
                     >
                       {orgName.charAt(0).toUpperCase()}
                     </div>
                     <div className="min-w-0">
-                      <p className="text-[14px] font-extrabold leading-tight truncate" style={{ color: t.text }}>
+                      <p className="text-[13px] font-extrabold leading-tight truncate" style={{ color: t.text }}>
                         {orgName}
                       </p>
-                      <p className="text-[10px] font-semibold uppercase tracking-wider" style={{ color: t.textTer }}>
-                        Official payment receipt
+                      <p className="text-[10px] font-semibold uppercase tracking-[0.16em]" style={{ color: t.textTer }}>
+                        Payment receipt
                       </p>
                     </div>
                   </div>
+                  <StatusPill paid={!!paid} theme={theme} />
                 </div>
-                <StatusPill paid={!!paid} theme={theme} />
-              </div>
 
-              {/* Receipt-no chip — gives the document a real "audit
-                  identity" so members can quote a single short string
-                  back to support, and so the on-screen and PDF
-                  versions visibly match. */}
-              <div className="px-6 -mt-1 mb-3 flex items-center gap-2">
-                <span
-                  className="inline-flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-[0.16em] px-2 py-1 rounded-full"
-                  style={{
-                    background: t.primarySoft,
-                    color: t.primary,
-                    border: `1px solid ${t.primaryRing}`,
-                  }}
+                <p className="text-[10px] uppercase tracking-[0.18em] font-bold mb-1" style={{ color: t.textTer }}>
+                  {paid ? 'Amount paid' : 'Amount charged'}
+                </p>
+                <p
+                  className="text-[36px] sm:text-[42px] font-black leading-none tracking-tight tabular-nums"
+                  style={{ color: t.text }}
                 >
-                  <Hash size={11} />
-                  {receiptNo}
-                </span>
-                {receipt.org?.slug && (
+                  {amountDisplay}
+                </p>
+                <p className="text-[12px] mt-2 font-semibold" style={{ color: t.textSec }}>
+                  for {receipt.payment_type?.title || 'Payment'}
+                </p>
+
+                {/* Receipt-number chip — sits below the hero amount so
+                    you always have one short string to quote to support. */}
+                <div className="mt-4 flex items-center gap-2 flex-wrap">
                   <span
-                    className="inline-flex items-center gap-1 text-[10px] font-semibold"
-                    style={{ color: t.textTer }}
+                    className="inline-flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-[0.16em] px-2 py-1 rounded-full"
+                    style={{
+                      background: `${brandColor}18`,
+                      color: brandColor,
+                      border: `1px solid ${brandColor}38`,
+                    }}
                   >
-                    <Building2 size={10} />
-                    {receipt.org.slug}
+                    <Hash size={11} />
+                    {receiptNo}
                   </span>
-                )}
+                  {receipt.org?.slug && (
+                    <span
+                      className="inline-flex items-center gap-1 text-[10px] font-semibold"
+                      style={{ color: t.textTer }}
+                    >
+                      <Building2 size={10} />
+                      {receipt.org.slug}
+                    </span>
+                  )}
+                </div>
               </div>
 
-              {/* Dashed divider — the "perforation line" */}
+              {/* Perforation line — gives the card the "torn ticket"
+                  reading without overdoing it. */}
               <div
                 className="mx-6"
                 style={{
@@ -437,55 +476,22 @@ export default function ReceiptPage() {
                 }}
               />
 
-              {/* Data rows */}
-              <div className="px-6 py-5 space-y-3">
-                <KV label="Member"          value={receipt.member?.full_name || receipt.payer_name || '—'} theme={theme} />
-                <KV label="Member ID"       value={receipt.member?.member_id || '—'} theme={theme} mono />
+              {/* ── PAID BY ─────────────────────────────────────── */}
+              <Section title="Paid by" icon={<UserRound size={11} />} t={t} brand={brandColor}>
+                <KV label="Member"    value={receipt.member?.full_name || receipt.payer_name || '—'} theme={theme} />
+                <KV label="Member ID" value={receipt.member?.member_id || '—'} theme={theme} mono />
+                {receipt.member?.level && (
+                  <KV label="Level" value={receipt.member.level} theme={theme} small />
+                )}
                 {receipt.payer_email && (
-                  <KV
-                    label="Email"
-                    value={receipt.payer_email}
-                    theme={theme}
-                    small
-                    icon={<Mail size={11} />}
-                  />
+                  <KV label="Email" value={receipt.payer_email} theme={theme} small icon={<Mail size={11} />} />
                 )}
-                <KV label="Fee type"        value={receipt.payment_type?.title || 'Payment'} theme={theme} />
+              </Section>
 
-                {/* Fee breakdown — only renders when there's an actual
-                    platform fee to disclose. Keeps simple cases simple. */}
-                {feeBreakdown ? (
-                  <>
-                    <KV
-                      label="Dues"
-                      value={formatNaira(feeBreakdown.dues)}
-                      theme={theme}
-                      small
-                    />
-                    <KV
-                      label="Platform fee"
-                      value={formatNaira(feeBreakdown.fee)}
-                      theme={theme}
-                      small
-                    />
-                    <KV
-                      label="Total charged"
-                      value={formatNaira(feeBreakdown.total)}
-                      theme={theme}
-                      highlight
-                    />
-                  </>
-                ) : (
-                  <KV
-                    label="Amount paid"
-                    value={amountDisplay}
-                    theme={theme}
-                    highlight
-                  />
-                )}
-
+              {/* ── PAYMENT DETAILS ─────────────────────────────── */}
+              <Section title="Payment details" icon={<CreditCard size={11} />} t={t} brand={brandColor}>
                 <KV
-                  label="Payment method"
+                  label="Method"
                   value={channelLabel(receipt.payment_method, receipt.paystack_channel)}
                   theme={theme}
                 />
@@ -495,59 +501,80 @@ export default function ReceiptPage() {
                   value={formatDateTime(receipt.approved_at || receipt.created_at)}
                   theme={theme}
                   small
+                  icon={<Calendar size={11} />}
                 />
-              </div>
+              </Section>
 
-              {/* Thank-you + verified stamp + QR */}
+              {/* ── BREAKDOWN (only if there's a platform fee) ──── */}
+              {feeBreakdown && (
+                <Section title="Breakdown" icon={<FileText size={11} />} t={t} brand={brandColor}>
+                  <KV label="Dues"          value={formatNaira(feeBreakdown.dues)}  theme={theme} small />
+                  <KV label="Platform fee"  value={formatNaira(feeBreakdown.fee)}   theme={theme} small />
+                  <KV label="Total charged" value={formatNaira(feeBreakdown.total)} theme={theme} highlight />
+                </Section>
+              )}
+
+              {/* ── THANK-YOU + VERIFICATION ────────────────────── */}
               <div
-                className="mx-6 mb-6 px-5 py-4 rounded-2xl flex items-center gap-4"
+                className="mx-6 mb-5 rounded-2xl overflow-hidden"
                 style={{
-                  background: isLight ? '#FFF7EE' : 'rgba(255,172,95,0.10)',
-                  border: `1px dashed ${isLight ? 'rgba(255,104,3,0.28)' : 'rgba(255,172,95,0.28)'}`,
+                  background: `linear-gradient(135deg, ${brandColor}12 0%, ${brandColor}05 100%)`,
+                  border: `1px dashed ${brandColor}40`,
                 }}
               >
-                <div className="flex-1 min-w-0">
-                  <p className="text-[14px] font-extrabold leading-tight" style={{ color: t.text }}>
-                    Thank you!
-                    {' '}<span aria-hidden>🎉</span>
-                  </p>
-                  <p className="text-[11px] mt-1" style={{ color: t.textSec }}>
-                    Your payment was successful and recorded on our ledger.
-                  </p>
-                  <p className="text-[10px] mt-2 font-semibold" style={{ color: t.textTer }}>
-                    Scan the code to verify this receipt online.
-                  </p>
+                <div className="px-5 pt-5 pb-4 flex items-start gap-4">
+                  <div className="flex-1 min-w-0">
+                    <p className="inline-flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-[0.16em]" style={{ color: brandColor }}>
+                      <Sparkles size={11} />
+                      Thank you{firstName ? `, ${firstName}` : ''}
+                    </p>
+                    <p className="text-[15px] font-extrabold mt-1 leading-tight" style={{ color: t.text }}>
+                      Your payment is on the books.
+                    </p>
+                    <p className="text-[12px] mt-1.5 leading-relaxed" style={{ color: t.textSec }}>
+                      This is your official record. Save the PDF or share the
+                      verification link — it stays valid for as long as the
+                      payment is on file.
+                    </p>
+                  </div>
+                  <VerifiedStamp theme={theme} />
                 </div>
-                <VerifiedStamp theme={theme} />
-              </div>
 
-              {/* QR strip — scan-to-verify. Sits in its own row below the
-                  thank-you so it has room to breathe; the canvas mounts
-                  once and is filled by the useEffect above. */}
-              <div className="mx-6 mb-6 flex items-center gap-3">
+                {/* QR strip — visually inside the same gratitude block so
+                    "thank you" and "here's how to verify" feel like one
+                    breath, not two disconnected widgets. */}
                 <div
-                  className="rounded-xl p-2 shrink-0"
+                  className="mx-5 mb-5 rounded-xl p-3 flex items-center gap-3"
                   style={{
-                    background: isLight ? '#FFFFFF' : 'rgba(255,255,255,0.06)',
+                    background: isLight ? '#FFFFFF' : 'rgba(255,255,255,0.04)',
                     border: `1px solid ${t.cardBorder}`,
                   }}
                 >
-                  <canvas
-                    ref={qrCanvasRef}
-                    width={84}
-                    height={84}
-                    style={{ display: 'block' }}
-                    aria-label="Receipt verification QR code"
-                  />
-                </div>
-                <div className="min-w-0">
-                  <p className="text-[10px] uppercase tracking-[0.16em] font-bold" style={{ color: t.textTer }}>
-                    Scan to verify
-                  </p>
-                  <p className="text-[11px] mt-1 break-all" style={{ color: t.textSec }}>
-                    Opens the live receipt on Payvexo. The code stays valid
-                    as long as the payment is on file.
-                  </p>
+                  <div
+                    className="rounded-lg p-1.5 shrink-0"
+                    style={{
+                      background: isLight ? '#FFFFFF' : 'rgba(255,255,255,0.08)',
+                      border: `1px solid ${t.cardBorder}`,
+                    }}
+                  >
+                    <canvas
+                      ref={qrCanvasRef}
+                      width={72}
+                      height={72}
+                      style={{ display: 'block' }}
+                      aria-label="Receipt verification QR code"
+                    />
+                  </div>
+                  <div className="min-w-0">
+                    <p className="text-[10px] uppercase tracking-[0.16em] font-bold inline-flex items-center gap-1" style={{ color: brandColor }}>
+                      <ShieldCheck size={11} />
+                      Scan to verify
+                    </p>
+                    <p className="text-[11px] mt-1 leading-relaxed" style={{ color: t.textSec }}>
+                      Opens this live receipt on Payvexo. Receipt #{receiptNo} ·
+                      issued {formatDateTime(receipt.approved_at || receipt.created_at)}.
+                    </p>
+                  </div>
                 </div>
               </div>
 
@@ -636,6 +663,41 @@ function KV({
       >
         {value}
       </span>
+    </div>
+  );
+}
+
+// ── Section — visually groups related KV rows under a single
+// labelled banner. Used to split the receipt into "Paid by",
+// "Payment details", and the optional "Breakdown". Replaces the old
+// flat data block, which buried the visual hierarchy in dividers.
+function Section({
+  title, icon, brand, t, children,
+}: {
+  title:    string;
+  icon:     React.ReactNode;
+  brand:    string;
+  t:        ReturnType<typeof getDashboardTokens>;
+  children: React.ReactNode;
+}) {
+  return (
+    <div className="px-6 py-4 space-y-2.5">
+      <div className="flex items-center gap-1.5 mb-1.5">
+        <span
+          className="inline-flex w-5 h-5 rounded-full items-center justify-center"
+          style={{ background: `${brand}18`, color: brand }}
+        >
+          {icon}
+        </span>
+        <p
+          className="text-[10px] font-bold uppercase tracking-[0.18em]"
+          style={{ color: t.textTer }}
+        >
+          {title}
+        </p>
+        <span className="flex-1 h-px" style={{ background: t.cardBorder }} />
+      </div>
+      {children}
     </div>
   );
 }
