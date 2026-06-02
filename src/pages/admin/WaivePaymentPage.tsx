@@ -5,6 +5,9 @@ import {  } from "react-router-dom";
 import { useAppNav } from '@/hooks/useAppNav';
 import { supabase } from "@/config/supabase";
 import { getOrgScope } from '@/utils/orgScope';
+import { getScopedGroupIds } from '@/utils/scopedGroups';
+import { useActiveRole } from '@/hooks/useActiveRole';
+import { useMultiTenantAuth } from '@/hooks/useMultiTenantAuth';
 import { organizationService } from '@/services/organizationService';
 import { colors, gradients } from "@/config/colors";
 import GlassCard from "@/components/ui/GlassCard";
@@ -58,6 +61,15 @@ interface PaymentType {
 export default function WaivePaymentPage() {
   const { go: navigate } = useAppNav();
   const { user, hasPermission } = useAuth();
+  const { user: mtUser, organization } = useMultiTenantAuth();
+  // Resolve the active role's group subtree so a dept/faculty exec
+  // can waive payments toward dues they published — not just dues
+  // tied to their own primary class. Mirrors the same pattern used
+  // by ManageDuesPage and AdminReviewPage.
+  const { activeRole } = useActiveRole({
+    orgId: organization?.id,
+    memberId: mtUser?.id,
+  });
   const { success, error: showError } = useToast();
   const { theme } = useTheme();
   const tk = getDashboardTokens(theme);
@@ -90,45 +102,52 @@ export default function WaivePaymentPage() {
     }
 
     try {
-      // Fetch all active payment types for scope and filter client-side so that
-      // payment types without `target_levels` apply to all members in the org.
+      // Fetch active payment types within the active role's subtree.
+      // We swapped `eq('group_id', scope.groupId)` for `in(...)` against
+      // the descendant set so a dept/faculty exec can waive payments
+      // toward dues they published — not just class-pinned dues. The
+      // previous filter quietly hid every dept/faculty due from the
+      // waive list, leaving execs unable to waive their own dues.
       const scope = getOrgScope();
+      const scopedIds = scope ? await getScopedGroupIds({
+        orgId: scope.orgId,
+        activeGroupId: activeRole?.groupId ?? null,
+        activeScopeLevel: activeRole?.scopeLevel ?? null,
+      }) : null;
       let ptQ = supabase
         .from("payment_types")
         .select("id, title, amount, description, deadline, target_levels, group_id")
         .eq("is_active", true);
       if (scope) {
         ptQ = ptQ.eq('organization_id', scope.orgId);
-        ptQ = ptQ.eq('group_id', scope.groupId);
+        if (scopedIds) {
+          ptQ = ptQ.in('group_id', Array.from(scopedIds));
+        }
       }
       const { data: allPaymentTypes, error: ptError } = await ptQ;
 
       if (ptError) throw ptError;
       const memberLevelCanon = organizationService.canonicalizeLevel(selectedStudent.level || '');
-      let orgType: string | null = null;
-      if (scope) {
-        const org = await organizationService.getById(scope.orgId);
-        orgType = org?.organization_type || null;
-      }
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const filteredPaymentTypes = (allPaymentTypes || []).filter((pt: any) => {
-        if (orgType === 'university' && pt.group_id) {
-          if (!selectedStudent.group_id || selectedStudent.group_id !== pt.group_id) return false;
-        }
+        // Cascade: a due applies to this student when it's org-wide
+        // (group_id NULL) or its target group is the student's class
+        // / any of its ancestors that the exec also covers.
         const targets: string[] = pt.target_levels || [];
         if (!targets || targets.length === 0) return true;
         const t = targets.map((l: string) => organizationService.canonicalizeLevel(l));
         return t.includes(memberLevelCanon);
       });
 
-      // Fetch student's existing payments
+      // Fetch student's existing payments. Member-scoped is enough —
+      // pinning to a single primary group hid payments the student
+      // made toward dues higher in the hierarchy.
       let payQ = supabase
         .from("payments")
         .select("payment_type_id, status, amount")
         .eq("member_id", selectedStudent.id);
       if (scope) {
         payQ = payQ.eq('organization_id', scope.orgId);
-        payQ = payQ.eq('group_id', scope.groupId);
       }
       const { data: existingPayments, error: paymentsError } = await payQ;
 
@@ -166,6 +185,16 @@ export default function WaivePaymentPage() {
     try {
       setSearching(true);
       const scope = getOrgScope();
+      // Search members across the active role's subtree so a faculty
+      // exec can waive for any class member under their faculty, not
+      // just members of their own primary class. scopedIds is null
+      // for org-scope callers (search the whole org) and a Set for
+      // unit/group-scope.
+      const scopedIds = scope ? await getScopedGroupIds({
+        orgId: scope.orgId,
+        activeGroupId: activeRole?.groupId ?? null,
+        activeScopeLevel: activeRole?.scopeLevel ?? null,
+      }) : null;
       let searchQ = supabase
         .from("organization_members")
         .select("id, full_name, member_id, level, email, group_id")
@@ -174,7 +203,9 @@ export default function WaivePaymentPage() {
         .limit(10);
       if (scope) {
         searchQ = searchQ.eq('organization_id', scope.orgId);
-        searchQ = searchQ.eq('group_id', scope.groupId);
+        if (scopedIds) {
+          searchQ = searchQ.in('group_id', Array.from(scopedIds));
+        }
       }
       const { data, error } = await searchQ;
 
@@ -198,7 +229,7 @@ export default function WaivePaymentPage() {
     } finally {
       setSearching(false);
     }
-  }, []);
+  }, [activeRole?.groupId, activeRole?.scopeLevel]);
 
   // Live search as the user types (debounced)
   useEffect(() => {
