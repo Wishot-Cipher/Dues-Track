@@ -33,6 +33,7 @@ import PaymentVerifyPage from '@/pages/PaymentVerifyPage';
 import ReceiptPage from '@/pages/ReceiptPage';
 import AdminDashboardPage from '@/pages/admin/AdminDashboardPage';
 import DepartmentExecDashboardPage from '@/pages/admin/DepartmentExecDashboardPage';
+import FacultyExecDashboardPage from '@/pages/admin/FacultyExecDashboardPage';
 // NOTE: src/pages/admin/CreatePaymentTypePage.tsx is the legacy create-due page.
 // It stays on disk as a safe-revert backup but is no longer routed.
 import CreateDuePage from '@/pages/admin/CreateDuePage';
@@ -172,6 +173,8 @@ function App() {
                     "is this the right kind of admin?" check and bounces
                     non-matching callers, so requireVerified is enough. */}
                 <Route path="admin/dept" element={<OrgProtectedRoute requireVerified><DepartmentExecDashboardPage /></OrgProtectedRoute>} />
+                {/* Faculty exec dashboard — same pattern, one tier up. */}
+                <Route path="admin/faculty" element={<OrgProtectedRoute requireVerified><FacultyExecDashboardPage /></OrgProtectedRoute>} />
                 <Route path="admin/groups" element={<OrgProtectedRoute requireActing><OrgGroupsPage /></OrgProtectedRoute>} />
                 <Route path="admin/academic-calendar" element={<OrgProtectedRoute requireActing><OrgAcademicCalendarPage /></OrgProtectedRoute>} />
                 <Route path="admin/members" element={<OrgProtectedRoute requiredPermission="can_manage_members" requireVerified><OrgMembersPage /></OrgProtectedRoute>} />
