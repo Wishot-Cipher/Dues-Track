@@ -67,12 +67,20 @@ interface NavItem {
   permission?: string;
   hideOnMobile?: boolean;
   /**
-   * Minimum admin scope required to see this tool. Used ONLY for tenant-level
-   * tools (billing, org structure, academic calendar) — never for money
-   * collection, so a group-scope class rep can still run dues for their class
-   * (e.g. collecting for textbooks without bugging the finsec).
+   * Minimum admin scope required to see this tool. Used for tools that
+   * only make sense at higher tiers — billing, org structure, academic
+   * calendar, payout setup, public contributions. A group-scope class
+   * rep shouldn't see them; a dept-scope unit exec sees the unit ones.
    */
   minScope?: 'org' | 'unit';
+  /**
+   * Maximum admin scope. Tools that are LOCAL to a class — scanning
+   * QR codes at a class venue, checking attendees in, approving the
+   * class's own payments — clutter higher-tier dashboards if they
+   * leak up. A dept/faculty exec shouldn't be reviewing individual
+   * payments; that stays with the class rep closest to the student.
+   */
+  maxScope?: 'group' | 'unit';
   /**
    * Admin-only grouping for the dropdown / sheet. Keeps the cluttered admin
    * nav visually digestible: Overview · Money · Structure · Org-level.
@@ -277,23 +285,40 @@ export default function OrgLayout() {
     // Tenant structure — org/unit execs only (a class rep doesn't reshape the org tree).
     { path: '/admin/groups', label: groupNavLabel, icon: <Building2 size={20} />, section: 'admin', hideOnMobile: true, permission: 'can_manage_settings', minScope: 'unit', adminGroup: 'structure' },
     ...(isAcademicOrg ? [{ path: '/admin/academic-calendar', label: 'Academic Calendar', icon: <CalendarDays size={20} />, section: 'admin' as const, hideOnMobile: true, permission: 'can_manage_settings', minScope: 'unit' as const, adminGroup: 'structure' as const }] : []),
-    // Money collection — available at ANY scope (class rep can collect for their own class).
+    // Money collection — available at ANY scope. The dept/faculty exec
+    // gets a targeted form (scope=unit / by-level); the class rep gets
+    // a class-scoped form. The page itself adapts to context.
     { path: '/admin/create-payment', label: 'Create Dues', icon: <BadgeDollarSign size={20} />, section: 'admin', hideOnMobile: true, permission: 'can_create_payments', adminGroup: 'money' },
     { path: '/admin/manage-dues', label: 'Manage Dues', icon: <Receipt size={20} />, section: 'admin', hideOnMobile: true, permission: 'can_create_payments', adminGroup: 'money' },
-    { path: '/admin/review', label: 'Review', icon: <ClipboardCheck size={20} />, section: 'admin', hideOnMobile: true, permission: 'can_approve_payments', adminGroup: 'money' },
-    { path: '/admin/expenses', label: 'Expenses', icon: <HandCoins size={20} />, section: 'admin', hideOnMobile: true, permission: 'can_manage_expenses', adminGroup: 'money' },
-    { path: '/admin/scan-qr', label: 'Scan QR', icon: <QrCode size={20} />, section: 'admin', hideOnMobile: true, permission: 'can_approve_payments', adminGroup: 'money' },
-    { path: '/admin/check-in', label: 'Event Check-in', icon: <ScanLine size={20} />, section: 'admin', hideOnMobile: true, permission: 'can_approve_payments', adminGroup: 'money' },
-    { path: '/admin/contributions', label: 'Contributions', icon: <Heart size={20} />, section: 'admin', hideOnMobile: true, permission: 'can_approve_payments', adminGroup: 'money' },
-    // Payout destination — a collector needs somewhere for money to land, so it's
-    // NOT scope-gated; just permission-gated.
-    { path: '/admin/payout', label: 'Payout Account', icon: <Banknote size={20} />, section: 'admin', hideOnMobile: true, permission: 'can_manage_settings', adminGroup: 'org' },
+    // Per-payment approve/reject + class-venue tools — these are
+    // CLOSE-TO-THE-STUDENT actions. They belong to the class rep.
+    // Hiding them from dept/faculty execs declutters their nav and
+    // matches the strategic rule: "individual payment detail stays
+    // with the class rep."
+    { path: '/admin/review', label: 'Review', icon: <ClipboardCheck size={20} />, section: 'admin', hideOnMobile: true, permission: 'can_approve_payments', maxScope: 'group', adminGroup: 'money' },
+    { path: '/admin/expenses', label: 'Expenses', icon: <HandCoins size={20} />, section: 'admin', hideOnMobile: true, permission: 'can_manage_expenses', maxScope: 'group', adminGroup: 'money' },
+    { path: '/admin/scan-qr', label: 'Scan QR', icon: <QrCode size={20} />, section: 'admin', hideOnMobile: true, permission: 'can_approve_payments', maxScope: 'group', adminGroup: 'money' },
+    { path: '/admin/check-in', label: 'Event Check-in', icon: <ScanLine size={20} />, section: 'admin', hideOnMobile: true, permission: 'can_approve_payments', maxScope: 'group', adminGroup: 'money' },
+    // Public donations are org-wide (a class doesn't have its own
+    // donation page).
+    { path: '/admin/contributions', label: 'Contributions', icon: <Heart size={20} />, section: 'admin', hideOnMobile: true, permission: 'can_approve_payments', minScope: 'org', adminGroup: 'money' },
+    // Payout destination — one Paystack sub-account per org, set by
+    // the org owner (or a unit exec the owner has delegated to).
+    // Class reps don't see it.
+    { path: '/admin/payout', label: 'Payout Account', icon: <Banknote size={20} />, section: 'admin', hideOnMobile: true, permission: 'can_manage_settings', minScope: 'unit', adminGroup: 'org' },
     // Platform subscription — the whole tenant's plan: org-scope owner only.
     { path: '/admin/billing', label: 'Billing', icon: <Wallet size={20} />, section: 'admin', hideOnMobile: true, permission: 'can_manage_settings', minScope: 'org', adminGroup: 'org' },
   ] : [];
-  const adminNav: NavItem[] = adminNavAll.filter(
-    (i) => (!i.permission || perms[i.permission]) && (!i.minScope || execScopeRank >= scopeRank(i.minScope)),
-  );
+  const adminNav: NavItem[] = adminNavAll.filter((i) => {
+    if (i.permission && !perms[i.permission]) return false;
+    if (i.minScope && execScopeRank < scopeRank(i.minScope)) return false;
+    // maxScope hides items from HIGHER tiers — e.g. Scan QR shouldn't
+    // appear in a faculty exec's nav even though they technically have
+    // can_approve_payments. The cap is strict: the active tier's rank
+    // must be <= the item's maxScope rank.
+    if (i.maxScope && execScopeRank > scopeRank(i.maxScope)) return false;
+    return true;
+  });
 
   // Bottom tab items (mobile) — fintech "2 + FAB + 2" pattern.
   // The mockup shows Home / Dues on the left, a big orange center FAB,

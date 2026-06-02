@@ -226,6 +226,25 @@ export default function CreateDuePage() {
   const qpGroupId  = searchParams.get('groupId');
   const qpByLevel  = searchParams.get('byLevel') === '1';
 
+  // When the dept/faculty exec arrives via the "By level" targeting
+  // card, we scroll the level picker into view + pulse it briefly so
+  // they know exactly where to make the choice. The ref attaches
+  // below, the effect fires once after the form mounts.
+  const levelPickerRef = useRef<HTMLDivElement | null>(null);
+  useEffect(() => {
+    if (!qpByLevel) return;
+    const t = setTimeout(() => {
+      const el = levelPickerRef.current;
+      if (!el) return;
+      el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      el.animate(
+        [{ transform: 'scale(1)' }, { transform: 'scale(1.02)' }, { transform: 'scale(1)' }],
+        { duration: 600, easing: 'ease-in-out', iterations: 2 },
+      );
+    }, 400);
+    return () => clearTimeout(t);
+  }, [qpByLevel, ctxLoading]);
+
   // Load context (caller's scope, org state, target list)
   useEffect(() => {
     const scope = getOrgScope();
@@ -916,6 +935,28 @@ export default function CreateDuePage() {
               </p>
             ) : (
               <>
+                {/* Prefill banner — shown when the page was opened from a
+                    dept/faculty targeting card. Reassures the user the
+                    selection isn't locked: change anything below. */}
+                {(qpScope || qpByLevel) && (
+                  <div
+                    className="mb-3 rounded-xl px-3 py-2 flex items-start gap-2 text-[11px]"
+                    style={{
+                      background: tk.primarySoft,
+                      border: `1px solid ${tk.primaryRing}`,
+                      color: tk.textSec,
+                    }}
+                  >
+                    <span className="w-4 h-4 rounded-full flex items-center justify-center shrink-0"
+                      style={{ background: tk.primary, color: '#FFFFFF', fontSize: 10, fontWeight: 800 }}>i</span>
+                    <span>
+                      <span className="font-semibold" style={{ color: tk.text }}>
+                        Targeting prefilled
+                      </span>
+                      {' '}from your dashboard. You can change scope, target group, or level below at any time before publishing.
+                    </span>
+                  </div>
+                )}
                 {/* Scope tabs — only show options the caller can actually do */}
                 <Field label="Scope" required>
                   <div className="flex flex-wrap gap-2">
@@ -998,7 +1039,7 @@ export default function CreateDuePage() {
                     members are the same level by definition; we hide it for them. */}
                 {targetScope !== 'group' && (
                   <Field label="Filter by level" hint="optional — leave blank for everyone in scope">
-                    <div className="flex flex-wrap gap-1.5">
+                    <div ref={levelPickerRef} className="flex flex-wrap gap-1.5 rounded-lg p-1 -m-1">
                       {LEVEL_OPTIONS.map((lvl) => {
                         const on = form.target_levels.includes(lvl);
                         return (
