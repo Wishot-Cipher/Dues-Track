@@ -164,7 +164,7 @@ export default function ClassExecDashboardView({ admin, klass }: ClassExecDashbo
           .order('created_at', { ascending: false })
           .limit(50);
 
-        const all = ((payRows as Array<{
+        const all = ((payRows as unknown as Array<{
           id: string; amount: number; status: string; created_at: string;
           payer_name: string | null; payment_type_id: string | null;
           payment_type: { title: string } | null;
