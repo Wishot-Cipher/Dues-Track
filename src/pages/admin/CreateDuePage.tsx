@@ -29,7 +29,7 @@
  */
 
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   AlertCircle,
@@ -212,6 +212,20 @@ export default function CreateDuePage() {
     }
   }, [user, hasPermission, navigate, toast]);
 
+  // Read query params from the dept-/faculty-exec targeting cards so
+  // we can prefill the form. Accepted keys:
+  //   scope     'org' | 'faculty' | 'group'
+  //   groupId   the target group id (faculty / dept / class)
+  //   byLevel   '1' → flag so we know to scroll the level picker
+  //             into view (the picker is already in the form below)
+  // We also accept `deptId` / `facultyId` from the cards even though
+  // we don't use them to filter yet — they're harmless and keep the
+  // URL self-describing for future polish.
+  const [searchParams] = useSearchParams();
+  const qpScope    = searchParams.get('scope');
+  const qpGroupId  = searchParams.get('groupId');
+  const qpByLevel  = searchParams.get('byLevel') === '1';
+
   // Load context (caller's scope, org state, target list)
   useEffect(() => {
     const scope = getOrgScope();
@@ -224,8 +238,23 @@ export default function CreateDuePage() {
       const data = await organizationService.getDueCreationContext(scope.memberId);
       if (cancelled) return;
       setCtx(data);
-      // Seed sensible defaults for scope/target based on caller's level
-      if (data.ok && data.caller?.scope) {
+
+      // Override order: URL params (from dept/faculty targeting cards)
+      // win, then we fall back to seeded defaults from the caller's
+      // own scope. This way an exec who tapped "All classes in dept"
+      // lands on the form already configured for that dept.
+      const validScopes = ['org', 'faculty', 'group'] as const;
+      const urlScope = validScopes.find((s) => s === qpScope);
+
+      if (urlScope) {
+        setTargetScope(urlScope);
+        if (urlScope === 'org') {
+          setTargetGroupId(null);
+        } else if (qpGroupId) {
+          setTargetGroupId(qpGroupId);
+        }
+      } else if (data.ok && data.caller?.scope) {
+        // Seed sensible defaults for scope/target based on caller's level
         const cscope = data.caller.scope;
         if (cscope === 'group') {
           setTargetScope('group');
@@ -241,7 +270,8 @@ export default function CreateDuePage() {
       setCtxLoading(false);
     })();
     return () => { cancelled = true; };
-  }, []);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [qpScope, qpGroupId]);
 
   // Derived: what kinds of targets are available given caller scope
   const targetGroups = ctx?.targets ?? [];
