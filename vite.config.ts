@@ -77,8 +77,13 @@ export default defineConfig({
     port: 1455,
     strictPort: true,
     proxy: {
+      // /api/* requests are forwarded to our local dev API server.
+      // In dev we run scripts/dev-api-server.mjs on :4001 alongside
+      // Vite because vercel dev silently 502s on Node 24. Production
+      // is unaffected — Vercel rewires /api/* to the serverless
+      // functions directly.
       '/api': {
-        target: 'http://localhost:3000',
+        target: 'http://localhost:4001',
         changeOrigin: true,
         secure: false,
       },
