@@ -470,23 +470,35 @@ export default function OrgOverviewPage() {
   }, [filtered, showAll, searchQuery, activeKind]);
 
   const handleGroupClick = (group: OrganizationGroup) => {
-    // Faculty rows drill into the faculty detail page, NOT the switch modal.
-    // A member belongs to a leaf group (class/department), never directly
-    // to a faculty.
-    if (group.kind?.toLowerCase() === 'faculty') {
-      if (orgSlug) navigate(`/${orgSlug}/f/${encodeURIComponent(group.short_name)}`);
+    if (!orgSlug) return;
+    const kind = group.kind?.toLowerCase();
+
+    // Faculties and departments are STRUCTURE, not login destinations.
+    // Always drill into them so the visitor can pick a leaf (class).
+    //   • Faculty/college → /f/<short> (lists depts + leaf classes)
+    //   • Department      → /d/<short> (lists classes in the dept)
+    // The previous code routed an unauthenticated dept-click straight to
+    // /g/<deptShort> (the login welcome) — that asked "log in as the
+    // dept" which is conceptually wrong. Members log in at the CLASS
+    // level; dept/faculty exec access happens via the role switcher
+    // after Layer-4 verification.
+    if (kind === 'faculty' || kind === 'college') {
+      navigate(`/${orgSlug}/f/${encodeURIComponent(group.short_name)}`);
       return;
     }
-    // Authenticated members see the switch-context modal.
+    if (kind === 'department') {
+      navigate(`/${orgSlug}/d/${encodeURIComponent(group.short_name)}`);
+      return;
+    }
+
+    // Leaf (class / level / fellowship / association):
+    //   • Authenticated → switch-context modal
+    //   • Visitor       → /g/<short> welcome (sign up / sign in / invite)
     if (isAuthenticated && user) {
       setSwitchTarget(group);
       return;
     }
-    // Unauthenticated visitors get the welcome page with three paths
-    // (sign up / sign in / invite code) — better than a hard login redirect.
-    if (orgSlug) {
-      navigate(`/${orgSlug}/g/${encodeURIComponent(group.short_name)}`);
-    }
+    navigate(`/${orgSlug}/g/${encodeURIComponent(group.short_name)}`);
   };
 
   const goToLogin = (group?: OrganizationGroup) => {
