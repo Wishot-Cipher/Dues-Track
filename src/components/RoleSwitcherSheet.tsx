@@ -64,7 +64,6 @@ export default function RoleSwitcherSheet({ onSelect }: { onSelect?: () => void 
                   kind: role.kind === 'exec' ? 'exec' : 'student',
                   adminId: role.adminId,
                   groupId: role.groupId ?? null,
-                  groupKind: role.groupKind ?? null,
                   scopeLevel: role.scopeLevel,
                   label: role.label,
                   orgId: organization?.id,
