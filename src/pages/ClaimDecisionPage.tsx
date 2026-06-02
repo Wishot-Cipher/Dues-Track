@@ -110,6 +110,11 @@ export default function ClaimDecisionPage() {
   };
 
   const [claim, setClaim] = useState<ClaimRow | null>(null);
+  // Resolved target group (name + kind) so the vote card can spell out
+  // "Faculty: Engineering" rather than the raw "unit" scope value.
+  // Without this label, a class member voting on a unit-scope claim has
+  // no way to tell whether it's a departmental or faculty role.
+  const [targetGroup, setTargetGroup] = useState<{ name: string; kind: string } | null>(null);
   const [myVote, setMyVote] = useState<MyVote | null>(null);
   const [confirmerCap, setConfirmerCap] = useState<ConfirmerCapability>({ can_confirm: false, reason: null });
   const [loading, setLoading] = useState(true);
@@ -150,6 +155,30 @@ export default function ClaimDecisionPage() {
       return;
     }
     setClaim(claimRow as ClaimRow);
+
+    // Resolve the target group name + kind for the tier label.
+    // unit-scope writes to claimed_unit_group_id; group-scope to
+    // claimed_group_id. Org-scope has no target group.
+    const targetGid = (claimRow as ClaimRow).claimed_scope === 'unit'
+      ? (claimRow as ClaimRow).claimed_unit_group_id
+      : (claimRow as ClaimRow).claimed_scope === 'group'
+        ? (claimRow as ClaimRow).claimed_group_id
+        : null;
+    if (targetGid) {
+      const { data: gRow } = await supabase
+        .from('organization_groups')
+        .select('name, kind')
+        .eq('id', targetGid)
+        .maybeSingle();
+      if (gRow) {
+        setTargetGroup({
+          name: (gRow as { name: string }).name || '',
+          kind: ((gRow as { kind: string | null }).kind || '').toLowerCase(),
+        });
+      }
+    } else {
+      setTargetGroup(null);
+    }
 
     // Already voted?
     const { data: voteRow } = await supabase
@@ -346,6 +375,38 @@ export default function ClaimDecisionPage() {
           <span className="font-normal" style={{ color: tk.textSec }}>claims to be your</span>{' '}
           <span style={{ color: tk.text }}>{claim.position_title}</span>
         </h1>
+
+        {/* Tier badge — makes it impossible for a voter to confuse a
+            faculty-level claim with a class one. The badge always
+            renders for group/unit scopes; org-scope is rare and
+            spelled out by the position title already. */}
+        {(claim.claimed_scope === 'unit' || claim.claimed_scope === 'group') && (
+          <div
+            className="inline-flex items-center gap-2 mt-3 px-3 py-1.5 rounded-full text-[11px] font-bold uppercase tracking-[0.14em]"
+            style={{
+              background: `${tk.primary}14`,
+              color: tk.primary,
+              border: `1px solid ${tk.primary}33`,
+            }}
+          >
+            <ShieldCheck className="w-3 h-3" />
+            {(() => {
+              // Translate the raw scope+kind into a label members
+              // immediately understand. Falls back to the raw scope
+              // when targetGroup hasn't resolved yet.
+              if (claim.claimed_scope === 'group') return 'Class-level role';
+              const k = targetGroup?.kind || '';
+              if (k === 'faculty' || k === 'college') return 'Faculty-level role';
+              if (k === 'department') return 'Departmental role';
+              return 'Unit-level role';
+            })()}
+            {targetGroup?.name && (
+              <span style={{ color: tk.text }}>
+                · <span className="font-bold">{targetGroup.name}</span>
+              </span>
+            )}
+          </div>
+        )}
         <p className="text-sm mt-3" style={{ color: tk.textSec }}>
           {claim.bootstrap_path
             ? <>This is a bootstrap claim — once <span className="font-semibold" style={{ color: tk.text }}>{claim.votes_required}</span> members confirm, they're verified and money unlocks for everyone.</>
@@ -377,7 +438,19 @@ export default function ClaimDecisionPage() {
             />
           </div>
           <div className="grid grid-cols-2 gap-3 mt-4 text-xs">
-            <Stat label="Scope" value={claim.claimed_scope} tk={tk} />
+            <Stat
+              label="Tier"
+              value={(() => {
+                if (claim.claimed_scope === 'org')   return 'Whole org';
+                if (claim.claimed_scope === 'group') return targetGroup?.name ? `Class · ${targetGroup.name}` : 'Class';
+                const k = targetGroup?.kind || '';
+                const tier = (k === 'faculty' || k === 'college')
+                  ? 'Faculty'
+                  : k === 'department' ? 'Dept' : 'Unit';
+                return targetGroup?.name ? `${tier} · ${targetGroup.name}` : tier;
+              })()}
+              tk={tk}
+            />
             <Stat label="Status" value={claim.status.replace(/_/g, ' ')} tk={tk} />
             <Stat label="Trust layer" value={`${claim.current_layer} of ${claim.required_layer}`} tk={tk} />
             <Stat label="Path" value={claim.bootstrap_path ? 'Bootstrap' : 'Standard'} tk={tk} />

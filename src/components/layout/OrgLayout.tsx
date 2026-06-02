@@ -295,7 +295,12 @@ export default function OrgLayout() {
     // Hiding them from dept/faculty execs declutters their nav and
     // matches the strategic rule: "individual payment detail stays
     // with the class rep."
-    { path: '/admin/review', label: 'Review', icon: <ClipboardCheck size={20} />, section: 'admin', hideOnMobile: true, permission: 'can_approve_payments', maxScope: 'group', adminGroup: 'money' },
+    // Review is no longer maxScope:'group'. The faculty/dept exec
+    // (or their treasurer) genuinely needs to see payments members
+    // made toward faculty- or dept-scoped dues. The page itself
+    // tightens the query to the active role's subtree so a faculty
+    // exec doesn't accidentally see another faculty's payments.
+    { path: '/admin/review', label: 'Review', icon: <ClipboardCheck size={20} />, section: 'admin', hideOnMobile: true, permission: 'can_approve_payments', adminGroup: 'money' },
     { path: '/admin/expenses', label: 'Expenses', icon: <HandCoins size={20} />, section: 'admin', hideOnMobile: true, permission: 'can_manage_expenses', maxScope: 'group', adminGroup: 'money' },
     { path: '/admin/scan-qr', label: 'Scan QR', icon: <QrCode size={20} />, section: 'admin', hideOnMobile: true, permission: 'can_approve_payments', maxScope: 'group', adminGroup: 'money' },
     { path: '/admin/check-in', label: 'Event Check-in', icon: <ScanLine size={20} />, section: 'admin', hideOnMobile: true, permission: 'can_approve_payments', maxScope: 'group', adminGroup: 'money' },

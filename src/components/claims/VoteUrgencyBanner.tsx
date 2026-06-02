@@ -25,6 +25,13 @@ interface Claim {
   position_title: string;
   votes_required: number;
   votes_received: number;
+  // Tier hints — populated from the claim row, used to label what
+  // kind of role the voter is being asked to confirm. Without this
+  // the banner reads identically for a class-rep claim and a
+  // faculty-treasurer claim, which is confusing.
+  claimed_scope?: 'org' | 'unit' | 'group';
+  claimed_group_id?: string | null;
+  claimed_unit_group_id?: string | null;
 }
 
 export default function VoteUrgencyBanner({ orgSlug: orgSlugProp }: { orgSlug?: string }) {
@@ -98,6 +105,19 @@ export default function VoteUrgencyBanner({ orgSlug: orgSlugProp }: { orgSlug?: 
           {top.full_name} claimed to be {top.position_title}
         </p>
         <p className="text-[11px]" style={{ color: dt.textSec }}>
+          {/* Tier hint inline, so a voter immediately sees whether this
+              is a class / dept / faculty / org claim. The exec label
+              chooses the most specific term we can without an extra
+              fetch (we don't have the target group's kind here). */}
+          <span
+            className="inline-flex items-center gap-1 mr-1 px-1.5 py-0.5 rounded-md text-[9.5px] font-bold uppercase tracking-wider align-middle"
+            style={{ background: `${dt.primary}18`, color: dt.primary, border: `1px solid ${dt.primary}30` }}
+          >
+            {top.claimed_scope === 'org'   ? 'Org'
+              : top.claimed_scope === 'unit'  ? 'Faculty / Dept'
+              : top.claimed_scope === 'group' ? 'Class'
+              : 'Role'}
+          </span>
           {top.votes_received} of {top.votes_required} confirmations • {pct}% complete
           {extra > 0 ? ` • +${extra} more` : ''}
         </p>

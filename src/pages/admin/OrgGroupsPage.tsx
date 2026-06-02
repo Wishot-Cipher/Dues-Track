@@ -15,6 +15,7 @@ import {
   Network,
 } from 'lucide-react';
 import { useMultiTenantAuth } from '@/hooks/useMultiTenantAuth';
+import { useActiveRole } from '@/hooks/useActiveRole';
 import { supabase } from '@/config/supabase';
 import organizationService from '@/services/organizationService';
 import type { OrganizationGroup, GroupKind } from '@/types/multiTenant';
@@ -405,11 +406,68 @@ export default function OrgGroupsPage() {
     return groups.filter(g => g.kind === orphan.kind && g.id !== orphan.id && !orphanIds.has(g.id))
   }, [groups, orphans])
 
-  const facultyGroups = useMemo(() => groups.filter(g => g.kind === 'faculty'), [groups])
-  const classGroups   = useMemo(() => groups.filter(g => g.kind !== 'faculty'), [groups])
+  // ── Scope to the caller's active role ────────────────────────────
+  // Before this, the page rendered EVERY faculty + class in the org,
+  // even when the caller is a unit-scope (dept/faculty) exec who
+  // only manages a single branch. A faculty exec for "Engineering"
+  // would see "Medicine", "Arts", etc. — confusing AND not their
+  // business. We now narrow to the active role's subtree.
+  //
+  // Rules:
+  //   active role = org-scope (or none) → see everything (legacy)
+  //   active role = unit-scope + faculty → see THAT faculty + all
+  //     groups whose parent chain leads to it
+  //   active role = unit-scope + dept   → see THAT dept + its classes
+  //   active role = group-scope         → minScope:'unit' already
+  //     hides the nav link; if they deep-link here, scope to just
+  //     their own group so they don't see siblings.
+  const { activeRole } = useActiveRole({
+    orgId: organization?.id,
+    memberId: user?.id,
+  });
+
+  // Build a set of in-scope group ids by walking down from the active
+  // role's group. For org-scope (or no role yet) the set is "every
+  // group" — represented by null so we skip the filter entirely.
+  const inScopeIds = useMemo<Set<string> | null>(() => {
+    if (activeRole?.kind !== 'exec') return null;
+    if (activeRole.scopeLevel === 'org') return null;
+    const rootId = activeRole.groupId;
+    if (!rootId) return null;
+    const out = new Set<string>([rootId]);
+    const stack = [rootId];
+    while (stack.length) {
+      const id = stack.pop()!;
+      for (const g of groups) {
+        if (g.parent_group_id === id && !out.has(g.id)) {
+          out.add(g.id);
+          stack.push(g.id);
+        }
+      }
+    }
+    return out;
+  }, [activeRole?.kind, activeRole?.scopeLevel, activeRole?.groupId, groups]);
+
+  // The displayed groups list — filtered to the caller's subtree.
+  const scopedGroups = useMemo(
+    () => inScopeIds ? groups.filter(g => inScopeIds.has(g.id)) : groups,
+    [groups, inScopeIds],
+  );
+
+  // Find the root group's name so we can name the scope banner.
+  const scopeRootName = useMemo(() => {
+    if (!inScopeIds || activeRole?.kind !== 'exec' || !activeRole.groupId) return null;
+    return groups.find(g => g.id === activeRole.groupId)?.name ?? null;
+  }, [groups, inScopeIds, activeRole?.kind, activeRole?.groupId]);
+
+  const facultyGroups = useMemo(() => scopedGroups.filter(g => g.kind === 'faculty'), [scopedGroups])
+  const classGroups   = useMemo(() => scopedGroups.filter(g => g.kind !== 'faculty'), [scopedGroups])
 
   const visibleGroups = useMemo(() => {
-    let base = groups
+    // Default fallback is the SCOPED list, not the raw `groups`. The
+    // raw list contains every group in the org and would leak content
+    // outside the caller's subtree for non-academic shapes.
+    let base = scopedGroups
     if (isAcademicOrg) {
       if (activeTab === 'faculty') base = facultyGroups
       if (activeTab === 'class')   base = classGroups
@@ -421,7 +479,7 @@ export default function OrgGroupsPage() {
       g.short_name.toLowerCase().includes(q) ||
       (g.description || '').toLowerCase().includes(q)
     )
-  }, [groups, isAcademicOrg, activeTab, facultyGroups, classGroups, searchQuery])
+  }, [scopedGroups, isAcademicOrg, activeTab, facultyGroups, classGroups, searchQuery])
 
   const openCreate = () => {
     setForm({ ...DEFAULT_FORM, kind: isAcademicOrg ? 'class' : 'general' })
@@ -509,6 +567,24 @@ export default function OrgGroupsPage() {
                     <p className="mt-3 text-sm max-w-lg leading-7" style={{ color: tk.textSec }}>
                       Keep your structure clean and professional. Create, update, and organize {groupLabelPlural.toLowerCase()} with clarity.
                     </p>
+
+                    {/* Scope banner — surfaces when the page has been
+                        narrowed to the caller's active role's subtree.
+                        Without it the filtering feels like a bug ("I
+                        had more faculties yesterday?"). */}
+                    {scopeRootName && (
+                      <div
+                        className="mt-4 inline-flex items-center gap-2 px-3 py-1.5 rounded-full text-[11px] font-semibold"
+                        style={{
+                          background: `${tk.primary}14`,
+                          border: `1px solid ${tk.primary}33`,
+                          color: tk.primary,
+                        }}
+                      >
+                        <Layers className="w-3 h-3" />
+                        Showing your scope: <span className="font-bold">{scopeRootName}</span>
+                      </div>
+                    )}
                   </div>
                   <motion.button
                     whileHover={{ scale: 1.04 }} whileTap={{ scale: 0.97 }}

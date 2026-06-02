@@ -1,6 +1,9 @@
 import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useAuth } from '@/hooks/useAppAuth';
+import { useMultiTenantAuth } from '@/hooks/useMultiTenantAuth';
+import { useActiveRole } from '@/hooks/useActiveRole';
+import { getScopedGroupIds } from '@/utils/scopedGroups';
 import {  } from "react-router-dom";
 import { useAppNav } from '@/hooks/useAppNav';
 import { supabase } from "@/config/supabase";
@@ -155,6 +158,11 @@ function ReviewDecisionModal({
 
 export default function AdminReviewPage() {
   const { user, hasPermission } = useAuth();
+  const { user: mtUser, organization } = useMultiTenantAuth();
+  const { activeRole } = useActiveRole({
+    orgId: organization?.id,
+    memberId: mtUser?.id,
+  });
   const { go: navigate } = useAppNav();
   const { success: showSuccess, error: showError } = useToast();
   const { theme } = useTheme();
@@ -195,7 +203,33 @@ export default function AdminReviewPage() {
     try {
       setLoading(true);
       const scope = getOrgScope();
-      const { data, error } = await supabase
+
+      // Narrow to the active role's subtree so a faculty/dept exec
+      // doesn't see another faculty's payments and a class rep keeps
+      // seeing only their class. We resolve the scoped group ids
+      // up-front; org-scope returns null (no filter, see all).
+      const scopedIds = scope ? await getScopedGroupIds({
+        orgId: scope.orgId,
+        activeGroupId: activeRole?.groupId ?? null,
+        activeScopeLevel: activeRole?.scopeLevel ?? null,
+      }) : null;
+
+      // When we have a scope set, we first look up payment_type ids
+      // whose group_id is in that set (or NULL = org-wide), then
+      // fetch payments referencing those types. We do it in two
+      // steps so the IN() clause doesn't blow past PostgREST's
+      // string-length limit on big orgs.
+      let scopedPaymentTypeIds: string[] | null = null;
+      if (scope && scopedIds) {
+        const { data: ptRows } = await supabase
+          .from('payment_types')
+          .select('id')
+          .eq('organization_id', scope.orgId)
+          .in('group_id', Array.from(scopedIds));
+        scopedPaymentTypeIds = (ptRows ?? []).map((r: { id: string }) => r.id);
+      }
+
+      let query = supabase
         .from("payments")
         .select(
           `
@@ -213,6 +247,15 @@ export default function AdminReviewPage() {
         )
         .eq('organization_id', scope?.orgId || '')
         .order("created_at", { ascending: true });
+      if (scopedPaymentTypeIds) {
+        // Empty list = no scoped types = no payments. Short-circuit.
+        if (scopedPaymentTypeIds.length === 0) {
+          setPayments([]);
+          return;
+        }
+        query = query.in('payment_type_id', scopedPaymentTypeIds);
+      }
+      const { data, error } = await query;
 
       if (error) throw error;
 

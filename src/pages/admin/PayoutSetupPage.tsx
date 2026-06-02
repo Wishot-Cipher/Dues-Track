@@ -74,29 +74,57 @@ export default function PayoutSetupPage() {
     settlement_bank: string | null;
   } | null>(null);
 
-  // Whenever we have a groupId, resolve that group's existing payout
-  // (if any) so we can show "Connected" state and pre-fill / disable
-  // accordingly. No-op for the org-wide flow.
+  // Whenever we have a groupId, resolve that group's identity (name,
+  // kind) first so the "Configuring payout for X" banner can render
+  // immediately. Then opportunistically pull the payout columns added
+  // by mig 092. Splitting it like this keeps the page useful even
+  // when the migration hasn't been applied yet — the banner shows the
+  // tier name, the connected-state is just "not configured."
   useEffect(() => {
     if (!groupId) { setGroupCtx(null); return; }
     let cancelled = false;
     (async () => {
-      const { data } = await supabase
+      // 1) Basic identity — columns guaranteed to exist on every env.
+      const { data: baseData } = await supabase
         .from('organization_groups')
-        .select('id, name, kind, paystack_subaccount_code, account_name, account_number, bank_code')
+        .select('id, name, kind')
         .eq('id', groupId)
         .maybeSingle();
-      if (cancelled) return;
-      if (data) {
-        setGroupCtx({
-          id:              data.id as string,
-          name:            (data.name as string) || 'this group',
-          kind:            ((data.kind as string) || 'group').toLowerCase(),
-          subaccount_code: (data.paystack_subaccount_code as string) || null,
-          account_name:    (data.account_name as string) || null,
-          account_number:  (data.account_number as string) || null,
-          settlement_bank: (data.bank_code as string) || null,
-        });
+      if (cancelled || !baseData) return;
+      const base = {
+        id:              baseData.id as string,
+        name:            (baseData.name as string) || 'this group',
+        kind:            ((baseData.kind as string) || 'group').toLowerCase(),
+        subaccount_code: null as string | null,
+        account_name:    null as string | null,
+        account_number:  null as string | null,
+        settlement_bank: null as string | null,
+      };
+      // Show the banner with name/kind RIGHT NOW.
+      setGroupCtx(base);
+
+      // 2) Try to enrich with payout fields. If mig 092 isn't applied
+      // yet (or the columns are missing on this env), .select() throws
+      // a 42703 error — we catch it and leave the base state in place.
+      // Either way the banner already displays correctly.
+      try {
+        const { data: payoutData, error } = await supabase
+          .from('organization_groups')
+          .select('paystack_subaccount_code, account_name, account_number, bank_code')
+          .eq('id', groupId)
+          .maybeSingle();
+        if (cancelled) return;
+        if (!error && payoutData) {
+          setGroupCtx({
+            ...base,
+            subaccount_code: (payoutData.paystack_subaccount_code as string | null) ?? null,
+            account_name:    (payoutData.account_name as string | null) ?? null,
+            account_number:  (payoutData.account_number as string | null) ?? null,
+            settlement_bank: (payoutData.bank_code as string | null) ?? null,
+          });
+        }
+      } catch {
+        // Mig 092 not applied — base state already set, just move on.
       }
     })();
     return () => { cancelled = true; };

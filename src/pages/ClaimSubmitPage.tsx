@@ -23,7 +23,9 @@ import { organizationService } from '@/services/organizationService';
 import { useMultiTenantAuth } from '@/hooks/useMultiTenantAuth';
 import { useTheme, getDashboardTokens } from '@/hooks/useTheme';
 import PayvexoBackground from '@/components/student/dashboard/PayvexoBackground';
+import ProfessionalDropdown from '@/components/ui/ProfessionalDropdown';
 import { APP_NAME, getClaimRoleOptions, getOrgScopeRoleOptions } from '@/config/constants';
+import type { OrganizationGroup } from '@/types/multiTenant';
 
 type ClaimTheme = {
   bg: string;
@@ -74,9 +76,79 @@ export default function ClaimSubmitPage() {
   const initialGroupId = params.get('group') ?? group?.id ?? null;
 
   const [claimedScope, setClaimedScope] = useState<'org' | 'unit' | 'group'>(initialScope);
-  // Group id is fixed for now (defaults to caller's own group from session/URL).
-  // A future enhancement: let unit/org-scope claimers pick a different target.
-  const [claimedGroupId] = useState<string | null>(initialGroupId);
+
+  // When the claimant flips scope, reset the target group so we don't
+  // carry a stale id over. unit → wait for the picker effect below to
+  // pick the closest ancestor; group → snap back to the user's primary
+  // class; org → null (no group needed).
+  useEffect(() => {
+    if (claimedScope === 'org') setClaimedGroupId(null);
+    else if (claimedScope === 'group') setClaimedGroupId(initialGroupId);
+    // unit: handled by the unitTargets loader below (defaults to the
+    // claimant's nearest ancestor unit-tier group).
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [claimedScope]);
+  // Group id is mutable: claimers picking a unit-scope role (dept / faculty)
+  // need to select WHICH faculty or department they're claiming for. The
+  // class id from the URL/session only makes sense for group-scope ("class
+  // rep of MY class") — if we kept it fixed, a faculty-treasurer claim
+  // would attach to the claimant's class group_id and the resulting admin
+  // row would look like a class-level admin in disguise (the BioMed 0'28
+  // dashboard bug).
+  const [claimedGroupId, setClaimedGroupId] = useState<string | null>(initialGroupId);
+
+  // ── Fetch unit-tier groups once so the picker has options. We do
+  //    NOT fetch on every keystroke — just on mount + when scope flips
+  //    to unit so we lazy-load the dropdown's data only when needed.
+  const [unitTargets, setUnitTargets] = useState<OrganizationGroup[]>([]);
+  const [unitTargetsLoading, setUnitTargetsLoading] = useState(false);
+  useEffect(() => {
+    if (claimedScope !== 'unit' || !organization?.id) return;
+    let cancelled = false;
+    setUnitTargetsLoading(true);
+    (async () => {
+      try {
+        const all = await organizationService.getGroups(organization.id);
+        if (cancelled) return;
+        // Unit tier = faculty / college / department / "unit". Sort by
+        // kind first (faculties on top, depts below) then by name so
+        // a long list stays scannable.
+        const kindRank: Record<string, number> = {
+          faculty: 0, college: 0, unit: 1, department: 2,
+        };
+        const filtered = (all || []).filter((g) => {
+          const k = (g.kind || '').toLowerCase();
+          return k === 'faculty' || k === 'college' || k === 'department' || k === 'unit';
+        }).sort((a, b) => {
+          const ra = kindRank[(a.kind || '').toLowerCase()] ?? 9;
+          const rb = kindRank[(b.kind || '').toLowerCase()] ?? 9;
+          if (ra !== rb) return ra - rb;
+          return (a.name || '').localeCompare(b.name || '');
+        });
+        setUnitTargets(filtered);
+
+        // First time the user picks "unit" scope, default the target
+        // to the claimant's CLOSEST ancestor in the tree (so a class
+        // member submitting a dept claim defaults to their actual
+        // dept, not the first dept in the alphabet). We walk up from
+        // the user's primary group_id until we hit a unit-tier group.
+        if (!claimedGroupId || filtered.every(g => g.id !== claimedGroupId)) {
+          const targetIds = new Set(filtered.map(g => g.id));
+          let cur = group?.parent_group_id ?? null;
+          let safety = 10;
+          while (cur && safety-- > 0) {
+            if (targetIds.has(cur)) { setClaimedGroupId(cur); break; }
+            const next = (all || []).find(g => g.id === cur);
+            cur = next?.parent_group_id ?? null;
+          }
+        }
+      } finally {
+        if (!cancelled) setUnitTargetsLoading(false);
+      }
+    })();
+    return () => { cancelled = true; };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [claimedScope, organization?.id]);
 
   // Org-type-aware list of exec roles (academic vs church vs club vs ...)
   const ROLE_OPTIONS = useMemo(
@@ -310,6 +382,52 @@ export default function ClaimSubmitPage() {
               Group scope = your class/department. Unit = your faculty. Org = the entire {organization.name} (top exec only).
             </p>
           </Field>
+
+          {/* Unit target picker — only when scope=unit. Forces the
+              claimant to choose WHICH faculty/department they're
+              claiming for. Without this, the claim's group_id silently
+              defaults to the claimant's own class, which makes the
+              resulting admin row look like a class-level admin even
+              though they picked unit scope. */}
+          {claimedScope === 'unit' && (
+            <Field
+              label="Which faculty / department?"
+              required
+              tk={tk}
+              hint={
+                unitTargetsLoading
+                  ? 'Loading…'
+                  : 'Pick the tier you\'re claiming for. Members of that tier are the ones who vote.'
+              }
+            >
+              <ProfessionalDropdown
+                value={claimedGroupId ?? ''}
+                onChange={(v) => setClaimedGroupId((Array.isArray(v) ? v[0] : v) || null)}
+                placeholder={unitTargetsLoading ? 'Loading faculties & departments…' : 'Select a faculty or department'}
+                searchable
+                disabled={unitTargetsLoading || unitTargets.length === 0}
+                options={unitTargets.map((g) => {
+                  const k = (g.kind || 'unit').toLowerCase();
+                  const tierLabel = k === 'faculty' || k === 'college'
+                    ? 'Faculty'
+                    : k === 'department'
+                      ? 'Department'
+                      : 'Unit';
+                  return {
+                    value: g.id,
+                    label: g.name,
+                    description: `${tierLabel}${g.short_name ? ' · ' + g.short_name : ''}`,
+                  };
+                })}
+              />
+              {unitTargets.length === 0 && !unitTargetsLoading && (
+                <p className="text-[11px] mt-2" style={{ color: tk.danger }}>
+                  No faculties or departments exist in this organization yet. Ask
+                  the platform admin to add the hierarchy first.
+                </p>
+              )}
+            </Field>
+          )}
         </Panel>
 
         <Panel title="Contact (so we can reach you)" icon={<Mail className="w-4 h-4" />} tk={tk}>

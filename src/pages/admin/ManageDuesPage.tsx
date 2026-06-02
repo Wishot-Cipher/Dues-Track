@@ -12,6 +12,9 @@ import { useAuth } from '@/hooks/useAppAuth'
 import { useToast } from '@/hooks/useToast'
 import { supabase } from '@/config/supabase'
 import { getOrgScope } from '@/utils/orgScope'
+import { getScopedGroupIds } from '@/utils/scopedGroups'
+import { useActiveRole } from '@/hooks/useActiveRole'
+import { useMultiTenantAuth } from '@/hooks/useMultiTenantAuth'
 import { formatDate } from '@/utils/formatters'
 import Footer from '@/components/Footer'
 import DashboardSwitcher from '@/components/DashboardSwitcher'
@@ -141,6 +144,11 @@ export default function ManageDuesPage() {
   const tk = getDashboardTokens(theme)
   const { hasPermission } = useAuth()
   const { success, error: showError } = useToast()
+  const { user, organization } = useMultiTenantAuth()
+  const { activeRole } = useActiveRole({
+    orgId: organization?.id,
+    memberId: user?.id,
+  })
   const [paymentTypes, setPaymentTypes] = useState<PaymentType[]>([])
   const [loading, setLoading] = useState(true)
   const [actionLoading, setActionLoading] = useState(false)
@@ -167,13 +175,28 @@ export default function ManageDuesPage() {
     try {
       setLoading(true)
       const scope = getOrgScope()
+      // The old filter pinned group_id to the user's PRIMARY group,
+      // which meant a faculty/dept exec only saw dues for their own
+      // unit and never the dues they published targeting classes
+      // below them. We now scope to the ACTIVE role's subtree —
+      //   class rep → just their class
+      //   dept exec → their dept + all classes under it
+      //   faculty exec → their faculty + every dept + every class
+      //   org owner → everything (scope = null → no filter)
+      const scopedIds = scope ? await getScopedGroupIds({
+        orgId: scope.orgId,
+        activeGroupId: activeRole?.groupId ?? null,
+        activeScopeLevel: activeRole?.scopeLevel ?? null,
+      }) : null
       let query = supabase
         .from('payment_types')
         .select('*')
         .order('created_at', { ascending: false })
       if (scope) {
         query = query.eq('organization_id', scope.orgId)
-        query = query.eq('group_id', scope.groupId)
+        if (scopedIds) {
+          query = query.in('group_id', Array.from(scopedIds))
+        }
       }
       const { data, error } = await query
 
@@ -193,7 +216,7 @@ export default function ManageDuesPage() {
     } finally {
       setLoading(false)
     }
-  }, [showError])
+  }, [showError, activeRole?.groupId, activeRole?.scopeLevel])
 
   useEffect(() => {
     loadPaymentTypes()

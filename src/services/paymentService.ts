@@ -86,48 +86,55 @@ class PaymentService {
       // Canonicalize member level for consistent matching
       const memberLevel = organizationService.canonicalizeLevel(member.level || '');
       const scope = getOrgScope();
-      let orgType: string | null = null;
-      if (scope) {
-        const org = await organizationService.getById(scope.orgId);
-        orgType = org?.organization_type || null;
-      }
-      
-      // Fetch all active payment types for scope and filter client-side to allow
-      // payment types with no `target_levels` to apply to all members in the org.
+      // orgType used to gate dues by primary-group equality for university
+      // tenants. The new ancestor-aware billingGroupIds set covers that
+      // requirement properly, so the fetch was removed. If you re-introduce
+      // org-type-specific stat behaviour later, fetch it back here.
+
+      // Fetch all active payment types for the org, then filter
+      // client-side. We use the SAME ancestor-aware billing-group
+      // set used by getActivePaymentTypesForStudent so a dept- or
+      // faculty-level due cascades to the member's stats too. The
+      // previous code restricted to `group_id = primary group`,
+      // which meant dues published higher in the hierarchy never
+      // counted toward the Outstanding hero — only the class's
+      // own dues showed up.
+      const billingGroupIds = new Set(await this.getMemberGroupIds(studentId));
       let ptQuery = supabase
         .from('payment_types')
         .select('id, amount, deadline, late_fee_per_day, target_levels, group_id')
         .eq('is_active', true);
       if (scope) {
         ptQuery = ptQuery.eq('organization_id', scope.orgId);
-        ptQuery = ptQuery.eq('group_id', scope.groupId);
       }
 
       const { data: allPaymentTypes, error: typesError } = await ptQuery;
       if (typesError) throw typesError;
 
       const activePaymentTypes = (allPaymentTypes || []).filter((pt: any) => {
+        // Cascade rule: a due applies to this member if either
+        //   (a) it's org-wide (group_id IS NULL), OR
+        //   (b) its target group is the member's class OR any
+        //       ancestor (dept / faculty) — captured in billingGroupIds.
+        if (pt.group_id && !billingGroupIds.has(pt.group_id)) return false;
+
         const targets: string[] = pt.target_levels || [];
-        // If org is a university, require group match when payment type is tied to a group.
-        if (orgType === 'university') {
-          if (pt.group_id) {
-            // only include if member is in same group
-            if (!member.group_id || member.group_id !== pt.group_id) return false;
-          }
-        }
-        if (!targets || targets.length === 0) return true; // applies to all members
+        if (!targets || targets.length === 0) return true;
         const canonicalTargets = targets.map((l: string) => organizationService.canonicalizeLevel(l));
         return canonicalTargets.includes(memberLevel);
       });
 
-      // Get all payments for this member
+      // Get all payments for this member. Member-scoped already, so
+      // we don't need to gate by group_id — pinning to the primary
+      // group would HIDE the member's own payments toward dept /
+      // faculty / org-wide dues, which is exactly the bug we're
+      // fixing on the type side.
       let pmtQuery = supabase
         .from('payments')
         .select('payment_type_id, amount, status, transaction_ref')
         .eq('member_id', studentId);
       if (scope) {
         pmtQuery = pmtQuery.eq('organization_id', scope.orgId);
-        pmtQuery = pmtQuery.eq('group_id', scope.groupId);
       }
       const { data: allPayments } = await pmtQuery;
 
