@@ -389,45 +389,48 @@ export default function OrgLayout() {
               </motion.div>
             )}
             <div className="min-w-0">
-              <p className="text-sm font-semibold leading-tight transition-colors truncate" style={{ color: tk.text }}>
+              <p
+                className="text-sm font-semibold leading-tight transition-colors truncate"
+                style={{ color: tk.text, maxWidth: '200px' }}
+              >
                 {organization.short_name || organization.name}
               </p>
-              <div className="flex flex-col">
-                {/* <p className="text-[10px] font-medium tracking-wider uppercase truncate" style={{ color: colors.primary }}>
-                  {organization.organization_type === 'university' ? '🎓 University'
-                    : organization.organization_type === 'school' ? '🏫 School'
-                    : organization.organization_type === 'church' ? '⛪ Church'
-                    : organization.organization_type === 'club' ? '🏢 Club'
-                    : organization.organization_type === 'association' ? '🤝 Association'
-                    : organization.organization_type === 'cooperative' ? '🏦 Cooperative'
-                    : organization.organization_type === 'ngo' ? '🌍 NGO'
-                    : APP_NAME
-                  }
-                </p> */}
-
-                {/* Group short name + level badge (standout) */}
-                <div className="flex items-center gap-2 mt-0.5">
-                  <p className="text-[10px] font-bold uppercase truncate" style={{ color: colors.textTertiary, maxWidth: '160px' }}>
-                    {group?.short_name || group?.name || ''}
-                  </p>
-                  {(user.level || groupPrimary || fetchedLevel) && (
+              {/* Subtitle: group + level — single tidy line with a middot
+                  separator. Theme-aware tokens, tighter typography, and
+                  bounded width so a long class name can't push the
+                  whole header sideways on mobile. */}
+              <div className="flex items-center gap-1.5 mt-0.5 min-w-0">
+                {(group?.short_name || group?.name) && (
+                  <span
+                    className="text-[10px] font-bold uppercase truncate"
+                    style={{ color: tk.textTer, maxWidth: '130px' }}
+                  >
+                    {group?.short_name || group?.name}
+                  </span>
+                )}
+                {(user.level || groupPrimary || fetchedLevel) && (
+                  <>
+                    {(group?.short_name || group?.name) && (
+                      <span
+                        aria-hidden
+                        className="w-1 h-1 rounded-full shrink-0"
+                        style={{ background: tk.textTer }}
+                      />
+                    )}
                     <span
-                      className="text-[10px] font-semibold uppercase truncate"
+                      className="text-[10px] font-bold tracking-wide whitespace-nowrap"
                       style={{
-                        background: `${colors.primary}16`,
-                        color: colors.primary,
-                        padding: '2px 8px',
+                        background: tk.primarySoft,
+                        color: tk.primary,
+                        padding: '1px 7px',
                         borderRadius: 9999,
-                        border: `1px solid ${colors.primary}25`,
-                        boxShadow: `0 6px 18px ${colors.primary}10`,
-                        whiteSpace: 'nowrap',
-                        maxWidth: '120px'
+                        border: `1px solid ${tk.primaryRing}`,
                       }}
                     >
-                      {`Level ${user.level || groupPrimary || fetchedLevel}`}
+                      L{user.level || groupPrimary || fetchedLevel}
                     </span>
-                  )}
-                </div>
+                  </>
+                )}
               </div>
             </div>
           </Link>

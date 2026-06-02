@@ -38,6 +38,33 @@ export default function VerifyEmailPage() {
   const [sentTo, setSentTo] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
+  // ── Org-type-aware copy ─────────────────────────────────────────────
+  // Not every org is a school. A church verifying its treasurer doesn't
+  // have a "school email"; an NGO doesn't either. We swap label,
+  // placeholder, and the helper line so the request fits the org.
+  const orgType = (organization?.organization_type || '').toLowerCase();
+  const isAcademic = /\b(university|school|college|class|faculty|department|academic|institute)\b/.test(orgType);
+  const isChurch   = /\b(church|chapel|fellowship|ministry|parish|mosque|cathedral|diocese)\b/.test(orgType);
+  const isCorporate = /\b(company|corporate|firm|professional|enterprise|business)\b/.test(orgType);
+
+  const emailFieldLabel = isAcademic ? 'School email'
+    : isChurch ? 'Verification email'
+    : isCorporate ? 'Work email'
+    : 'Verification email';
+
+  const emailPlaceholder = isAcademic ? 'you@school.edu.ng'
+    : isChurch ? `you@${organization?.slug || 'church'}.org`
+    : isCorporate ? 'you@company.com'
+    : 'you@example.com';
+
+  const heroSub = isAcademic
+    ? `Confirm a school email for ${organization?.name || 'your organization'} to unlock creating dues, events and payouts.`
+    : `Confirm an email tied to ${organization?.name || 'your organization'} so we can verify your role and unlock creating dues, events and payouts.`;
+
+  const helperLine = isAcademic
+    ? "Use the email issued by your institution (it must match the org's domain)."
+    : 'Use an email you can prove ownership of — ideally one tied to your role here.';
+
   const requestCode = async () => {
     if (!user?.id) { toast?.error?.('Sign in required.'); return; }
     const e = email.trim().toLowerCase();
@@ -59,9 +86,23 @@ export default function VerifyEmailPage() {
     const res = await multiTenantAuthService.confirmSchoolEmailCode(user.id, c);
     setBusy(false);
     if (!res.ok) { toast?.error?.(res.error || 'Could not verify the code.'); return; }
-    toast?.success?.(res.message || 'Verified!');
     await refreshSession();
-    go('/admin/dashboard');
+
+    // Branch on what actually happened server-side:
+    //   • promoted > 0 → an existing pending exec row was bumped to
+    //                    Layer 2. They're acting admin now; send them
+    //                    to the admin dashboard.
+    //   • promoted = 0 → email is verified but they never submitted a
+    //                    claim. Route them to /claim so they can do
+    //                    so — peer voting can't happen on a claim that
+    //                    doesn't exist yet.
+    if ((res.promoted ?? 0) > 0) {
+      toast?.success?.(res.message || 'Verified — your exec role is now active.');
+      go('/admin/dashboard');
+    } else {
+      toast?.success?.('Email verified. Submit a claim so your members can confirm your role.');
+      go('/claim');
+    }
   };
 
   return (
@@ -80,8 +121,7 @@ export default function VerifyEmailPage() {
           <h1 className="text-xl font-bold" style={{ color: tk.text }}>Verify your role</h1>
         </div>
         <p className="text-sm mb-6" style={{ color: tk.textSec }}>
-          Confirm a school email for <span style={{ color: tk.text }}>{organization?.name || 'your organization'}</span> to
-          unlock creating dues, events and payouts.
+          {heroSub}
         </p>
 
         {step === 'email' && (
@@ -89,12 +129,12 @@ export default function VerifyEmailPage() {
             initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }}
             className="rounded-2xl p-5" style={{ background: tk.panel, border: `1px solid ${tk.border}` }}
           >
-            <label className="block text-xs font-semibold mb-1.5" style={{ color: tk.textSec }}>School email</label>
+            <label className="block text-xs font-semibold mb-1.5" style={{ color: tk.textSec }}>{emailFieldLabel}</label>
             <input
               type="email"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
-              placeholder="you@school.edu.ng"
+              placeholder={emailPlaceholder}
               disabled={busy}
               className="w-full rounded-xl px-3 py-2.5 text-sm outline-none mb-4"
               style={{ background: tk.inputBg, border: `1px solid ${tk.border}`, color: tk.text }}
@@ -110,7 +150,7 @@ export default function VerifyEmailPage() {
               {busy ? 'Sending…' : 'Send code'}
             </motion.button>
             <p className="text-[11px] mt-3" style={{ color: tk.textTer }}>
-              Use the email issued by your institution (it must match the org's domain).
+              {helperLine}
             </p>
           </motion.div>
         )}

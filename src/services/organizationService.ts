@@ -1760,24 +1760,37 @@ export const organizationService = {
   }): Promise<OrganizationInvite | null> {
     try {
       // Ensure `created_by` references an existing `member_admins.id` when possible.
+      // Also resolve the underlying member id so `created_by_member_id` is set —
+      // that keeps admin-created invites in the v_class_invite_activity feed
+      // alongside founder bootstrap invites (mig 082).
       let createdByAdminId: string | null = null;
+      let createdByMemberId: string | null = null;
       if (inviteData.created_by) {
         // 1) If caller passed an admin id directly, verify it exists
         const { data: adminById } = await supabase
           .from('member_admins')
-          .select('id')
+          .select('id, member_id')
           .eq('id', inviteData.created_by)
           .maybeSingle();
         if (adminById && adminById.id) {
           createdByAdminId = adminById.id;
+          createdByMemberId = (adminById as { id: string; member_id: string }).member_id ?? null;
         } else {
           // 2) If they passed a member id, try to find the admin row for that member
           const { data: adminByMember } = await supabase
             .from('member_admins')
-            .select('id')
+            .select('id, member_id')
             .eq('member_id', inviteData.created_by)
             .maybeSingle();
-          if (adminByMember && adminByMember.id) createdByAdminId = adminByMember.id;
+          if (adminByMember && adminByMember.id) {
+            createdByAdminId = adminByMember.id;
+            createdByMemberId = (adminByMember as { id: string; member_id: string }).member_id ?? null;
+          } else {
+            // 3) Last resort: caller is a plain member (no admin row).
+            // Record them as the member-side audit identity so we still
+            // know who shared this code.
+            createdByMemberId = inviteData.created_by;
+          }
         }
       }
 
@@ -1786,6 +1799,7 @@ export const organizationService = {
         .insert({
           ...inviteData,
           created_by: createdByAdminId,
+          created_by_member_id: createdByMemberId,
           invite_code: Math.random().toString(36).substring(2, 10).toUpperCase(),
           max_uses: inviteData.max_uses || (inviteData.invite_type === 'bulk' ? 100 : 1),
           is_active: true,

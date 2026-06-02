@@ -317,9 +317,40 @@ export default function ClaimSubmitPage() {
             <Field label="Personal email" hint="optional" tk={tk}>
               <Input value={personalEmail} onChange={setPersonalEmail} placeholder="you@example.com" type="email" tk={tk} />
             </Field>
-            <Field label="School email" hint="optional — required for first claim (bootstrap)" tk={tk}>
-              <Input value={institutionalEmail} onChange={setInstitutionalEmail} placeholder="you@unn.edu.ng" type="email" tk={tk} />
-            </Field>
+            {/* Affiliation email — label + placeholder track the org type
+                so a church claimant isn't asked for a "school email." */}
+            {(() => {
+              const t = (organization?.organization_type || '').toLowerCase();
+              const isAcademic = /\b(university|school|college|class|faculty|department|academic)\b/.test(t);
+              const isChurch   = /\b(church|chapel|fellowship|ministry|parish|mosque)\b/.test(t);
+              const isCorporate = /\b(company|corporate|firm|professional)\b/.test(t);
+
+              const label = isAcademic ? 'School email'
+                : isChurch ? 'Affiliation email'
+                : isCorporate ? 'Work email'
+                : 'Affiliation email';
+
+              const placeholder = isAcademic ? 'you@unn.edu.ng'
+                : isChurch ? 'you@your-workplace.com (optional)'
+                : isCorporate ? 'you@company.com'
+                : 'you@example.com';
+
+              const hint = isAcademic
+                ? 'optional — required for first claim (bootstrap)'
+                : 'optional — helps us verify your role faster';
+
+              return (
+                <Field label={label} hint={hint} tk={tk}>
+                  <Input
+                    value={institutionalEmail}
+                    onChange={setInstitutionalEmail}
+                    placeholder={placeholder}
+                    type="email"
+                    tk={tk}
+                  />
+                </Field>
+              );
+            })()}
           </Row>
           <Field label="Phone" hint="optional" icon={<Phone className="w-3 h-3" />} tk={tk}>
             <Input value={phone} onChange={setPhone} placeholder="+234 800 000 0000" type="tel" tk={tk} />

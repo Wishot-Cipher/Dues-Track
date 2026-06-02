@@ -25,11 +25,9 @@ import {
   Calendar,
   Flame,
 } from 'lucide-react';
-import { colors } from '@/config/colors';
 import { useMultiTenantAuth } from '@/hooks/useMultiTenantAuth';
 import { useNavigate, useParams } from 'react-router-dom';
 import { supabase } from '@/config/supabase';
-import GlassCard from '@/components/ui/GlassCard';
 import { useThemeTokens, type ThemeTokens } from '@/hooks/useThemeTokens';
 
 interface DashboardStats {
@@ -216,7 +214,19 @@ function UnpaidDuesList({ organization, user, unpaidPage, unpaidPerPage, setUnpa
           });
         } catch {}
 
-        if (mounted) setItems(unpaid.sort((a, b) => new Date(a.paymentType.created_at || 0).getTime() - new Date(b.paymentType.created_at || 0).getTime()));
+        // Sort: items with a deadline first (most-urgent first), then by mandatory, then by recency.
+        const sorted = unpaid.sort((a, b) => {
+          const da = daysUntil(a.paymentType.deadline ?? null);
+          const db = daysUntil(b.paymentType.deadline ?? null);
+          if (da !== null && db !== null) return da - db;
+          if (da !== null) return -1;
+          if (db !== null) return 1;
+          if (a.paymentType.is_mandatory !== b.paymentType.is_mandatory) {
+            return a.paymentType.is_mandatory ? -1 : 1;
+          }
+          return new Date(b.paymentType.created_at || 0).getTime() - new Date(a.paymentType.created_at || 0).getTime();
+        });
+        if (mounted) setItems(sorted);
       } catch (err) {
         console.error('Error loading unpaid dues:', err);
       } finally {
@@ -241,123 +251,198 @@ function UnpaidDuesList({ organization, user, unpaidPage, unpaidPerPage, setUnpa
 
   const scrollToTop = () => window.scrollTo({ top: 0, behavior: 'smooth' });
 
+  const currency = organization?.currency_symbol || '₦';
+
   return (
     <div>
       {loading ? (
-        <div className="p-6 text-center">
-          <Loader2 size={20} className="animate-spin mx-auto" style={{ color: colors.primary }} />
+        <div className="p-8 text-center">
+          <Loader2 size={22} className="animate-spin mx-auto" style={{ color: tk.primary }} />
         </div>
       ) : visibleItems.length === 0 ? (
-        <div className="p-6 text-center text-sm" style={{ color: colors.textTertiary }}>
-          <div>No unpaid dues</div>
+        <div className="px-6 py-10 text-center">
+          <div
+            className="w-14 h-14 rounded-2xl mx-auto flex items-center justify-center mb-3"
+            style={{ background: `${tk.mint}18`, border: `1px solid ${tk.mint}30` }}
+          >
+            <CheckCircle size={24} style={{ color: tk.mint }} />
+          </div>
+          <p className="font-semibold text-sm" style={{ color: tk.text }}>You're all caught up</p>
+          <p className="text-xs mt-1" style={{ color: tk.textTer }}>No outstanding dues right now.</p>
           {dismissedIds.length > 0 && (
-            <div className="mt-3">
-              <button
-                onClick={() => setShowDismissed(s => !s)}
-                className="text-xs font-medium"
-                style={{ color: colors.primary }}
-              >
-                {showDismissed ? 'Hide' : 'Show'} Skipped ({dismissedIds.length})
-              </button>
-            </div>
+            <button
+              onClick={() => setShowDismissed(s => !s)}
+              className="text-xs font-medium mt-4"
+              style={{ color: tk.primary }}
+            >
+              {showDismissed ? 'Hide' : 'Show'} skipped ({dismissedIds.length})
+            </button>
           )}
         </div>
       ) : (
         <div>
-          <div className="flex items-center justify-between mb-3">
-            <div />
-            {dismissedIds.length > 0 && (
-              <button
-                onClick={() => { setShowDismissed(s => { const next = !s; try { console.debug('OrgDashboard UnpaidDuesList toggle showDismissed', { next, dismissedIds }); } catch{}; return next; }); setUnpaidPage(1); }}
-                className="text-xs font-medium"
-                style={{ color: colors.primary }}
-              >
-                {showDismissed ? 'Hide' : 'Show'} Skipped ({dismissedIds.length})
+          {(dismissedIds.length > 0 || debugOpen) && (
+            <div className="flex items-center justify-end gap-3 mb-3">
+              {dismissedIds.length > 0 && (
+                <button
+                  onClick={() => { setShowDismissed(s => { const next = !s; try { console.debug('OrgDashboard UnpaidDuesList toggle showDismissed', { next, dismissedIds }); } catch{}; return next; }); setUnpaidPage(1); }}
+                  className="text-xs font-medium"
+                  style={{ color: tk.primary }}
+                >
+                  {showDismissed ? 'Hide' : 'Show'} skipped ({dismissedIds.length})
+                </button>
+              )}
+              <button onClick={() => setDebugOpen(d => !d)} className="text-xs" style={{ color: tk.textTer }}>
+                {debugOpen ? 'Hide' : 'Show'} debug
               </button>
-            )}
-            <div>
-              <button onClick={() => setDebugOpen(d => !d)} className="text-xs ml-3" style={{ color: colors.textTertiary }}>{debugOpen ? 'Hide' : 'Show'} debug</button>
             </div>
-          </div>
-          <div className="space-y-3">
-            {pageItems.map((it) => {
+          )}
+
+          <div className="space-y-2.5">
+            {pageItems.map((it, idx) => {
               const isDismissed = dismissedIds.includes(String(it.paymentType.id));
               const isOptional = !it.paymentType.is_mandatory;
               const days = daysUntil(it.paymentType.deadline ?? null);
               const badge = deadlineBadge(days, tk);
+              const accent = it.paymentType.color || (badge?.color ?? tk.primary);
+
               return (
-              <div key={it.paymentType.id} className="p-3 rounded-xl bg-white/3 flex items-start justify-between">
-                <div className="min-w-0">
-                  <p className="font-semibold text-white text-sm truncate">{it.paymentType.title}</p>
-                  <div className="flex items-center gap-2 mt-1 flex-wrap">
-                    <p className="text-xs" style={{ color: colors.textTertiary }}>{it.paymentType.category || '—'}</p>
-                    {badge && (
-                      <span
-                        className="inline-flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-full"
-                        style={{ color: badge.color, background: `${badge.color}1a`, border: `1px solid ${badge.color}35` }}
-                      >
-                        {badge.icon}{badge.label}
-                      </span>
-                    )}
+                <motion.button
+                  key={it.paymentType.id}
+                  type="button"
+                  onClick={() => navigate(`/${organization?.slug}/payments/${it.paymentType.id}`)}
+                  initial={{ opacity: 0, y: 8 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: idx * 0.04 }}
+                  whileHover={{ y: -1 }}
+                  whileTap={{ scale: 0.995 }}
+                  className="group w-full relative overflow-hidden rounded-2xl p-3.5 sm:p-4 flex items-stretch gap-3 text-left transition-all"
+                  style={{
+                    background: tk.card,
+                    border: `1px solid ${tk.cardBorder}`,
+                    boxShadow: tk.shadow,
+                  }}
+                >
+                  {/* Left accent rail (urgency-tinted) */}
+                  <span
+                    aria-hidden
+                    className="absolute left-0 top-0 bottom-0 w-1"
+                    style={{ background: `linear-gradient(180deg, ${accent}, ${accent}55)` }}
+                  />
+
+                  {/* Icon block */}
+                  <div
+                    className="shrink-0 w-11 h-11 sm:w-12 sm:h-12 rounded-xl flex items-center justify-center"
+                    style={{
+                      background: `${accent}15`,
+                      color: accent,
+                      border: `1px solid ${accent}28`,
+                    }}
+                  >
+                    <CreditCard size={20} />
                   </div>
-                </div>
-                <div className="text-right">
-                  <p className="font-bold text-white">{organization?.currency_symbol || '₦'}{Number(it.remaining).toLocaleString('en-NG')}</p>
-                  <div className="flex items-center justify-end gap-3">
-                    <button
-                      onClick={() => navigate(`/${organization?.slug}/payments/${it.paymentType.id}`)}
-                      className="mt-2 text-xs font-medium"
-                      style={{ color: colors.primary }}
-                    >
-                      View
-                    </button>
-                    {isOptional && !isDismissed && (
-                      <button
-                        onClick={() => {
-                          const next = Array.from(new Set([...dismissedIds, String(it.paymentType.id)]));
-                          setDismissedIds(next);
-                          try { if (user?.id) localStorage.setItem(`dismissedDues_${user.id}`, JSON.stringify(next)); } catch {}
-                          try { console.debug('OrgDashboard UnpaidDuesList skip', { added: it.paymentType.id, next }); } catch {}
-                          setUnpaidPage(1);
-                        }}
-                        className="mt-2 text-xs font-medium opacity-80"
-                        style={{ color: colors.textTertiary }}
-                      >
-                        Skip
-                      </button>
-                    )}
-                    {isOptional && isDismissed && (
-                      <button
-                        onClick={() => {
-                          const next = dismissedIds.filter(id => id !== String(it.paymentType.id));
-                          setDismissedIds(next);
-                          try { if (user?.id) localStorage.setItem(`dismissedDues_${user.id}`, JSON.stringify(next)); } catch {}
-                          try { console.debug('OrgDashboard UnpaidDuesList restore', { removed: it.paymentType.id, next }); } catch {}
-                          setUnpaidPage(1);
-                        }}
-                        className="mt-2 text-xs font-medium"
-                        style={{ color: colors.primary }}
-                      >
-                        Restore
-                      </button>
-                    )}
+
+                  {/* Body */}
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-start gap-2 flex-wrap">
+                      <p className="font-semibold text-sm truncate" style={{ color: tk.text }}>
+                        {it.paymentType.title}
+                      </p>
+                      {!isOptional && (
+                        <span
+                          className="text-[10px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded"
+                          style={{ background: `${tk.primary}18`, color: tk.primary }}
+                        >
+                          Required
+                        </span>
+                      )}
+                    </div>
+                    <div className="flex items-center gap-1.5 mt-1 flex-wrap">
+                      {it.paymentType.category && (
+                        <span className="text-[11px]" style={{ color: tk.textTer }}>
+                          {it.paymentType.category}
+                        </span>
+                      )}
+                      {it.paymentType.category && badge && (
+                        <span className="w-1 h-1 rounded-full" style={{ background: tk.textTer }} />
+                      )}
+                      {badge && (
+                        <span
+                          className="inline-flex items-center gap-1 text-[10px] font-semibold px-2 py-0.5 rounded-full"
+                          style={{ color: badge.color, background: `${badge.color}18`, border: `1px solid ${badge.color}30` }}
+                        >
+                          {badge.icon}{badge.label}
+                        </span>
+                      )}
+                    </div>
                   </div>
-                </div>
-              </div>
-            )})}
+
+                  {/* Amount + actions */}
+                  <div className="flex flex-col items-end justify-between shrink-0">
+                    <p className="font-bold text-sm sm:text-base whitespace-nowrap" style={{ color: tk.text }}>
+                      {currency}{Number(it.remaining).toLocaleString('en-NG')}
+                    </p>
+                    <div className="flex items-center gap-2 mt-1">
+                      {isOptional && !isDismissed && (
+                        <span
+                          role="button"
+                          tabIndex={0}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            const next = Array.from(new Set([...dismissedIds, String(it.paymentType.id)]));
+                            setDismissedIds(next);
+                            try { if (user?.id) localStorage.setItem(`dismissedDues_${user.id}`, JSON.stringify(next)); } catch {}
+                            setUnpaidPage(1);
+                          }}
+                          className="text-[11px] font-medium"
+                          style={{ color: tk.textTer }}
+                        >
+                          Skip
+                        </span>
+                      )}
+                      {isOptional && isDismissed && (
+                        <span
+                          role="button"
+                          tabIndex={0}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            const next = dismissedIds.filter(id => id !== String(it.paymentType.id));
+                            setDismissedIds(next);
+                            try { if (user?.id) localStorage.setItem(`dismissedDues_${user.id}`, JSON.stringify(next)); } catch {}
+                            setUnpaidPage(1);
+                          }}
+                          className="text-[11px] font-medium"
+                          style={{ color: tk.primary }}
+                        >
+                          Restore
+                        </span>
+                      )}
+                      <ArrowRight
+                        size={14}
+                        className="transition-transform group-hover:translate-x-0.5"
+                        style={{ color: tk.primary }}
+                      />
+                    </div>
+                  </div>
+                </motion.button>
+              );
+            })}
           </div>
 
           {visibleTotalPages > 1 && (
-            <div className="mt-4 rounded-xl p-3 flex items-center justify-between gap-4" style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.06)' }}>
-              <div className="text-sm" style={{ color: colors.textTertiary }}>
-                Showing <span className="font-semibold text-white">{startIndex + 1}-{endIndex}</span> of <span className="font-semibold text-white">{visibleItems.length}</span>
+            <div
+              className="mt-4 rounded-xl p-3 flex items-center justify-between gap-4"
+              style={{ background: tk.overlay, border: `1px solid ${tk.cardBorder}` }}
+            >
+              <div className="text-xs sm:text-sm" style={{ color: tk.textTer }}>
+                Showing <span className="font-semibold" style={{ color: tk.text }}>{startIndex + 1}-{endIndex}</span> of <span className="font-semibold" style={{ color: tk.text }}>{visibleItems.length}</span>
               </div>
               <div className="flex items-center gap-1">
-                <button onClick={() => { setUnpaidPage(1); scrollToTop(); }} disabled={unpaidPage === 1} className="p-2 rounded-lg" style={{ background: 'rgba(255,255,255,0.05)' }}>
-                  <ChevronsLeft className="w-4 h-4" style={{ color: colors.textTertiary }} />
+                <button onClick={() => { setUnpaidPage(1); scrollToTop(); }} disabled={unpaidPage === 1} className="p-2 rounded-lg disabled:opacity-40" style={{ background: tk.overlay }}>
+                  <ChevronsLeft className="w-4 h-4" style={{ color: tk.textSec }} />
                 </button>
-                <button onClick={() => { setUnpaidPage(prev => Math.max(1, prev - 1)); scrollToTop(); }} disabled={unpaidPage === 1} className="p-2 rounded-lg" style={{ background: 'rgba(255,255,255,0.05)' }}>
-                  <ChevronLeft className="w-4 h-4" style={{ color: colors.textTertiary }} />
+                <button onClick={() => { setUnpaidPage(prev => Math.max(1, prev - 1)); scrollToTop(); }} disabled={unpaidPage === 1} className="p-2 rounded-lg disabled:opacity-40" style={{ background: tk.overlay }}>
+                  <ChevronLeft className="w-4 h-4" style={{ color: tk.textSec }} />
                 </button>
 
                 <div className="flex items-center gap-1 mx-2">
@@ -370,18 +455,27 @@ function UnpaidDuesList({ organization, user, unpaidPage, unpaidPerPage, setUnpa
 
                     const isActive = unpaidPage === pageNumber;
                     return (
-                      <button key={i} onClick={() => { setUnpaidPage(pageNumber); scrollToTop(); }} className="w-9 h-9 rounded-lg font-medium text-sm" style={{ background: isActive ? 'linear-gradient(135deg,' + colors.primary + ', ' + colors.success + ')' : 'rgba(255,255,255,0.05)', color: isActive ? 'white' : colors.textTertiary }}>
+                      <button
+                        key={i}
+                        onClick={() => { setUnpaidPage(pageNumber); scrollToTop(); }}
+                        className="w-9 h-9 rounded-lg font-medium text-sm"
+                        style={{
+                          background: isActive ? tk.gradOrange : tk.overlay,
+                          color: isActive ? '#FFFFFF' : tk.textSec,
+                          boxShadow: isActive ? `0 4px 14px -4px ${tk.primary}66` : 'none',
+                        }}
+                      >
                         {pageNumber}
                       </button>
                     );
                   })}
                 </div>
 
-                <button onClick={() => { setUnpaidPage(prev => Math.min(visibleTotalPages, prev + 1)); scrollToTop(); }} disabled={unpaidPage === visibleTotalPages} className="p-2 rounded-lg" style={{ background: 'rgba(255,255,255,0.05)' }}>
-                  <ChevronRight className="w-4 h-4" style={{ color: colors.textTertiary }} />
+                <button onClick={() => { setUnpaidPage(prev => Math.min(visibleTotalPages, prev + 1)); scrollToTop(); }} disabled={unpaidPage === visibleTotalPages} className="p-2 rounded-lg disabled:opacity-40" style={{ background: tk.overlay }}>
+                  <ChevronRight className="w-4 h-4" style={{ color: tk.textSec }} />
                 </button>
-                <button onClick={() => { setUnpaidPage(visibleTotalPages); scrollToTop(); }} disabled={unpaidPage === visibleTotalPages} className="p-2 rounded-lg" style={{ background: 'rgba(255,255,255,0.05)' }}>
-                  <ChevronsRight className="w-4 h-4" style={{ color: colors.textTertiary }} />
+                <button onClick={() => { setUnpaidPage(visibleTotalPages); scrollToTop(); }} disabled={unpaidPage === visibleTotalPages} className="p-2 rounded-lg disabled:opacity-40" style={{ background: tk.overlay }}>
+                  <ChevronsRight className="w-4 h-4" style={{ color: tk.textSec }} />
                 </button>
               </div>
             </div>
@@ -389,8 +483,8 @@ function UnpaidDuesList({ organization, user, unpaidPage, unpaidPerPage, setUnpa
         </div>
       )}
       {debugOpen && (
-        <div className="mt-3 p-3 text-xs rounded-lg" style={{ background: 'rgba(0,0,0,0.5)', border: '1px solid rgba(255,255,255,0.05)', color: colors.textTertiary }}>
-          <div className="font-semibold text-white mb-2">Debug — Unpaid Dues</div>
+        <div className="mt-3 p-3 text-xs rounded-lg" style={{ background: tk.overlay, border: `1px solid ${tk.cardBorder}`, color: tk.textSec }}>
+          <div className="font-semibold mb-2" style={{ color: tk.text }}>Debug — Unpaid Dues</div>
           <div><strong>showDismissed:</strong> {String(showDismissed)}</div>
           <div><strong>dismissedIds:</strong> {JSON.stringify(dismissedIds)}</div>
           <div><strong>items.ids:</strong> {JSON.stringify(items.map(i => String(i.paymentType.id)))}</div>
@@ -481,19 +575,19 @@ export default function OrgDashboardPage() {
   };
 
   return (
-    <div className="max-w-7xl mx-auto px-4 py-6 space-y-6">
+    <div className="max-w-7xl mx-auto px-4 py-6 space-y-6" style={{ color: tk.text }}>
       {/* ── Welcome Header ── */}
       <motion.div
         className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3"
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
       >
-        <div>
-          <h1 className="text-2xl font-bold text-white">
-            {greeting()}, {user?.full_name?.split(' ')[0]} 👋
+        <div className="min-w-0">
+          <h1 className="text-2xl sm:text-[28px] font-bold tracking-tight" style={{ color: tk.text }}>
+            {greeting()}, {user?.full_name?.split(' ')[0] || 'there'} 👋
           </h1>
-          <p className="text-sm mt-1" style={{ color: colors.textTertiary }}>
-            {organization?.name} &bull; {group?.name || '—'}
+          <p className="text-sm mt-1 truncate" style={{ color: tk.textSec }}>
+            {organization?.name} &bull; <span style={{ color: tk.textTer }}>{group?.name || '—'}</span>
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -501,7 +595,7 @@ export default function OrgDashboardPage() {
             <button
               onClick={() => navigate(`/${orgSlug}/admin/members`)}
               className="flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-medium transition-all hover:scale-105"
-              style={{ border: `1px solid ${colors.borderPrimary}`, color: colors.primary }}
+              style={{ border: `1px solid ${tk.primaryRing}`, color: tk.primary, background: tk.primarySoft }}
             >
               <UserPlus size={14} />
               <span className="hidden sm:inline">Add {organization?.member_label || 'Member'}</span>
@@ -510,27 +604,48 @@ export default function OrgDashboardPage() {
         </div>
       </motion.div>
 
-      {/* ── Payment Summary Card (the hero) ── */}
+      {/* ── Hero: Payment Summary Card ── */}
       <motion.div
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ delay: 0.1 }}
       >
-        <GlassCard intensity="medium" className="p-0 overflow-hidden">
-          <div className="p-5 sm:p-6">
+        <div
+          className="relative overflow-hidden rounded-3xl"
+          style={{
+            background: tk.card,
+            border: `1px solid ${tk.cardBorder}`,
+            boxShadow: tk.shadowLg,
+          }}
+        >
+          {/* Ambient brand wash — visible in both themes */}
+          <span
+            aria-hidden
+            className="absolute -top-24 -right-24 w-72 h-72 rounded-full pointer-events-none"
+            style={{ background: tk.blob1, filter: 'blur(60px)' }}
+          />
+          <span
+            aria-hidden
+            className="absolute -bottom-32 -left-20 w-72 h-72 rounded-full pointer-events-none"
+            style={{ background: tk.blob2, filter: 'blur(60px)' }}
+          />
+
+          <div className="relative p-5 sm:p-7">
             <div className="flex flex-col sm:flex-row items-center gap-6">
               {/* Progress Ring */}
               <div className="relative shrink-0">
                 {loading ? (
-                  <div className="w-[120px] h-[120px] flex items-center justify-center">
-                    <Loader2 size={28} className="animate-spin" style={{ color: colors.primary }} />
+                  <div className="w-[132px] h-[132px] flex items-center justify-center">
+                    <Loader2 size={28} className="animate-spin" style={{ color: tk.primary }} />
                   </div>
                 ) : (
                   <>
                     <ProgressRing progress={progressPercent} tk={tk} />
                     <div className="absolute inset-0 flex flex-col items-center justify-center">
-                      <span className="text-2xl font-bold text-white">{progressPercent}%</span>
-                      <span className="text-[10px] uppercase tracking-wider" style={{ color: colors.textTertiary }}>
+                      <span className="text-3xl font-bold tracking-tight" style={{ color: tk.text }}>
+                        {progressPercent}%
+                      </span>
+                      <span className="text-[10px] uppercase tracking-[0.18em] font-bold mt-0.5" style={{ color: tk.textTer }}>
                         Paid
                       </span>
                     </div>
@@ -542,27 +657,43 @@ export default function OrgDashboardPage() {
               <div className="flex-1 w-full space-y-4">
                 <div className="grid grid-cols-2 gap-4">
                   <div>
-                    <p className="text-xs uppercase tracking-wider mb-1" style={{ color: colors.textTertiary }}>Total Due</p>
-                    <p className="text-xl sm:text-2xl font-bold text-white">{loading ? '---' : formatAmount(stats.totalDue)}</p>
+                    <p className="text-[10px] uppercase tracking-[0.14em] font-bold mb-1" style={{ color: tk.textTer }}>
+                      Total Due
+                    </p>
+                    <p className="text-xl sm:text-2xl font-bold tabular-nums" style={{ color: tk.text }}>
+                      {loading ? '---' : formatAmount(stats.totalDue)}
+                    </p>
                   </div>
                   <div>
-                    <p className="text-xs uppercase tracking-wider mb-1" style={{ color: colors.textTertiary }}>Paid</p>
-                    <p className="text-xl sm:text-2xl font-bold" style={{ color: colors.success }}>{loading ? '---' : formatAmount(stats.totalPaid)}</p>
+                    <p className="text-[10px] uppercase tracking-[0.14em] font-bold mb-1" style={{ color: tk.textTer }}>
+                      Paid
+                    </p>
+                    <p className="text-xl sm:text-2xl font-bold tabular-nums" style={{ color: tk.mint }}>
+                      {loading ? '---' : formatAmount(stats.totalPaid)}
+                    </p>
                   </div>
                 </div>
 
                 {/* Balance bar */}
                 <div>
                   <div className="flex items-center justify-between mb-1.5">
-                    <span className="text-xs font-medium" style={{ color: colors.textTertiary }}>Outstanding Balance</span>
-                    <span className="text-sm font-bold" style={{ color: balance > 0 ? colors.error : colors.success }}>
+                    <span className="text-xs font-medium" style={{ color: tk.textSec }}>
+                      Outstanding balance
+                    </span>
+                    <span
+                      className="text-sm font-bold tabular-nums"
+                      style={{ color: balance > 0 ? tk.danger : tk.mint }}
+                    >
                       {loading ? '---' : formatAmount(balance)}
                     </span>
                   </div>
-                  <div className="h-2 rounded-full overflow-hidden" style={{ background: 'rgba(255,255,255,0.06)' }}>
+                  <div
+                    className="h-2 rounded-full overflow-hidden"
+                    style={{ background: tk.isLight ? 'rgba(15,7,3,0.06)' : 'rgba(255,255,255,0.07)' }}
+                  >
                     <motion.div
                       className="h-full rounded-full"
-                      style={{ background: `linear-gradient(90deg, ${colors.primary}, ${colors.success})` }}
+                      style={{ background: tk.gradOrange }}
                       initial={{ width: 0 }}
                       animate={{ width: `${progressPercent}%` }}
                       transition={{ duration: 1, ease: 'easeOut', delay: 0.3 }}
@@ -575,22 +706,35 @@ export default function OrgDashboardPage() {
 
           {/* Summary footer stats */}
           <div
-            className="grid grid-cols-3 divide-x"
-            style={{ borderTop: `1px solid ${colors.borderLight}`, borderColor: 'rgba(255,255,255,0.06)' }}
+            className="relative grid grid-cols-3"
+            style={{ borderTop: `1px solid ${tk.cardBorder}` }}
           >
             {[
-              { label: paymentLabel, value: stats.totalPaymentTypes, icon: <CreditCard size={14} />, color: colors.primary },
-              { label: 'Pending', value: stats.pendingCount, icon: <Clock size={14} />, color: colors.warning },
-              { label: 'Approved', value: stats.approvedCount, icon: <CheckCircle size={14} />, color: colors.success },
-            ].map((item) => (
-              <div key={item.label} className="flex items-center justify-center gap-2 py-3 px-2" style={{ borderColor: 'rgba(255,255,255,0.06)' }}>
-                <div style={{ color: item.color }}>{item.icon}</div>
-                <span className="text-sm font-semibold text-white">{loading ? '-' : item.value}</span>
-                <span className="text-xs hidden sm:inline" style={{ color: colors.textTertiary }}>{item.label}</span>
+              { label: paymentLabel, value: stats.totalPaymentTypes, icon: <CreditCard size={14} />, color: tk.primary },
+              { label: 'Pending', value: stats.pendingCount, icon: <Clock size={14} />, color: tk.amber },
+              { label: 'Approved', value: stats.approvedCount, icon: <CheckCircle size={14} />, color: tk.mint },
+            ].map((item, i) => (
+              <div
+                key={item.label}
+                className="flex items-center justify-center gap-2 py-3.5 px-2"
+                style={{ borderLeft: i === 0 ? 'none' : `1px solid ${tk.cardBorder}` }}
+              >
+                <span
+                  className="w-7 h-7 rounded-lg flex items-center justify-center"
+                  style={{ background: `${item.color}18`, color: item.color }}
+                >
+                  {item.icon}
+                </span>
+                <span className="text-sm font-bold tabular-nums" style={{ color: tk.text }}>
+                  {loading ? '-' : item.value}
+                </span>
+                <span className="text-xs hidden sm:inline" style={{ color: tk.textTer }}>
+                  {item.label}
+                </span>
               </div>
             ))}
           </div>
-        </GlassCard>
+        </div>
       </motion.div>
 
       {/* ── Quick Actions Grid ── */}
@@ -600,78 +744,90 @@ export default function OrgDashboardPage() {
         animate={{ opacity: 1, y: 0 }}
         transition={{ delay: 0.2 }}
       >
-        <button
-          onClick={() => navigate(`/${orgSlug}/payments`)}
-          className="group flex items-center gap-4 p-4 rounded-2xl text-left transition-all hover:scale-[1.01] active:scale-[0.98]"
-          style={{ background: `${colors.primary}08`, border: `1px solid ${colors.borderPrimary}` }}
-        >
-          <div className="w-11 h-11 rounded-xl flex items-center justify-center transition-transform group-hover:scale-110" style={{ background: `${colors.primary}18`, color: colors.primary }}>
-            <CreditCard size={22} />
-          </div>
-          <div className="flex-1 min-w-0">
-            <p className="font-medium text-sm text-white">View {paymentLabel}</p>
-            <p className="text-xs" style={{ color: colors.textTertiary }}>History & submissions</p>
-          </div>
-          <ArrowRight size={16} className="transition-transform group-hover:translate-x-1" style={{ color: colors.textTertiary }} />
-        </button>
-
-        {isAnyAdmin() && (
-          <>
-            <button
-              onClick={() => navigate(`/${orgSlug}/admin/dashboard`)}
-              className="group flex items-center gap-4 p-4 rounded-2xl text-left transition-all hover:scale-[1.01] active:scale-[0.98]"
-              style={{ background: `${colors.accentPurple}08`, border: `1px solid ${colors.accentPurple}25` }}
+        {[
+          {
+            onClick: () => navigate(`/${orgSlug}/payments`),
+            title: `View ${paymentLabel}`,
+            sub: 'History & submissions',
+            icon: <CreditCard size={22} />,
+            color: tk.primary,
+            show: true,
+          },
+          {
+            onClick: () => navigate(`/${orgSlug}/admin/dashboard`),
+            title: 'Admin Panel',
+            sub: 'Review & manage',
+            icon: <Shield size={22} />,
+            color: tk.purple,
+            show: isAnyAdmin(),
+          },
+          {
+            onClick: () => navigate(`/${orgSlug}/admin/members`),
+            title: `Manage ${memberLabelPlural}`,
+            sub: 'Add & organize',
+            icon: <Users size={22} />,
+            color: tk.blue,
+            show: isAnyAdmin(),
+          },
+        ].filter(a => a.show).map((a) => (
+          <button
+            key={a.title}
+            onClick={a.onClick}
+            className="group flex items-center gap-4 p-4 rounded-2xl text-left transition-all hover:-translate-y-0.5 active:scale-[0.99]"
+            style={{
+              background: tk.card,
+              border: `1px solid ${tk.cardBorder}`,
+              boxShadow: tk.shadow,
+            }}
+          >
+            <div
+              className="w-11 h-11 rounded-xl flex items-center justify-center transition-transform group-hover:scale-110"
+              style={{ background: `${a.color}14`, color: a.color, border: `1px solid ${a.color}30` }}
             >
-              <div className="w-11 h-11 rounded-xl flex items-center justify-center transition-transform group-hover:scale-110" style={{ background: `${colors.accentPurple}15`, color: colors.accentPurple }}>
-                <Shield size={22} />
-              </div>
-              <div className="flex-1 min-w-0">
-                <p className="font-medium text-sm text-white">Admin Panel</p>
-                <p className="text-xs" style={{ color: colors.textTertiary }}>Review & manage</p>
-              </div>
-              <ArrowRight size={16} className="transition-transform group-hover:translate-x-1" style={{ color: colors.textTertiary }} />
-            </button>
-
-            <button
-              onClick={() => navigate(`/${orgSlug}/admin/members`)}
-              className="group flex items-center gap-4 p-4 rounded-2xl text-left transition-all hover:scale-[1.01] active:scale-[0.98]"
-              style={{ background: `${colors.accentCyan}06`, border: `1px solid ${colors.accentCyan}20` }}
-            >
-              <div className="w-11 h-11 rounded-xl flex items-center justify-center transition-transform group-hover:scale-110" style={{ background: `${colors.accentCyan}12`, color: colors.accentCyan }}>
-                <Users size={22} />
-              </div>
-              <div className="flex-1 min-w-0">
-                <p className="font-medium text-sm text-white">Manage {memberLabelPlural}</p>
-                <p className="text-xs" style={{ color: colors.textTertiary }}>Add & organize</p>
-              </div>
-              <ArrowRight size={16} className="transition-transform group-hover:translate-x-1" style={{ color: colors.textTertiary }} />
-            </button>
-          </>
-        )}
+              {a.icon}
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="font-semibold text-sm" style={{ color: tk.text }}>{a.title}</p>
+              <p className="text-xs" style={{ color: tk.textTer }}>{a.sub}</p>
+            </div>
+            <ArrowRight
+              size={16}
+              className="transition-transform group-hover:translate-x-1"
+              style={{ color: a.color }}
+            />
+          </button>
+        ))}
       </motion.div>
 
-      {/* ── Unpaid Dues (paginated) ── */}
+      {/* ── What's Due (events) ── */}
       <motion.div
         initial={{ opacity: 0, y: 10 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ delay: 0.25 }}
       >
         <div className="flex items-center justify-between mb-3">
-          <h2 className="text-lg font-semibold text-white">Unpaid Dues</h2>
-          <div className="text-sm" style={{ color: colors.textTertiary }}>{/* summary */}</div>
-        </div>
-        <GlassCard>
-          <div className="p-3">
-            <UnpaidDuesList
-              organization={organization}
-              user={user}
-              unpaidPage={unpaidPage}
-              unpaidPerPage={unpaidPerPage}
-              setUnpaidPage={setUnpaidPage}
-              tk={tk}
-            />
+          <div>
+            <h2 className="text-lg font-bold tracking-tight" style={{ color: tk.text }}>
+              What's due
+            </h2>
+            <p className="text-xs mt-0.5" style={{ color: tk.textTer }}>
+              Sorted by urgency. Tap a card to pay.
+            </p>
           </div>
-        </GlassCard>
+        </div>
+        <div
+          className="rounded-2xl p-3 sm:p-4"
+          style={{ background: tk.card, border: `1px solid ${tk.cardBorder}`, boxShadow: tk.shadow }}
+        >
+          <UnpaidDuesList
+            organization={organization}
+            user={user}
+            unpaidPage={unpaidPage}
+            unpaidPerPage={unpaidPerPage}
+            setUnpaidPage={setUnpaidPage}
+            tk={tk}
+          />
+        </div>
       </motion.div>
 
       {/* ── Recent Activity ── */}
@@ -681,76 +837,91 @@ export default function OrgDashboardPage() {
         transition={{ delay: 0.3 }}
       >
         <div className="flex items-center justify-between mb-3">
-          <h2 className="text-lg font-semibold text-white">Recent Activity</h2>
+          <div>
+            <h2 className="text-lg font-bold tracking-tight" style={{ color: tk.text }}>
+              Recent activity
+            </h2>
+            <p className="text-xs mt-0.5" style={{ color: tk.textTer }}>
+              Your last few submissions.
+            </p>
+          </div>
           {recentPayments.length > 0 && (
             <button
               onClick={() => navigate(`/${orgSlug}/payments`)}
-              className="text-xs font-medium flex items-center gap-1 transition-all hover:gap-2"
-              style={{ color: colors.primary }}
+              className="text-xs font-medium flex items-center gap-1 transition-all hover:gap-2 px-3 py-2 rounded-xl"
+              style={{ color: tk.primary, background: tk.primarySoft }}
             >
-              View All <ArrowRight size={12} />
+              View all <ArrowRight size={12} />
             </button>
           )}
         </div>
-        <GlassCard className="divide-y divide-white/5">
+        <div
+          className="rounded-2xl overflow-hidden"
+          style={{ background: tk.card, border: `1px solid ${tk.cardBorder}`, boxShadow: tk.shadow }}
+        >
           {loading ? (
             <div className="p-10 text-center">
-              <Loader2 size={24} className="animate-spin mx-auto mb-2" style={{ color: colors.primary }} />
-              <p className="text-sm" style={{ color: colors.textTertiary }}>Loading activity...</p>
+              <Loader2 size={24} className="animate-spin mx-auto mb-2" style={{ color: tk.primary }} />
+              <p className="text-sm" style={{ color: tk.textTer }}>Loading activity...</p>
             </div>
           ) : recentPayments.length === 0 ? (
             <div className="p-10 text-center space-y-3">
-              <div className="w-14 h-14 rounded-2xl mx-auto flex items-center justify-center" style={{ background: `${colors.primary}10` }}>
-                <CreditCard size={28} style={{ color: colors.textDisabled }} />
+              <div
+                className="w-14 h-14 rounded-2xl mx-auto flex items-center justify-center"
+                style={{ background: tk.primarySoft, border: `1px solid ${tk.primaryRing}` }}
+              >
+                <CreditCard size={28} style={{ color: tk.primary }} />
               </div>
               <div>
-                <p className="font-medium text-white">No activity yet</p>
-                <p className="text-sm mt-1" style={{ color: colors.textTertiary }}>
-                  Your payment activity will appear here
+                <p className="font-semibold" style={{ color: tk.text }}>No activity yet</p>
+                <p className="text-sm mt-1" style={{ color: tk.textTer }}>
+                  Your payment activity will appear here.
                 </p>
               </div>
               <button
                 onClick={() => navigate(`/${orgSlug}/payments`)}
                 className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-medium transition-all hover:scale-105"
-                style={{ color: colors.primary, border: `1px solid ${colors.borderPrimary}` }}
+                style={{ color: '#FFFFFF', background: tk.gradOrange, boxShadow: `0 8px 22px -8px ${tk.primary}` }}
               >
                 <Plus size={16} />
-                Submit a Payment
+                Submit a payment
               </button>
             </div>
           ) : (
-            recentPayments.map((payment, idx) => {
+            <div className="divide-y" style={{ borderColor: tk.cardBorder }}>
+            {recentPayments.map((payment, idx) => {
               const statusColors: Record<string, string> = {
-                approved: colors.success,
-                pending: colors.warning,
-                rejected: colors.error,
+                approved: tk.mint,
+                pending: tk.amber,
+                rejected: tk.danger,
               };
               const statusIcons: Record<string, React.ReactNode> = {
                 approved: <CheckCircle size={14} />,
                 pending: <Clock size={14} />,
                 rejected: <AlertCircle size={14} />,
               };
-              const statusColor = statusColors[payment.status as string] || colors.textTertiary;
+              const statusColor = statusColors[payment.status as string] || tk.textTer;
               return (
                 <motion.div
                   key={payment.id as string}
-                  className="flex items-center justify-between px-4 sm:px-5 py-3.5 hover:bg-white/2 transition-colors"
+                  className="flex items-center justify-between px-4 sm:px-5 py-3.5 transition-colors"
+                  style={{ borderColor: tk.cardBorder }}
                   initial={{ opacity: 0, x: -10 }}
                   animate={{ opacity: 1, x: 0 }}
                   transition={{ delay: idx * 0.05 }}
                 >
                   <div className="flex items-center gap-3">
                     <div
-                      className="w-8 h-8 rounded-lg flex items-center justify-center shrink-0"
-                      style={{ background: `${statusColor}12`, color: statusColor }}
+                      className="w-9 h-9 rounded-xl flex items-center justify-center shrink-0"
+                      style={{ background: `${statusColor}18`, color: statusColor, border: `1px solid ${statusColor}30` }}
                     >
                       {statusIcons[payment.status as string] || <CreditCard size={14} />}
                     </div>
                     <div>
-                      <p className="text-sm font-medium text-white">
+                      <p className="text-sm font-semibold tabular-nums" style={{ color: tk.text }}>
                         {formatAmount(payment.amount as number)}
                       </p>
-                      <p className="text-xs" style={{ color: colors.textTertiary }}>
+                      <p className="text-xs" style={{ color: tk.textTer }}>
                         {new Date(payment.created_at as string).toLocaleDateString('en-GB', {
                           day: 'numeric', month: 'short', year: 'numeric',
                         })}
@@ -759,15 +930,16 @@ export default function OrgDashboardPage() {
                   </div>
                   <span
                     className="text-xs font-semibold px-2.5 py-1 rounded-full capitalize"
-                    style={{ color: statusColor, background: `${statusColor}12` }}
+                    style={{ color: statusColor, background: `${statusColor}18`, border: `1px solid ${statusColor}30` }}
                   >
                     {payment.status as string}
                   </span>
                 </motion.div>
               );
-            })
+            })}
+            </div>
           )}
-        </GlassCard>
+        </div>
       </motion.div>
     </div>
   );

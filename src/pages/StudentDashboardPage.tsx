@@ -58,6 +58,7 @@ import EventsSection from '@/components/student/dashboard/EventsSection';
 import QuickActionsGrid from '@/components/student/dashboard/QuickActionsGrid';
 import DueNextList, { type DueNextItem } from '@/components/student/dashboard/DueNextList';
 import PayOnTimeCard from '@/components/student/dashboard/PayOnTimeCard';
+import ShareClassLinkCard from '@/components/student/dashboard/ShareClassLinkCard';
 import ThemeSwitcher from '@/components/ThemeSwitcher';
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -364,6 +365,7 @@ export default function StudentDashboardPage() {
           onTogglePrivacy={() => setPrivacyOn((v) => !v)}
           ctaLabel={urgent ? 'Pay next due' : undefined}
           onCtaClick={urgent ? () => go(`/payment/${urgent.pt.id}`) : undefined}
+          memberId={memberLoginId || null}
         />
 
         {/* ───────────── VERIFICATION STATUS BANNER ─────────────
@@ -375,6 +377,21 @@ export default function StudentDashboardPage() {
         <ThemedPanel theme={theme}>
           <VerificationStatusBanner />
         </ThemedPanel>
+
+        {/* ───────────── SHARE CLASS LINK ─────────────
+            Anyone in the class can grow the class — invites are not
+            gated to admins. Calls SECURITY DEFINER RPC
+            create_member_join_invite which yields a member-only code. */}
+        {orgSlug && groupId && mtMember?.id && (
+          <ShareClassLinkCard
+            theme={theme}
+            memberId={mtMember.id}
+            groupId={groupId}
+            orgSlug={orgSlug}
+            className={mtMember?.group?.name}
+            orgName={orgName}
+          />
+        )}
 
         {/* VoteInbox removed in fintech-redesign — the compact
             VoteUrgencyBanner above is the single source of truth for

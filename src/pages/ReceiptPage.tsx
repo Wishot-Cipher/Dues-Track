@@ -21,17 +21,20 @@
  * doesn't blow up.
  */
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import {
   ArrowLeft, Share2, CheckCircle2, Download, Loader2, AlertCircle,
+  Hash, Mail, Building2,
 } from 'lucide-react';
+import QRCode from 'qrcode';
 import { supabase } from '@/config/supabase';
 import { useAppNav } from '@/hooks/useAppNav';
 import { useTheme, getDashboardTokens } from '@/hooks/useTheme';
 import { useToast } from '@/hooks/useToast';
 import PayvexoBackground from '@/components/student/dashboard/PayvexoBackground';
+import { generatePaymentReceiptPDF } from '@/utils/pdfExport';
 
 // ── Types ──────────────────────────────────────────────────────────
 interface ReceiptRow {
@@ -86,6 +89,21 @@ function channelLabel(method: string | null, channel: string | null): string {
   return 'Online payment';
 }
 
+/**
+ * Deterministic, human-readable receipt number derived from the row id.
+ * Same algorithm the PDF exporter uses, so the on-screen and PDF
+ * receipt numbers always match.
+ */
+function receiptNumberFor(id: string, amount: number, status: string): string {
+  const raw = `${id}-${amount}-${status}`;
+  let hash = 0;
+  for (let i = 0; i < raw.length; i++) {
+    hash = ((hash << 5) - hash) + raw.charCodeAt(i);
+    hash |= 0;
+  }
+  return 'PVX-' + Math.abs(hash).toString(36).toUpperCase().padStart(6, '0').slice(0, 6);
+}
+
 // ── Page ───────────────────────────────────────────────────────────
 export default function ReceiptPage() {
   const { paymentId } = useParams<{ paymentId: string }>();
@@ -98,6 +116,7 @@ export default function ReceiptPage() {
   const [receipt, setReceipt] = useState<ReceiptRow | null>(null);
   const [loading, setLoading] = useState(true);
   const [notFound, setNotFound] = useState(false);
+  const qrCanvasRef = useRef<HTMLCanvasElement | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -159,12 +178,61 @@ export default function ReceiptPage() {
     } catch { /* user cancelled */ }
   }, [receipt, toast]);
 
-  // ── Download (print → save as PDF) ─────────────────────────────
-  // No PDF library wired up yet, so we lean on the browser print-to-PDF
-  // dialogue. Adding a real renderer (e.g. jsPDF) is a separate task.
+  // ── Download (proper PDF, NOT a page screenshot) ──────────────
+  // The previous implementation called window.print() on the whole
+  // page — which captured the nav, the background, and shrank the
+  // receipt to a tiny square in the middle of an A4 sheet. That's
+  // not how receipts work in real life.
+  //
+  // We now hand the receipt to generatePaymentReceiptPDF, which opens
+  // a separate window with a print-friendly receipt-sized template.
+  // The current page (nav, sheets, modals) is never part of the output.
   const handleDownload = useCallback(() => {
-    window.print();
-  }, []);
+    if (!receipt) return;
+    try {
+      generatePaymentReceiptPDF({
+        id: receipt.id,
+        amount: Number(receipt.total_charged_kobo
+          ? receipt.total_charged_kobo / 100
+          : receipt.amount || 0),
+        status: receipt.status,
+        payment_method: channelLabel(receipt.payment_method, receipt.paystack_channel),
+        transaction_ref: receipt.paystack_reference || receipt.transaction_ref || '',
+        created_at: receipt.created_at || new Date().toISOString(),
+        approved_at: receipt.approved_at || undefined,
+        payment_type: {
+          title:  receipt.payment_type?.title || 'Payment',
+          amount: Number(receipt.dues_amount_kobo
+            ? receipt.dues_amount_kobo / 100
+            : receipt.amount || 0),
+        },
+        student: {
+          full_name:  receipt.member?.full_name  || receipt.payer_name  || 'Member',
+          reg_number: receipt.member?.member_id  || '—',
+          email:      receipt.payer_email || undefined,
+        },
+      });
+    } catch (e) {
+      console.error('[ReceiptPage] PDF generation failed', e);
+      toast.error('Could not generate PDF. Try again.');
+    }
+  }, [receipt, toast]);
+
+  // ── QR code render ─────────────────────────────────────────────
+  // The on-screen receipt shows a QR code that points back at this
+  // receipt's URL. Anyone scanning it (e.g. from a printed PDF) lands
+  // on the live, verifiable version — same as how restaurant receipts
+  // and event tickets work.
+  useEffect(() => {
+    const canvas = qrCanvasRef.current;
+    if (!canvas || !receipt) return;
+    QRCode.toCanvas(canvas, window.location.href, {
+      width: 84,
+      margin: 0,
+      color: { dark: '#0F0703', light: '#00000000' },
+      errorCorrectionLevel: 'M',
+    }).catch((e) => console.warn('[ReceiptPage] QR render failed', e));
+  }, [receipt]);
 
   // ── Render ───────────────────────────────────────────────────────
   const paid = receipt && receipt.status === 'approved';
@@ -172,10 +240,31 @@ export default function ReceiptPage() {
   const orgName = receipt?.org?.name || 'Payvexo';
   const ref     = receipt?.paystack_reference || receipt?.transaction_ref || '—';
 
+  // Receipt number — used in the header, the QR caption, and the PDF.
+  const receiptNo = useMemo(() => {
+    if (!receipt) return '';
+    return receiptNumberFor(receipt.id, Number(receipt.amount || 0), receipt.status);
+  }, [receipt]);
+
+  // Amount-paid (total charged including platform fee if present).
   const amountDisplay = useMemo(() => {
     if (!receipt) return '—';
     if (receipt.total_charged_kobo) return formatNaira(receipt.total_charged_kobo / 100);
     return formatNaira(Number(receipt.amount || 0));
+  }, [receipt]);
+
+  // Did the payment carry a platform fee that's worth surfacing?
+  // We only show the breakdown when there's an actual fee row.
+  const feeBreakdown = useMemo(() => {
+    if (!receipt) return null;
+    const dues = receipt.dues_amount_kobo ? receipt.dues_amount_kobo / 100 : null;
+    const fee  = receipt.platform_fee_kobo ? receipt.platform_fee_kobo / 100 : null;
+    if (!fee || fee <= 0) return null;
+    return {
+      dues: dues ?? Number(receipt.amount || 0),
+      fee,
+      total: receipt.total_charged_kobo ? receipt.total_charged_kobo / 100 : (dues ?? 0) + fee,
+    };
   }, [receipt]);
 
   return (
@@ -304,12 +393,39 @@ export default function ReceiptPage() {
                         {orgName}
                       </p>
                       <p className="text-[10px] font-semibold uppercase tracking-wider" style={{ color: t.textTer }}>
-                        Smart. Simple. Transparent.
+                        Official payment receipt
                       </p>
                     </div>
                   </div>
                 </div>
                 <StatusPill paid={!!paid} theme={theme} />
+              </div>
+
+              {/* Receipt-no chip — gives the document a real "audit
+                  identity" so members can quote a single short string
+                  back to support, and so the on-screen and PDF
+                  versions visibly match. */}
+              <div className="px-6 -mt-1 mb-3 flex items-center gap-2">
+                <span
+                  className="inline-flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-[0.16em] px-2 py-1 rounded-full"
+                  style={{
+                    background: t.primarySoft,
+                    color: t.primary,
+                    border: `1px solid ${t.primaryRing}`,
+                  }}
+                >
+                  <Hash size={11} />
+                  {receiptNo}
+                </span>
+                {receipt.org?.slug && (
+                  <span
+                    className="inline-flex items-center gap-1 text-[10px] font-semibold"
+                    style={{ color: t.textTer }}
+                  >
+                    <Building2 size={10} />
+                    {receipt.org.slug}
+                  </span>
+                )}
               </div>
 
               {/* Dashed divider — the "perforation line" */}
@@ -325,13 +441,49 @@ export default function ReceiptPage() {
               <div className="px-6 py-5 space-y-3">
                 <KV label="Member"          value={receipt.member?.full_name || receipt.payer_name || '—'} theme={theme} />
                 <KV label="Member ID"       value={receipt.member?.member_id || '—'} theme={theme} mono />
+                {receipt.payer_email && (
+                  <KV
+                    label="Email"
+                    value={receipt.payer_email}
+                    theme={theme}
+                    small
+                    icon={<Mail size={11} />}
+                  />
+                )}
                 <KV label="Fee type"        value={receipt.payment_type?.title || 'Payment'} theme={theme} />
-                <KV
-                  label="Amount paid"
-                  value={amountDisplay}
-                  theme={theme}
-                  highlight
-                />
+
+                {/* Fee breakdown — only renders when there's an actual
+                    platform fee to disclose. Keeps simple cases simple. */}
+                {feeBreakdown ? (
+                  <>
+                    <KV
+                      label="Dues"
+                      value={formatNaira(feeBreakdown.dues)}
+                      theme={theme}
+                      small
+                    />
+                    <KV
+                      label="Platform fee"
+                      value={formatNaira(feeBreakdown.fee)}
+                      theme={theme}
+                      small
+                    />
+                    <KV
+                      label="Total charged"
+                      value={formatNaira(feeBreakdown.total)}
+                      theme={theme}
+                      highlight
+                    />
+                  </>
+                ) : (
+                  <KV
+                    label="Amount paid"
+                    value={amountDisplay}
+                    theme={theme}
+                    highlight
+                  />
+                )}
+
                 <KV
                   label="Payment method"
                   value={channelLabel(receipt.payment_method, receipt.paystack_channel)}
@@ -346,7 +498,7 @@ export default function ReceiptPage() {
                 />
               </div>
 
-              {/* Thank-you + verified stamp */}
+              {/* Thank-you + verified stamp + QR */}
               <div
                 className="mx-6 mb-6 px-5 py-4 rounded-2xl flex items-center gap-4"
                 style={{
@@ -362,8 +514,41 @@ export default function ReceiptPage() {
                   <p className="text-[11px] mt-1" style={{ color: t.textSec }}>
                     Your payment was successful and recorded on our ledger.
                   </p>
+                  <p className="text-[10px] mt-2 font-semibold" style={{ color: t.textTer }}>
+                    Scan the code to verify this receipt online.
+                  </p>
                 </div>
                 <VerifiedStamp theme={theme} />
+              </div>
+
+              {/* QR strip — scan-to-verify. Sits in its own row below the
+                  thank-you so it has room to breathe; the canvas mounts
+                  once and is filled by the useEffect above. */}
+              <div className="mx-6 mb-6 flex items-center gap-3">
+                <div
+                  className="rounded-xl p-2 shrink-0"
+                  style={{
+                    background: isLight ? '#FFFFFF' : 'rgba(255,255,255,0.06)',
+                    border: `1px solid ${t.cardBorder}`,
+                  }}
+                >
+                  <canvas
+                    ref={qrCanvasRef}
+                    width={84}
+                    height={84}
+                    style={{ display: 'block' }}
+                    aria-label="Receipt verification QR code"
+                  />
+                </div>
+                <div className="min-w-0">
+                  <p className="text-[10px] uppercase tracking-[0.16em] font-bold" style={{ color: t.textTer }}>
+                    Scan to verify
+                  </p>
+                  <p className="text-[11px] mt-1 break-all" style={{ color: t.textSec }}>
+                    Opens the live receipt on Payvexo. The code stays valid
+                    as long as the payment is on file.
+                  </p>
+                </div>
               </div>
 
               {/* Bottom spacer for the scalloped edge */}
@@ -421,7 +606,7 @@ export default function ReceiptPage() {
 
 // ── KV — clean key/value row used inside the receipt body ────────
 function KV({
-  label, value, theme, highlight, mono, small,
+  label, value, theme, highlight, mono, small, icon,
 }: {
   label: string;
   value: string;
@@ -429,14 +614,16 @@ function KV({
   highlight?: boolean;
   mono?: boolean;
   small?: boolean;
+  icon?: React.ReactNode;
 }) {
   const t = getDashboardTokens(theme);
   return (
     <div className="flex items-center justify-between gap-3">
       <span
-        className="text-[11px] uppercase tracking-wider font-bold shrink-0"
+        className="text-[11px] uppercase tracking-wider font-bold shrink-0 inline-flex items-center gap-1"
         style={{ color: t.textTer }}
       >
+        {icon}
         {label}
       </span>
       <span

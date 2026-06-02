@@ -58,10 +58,13 @@ export default async function handler(req: any, res: any) {
         return res.status(400).json({ ok: false, error: 'Enter a valid email address.' });
       }
 
-      // Resolve the org's accepted email domain (org first, then its seed)
+      // Resolve the org's accepted email domain (org first, then its seed).
+      // We also pull organization_type so the rule can adapt: a strict
+      // domain match only makes sense for academic orgs that actually
+      // have a verified institutional domain on file.
       const { data: org } = await supabase
         .from('organizations')
-        .select('name, email_domain, seed_institution_id')
+        .select('name, organization_type, email_domain, seed_institution_id')
         .eq('id', member.organization_id)
         .maybeSingle();
 
@@ -75,17 +78,22 @@ export default async function handler(req: any, res: any) {
         domain = (seed?.email_domain || '').trim().toLowerCase();
       }
 
-      if (!domain) {
-        return res.status(400).json({
-          ok: false,
-          error: 'Your organization has no verified school-email domain on file yet. Ask the platform admin to set it, or use another verification method.',
-        });
-      }
+      const orgType = String(org?.organization_type || '').toLowerCase();
+      const isAcademic = /\b(university|school|college|class|faculty|department|academic|institute|polytechnic)\b/.test(orgType);
 
-      const emailDomain = email.split('@')[1];
-      const matches = emailDomain === domain || emailDomain.endsWith('.' + domain);
-      if (!matches) {
-        return res.status(400).json({ ok: false, error: `Use your @${domain} school email to verify.` });
+      // Domain match is required ONLY for academic orgs that actually have
+      // a domain on file. Churches, NGOs, clubs etc. verify by ownership of
+      // any valid email — layer-2 trust is "you can read this inbox," not
+      // "your email is on a campus domain." If an academic org skipped the
+      // domain setup, we still accept the verification (loose) so they
+      // aren't blocked; the platform admin can tighten by setting
+      // email_domain later.
+      if (isAcademic && domain) {
+        const emailDomain = email.split('@')[1];
+        const matches = emailDomain === domain || emailDomain.endsWith('.' + domain);
+        if (!matches) {
+          return res.status(400).json({ ok: false, error: `Use your @${domain} school email to verify.` });
+        }
       }
 
       const code = String(Math.floor(100000 + Math.random() * 900000));

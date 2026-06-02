@@ -182,32 +182,44 @@ export default function EventsSection({
 
   const visibleEvents = typeof maxItems === 'number' ? events.slice(0, maxItems) : events;
   const showAll = Boolean(showAllHref && events.length > visibleEvents.length);
+  const hasMultiple = visibleEvents.length > 1;
 
   return (
     <section className="relative mb-1">
       <header className="px-1 mb-3 flex items-end justify-between gap-3">
-        <div>
-          <p className="text-[10px] uppercase tracking-[0.14em] font-bold" style={{ color: t.primary }}>
-            Happening Soon
-          </p>
-          <h2 className="text-base sm:text-lg font-extrabold tracking-tight" style={{ color: t.text }}>
-            Upcoming Events
-          </h2>
+        <div className="flex items-center gap-3">
+          <span
+            aria-hidden
+            className="w-1.5 h-7 rounded-full"
+            style={{ background: `linear-gradient(180deg, ${t.primary}, ${t.primary}55)` }}
+          />
+          <div>
+            <p className="text-[10px] uppercase tracking-[0.18em] font-bold" style={{ color: t.primary }}>
+              Happening soon
+            </p>
+            <h2 className="text-base sm:text-lg font-extrabold tracking-tight" style={{ color: t.text }}>
+              Upcoming events
+            </h2>
+          </div>
         </div>
         {showAll && (
           <button
             type="button"
             onClick={() => showAllHref && navigate(showAllHref)}
-            className="text-xs font-bold rounded-full px-3 py-1.5 transition-colors"
+            className="text-xs font-bold rounded-full px-3 py-1.5 transition-colors inline-flex items-center gap-1"
             style={{ color: t.primary, background: isLight ? '#FFF4EB' : 'rgba(255,104,3,0.12)' }}
           >
             View all
+            <span aria-hidden>→</span>
           </button>
         )}
       </header>
 
       {loading && (
-        <div className="grid gap-3" style={{ maxWidth: 760, marginInline: 'auto' }}>
+        <div
+          className="grid gap-4"
+          style={{ gridTemplateColumns: hasMultiple ? 'repeat(auto-fit, minmax(320px, 1fr))' : '1fr' }}
+        >
           {[0, 1].map((i) => (
             <div
               key={i}
@@ -232,12 +244,12 @@ export default function EventsSection({
 
       {!loading && events.length > 0 && (
         <div
+          className="grid gap-4"
           style={{
-            display: 'grid',
-            gap: 16,
-            gridTemplateColumns: '1fr',
-            maxWidth: 760,
-            marginInline: 'auto',
+            // Single event = comfortable centred panel.
+            // 2+ events = responsive 2-up that collapses to 1 on narrow viewports.
+            gridTemplateColumns: hasMultiple ? 'repeat(auto-fit, minmax(320px, 1fr))' : 'minmax(0, 760px)',
+            justifyContent: hasMultiple ? 'stretch' : 'center',
           }}
         >
           {visibleEvents.map((event) => (

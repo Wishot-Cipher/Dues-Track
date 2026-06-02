@@ -22,8 +22,9 @@
  * surrounding page can be light or dark; the card pops on both.
  */
 
-import { motion } from 'framer-motion';
-import { Eye, EyeOff, Sparkles } from 'lucide-react';
+import { motion, useMotionValue, useTransform, animate, useSpring } from 'framer-motion';
+import { Eye, EyeOff, Sparkles, TrendingUp, CheckCircle2 } from 'lucide-react';
+import { useEffect, useRef, useState } from 'react';
 
 export interface OutstandingHeroProps {
   /** Total amount owed (in the org's currency, naira units not kobo). */
@@ -40,6 +41,8 @@ export interface OutstandingHeroProps {
   /** Optional CTA label + onClick. If omitted, no button rendered. */
   ctaLabel?: string;
   onCtaClick?: () => void;
+  /** Optional member ID — surfaces a faint embossed line at the foot of the card. */
+  memberId?: string | null;
 }
 
 // Split amount into integer and decimal so we can render the decimals
@@ -65,6 +68,7 @@ export default function OutstandingHero({
   onTogglePrivacy,
   ctaLabel,
   onCtaClick,
+  memberId,
 }: OutstandingHeroProps) {
   // ── Donut math ───────────────────────────────────────────────
   const total = Math.max(1, totalCount ?? Math.max(pendingCount, 1));
@@ -86,29 +90,102 @@ export default function OutstandingHero({
   const isZero = outstandingAmount <= 0;
   const amount = splitAmount(outstandingAmount, currencySymbol);
 
+  // ── Animated count-up of the balance — premium fintech touch.
+  //   The integer climbs from 0 to its real value over ~1.1s on mount.
+  const target = Math.max(0, Math.round(outstandingAmount));
+  const motionVal = useMotionValue(0);
+  const display = useTransform(motionVal, (v) => Math.round(v).toLocaleString('en-NG'));
+  const [displayInt, setDisplayInt] = useState('0');
+  useEffect(() => {
+    const controls = animate(motionVal, target, {
+      duration: 1.15,
+      ease: [0.22, 1, 0.36, 1],
+    });
+    const unsub = display.on('change', setDisplayInt);
+    return () => { controls.stop(); unsub(); };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [target]);
+
+  // ── Mouse-tracked highlight — a subtle radial brighten that follows
+  //   the cursor. Springs so it feels physical, not jumpy. Only kicks
+  //   in on pointer-fine devices (CSS handles that via pointer-events).
+  const wrapRef = useRef<HTMLDivElement | null>(null);
+  const mx = useSpring(50, { stiffness: 120, damping: 18 });
+  const my = useSpring(50, { stiffness: 120, damping: 18 });
+  const highlight = useTransform<number, string>(
+    [mx, my],
+    ([x, y]) => `radial-gradient(280px 200px at ${x}% ${y}%, rgba(255,255,255,0.22), transparent 60%)`,
+  );
+
+  // ── Contextual status copy — surfaces "what to do" under the amount.
+  let statusLabel: string;
+  let StatusIcon: typeof TrendingUp;
+  if (isZero) {
+    statusLabel = 'All paid up — nice work';
+    StatusIcon = CheckCircle2;
+  } else if (paidPct >= 0.66) {
+    statusLabel = 'Almost there — keep going';
+    StatusIcon = TrendingUp;
+  } else if (paidPct >= 0.33) {
+    statusLabel = 'Making steady progress';
+    StatusIcon = TrendingUp;
+  } else {
+    statusLabel = `${pendingCount} ${pendingCount === 1 ? 'item' : 'items'} need your attention`;
+    StatusIcon = Sparkles;
+  }
+
   return (
     <motion.div
+      ref={wrapRef}
+      onMouseMove={(e) => {
+        const r = wrapRef.current?.getBoundingClientRect();
+        if (!r) return;
+        mx.set(((e.clientX - r.left) / r.width) * 100);
+        my.set(((e.clientY - r.top) / r.height) * 100);
+      }}
+      onMouseLeave={() => { mx.set(50); my.set(50); }}
       initial={{ opacity: 0, y: 16, scale: 0.985 }}
       animate={{ opacity: 1, y: 0, scale: 1 }}
       transition={{ duration: 0.55, ease: [0.22, 1, 0.36, 1] }}
       className="relative w-full rounded-[28px] overflow-hidden"
       style={{
-        // Multi-stop gradient with a darker hot-spot in lower-right
-        // — gives the card the "light falling on a curved surface" feel
-        // that real card photographs have.
+        // Multi-stop gradient — toned down from the previous "neon
+        // orange" with warmer, earthier stops. Reads as a real card
+        // (Monzo Hot Coral / Revolut amber) instead of a CSS swatch.
+        // The dark hot-spot in the lower right is what gives it that
+        // "light falling on a curved surface" feel.
         background:
-          'radial-gradient(120% 110% at 18% 0%, #FF8C42 0%, #FF7A1E 28%, #FF6803 55%, #D85402 100%)',
+          'radial-gradient(120% 110% at 18% 0%, #FF9558 0%, #F47424 28%, #E25E0B 58%, #B84800 100%)',
         boxShadow:
           // Layer 1: rich tinted drop shadow (the card is lifted) ─
-          '0 22px 50px -22px rgba(216, 84, 2, 0.65),' +
+          '0 22px 50px -22px rgba(184, 72, 0, 0.55),' +
           // Layer 2: tight drop shadow for crisp edge against bg ─
-          ' 0 4px 12px -2px rgba(216, 84, 2, 0.30),' +
+          ' 0 4px 12px -2px rgba(184, 72, 0, 0.28),' +
           // Layer 3: inset highlight along the top edge (bevel) ─
-          ' inset 0 1px 0 rgba(255, 255, 255, 0.30),' +
+          ' inset 0 1px 0 rgba(255, 255, 255, 0.28),' +
           // Layer 4: inset darker line along the bottom (depth) ─
-          ' inset 0 -1px 0 rgba(0, 0, 0, 0.08)',
+          ' inset 0 -1px 0 rgba(0, 0, 0, 0.10)',
       }}
     >
+      {/* ── Mouse-tracked radial highlight — follows the cursor across
+            the card. Reads as "real material catching the light". */}
+      <motion.div
+        className="absolute inset-0 pointer-events-none"
+        style={{ background: highlight, mixBlendMode: 'soft-light' }}
+        aria-hidden
+      />
+
+      {/* ── Holographic stripe — narrow rainbow band low-opacity,
+            visible only on hover. The "premium card foil" detail. */}
+      <div
+        className="absolute inset-0 pointer-events-none opacity-0 hover:opacity-100 transition-opacity duration-500"
+        style={{
+          background:
+            'linear-gradient(115deg, transparent 38%, rgba(255,228,178,0.10) 44%, rgba(255,180,255,0.14) 49%, rgba(176,222,255,0.10) 54%, transparent 60%)',
+          mixBlendMode: 'overlay',
+        }}
+        aria-hidden
+      />
       {/* ── Foil shimmer — sweeps across once on mount.
           A diagonal white-translucent band that slides from left to
           right. Apple-Card-style "fresh from the wallet" finish. */}
@@ -125,7 +202,11 @@ export default function OutstandingHero({
         aria-hidden
       />
 
-      {/* ── Wavy line ribbons (the "line thing at the back") ── */}
+      {/* ── Wavy line ribbons (the "line thing at the back") ──
+            Now with a slightly hand-drawn cadence: the strokes wobble
+            instead of being perfect ease curves, and an extra "scribble"
+            line gives the card a sketched, human feel — the kind of
+            detail you'd see on a postcard, not a stock template. */}
       <svg
         className="absolute inset-0 w-full h-full pointer-events-none"
         viewBox="0 0 380 220"
@@ -139,12 +220,39 @@ export default function OutstandingHero({
             <stop offset="100%" stopColor="#fff" stopOpacity="0.05" />
           </linearGradient>
         </defs>
-        <path d="M -10 60 C 60 20, 140 30, 200 80 S 320 130, 400 100"
+        <path d="M -10 58 C 60 24, 138 28, 200 80 S 318 132, 400 96"
               stroke="url(#oh-line)" strokeWidth={1.5} strokeLinecap="round" opacity={0.95} />
-        <path d="M -10 90 C 70 50, 150 60, 210 100 S 320 150, 400 120"
+        <path d="M -10 92 C 68 48, 150 62, 212 100 S 322 148, 400 124"
               stroke="#fff" strokeWidth={1.25} strokeLinecap="round" opacity={0.22} />
-        <path d="M -10 120 C 80 80, 160 95, 220 130 S 320 175, 400 150"
+        <path d="M -10 122 C 80 78, 158 96, 222 128 S 322 178, 400 148"
               stroke="#fff" strokeWidth={1} strokeLinecap="round" opacity={0.13} />
+        {/* Hand-drawn underline — a wobbly highlight you'd doodle in a
+            notebook under the headline. Sits behind the "Total Outstanding"
+            label and the amount. */}
+        <path
+          d="M 22 102 q 30 -6 64 -2 t 70 0"
+          stroke="#FFFFFF"
+          strokeWidth={2.2}
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          opacity={0.18}
+          fill="none"
+        />
+      </svg>
+
+      {/* ── Soft "thumbprint" mark in the lower-left — three tiny dots
+            and an arc, like a stamp left by a hand. Adds warmth and the
+            sense that a real person designed this. */}
+      <svg
+        className="absolute pointer-events-none"
+        style={{ left: 14, bottom: 22, opacity: 0.18 }}
+        width={22} height={26} viewBox="0 0 22 26" fill="none" aria-hidden
+      >
+        <path d="M3 13 C 3 7, 8 3, 11 3 C 15 3, 19 7, 19 13 C 19 18, 16 22, 11 24"
+              stroke="#FFFFFF" strokeWidth={1.4} strokeLinecap="round" />
+        <path d="M7 13 C 7 10, 9 8, 11 8 C 13 8, 15 10, 15 13 C 15 16, 13 18, 11 20"
+              stroke="#FFFFFF" strokeWidth={1.2} strokeLinecap="round" />
+        <circle cx={11} cy={13} r={1.6} fill="#FFFFFF" />
       </svg>
 
       {/* ── Bottom-right vignette so the donut sits on a slightly
@@ -165,7 +273,7 @@ export default function OutstandingHero({
       />
 
       {/* ── Content ─────────────────────────────────────────── */}
-      <div className="relative px-5 sm:px-6 py-5 sm:py-6 flex items-center gap-4">
+      <div className="relative px-5 sm:px-6 pt-5 sm:pt-6 pb-8 sm:pb-9 flex items-center gap-4">
 
         {/* Left column */}
         <div className="flex-1 min-w-0">
@@ -189,9 +297,10 @@ export default function OutstandingHero({
             </button>
           </div>
 
-          {/* Big amount — premium fintech typography. The prefix is
-              half-height, the integer is the headline, the decimals
-              are a muted trailing weight on the same baseline. */}
+          {/* Big amount — premium fintech typography with live count-up.
+              The prefix is half-height, the integer is the headline,
+              the decimals are a muted trailing weight on the same
+              baseline. The integer climbs from 0 on mount. */}
           <div className="mt-2.5 flex items-baseline">
             {privacyOn ? (
               <span
@@ -212,7 +321,7 @@ export default function OutstandingHero({
                   className="text-3xl sm:text-[40px] font-black text-white leading-none tracking-tight"
                   style={{ fontVariantNumeric: 'tabular-nums', letterSpacing: '-0.025em' }}
                 >
-                  {amount.integer}
+                  {displayInt}
                 </span>
                 <span
                   className="text-lg sm:text-xl font-bold leading-none ml-0.5"
@@ -224,8 +333,20 @@ export default function OutstandingHero({
             )}
           </div>
 
+          {/* Contextual status line — what's happening, in one breath. */}
+          <motion.p
+            initial={{ opacity: 0, y: 4 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.5, duration: 0.4 }}
+            className="mt-2 inline-flex items-center gap-1.5 text-[11px] font-semibold"
+            style={{ color: 'rgba(255,255,255,0.85)' }}
+          >
+            <StatusIcon size={12} />
+            {statusLabel}
+          </motion.p>
+
           {/* Status pill + CTA */}
-          <div className="mt-3.5 flex items-center gap-2 flex-wrap">
+          <div className="mt-3 flex items-center gap-2 flex-wrap">
             <span
               className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-semibold"
               style={{
@@ -236,8 +357,8 @@ export default function OutstandingHero({
             >
               <span className="relative flex items-center justify-center w-1.5 h-1.5">
                 <span
-                  className="absolute w-2.5 h-2.5 rounded-full"
-                  style={{ background: '#fff', opacity: 0.35 }}
+                  className="absolute w-2.5 h-2.5 rounded-full animate-ping"
+                  style={{ background: '#fff', opacity: 0.45 }}
                 />
                 <span className="absolute w-1.5 h-1.5 rounded-full bg-white" />
               </span>
@@ -331,6 +452,36 @@ export default function OutstandingHero({
         </div>
       </div>
 
+      {/* ── Embossed footer row — member ID + brand mark, set very low
+            opacity to read as a "card surface" detail, not an info row.
+            Same finish you see on the bottom of real bank cards. */}
+      {(memberId || true) && (
+        <div
+          className="absolute bottom-2 left-5 right-5 flex items-end justify-between pointer-events-none select-none"
+          aria-hidden
+        >
+          <span
+            className="text-[9px] font-bold tracking-[0.32em] uppercase"
+            style={{
+              color: 'rgba(255,255,255,0.55)',
+              textShadow: '0 1px 0 rgba(0,0,0,0.18), 0 0 1px rgba(255,255,255,0.4)',
+              fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace',
+            }}
+          >
+            {memberId ? `MEMBER · ${memberId}` : 'PAYVEXO · MEMBER'}
+          </span>
+          <span
+            className="text-[9px] font-extrabold tracking-[0.32em] uppercase"
+            style={{
+              color: 'rgba(255,255,255,0.55)',
+              textShadow: '0 1px 0 rgba(0,0,0,0.18)',
+            }}
+          >
+            PVX
+          </span>
+        </div>
+      )}
+
       {/* ── Bottom hairline progress ribbon ──
           A thin two-tone bar at the very bottom of the card gives a
           second, more obvious read on "how much done". Reads as a
@@ -349,6 +500,32 @@ export default function OutstandingHero({
           />
         </div>
       )}
+
+      {/* ── Tiny celebratory burst when fully paid — three sparkle
+            chips fade in around the donut. Reads as "achievement",
+            not as decoration. */}
+      {isZero && (
+        <>
+          {[
+            { top: 18, right: 110, delay: 0.6, size: 10 },
+            { top: 60, right: 28,  delay: 0.8, size: 12 },
+            { top: 110, right: 90, delay: 1.0, size: 9 },
+          ].map((s, i) => (
+            <motion.span
+              key={i}
+              className="absolute pointer-events-none"
+              style={{ top: s.top, right: s.right, color: '#FFFFFF' }}
+              initial={{ scale: 0, opacity: 0, rotate: -20 }}
+              animate={{ scale: 1, opacity: 0.85, rotate: 0 }}
+              transition={{ delay: s.delay, duration: 0.5, type: 'spring', stiffness: 240, damping: 18 }}
+              aria-hidden
+            >
+              <Sparkles size={s.size} />
+            </motion.span>
+          ))}
+        </>
+      )}
+
     </motion.div>
   );
 }
