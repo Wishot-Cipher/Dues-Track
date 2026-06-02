@@ -33,7 +33,8 @@ import { PrivacyMask, PrivacyToggle } from '@/components/ui/PrivacyMask';
 import { NotificationCenter } from '@/components/NotificationCenter';
 import PushNotificationPrompt from '@/components/PushNotificationPrompt';
 import Footer from '@/components/Footer';
-import ExpenseTransparencyDashboard from '@/components/student/ExpenseTransparencyDashboard';
+// ExpenseTransparencyDashboard import removed — the transparency
+// widget was retired from the student dashboard.
 import AchievementSystem from '@/components/student/AchievementSystem';
 import SmartDeadlineReminders from '@/components/student/SmartDeadlineReminders';
 import DashboardSwitcher from '@/components/DashboardSwitcher';
@@ -1488,7 +1489,11 @@ background:linear-gradient(135deg,#FF6803,#FFAC5F);color:white;font-size:14px}
 
                 {/* Right Column */}
                 <div className="space-y-4 sm:space-y-6">
-                  {features.expenseTransparency && <ExpenseTransparencyDashboard />}
+                  {/* ExpenseTransparencyDashboard removed — the
+                      transparency surface didn't pull its weight
+                      in user testing. Data tables + the feature flag
+                      stay so it can be reintroduced as a designed
+                      public summary later. */}
                   {features.achievements && <AchievementSystem />}
                 </div>
               </div>

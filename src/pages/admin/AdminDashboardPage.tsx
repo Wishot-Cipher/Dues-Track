@@ -48,7 +48,8 @@ import {
 } from 'lucide-react';
 import Footer from '@/components/Footer';
 import StudentFeatureSettings from '@/components/admin/StudentFeatureSettings';
-import ExpenseVisibilitySettings from '@/components/admin/ExpenseVisibilitySettings';
+// ExpenseVisibilitySettings import removed — the transparency toggle
+// was retired with the student-facing transparency dashboard.
 import PushNotificationPrompt from '@/components/PushNotificationPrompt';
 // ExpenseList removed from dashboard; use dedicated Expenses page instead
 
@@ -157,6 +158,34 @@ export default function AdminDashboardPage() {
     if (activeRole?.adminId && activeRole.adminId !== classView.admin.id) return false;
     return true;
   }, [classView, activeRole?.adminId]);
+
+  // Synchronous "will this redirect?" check — same logic as the effect
+  // below, but runs in render so we can short-circuit the legacy view
+  // BEFORE it paints. Without this, a faculty exec deep-linking to
+  // /admin/dashboard sees the class-rep widgets flash for ~50ms before
+  // the useEffect kicks in and navigate()s to /admin/dept. That flash
+  // is what the user described as "the formal admin page first shows."
+  const willRedirectToTier = useMemo(() => {
+    if (!orgSlug || !user) return false;
+    if (activeRole?.kind === 'exec' && activeRole.scopeLevel === 'group') return false;
+    if (activeRole?.kind === 'exec' && activeRole.scopeLevel === 'org')   return false;
+    type AdminRowMin = {
+      id?: string; is_active?: boolean; verification_layer?: number;
+      scope_level?: string; group_id?: string | null;
+    };
+    const records = (user.admin_records ?? []) as AdminRowMin[];
+    const byId = activeRole?.adminId
+      ? records.find((r) => r.id === activeRole.adminId && r.scope_level === 'unit')
+      : null;
+    const unitRow = byId
+      ?? records.find((r) =>
+        r.is_active !== false
+        && (r.verification_layer ?? 0) >= 4
+        && r.scope_level === 'unit'
+        && Boolean(r.group_id),
+      );
+    return Boolean(unitRow?.group_id);
+  }, [orgSlug, user, activeRole?.adminId, activeRole?.scopeLevel, activeRole?.kind]);
 
   useEffect(() => {
     if (!orgSlug || !user) return;
@@ -488,6 +517,29 @@ export default function AdminDashboardPage() {
   // before classProbeDone flips true).
   if (classProbeDone && renderClassView && classView) {
     return <ClassExecDashboardView admin={classView.admin} klass={classView.klass} />;
+  }
+
+  // If we already know we're about to redirect to /admin/dept or
+  // /admin/faculty, don't paint the legacy class-rep widgets — they'll
+  // flash for a frame and then disappear, which reads as a broken
+  // navigation. Show a calm, theme-aware loader until the effect
+  // fires the navigate().
+  if (willRedirectToTier) {
+    return (
+      <div
+        className="min-h-screen flex items-center justify-center"
+        style={{ background: tk.bg, color: tk.textSec }}
+      >
+        <div className="flex items-center gap-2 text-sm">
+          <span
+            className="w-4 h-4 rounded-full border-2 animate-spin"
+            style={{ borderColor: `${tk.primary}55`, borderTopColor: tk.primary }}
+            aria-hidden
+          />
+          Loading your dashboard…
+        </div>
+      </div>
+    );
   }
 
   return (
@@ -1286,9 +1338,15 @@ export default function AdminDashboardPage() {
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.85 }}
           >
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 gap-4">
               <StudentFeatureSettings />
-              <ExpenseVisibilitySettings />
+              {/* ExpenseVisibilitySettings (the "transparency" toggle)
+                  intentionally removed — the user's call. The widget
+                  paired with a student-facing ExpenseTransparencyDashboard
+                  that we also dropped from the member dashboard. The
+                  expenses table + visibility column stay in the DB so
+                  the feature can be reintroduced later as a designed
+                  public-summary instead of a half-toggle. */}
             </div>
           </motion.div>
         )}
