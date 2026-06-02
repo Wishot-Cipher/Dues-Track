@@ -302,10 +302,13 @@ export default function OrgLayout() {
     // Public donations are org-wide (a class doesn't have its own
     // donation page).
     { path: '/admin/contributions', label: 'Contributions', icon: <Heart size={20} />, section: 'admin', hideOnMobile: true, permission: 'can_approve_payments', minScope: 'org', adminGroup: 'money' },
-    // Payout destination — one Paystack sub-account per org, set by
-    // the org owner (or a unit exec the owner has delegated to).
-    // Class reps don't see it.
-    { path: '/admin/payout', label: 'Payout Account', icon: <Banknote size={20} />, section: 'admin', hideOnMobile: true, permission: 'can_manage_settings', minScope: 'unit', adminGroup: 'org' },
+    // Payout destination — per-tier (mig 092). Each exec — class rep,
+    // dept exec, faculty exec, org owner — owns their own Paystack
+    // subaccount. Strict ownership, no cascade. So the nav entry is
+    // visible to every admin tier; the page itself reads ?groupId
+    // (or the caller's active scope) to know which tier's payout
+    // it's configuring.
+    { path: '/admin/payout', label: 'Payout Account', icon: <Banknote size={20} />, section: 'admin', hideOnMobile: true, permission: 'can_manage_settings', adminGroup: 'org' },
     // Platform subscription — the whole tenant's plan: org-scope owner only.
     { path: '/admin/billing', label: 'Billing', icon: <Wallet size={20} />, section: 'admin', hideOnMobile: true, permission: 'can_manage_settings', minScope: 'org', adminGroup: 'org' },
   ] : [];
@@ -991,7 +994,7 @@ export default function OrgLayout() {
                       <div key={g.id} className="mb-3 last:mb-0">
                         <p
                           className="px-1.5 pt-1 pb-1.5 text-[10px] font-bold uppercase tracking-[0.16em]"
-                          style={{ color: colors.textTertiary }}
+                          style={{ color: tk.textTer }}
                         >
                           {g.label}
                         </p>
@@ -1124,26 +1127,37 @@ function MoreSheetTile({
   isActive: boolean;
   onClose: () => void;
 }) {
+  // Theme-aware: surfaces + label colour resolve from useThemeTokens
+  // so the More sheet reads correctly in light + dark. The brand
+  // tints (primarySoft / primaryRing) only show on the active tile,
+  // matching the desktop admin dropdown.
+  const tk = useThemeTokens();
   return (
     <Link
       to={`${basePath}${item.path}`}
       onClick={onClose}
       className="flex items-center gap-3 px-3.5 py-3 rounded-2xl transition-all"
       style={{
-        background: isActive ? `${colors.primary}18` : 'rgba(255,255,255,0.03)',
-        border: `1px solid ${isActive ? `${colors.primary}30` : colors.borderLight}`,
+        background: isActive ? tk.primarySoft : tk.overlay,
+        border: `1px solid ${isActive ? tk.primaryRing : tk.cardBorder}`,
       }}
     >
       <span
         className="w-8 h-8 rounded-lg flex items-center justify-center shrink-0"
         style={{
-          background: isActive ? `${colors.primary}22` : 'rgba(255,255,255,0.04)',
-          color: isActive ? colors.primary : colors.textSecondary,
+          background: isActive ? tk.primarySoft : tk.card,
+          color: isActive ? tk.primary : tk.textSec,
+          border: `1px solid ${isActive ? tk.primaryRing : tk.cardBorder}`,
         }}
       >
         {item.icon}
       </span>
-      <span className="text-xs font-semibold truncate" style={{ color: '#FFFFFF' }}>{item.label}</span>
+      <span
+        className="text-xs font-semibold truncate"
+        style={{ color: isActive ? tk.text : tk.text }}
+      >
+        {item.label}
+      </span>
     </Link>
   );
 }
