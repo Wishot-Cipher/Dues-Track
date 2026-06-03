@@ -113,29 +113,11 @@ const ICONS = [
 const LEVEL_OPTIONS = ['100', '200', '300', '400', '500', '600', '700']
 const SECTION_OPTIONS = ['A', 'B', 'C', 'D', 'E', 'F']
 
-const normalizePaymentTypeToForm = (paymentType: PaymentType): EditPaymentTypeForm => ({
-  id: paymentType.id,
-  title: paymentType.title || '',
-  description: paymentType.description || '',
-  category: paymentType.category || 'semester_dues',
-  amount: String(paymentType.amount ?? ''),
-  minimum_partial_amount: String(paymentType.minimum_partial_amount ?? ''),
-  allow_partial: paymentType.allow_partial ?? false,
-  is_mandatory: paymentType.is_mandatory ?? false,
-  deadline: paymentType.deadline || '',
-  target_levels: paymentType.target_levels || [],
-  target_sections: paymentType.target_sections || [],
-  icon: paymentType.icon || '🎓',
-  color: paymentType.color || colors.primary,
-  bank_name: paymentType.bank_name || '',
-  account_name: paymentType.account_name || '',
-  account_number: paymentType.account_number || '',
-  accepts_paystack: paymentType.accepts_paystack ?? true,
-  accepts_manual: paymentType.accepts_manual ?? true,
-  late_fee_per_day: String(paymentType.late_fee_per_day ?? ''),
-  is_active: paymentType.is_active ?? true,
-  is_public: paymentType.is_public ?? false,
-})
+// normalizePaymentTypeToForm + EditPaymentTypeForm were used by the
+// in-page edit modal we replaced with the /admin/dues/:id/edit route
+// (CreateDuePage in edit mode). The modal and its supporting state
+// are still referenced by some dead branches in this file pending
+// a full cleanup; the helper itself is no longer called.
 
 export default function ManageDuesPage() {
   const { go: navigate, orgSlug } = useAppNav();

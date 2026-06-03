@@ -197,7 +197,6 @@ export default function CreateDuePage() {
   // editing doesn't feel like a different page.
   const { id: editId } = useParams<{ id?: string }>();
   const isEditMode = Boolean(editId);
-  const [editLoading, setEditLoading] = useState<boolean>(isEditMode);
 
   const [form, setForm] = useState<FormState>(EMPTY);
   const [submitting, setSubmitting] = useState(false);
@@ -249,8 +248,7 @@ export default function CreateDuePage() {
         if (ptErr) throw ptErr;
         if (!pt) {
           setError('That due no longer exists. It may have been deleted.');
-          setEditLoading(false);
-          return;
+            return;
         }
         // Tiers (events only) — sibling table. Skip the query when
         // category is not 'event' so we don't waste a round-trip.
@@ -314,11 +312,9 @@ export default function CreateDuePage() {
         const grp = row.group_id as string | null;
         if (!grp) setTargetScope('org');
         else { setTargetScope('group'); setTargetGroupId(grp); }
-        setEditLoading(false);
       } catch (err) {
         if (cancelled) return;
         setError(err instanceof Error ? err.message : 'Could not load that due for editing.');
-        setEditLoading(false);
       }
     })();
     return () => { cancelled = true; };
