@@ -14,6 +14,7 @@
  */
 
 import { useEffect, useState, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import { Outlet, useParams, useNavigate, useLocation, Link } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
@@ -123,6 +124,18 @@ export default function OrgLayout() {
   const [showLogoutModal, setShowLogoutModal] = useState(false);
   const [showMoreSheet, setShowMoreSheet] = useState(false);
   const profileRef = useRef<HTMLDivElement>(null);
+  // The floating-panel itself is rendered via portal at document.body,
+  // so a click inside the panel reads as "outside profileRef" without
+  // this second ref. Was the root cause of "I tap an item and the
+  // menu just closes" — mousedown fired first, the panel disappeared
+  // before click reached the button.
+  const panelRef = useRef<HTMLDivElement>(null);
+  // Computed position for the panel — derived from the chip's
+  // bounding rect so the panel visually grows from the chip itself
+  // (origin-aware). Recomputed on scroll + resize while open.
+  const [panelPos, setPanelPos] = useState<
+    { top: number; left: number; width: number; originX: number; originY: number } | null
+  >(null);
   const [fetchedLevel, setFetchedLevel] = useState<string | null>(null);
 
   // Global identity — the orgs this person can switch between (one login).
@@ -178,16 +191,60 @@ export default function OrgLayout() {
     }
   }, [loading, isAuthenticated, currentSlug, orgSlug, navigate]);
 
-  // Close profile menu on outside click
+  // Close profile menu on outside click. Has to check BOTH the chip
+  // (profileRef) and the portal'd panel (panelRef) because the
+  // panel renders at document.body — DOM-wise it's not inside the
+  // profile cluster. Also only fires while the menu is open so we
+  // don't burn cycles on every page click.
   useEffect(() => {
+    if (!showProfileMenu) return;
     const handler = (e: MouseEvent) => {
-      if (profileRef.current && !profileRef.current.contains(e.target as Node)) {
-        setShowProfileMenu(false);
-      }
+      const t = e.target as Node;
+      if (profileRef.current?.contains(t)) return;
+      if (panelRef.current?.contains(t)) return;
+      setShowProfileMenu(false);
     };
-    document.addEventListener('mousedown', handler);
-    return () => document.removeEventListener('mousedown', handler);
-  }, []);
+    // pointerdown so this triggers before click and works for touch.
+    document.addEventListener('pointerdown', handler);
+    return () => document.removeEventListener('pointerdown', handler);
+  }, [showProfileMenu]);
+
+  // Compute the floating-panel position from the chip's bounding
+  // rect every time the menu opens (and on subsequent scroll /
+  // resize while it's open). The panel grows from the chip's
+  // bottom-right corner — origin-aware morph instead of a sheet
+  // appearing on the other side of the screen.
+  useEffect(() => {
+    if (!showProfileMenu) { setPanelPos(null); return; }
+    const compute = () => {
+      const trigger = profileRef.current;
+      if (!trigger) return;
+      const rect = trigger.getBoundingClientRect();
+      // Width: 340px wide enough for the bento grid on phones,
+      // clamped to viewport so 320px screens still get 16px gutters.
+      const width = Math.min(340, window.innerWidth - 24);
+      // Anchor the panel's RIGHT edge to the chip's right edge,
+      // then clamp into viewport so the panel never crosses left=8.
+      let left = rect.right - width;
+      left = Math.max(12, Math.min(left, window.innerWidth - width - 12));
+      const top = rect.bottom + 10;
+      // Origin: relative to panel, the chip's centre. Animation
+      // appears to bloom from the chip itself rather than from the
+      // panel's centre.
+      const originX = rect.left + rect.width / 2 - left;
+      const originY = -8;
+      setPanelPos({ top, left, width, originX, originY });
+    };
+    compute();
+    const onScroll = () => compute();
+    const onResize = () => compute();
+    window.addEventListener('scroll', onScroll, true);
+    window.addEventListener('resize', onResize);
+    return () => {
+      window.removeEventListener('scroll', onScroll, true);
+      window.removeEventListener('resize', onResize);
+    };
+  }, [showProfileMenu]);
 
   // Close admin submenu on route change
   useEffect(() => {
@@ -601,17 +658,31 @@ export default function OrgLayout() {
             </nav>
           </div>
 
-          {/* ── Right: Actions ── */}
-          <div className="flex items-center gap-1 sm:gap-2">
-            {/* Notification bell with full panel */}
-            {/* <div className="relative">
+          {/* ── Right: Actions ──
+              Order = NOTIFICATION → PROFILE (left → right). The
+              profile chip sits closest to the corner — the standard
+              convention in fintech apps (Wise, Revolut, Cash App)
+              that gives "you" visual priority while keeping
+              auxiliary controls one step to the left. The gap was
+              `gap-1 sm:gap-2`; bumped to `gap-2 sm:gap-3` so the
+              two controls don't feel cramped against the corner. */}
+          <div className="flex items-center gap-2 sm:gap-3">
+            {/* Notification bell — left of profile */}
+            <div className="relative">
               <NotificationCenter />
-            </div> */}
+            </div>
 
-            {/* Profile Dropdown — theme-aware */}
-            <div ref={profileRef} className="relative" style={{ paddingLeft: '0.9rem' }}>
+            {/* Profile Floating Pavilion trigger — theme-aware */}
+            <div ref={profileRef} className="relative">
               <button
-                onClick={() => setShowProfileMenu(prev => !prev)}
+                onClick={() => {
+                  // Force the admin nav submenu closed so the two
+                  // dropdowns can't be open simultaneously — was the
+                  // cause of "the admin dropdown opens by itself"
+                  // when tapping the profile chip in some cases.
+                  setShowAdminSubmenu(false);
+                  setShowProfileMenu(prev => !prev);
+                }}
                 className="flex items-center gap-2.5 py-1 rounded-full transition-all pl-1.5 pr-1.5 sm:pr-2.5"
                 style={{
                   background: showProfileMenu
@@ -686,363 +757,241 @@ export default function OrgLayout() {
                   />
                 </motion.div>
               </button>
-
-              {/* Desktop: positioned dropdown anchored to the chip.
-                  Mobile gets the bottom-sheet variant below. The
-                  `hidden sm:block` wrapper keeps this off the small
-                  screens where the dropdown couldn't fit cleanly. */}
-              <AnimatePresence>
-                {showProfileMenu && (
-                  <motion.div
-                    initial={{ opacity: 0, y: -8, scale: 0.96 }}
-                    animate={{ opacity: 1, y: 0, scale: 1 }}
-                    exit={{ opacity: 0, y: -8, scale: 0.96 }}
-                    transition={{ duration: 0.15, ease: 'easeOut' }}
-                    className="hidden sm:block absolute right-0 top-full mt-2 rounded-2xl overflow-hidden z-50"
-                    style={{
-                      width: 'min(17rem, calc(100vw - 1.5rem))',
-                      maxHeight: 'calc(100vh - 6rem)',
-                      overflowY: 'auto',
-                      background: isLight ? '#FFFFFF' : 'rgba(15, 7, 3, 0.92)',
-                      backdropFilter: 'saturate(180%) blur(22px)',
-                      WebkitBackdropFilter: 'saturate(180%) blur(22px)',
-                      border: `1px solid ${isLight ? 'rgba(15, 7, 3, 0.06)' : 'rgba(255,255,255,0.08)'}`,
-                      boxShadow: isLight
-                        ? '0 20px 50px -16px rgba(15, 7, 3, 0.18), 0 4px 12px -2px rgba(15, 7, 3, 0.06)'
-                        : '0 20px 60px rgba(0,0,0,0.6), 0 4px 16px rgba(0,0,0,0.3)',
-                    }}
-                  >
-                    {/* Profile header */}
-                    <div
-                      className="p-4"
-                      style={{
-                        borderBottom: `1px solid ${isLight ? 'rgba(15, 7, 3, 0.06)' : colors.borderLight}`,
-                      }}
-                    >
-                      <div className="flex items-center gap-3">
-                        <div
-                          className="w-11 h-11 rounded-full flex items-center justify-center text-sm font-bold shrink-0"
-                          style={{
-                            background: `linear-gradient(135deg, ${colors.primary}, ${colors.primary}aa)`,
-                            color: '#fff',
-                            boxShadow: `0 8px 18px -6px ${colors.primary}66`,
-                          }}
-                        >
-                          {userInitial}
-                        </div>
-                        <div className="min-w-0">
-                          <p
-                            className="text-sm font-bold truncate"
-                            style={{ color: isLight ? '#0F0703' : '#FFFFFF' }}
-                          >
-                            {user.full_name}
-                          </p>
-                          <p
-                            className="text-xs truncate"
-                            style={{ color: isLight ? 'rgba(15,7,3,0.55)' : colors.textTertiary }}
-                          >
-                            {user.member_id}
-                          </p>
-                          {(user.level || groupPrimary || fetchedLevel) && (
-                            <p className="text-[10px] font-semibold truncate mt-0.5" style={{ color: colors.primary }}>
-                              {user.level || groupPrimary || fetchedLevel}
-                            </p>
-                          )}
-                          {showAdmin && (
-                            <span
-                              className="inline-flex items-center gap-1 mt-1.5 px-2 py-0.5 rounded-full text-[10px] font-bold tracking-wide uppercase"
-                              style={{
-                                background: `${colors.primary}18`,
-                                color: colors.primary,
-                                border: `1px solid ${colors.primary}30`,
-                              }}
-                            >
-                              <Shield size={9} />
-                              Admin
-                            </span>
-                          )}
-                        </div>
-                      </div>
-                    </div>
-
-                    {/* Menu items */}
-                    <div className="py-1.5 px-1.5">
-                      <ProfileMenuItem
-                        to={`${basePath}/profile`}
-                        icon={<Building2 size={16} />}
-                        label="My Profile"
-                        onClose={() => setShowProfileMenu(false)}
-                        isLight={isLight}
-                      />
-                      <ProfileMenuItem
-                        to={`${basePath}/settings`}
-                        icon={<Settings size={16} />}
-                        label="Settings"
-                        onClose={() => setShowProfileMenu(false)}
-                        isLight={isLight}
-                      />
-                      <ProfileMenuItem
-                        to={`${basePath}/change-password`}
-                        icon={<UserCog size={16} />}
-                        label="Change Password"
-                        onClose={() => setShowProfileMenu(false)}
-                        isLight={isLight}
-                      />
-                    </div>
-
-                    {/* Your organizations (global identity) — only when >1 */}
-                    {myOrgs.length > 1 && (
-                      <div
-                        className="px-1.5 pb-1.5 pt-1"
-                        style={{ borderTop: `1px solid ${isLight ? 'rgba(15, 7, 3, 0.06)' : colors.borderLight}` }}
-                      >
-                        <p className="px-3 pt-1.5 pb-1 text-[10px] font-bold uppercase tracking-wider" style={{ color: colors.textTertiary }}>
-                          Your organizations
-                        </p>
-                        <div className="max-h-56 overflow-y-auto">
-                          {myOrgs.map((m) => (
-                            <button
-                              key={m.member_id}
-                              onClick={() => handleSwitchOrg(m)}
-                              disabled={switchingId !== null}
-                              className="w-full flex items-center gap-3 px-3 py-2 rounded-xl text-left transition-all hover:bg-white/5 disabled:opacity-60"
-                              style={{ background: m.is_current ? `${colors.primary}12` : 'transparent' }}
-                            >
-                              <div
-                                className="w-8 h-8 rounded-lg flex items-center justify-center shrink-0 overflow-hidden text-xs font-bold"
-                                style={{ background: `${colors.primary}1a`, color: colors.primary }}
-                              >
-                                {m.logo_url ? <img src={m.logo_url} alt="" className="w-full h-full object-cover" /> : (m.org_name?.[0] || '?')}
-                              </div>
-                              <div className="min-w-0 flex-1">
-                                <p className="text-sm font-semibold truncate" style={{ color: isLight ? '#0F0703' : '#FFFFFF' }}>
-                                  {m.org_name}
-                                </p>
-                                <p className="text-[11px] truncate" style={{ color: colors.textTertiary }}>
-                                  {m.role_label || (m.is_admin ? 'Admin' : 'Member')}{m.group_name ? ` · ${m.group_name}` : ''}
-                                </p>
-                              </div>
-                              {switchingId === m.member_id
-                                ? <LoadingSpinner size="sm" />
-                                : m.is_current
-                                  ? <CheckCircle2 size={16} style={{ color: colors.primary }} />
-                                  : null}
-                            </button>
-                          ))}
-                        </div>
-                      </div>
-                    )}
-
-                    {/* Logout */}
-                    <div
-                      className="px-1.5 pb-1.5"
-                      style={{
-                        borderTop: `1px solid ${isLight ? 'rgba(15, 7, 3, 0.06)' : colors.borderLight}`,
-                      }}
-                    >
-                      <button
-                        onClick={() => { setShowProfileMenu(false); setShowLogoutModal(true); }}
-                        className="w-full flex items-center gap-3 px-3.5 py-2.5 mt-1 rounded-xl text-sm font-medium transition-all hover:bg-red-500/10"
-                        style={{ color: '#ef4444' }}
-                      >
-                        <LogOut size={16} />
-                        Sign Out
-                      </button>
-                    </div>
-                  </motion.div>
-                )}
-              </AnimatePresence>
-
-              {/* ── Mobile: bottom sheet ──────────────────────────
-                  On phones the right-anchored dropdown above is
-                  hidden (`hidden sm:block`). Instead we slide a
-                  full-width sheet up from the bottom — the standard
-                  mobile pattern. Backdrop + drag handle + the same
-                  content. Gets out of the way of the keyboard and
-                  never clips off the right edge. */}
-              <AnimatePresence>
-                {showProfileMenu && (
-                  <>
-                    <motion.div
-                      key="profile-sheet-backdrop"
-                      initial={{ opacity: 0 }}
-                      animate={{ opacity: 1 }}
-                      exit={{ opacity: 0 }}
-                      transition={{ duration: 0.2 }}
-                      className="sm:hidden fixed inset-0 z-[80]"
-                      style={{ background: 'rgba(0,0,0,0.5)', backdropFilter: 'blur(6px)' }}
-                      onClick={() => setShowProfileMenu(false)}
-                    />
-                    <motion.div
-                      key="profile-sheet"
-                      initial={{ y: '100%' }}
-                      animate={{ y: 0 }}
-                      exit={{ y: '100%' }}
-                      transition={{ type: 'spring', stiffness: 340, damping: 32 }}
-                      className="sm:hidden fixed left-0 right-0 bottom-0 z-[90] rounded-t-3xl overflow-hidden"
-                      style={{
-                        background: isLight ? '#FFFFFF' : 'rgba(15, 7, 3, 0.98)',
-                        border: `1px solid ${isLight ? 'rgba(15, 7, 3, 0.08)' : 'rgba(255,255,255,0.08)'}`,
-                        borderBottom: 'none',
-                        boxShadow: '0 -12px 40px rgba(0,0,0,0.35)',
-                        maxHeight: 'calc(100vh - 4rem)',
-                        display: 'flex',
-                        flexDirection: 'column',
-                        paddingBottom: 'env(safe-area-inset-bottom, 0px)',
-                      }}
-                    >
-                      {/* Drag handle */}
-                      <div className="pt-2 pb-1 flex justify-center shrink-0">
-                        <span
-                          className="block w-10 h-1 rounded-full"
-                          style={{ background: isLight ? 'rgba(15,7,3,0.18)' : 'rgba(255,255,255,0.22)' }}
-                        />
-                      </div>
-
-                      {/* Header — bigger avatar than the desktop pop,
-                          mobile users have the room and it reads more
-                          like a profile screen. */}
-                      <div
-                        className="px-5 pb-4 shrink-0"
-                        style={{ borderBottom: `1px solid ${isLight ? 'rgba(15, 7, 3, 0.06)' : 'rgba(255,255,255,0.06)'}` }}
-                      >
-                        <div className="flex items-center gap-3">
-                          <div
-                            className="w-12 h-12 rounded-2xl flex items-center justify-center text-base font-extrabold shrink-0"
-                            style={{
-                              background: `linear-gradient(135deg, ${colors.primary}, ${colors.primary}aa)`,
-                              color: '#fff',
-                              boxShadow: `0 8px 20px -6px ${colors.primary}66`,
-                            }}
-                          >
-                            {userInitial}
-                          </div>
-                          <div className="min-w-0 flex-1">
-                            <p className="text-base font-bold truncate" style={{ color: isLight ? '#0F0703' : '#FFFFFF' }}>
-                              {user.full_name}
-                            </p>
-                            <p className="text-xs truncate" style={{ color: isLight ? 'rgba(15,7,3,0.55)' : colors.textTertiary }}>
-                              {user.member_id}
-                            </p>
-                            {showAdmin && (
-                              <span
-                                className="inline-flex items-center gap-1 mt-1.5 px-2 py-0.5 rounded-full text-[10px] font-bold tracking-wide uppercase"
-                                style={{
-                                  background: `${colors.primary}18`,
-                                  color: colors.primary,
-                                  border: `1px solid ${colors.primary}30`,
-                                }}
-                              >
-                                <Shield size={9} />
-                                Admin
-                              </span>
-                            )}
-                          </div>
-                        </div>
-                      </div>
-
-                      {/* Scrollable body. Without `flex-1 + overflow-y-auto`
-                          a long org list pushed the Sign Out button past
-                          the safe-area and it was unreachable on phones.
-                          Now the body scrolls inside the sheet. */}
-                      <div className="flex-1 overflow-y-auto px-3 py-2">
-                        <ProfileMenuItem
-                          to={`${basePath}/profile`}
-                          icon={<Building2 size={16} />}
-                          label="My Profile"
-                          onClose={() => setShowProfileMenu(false)}
-                          isLight={isLight}
-                        />
-                        <ProfileMenuItem
-                          to={`${basePath}/settings`}
-                          icon={<Settings size={16} />}
-                          label="Settings"
-                          onClose={() => setShowProfileMenu(false)}
-                          isLight={isLight}
-                        />
-                        <ProfileMenuItem
-                          to={`${basePath}/change-password`}
-                          icon={<UserCog size={16} />}
-                          label="Change Password"
-                          onClose={() => setShowProfileMenu(false)}
-                          isLight={isLight}
-                        />
-
-                        {/* Your organizations (global identity) — only when >1 */}
-                        {myOrgs.length > 1 && (
-                          <div
-                            className="mt-2 pt-2"
-                            style={{ borderTop: `1px solid ${isLight ? 'rgba(15, 7, 3, 0.06)' : 'rgba(255,255,255,0.06)'}` }}
-                          >
-                            <p className="px-3 pt-1 pb-1 text-[10px] font-bold uppercase tracking-wider" style={{ color: colors.textTertiary }}>
-                              Your organizations
-                            </p>
-                            {myOrgs.map((m) => (
-                              <button
-                                key={m.member_id}
-                                onClick={() => handleSwitchOrg(m)}
-                                disabled={switchingId !== null}
-                                className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-left transition-all disabled:opacity-60"
-                                style={{ background: m.is_current ? `${colors.primary}12` : 'transparent' }}
-                              >
-                                <div
-                                  className="w-9 h-9 rounded-lg flex items-center justify-center shrink-0 overflow-hidden text-xs font-bold"
-                                  style={{ background: `${colors.primary}1a`, color: colors.primary }}
-                                >
-                                  {m.logo_url ? <img src={m.logo_url} alt="" className="w-full h-full object-cover" /> : (m.org_name?.[0] || '?')}
-                                </div>
-                                <div className="min-w-0 flex-1">
-                                  <p className="text-sm font-semibold truncate" style={{ color: isLight ? '#0F0703' : '#FFFFFF' }}>
-                                    {m.org_name}
-                                  </p>
-                                  <p className="text-[11px] truncate" style={{ color: colors.textTertiary }}>
-                                    {m.role_label || (m.is_admin ? 'Admin' : 'Member')}{m.group_name ? ` · ${m.group_name}` : ''}
-                                  </p>
-                                </div>
-                                {switchingId === m.member_id
-                                  ? <LoadingSpinner size="sm" />
-                                  : m.is_current
-                                    ? <CheckCircle2 size={16} style={{ color: colors.primary }} />
-                                    : null}
-                              </button>
-                            ))}
-                          </div>
-                        )}
-                      </div>
-
-                      {/* Sign Out — anchored at the bottom of the sheet
-                          (outside the scrollable body) so it stays
-                          reachable even when the org list is long. */}
-                      <div
-                        className="px-3 py-3 shrink-0"
-                        style={{ borderTop: `1px solid ${isLight ? 'rgba(15, 7, 3, 0.06)' : 'rgba(255,255,255,0.06)'}` }}
-                      >
-                        <button
-                          type="button"
-                          onClick={() => { setShowProfileMenu(false); setShowLogoutModal(true); }}
-                          className="w-full flex items-center justify-center gap-2 px-4 py-3 rounded-xl text-sm font-bold transition-all active:scale-[0.98]"
-                          style={{
-                            background: `${tk.danger}12`,
-                            color: tk.danger,
-                            border: `1px solid ${tk.danger}38`,
-                          }}
-                        >
-                          <LogOut size={16} />
-                          Sign out
-                        </button>
-                      </div>
-                    </motion.div>
-                  </>
-                )}
-              </AnimatePresence>
-            </div>
-             <div className="relative">
-              <NotificationCenter />
             </div>
           </div>
         </div>
       </header>
-  
+
+      {/* ═══════════ PROFILE FLOATING PAVILION ═══════════
+          One panel. Same design on every viewport. Rendered into
+          document.body via createPortal so no overflow-hidden
+          ancestor can clip it. Position is computed from the
+          chip's bounding rect every time the menu opens, and the
+          transform origin is set to the chip's centre — so the
+          panel visually grows OUT of the chip you tapped instead
+          of appearing on the other side of the screen.
+
+          The hero is a soft brand-blob composition; the action
+          row is bento-grid tiles (Profile, Settings, Password);
+          your other orgs (when there are >1) sit below as a
+          quiet section; sign-out is a danger chip at the bottom.
+          Click any item → the menu closes. Click the backdrop
+          → the menu closes. No flash. */}
+      {typeof document !== 'undefined' && createPortal(
+        <AnimatePresence>
+          {showProfileMenu && panelPos && (
+            <>
+              {/* Backdrop — subtle dim + blur. Pointer-events
+                  catch closes the panel. z just below the panel. */}
+              <motion.div
+                key="pp-backdrop"
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                transition={{ duration: 0.18 }}
+                className="fixed inset-0 z-[110]"
+                style={{
+                  background: isLight ? 'rgba(15,7,3,0.18)' : 'rgba(0,0,0,0.42)',
+                  backdropFilter: 'blur(6px)',
+                  WebkitBackdropFilter: 'blur(6px)',
+                }}
+                onClick={() => setShowProfileMenu(false)}
+              />
+
+              {/* Panel itself */}
+              <motion.div
+                key="pp-panel"
+                ref={panelRef}
+                initial={{ opacity: 0, scale: 0.86, y: -6 }}
+                animate={{ opacity: 1, scale: 1, y: 0 }}
+                exit={{ opacity: 0, scale: 0.92, y: -4 }}
+                transition={{ type: 'spring', stiffness: 420, damping: 30 }}
+                className="fixed z-[120] rounded-3xl overflow-hidden"
+                style={{
+                  top: panelPos.top,
+                  left: panelPos.left,
+                  width: panelPos.width,
+                  maxHeight: 'calc(100vh - 80px)',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  transformOrigin: `${panelPos.originX}px ${panelPos.originY}px`,
+                  background: isLight ? '#FFFFFF' : 'rgba(20, 12, 8, 0.98)',
+                  border: `1px solid ${isLight ? 'rgba(15,7,3,0.08)' : 'rgba(255,255,255,0.06)'}`,
+                  boxShadow: isLight
+                    ? '0 24px 60px -18px rgba(15,7,3,0.22), 0 6px 18px -6px rgba(15,7,3,0.10)'
+                    : '0 30px 80px rgba(0,0,0,0.6), 0 6px 20px rgba(255,104,3,0.10)',
+                }}
+              >
+                {/* ── HERO ──────────────────────────────────
+                    Brand-blob backdrop + large avatar + identity.
+                    The blob is a soft radial spilling from the
+                    top-right; instantly reads as Payvexo. */}
+                <div
+                  className="relative px-5 pt-5 pb-4 shrink-0"
+                  style={{
+                    background: isLight
+                      ? `linear-gradient(135deg, ${colors.primary}10, transparent 70%)`
+                      : `linear-gradient(135deg, ${colors.primary}22, transparent 70%)`,
+                  }}
+                >
+                  <span
+                    aria-hidden
+                    className="pointer-events-none absolute -top-8 -right-10 w-40 h-40 rounded-full"
+                    style={{
+                      background: `${colors.primary}${isLight ? '30' : '38'}`,
+                      filter: 'blur(50px)',
+                    }}
+                  />
+                  <div className="relative flex items-start gap-3.5">
+                    {/* Avatar — 56px brand-gradient with the
+                        member's initial. Inset highlight + soft
+                        outer ring gives it depth without going
+                        skeuomorphic. */}
+                    <div
+                      className="w-14 h-14 rounded-2xl flex items-center justify-center text-lg font-extrabold shrink-0"
+                      style={{
+                        background: `linear-gradient(135deg, ${colors.primary} 0%, ${colors.primary}cc 100%)`,
+                        color: '#FFFFFF',
+                        boxShadow: `0 10px 24px -8px ${colors.primary}66, 0 0 0 2px ${isLight ? 'rgba(255,255,255,0.65)' : 'rgba(255,255,255,0.06)'}, inset 0 1px 0 rgba(255,255,255,0.30)`,
+                      }}
+                    >
+                      {userInitial}
+                    </div>
+
+                    <div className="flex-1 min-w-0">
+                      <p className="text-[15px] font-extrabold leading-tight truncate" style={{ color: isLight ? '#0F0703' : '#FFFFFF' }}>
+                        {user.full_name}
+                      </p>
+                      <p className="text-[11px] font-mono leading-snug mt-0.5 truncate" style={{ color: isLight ? 'rgba(15,7,3,0.55)' : 'rgba(255,255,255,0.55)' }}>
+                        {user.member_id}
+                      </p>
+                      <div className="flex flex-wrap items-center gap-1.5 mt-2">
+                        {showAdmin && (
+                          <span
+                            className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[9.5px] font-bold tracking-wider uppercase"
+                            style={{
+                              background: `${colors.primary}18`,
+                              color: colors.primary,
+                              border: `1px solid ${colors.primary}30`,
+                            }}
+                          >
+                            <Shield size={9} />
+                            {activeRole?.label || 'Admin'}
+                          </span>
+                        )}
+                        {(user.level || groupPrimary || fetchedLevel) && (
+                          <span
+                            className="inline-flex items-center px-1.5 py-0.5 rounded-full text-[9.5px] font-bold tracking-wider uppercase"
+                            style={{
+                              background: isLight ? 'rgba(15,7,3,0.05)' : 'rgba(255,255,255,0.06)',
+                              color: isLight ? 'rgba(15,7,3,0.65)' : 'rgba(255,255,255,0.7)',
+                            }}
+                          >
+                            L{user.level || groupPrimary || fetchedLevel}
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* ── ACTION TILES ─────────────────────────
+                    3-up bento grid. Each tile = icon chip + label.
+                    Big tap targets, distinctive vs a list. */}
+                <div className="px-3 pt-3 grid grid-cols-3 gap-2 shrink-0">
+                  <PavilionTile
+                    to={`${basePath}/profile`}
+                    icon={<Building2 size={16} />}
+                    label="Profile"
+                    onClose={() => setShowProfileMenu(false)}
+                    isLight={isLight}
+                  />
+                  <PavilionTile
+                    to={`${basePath}/settings`}
+                    icon={<Settings size={16} />}
+                    label="Settings"
+                    onClose={() => setShowProfileMenu(false)}
+                    isLight={isLight}
+                  />
+                  <PavilionTile
+                    to={`${basePath}/change-password`}
+                    icon={<UserCog size={16} />}
+                    label="Password"
+                    onClose={() => setShowProfileMenu(false)}
+                    isLight={isLight}
+                  />
+                </div>
+
+                {/* ── OTHER ORGS (global identity) ─────────
+                    Only shows when the founder is in >1 org.
+                    Horizontal scroll cards so a tall account
+                    doesn't bloat the panel. */}
+                {myOrgs.length > 1 && (
+                  <div className="px-4 pt-4 shrink-0">
+                    <p className="text-[10px] uppercase tracking-[0.18em] font-bold mb-1.5" style={{ color: isLight ? 'rgba(15,7,3,0.50)' : 'rgba(255,255,255,0.50)' }}>
+                      Switch organisation
+                    </p>
+                    <div className="flex-1 min-h-0 overflow-y-auto -mx-1 px-1 max-h-44">
+                      {myOrgs.map((m) => (
+                        <button
+                          key={m.member_id}
+                          type="button"
+                          onClick={() => handleSwitchOrg(m)}
+                          disabled={switchingId !== null}
+                          className="w-full flex items-center gap-2.5 px-2 py-2 rounded-xl text-left transition-all disabled:opacity-60"
+                          style={{ background: m.is_current ? `${colors.primary}12` : 'transparent' }}
+                        >
+                          <div
+                            className="w-8 h-8 rounded-lg flex items-center justify-center shrink-0 overflow-hidden text-xs font-bold"
+                            style={{ background: `${colors.primary}1a`, color: colors.primary }}
+                          >
+                            {m.logo_url ? <img src={m.logo_url} alt="" className="w-full h-full object-cover" /> : (m.org_name?.[0] || '?')}
+                          </div>
+                          <div className="min-w-0 flex-1">
+                            <p className="text-[13px] font-bold truncate" style={{ color: isLight ? '#0F0703' : '#FFFFFF' }}>
+                              {m.org_name}
+                            </p>
+                            <p className="text-[10.5px] truncate" style={{ color: isLight ? 'rgba(15,7,3,0.5)' : 'rgba(255,255,255,0.5)' }}>
+                              {m.role_label || (m.is_admin ? 'Admin' : 'Member')}{m.group_name ? ` · ${m.group_name}` : ''}
+                            </p>
+                          </div>
+                          {switchingId === m.member_id
+                            ? <LoadingSpinner size="sm" />
+                            : m.is_current
+                              ? <CheckCircle2 size={14} style={{ color: colors.primary }} />
+                              : null}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* ── SIGN OUT ─────────────────────────────
+                    Distinct danger chip pinned at the bottom.
+                    Anchored outside the (possible) org-switcher
+                    scroll area so it's always reachable. */}
+                <div className="px-3 pt-3 pb-3 mt-1 shrink-0" style={{ borderTop: `1px solid ${isLight ? 'rgba(15,7,3,0.06)' : 'rgba(255,255,255,0.06)'}` }}>
+                  <button
+                    type="button"
+                    onClick={() => { setShowProfileMenu(false); setShowLogoutModal(true); }}
+                    className="w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl text-sm font-bold transition-all active:scale-[0.98]"
+                    style={{
+                      background: isLight ? 'rgba(239,68,68,0.08)' : 'rgba(239,68,68,0.12)',
+                      color: '#ef4444',
+                      border: `1px solid ${isLight ? 'rgba(239,68,68,0.20)' : 'rgba(239,68,68,0.32)'}`,
+                    }}
+                  >
+                    <LogOut size={15} />
+                    Sign out
+                  </button>
+                </div>
+              </motion.div>
+            </>
+          )}
+        </AnimatePresence>,
+        document.body
+      )}
+
       {/* ═══════════ MAIN CONTENT ═══════════ */}
       {/* Bottom padding lifts content above the mobile tab bar. On
           focused checkout routes we hide the tab bar entirely, so we
@@ -1255,15 +1204,22 @@ export default function OrgLayout() {
           the app. Was a bespoke inline modal with a different visual
           (gradient top bar, glassy ember surface) which felt
           inconsistent with the rest of the system. */}
+      {/* Logout — same review-before-you-act pattern PlatformConsole
+          uses (action + impact rows). Reads consistently with every
+          other confirm sheet in the app. */}
       <ConfirmDialog
         isOpen={showLogoutModal}
         onClose={() => setShowLogoutModal(false)}
         onConfirm={handleLogout}
-        title="Sign out?"
-        message={`You'll need to sign back in to access ${organization.name}.`}
-        type="danger"
+        title="Confirm sign out"
+        subtitle="Review the action before leaving."
+        type="warning"
         confirmText="Sign out"
         cancelText="Stay signed in"
+        rows={[
+          { label: 'Action', value: `Sign out of ${organization.name}` },
+          { label: 'Impact', value: `You'll need to sign back in to view your dues, payments, and notifications in this org.` },
+        ]}
       />
     </div>
   );
@@ -1397,28 +1353,50 @@ function NavLink({
 }
 
 /** Profile dropdown menu item — theme-aware */
-function ProfileMenuItem({
-  to, icon, label, onClose, isLight = false,
+/**
+ * PavilionTile — bento-grid tile inside the floating profile panel.
+ *
+ * Visual recipe: a brand-soft "icon chip" at the top, label below.
+ * Larger tap target than a list-item, and the three tiles arranged
+ * in a row immediately signal "actions, pick one" — distinct from
+ * the linear menu pattern. Active state shrinks slightly so the
+ * tap feels confirmed even with no network round-trip.
+ */
+function PavilionTile({
+  to, icon, label, onClose, isLight,
 }: {
   to: string;
   icon: React.ReactNode;
   label: string;
   onClose: () => void;
-  isLight?: boolean;
+  isLight: boolean;
 }) {
   return (
     <Link
       to={to}
       onClick={onClose}
-      className={`flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-sm font-medium transition-all ${
-        isLight ? 'hover:bg-black/[0.04]' : 'hover:bg-white/5'
-      }`}
+      className="rounded-2xl p-2.5 flex flex-col items-center gap-1.5 transition-all hover:-translate-y-0.5 active:scale-[0.97]"
       style={{
-        color: isLight ? '#1F1B1A' : colors.textSecondary,
+        background: isLight ? 'rgba(15,7,3,0.03)' : 'rgba(255,255,255,0.04)',
+        border: `1px solid ${isLight ? 'rgba(15,7,3,0.06)' : 'rgba(255,255,255,0.06)'}`,
       }}
     >
-      <span style={{ color: isLight ? 'rgba(15,7,3,0.55)' : colors.textTertiary }}>{icon}</span>
-      {label}
+      <span
+        className="w-8 h-8 rounded-xl flex items-center justify-center"
+        style={{
+          background: `${colors.primary}18`,
+          color: colors.primary,
+          border: `1px solid ${colors.primary}28`,
+        }}
+      >
+        {icon}
+      </span>
+      <span
+        className="text-[10.5px] font-bold uppercase tracking-wider text-center"
+        style={{ color: isLight ? 'rgba(15,7,3,0.72)' : 'rgba(255,255,255,0.8)' }}
+      >
+        {label}
+      </span>
     </Link>
   );
 }

@@ -1291,7 +1291,7 @@ export default function ManageDuesPage() {
         )}
       </Modal>
 
-      {/* Delete Confirmation */}
+      {/* Delete confirmation — review-before-you-act pattern. */}
       <ConfirmDialog
         isOpen={showDeleteConfirm}
         onClose={() => {
@@ -1299,14 +1299,21 @@ export default function ManageDuesPage() {
           setSelectedPaymentType(null)
         }}
         onConfirm={() => selectedPaymentType && handleDelete(selectedPaymentType.id)}
-        title="Delete Payment Type"
-        message={`Are you sure you want to delete "${selectedPaymentType?.title}"? This action cannot be undone. If there are payments associated with this type, deletion will fail.`}
+        title="Delete payment type"
+        subtitle="Permanent — confirm before continuing."
         type="danger"
         confirmText="Delete"
         cancelText="Cancel"
+        rows={[
+          { label: 'Action', value: `Delete "${selectedPaymentType?.title || 'payment type'}"` },
+          {
+            label: 'Impact',
+            value: 'This removes the due from the catalogue. If any payments are already linked to it, the delete will fail — deactivate instead. This cannot be undone.',
+          },
+        ]}
       />
 
-      {/* Deactivate/Activate Confirmation */}
+      {/* Activate / deactivate confirmation. */}
       <ConfirmDialog
         isOpen={showDeactivateConfirm}
         onClose={() => {
@@ -1319,32 +1326,45 @@ export default function ManageDuesPage() {
             setShowDeactivateConfirm(false)
           }
         }}
-        title={selectedPaymentType?.is_active ? "Deactivate Payment Type" : "Activate Payment Type"}
-        message={selectedPaymentType?.is_active 
-          ? `Are you sure you want to deactivate "${selectedPaymentType?.title}"? Students will no longer be able to make payments for this due.`
-          : `Are you sure you want to activate "${selectedPaymentType?.title}"? This will make it available for students to pay.`
-        }
-        type={selectedPaymentType?.is_active ? "warning" : "info"}
-        confirmText={selectedPaymentType?.is_active ? "Deactivate" : "Activate"}
+        title={selectedPaymentType?.is_active ? 'Deactivate payment type' : 'Activate payment type'}
+        subtitle="Review the effect before continuing."
+        type={selectedPaymentType?.is_active ? 'warning' : 'info'}
+        confirmText={selectedPaymentType?.is_active ? 'Deactivate' : 'Activate'}
         cancelText="Cancel"
+        rows={[
+          {
+            label: 'Action',
+            value: `${selectedPaymentType?.is_active ? 'Deactivate' : 'Activate'} "${selectedPaymentType?.title || 'payment type'}"`,
+          },
+          {
+            label: 'Impact',
+            value: selectedPaymentType?.is_active
+              ? 'Members can no longer submit payments toward this due. Existing payment records stay intact and can still be approved or rejected.'
+              : 'The due reappears in member dashboards and they can submit payments toward it again.',
+          },
+        ]}
       />
 
-      {/* Edit Confirmation */}
+      {/* Edit-before-open confirmation. */}
       <ConfirmDialog
         isOpen={showEditConfirm}
-        onClose={() => {
-          setShowEditConfirm(false)
-          // Keep editingPaymentType so modal can open properly
-        }}
+        onClose={() => setShowEditConfirm(false)}
         onConfirm={() => {
           setShowEditConfirm(false)
           setShowEditModal(true)
         }}
-        title="Edit Payment Type"
-        message={`You are about to edit "${editingPaymentType?.title}". Changes will affect all future and existing references to this payment type. Continue?`}
+        title="Edit payment type"
+        subtitle="Confirm before opening the editor."
         type="info"
-        confirmText="Continue to Edit"
+        confirmText="Continue to edit"
         cancelText="Cancel"
+        rows={[
+          { label: 'Action', value: `Edit "${editingPaymentType?.title || 'payment type'}"` },
+          {
+            label: 'Impact',
+            value: 'Edits affect every future and existing reference to this payment type. Members who have already paid keep their payments; the title, amount, and deadline you set will be what they see going forward.',
+          },
+        ]}
       />
     </div>
   )
