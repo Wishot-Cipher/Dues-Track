@@ -487,78 +487,72 @@ export default function OrgLayout() {
           }}
         />
 
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 h-16 flex items-center gap-4">
-          {/* ── Left: Logo + Org Name ── */}
+        {/* Header inner container — `justify-between` so the brand
+            anchors LEFT and controls anchor RIGHT with the center
+            cluster (nav links on desktop) absorbing the slack. The
+            previous `gap-4` (no justify) clustered everything to the
+            left edge and left empty space on the right, which is
+            what was reading as "squeezed."
+            Padding bumped to `px-3 sm:px-4 lg:px-6` so the controls
+            don't touch the viewport edge. Height stays 16. */}
+        <div className="max-w-7xl mx-auto px-3 sm:px-4 lg:px-6 h-16 flex items-center justify-between gap-3">
+          {/* ── Left: Brand cluster.
+              Just two things on mobile: the avatar + the org's short
+              name in clean typography. The dropped-down group chip
+              and the L-level pill from the old design were spilling
+              into the line below the org name and visually fighting
+              for space with the avatar + name. Both of those bits
+              of identity already live inside the profile pavilion
+              (the hero shows role chip + L-level chip), so they
+              don't need to repeat in the top bar. min-w-0 lets the
+              name truncate gracefully; the wrapping link uses
+              `shrink` so on small screens it cedes width to the
+              right cluster instead of pushing it off-screen. */}
           <Link
             to={`${basePath}${homePath}`}
-            className="flex items-center gap-3 group"
+            className="flex items-center gap-2.5 sm:gap-3 min-w-0 shrink group"
           >
             {organization.logo_url ? (
               <motion.img
                 src={organization.logo_url}
                 alt={organization.short_name}
-                className="w-9 h-9 rounded-xl object-cover ring-1 ring-white/10 group-hover:ring-white/20 transition-all"
-                whileHover={{ scale: 1.05 }}
-                whileTap={{ scale: 0.95 }}
+                className="w-9 h-9 rounded-xl object-cover shrink-0"
+                style={{
+                  boxShadow: `0 4px 12px -4px ${colors.primary}55, 0 0 0 1px ${isLight ? 'rgba(15,7,3,0.06)' : 'rgba(255,255,255,0.06)'}`,
+                }}
+                whileTap={{ scale: 0.94 }}
               />
             ) : (
               <motion.div
-                className="w-9 h-9 rounded-xl flex items-center justify-center text-sm font-bold ring-1 ring-white/10 group-hover:ring-white/20 transition-all"
+                className="w-9 h-9 rounded-xl flex items-center justify-center text-sm font-extrabold shrink-0"
                 style={{
-                  background: `linear-gradient(135deg, ${organization.primary_color || colors.primary}, ${organization.primary_color || colors.primary}88)`,
-                  color: '#FFFFFF',   // always white over the brand-gradient avatar
+                  background: `linear-gradient(135deg, ${organization.primary_color || colors.primary} 0%, ${organization.primary_color || colors.primary}cc 100%)`,
+                  color: '#FFFFFF',
+                  boxShadow: `0 6px 14px -6px ${colors.primary}66, 0 0 0 1px ${isLight ? 'rgba(15,7,3,0.06)' : 'rgba(255,255,255,0.06)'}, inset 0 1px 0 rgba(255,255,255,0.28)`,
                 }}
-                whileHover={{ scale: 1.05 }}
-                whileTap={{ scale: 0.95 }}
+                whileTap={{ scale: 0.94 }}
               >
                 {organization.short_name?.charAt(0) || 'P'}
               </motion.div>
             )}
-            <div className="min-w-0 max-w-[60vw] sm:max-w-none">
+            <div className="min-w-0">
               <p
-                className="text-sm font-semibold leading-tight transition-colors truncate max-w-[140px] sm:max-w-[200px]"
+                className="text-[15px] font-extrabold leading-tight tracking-tight truncate"
                 style={{ color: tk.text }}
               >
                 {organization.short_name || organization.name}
               </p>
-              {/* Subtitle: group + level — single tidy line with a middot
-                  separator. Theme-aware tokens, tighter typography, and
-                  bounded width so a long class name can't push the
-                  whole header sideways on mobile. The width caps are
-                  responsive: tight on phones, generous on desktop. */}
-              <div className="flex items-center gap-1.5 mt-0.5 min-w-0">
-                {(group?.short_name || group?.name) && (
-                  <span
-                    className="text-[10px] font-bold uppercase truncate max-w-[80px] sm:max-w-[130px]"
-                    style={{ color: tk.textTer }}
-                  >
-                    {group?.short_name || group?.name}
-                  </span>
-                )}
-                {(user.level || groupPrimary || fetchedLevel) && (
-                  <>
-                    {(group?.short_name || group?.name) && (
-                      <span
-                        aria-hidden
-                        className="w-1 h-1 rounded-full shrink-0"
-                        style={{ background: tk.textTer }}
-                      />
-                    )}
-                    <span
-                      className="text-[10px] font-bold tracking-wide whitespace-nowrap"
-                      style={{
-                        background: tk.primarySoft,
-                        color: tk.primary,
-                        padding: '1px 7px',
-                        borderRadius: 9999,
-                        border: `1px solid ${tk.primaryRing}`,
-                      }}
-                    >
-                      L{user.level || groupPrimary || fetchedLevel}
-                    </span>
-                  </>
-                )}
-              </div>
+              {/* Subtitle: group label only — short, single line, no
+                  pill clutter. Hidden on screens below 400px so the
+                  smallest phones get a single-line brand. */}
+              {(group?.short_name || group?.name) && (
+                <p
+                  className="text-[10.5px] font-bold uppercase tracking-wider leading-tight truncate mt-0.5 max-[399px]:hidden"
+                  style={{ color: tk.textTer }}
+                >
+                  {group?.short_name || group?.name}
+                </p>
+              )}
             </div>
           </Link>
 
@@ -658,104 +652,87 @@ export default function OrgLayout() {
             </nav>
           </div>
 
-          {/* ── Right: Actions ──
-              Order = NOTIFICATION → PROFILE (left → right). The
-              profile chip sits closest to the corner — the standard
-              convention in fintech apps (Wise, Revolut, Cash App)
-              that gives "you" visual priority while keeping
-              auxiliary controls one step to the left. The gap was
-              `gap-1 sm:gap-2`; bumped to `gap-2 sm:gap-3` so the
-              two controls don't feel cramped against the corner. */}
-          <div className="flex items-center gap-2 sm:gap-3">
-            {/* Notification bell — left of profile */}
+          {/* ── Right: Control pod ──
+              Two controls treated as a unified pod, not loose icons.
+              `shrink-0` so the pod always reserves its space — the
+              brand cluster (which has `shrink`) cedes width first.
+              On mobile the profile chip is avatar-only (no role chip
+              text — that lives in the pavilion's hero already). On
+              sm: and above, we add the first-name + chevron so the
+              chip reads more like a full identity card. */}
+          <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
+            {/* Notification bell. Wrapped so the chip sizing is
+                consistent with the profile trigger — same 38px
+                height, same rounded shape. */}
             <div className="relative">
               <NotificationCenter />
             </div>
 
-            {/* Profile Floating Pavilion trigger — theme-aware */}
+            {/* Profile Floating Pavilion trigger */}
             <div ref={profileRef} className="relative">
               <button
                 onClick={() => {
                   // Force the admin nav submenu closed so the two
-                  // dropdowns can't be open simultaneously — was the
-                  // cause of "the admin dropdown opens by itself"
-                  // when tapping the profile chip in some cases.
+                  // dropdowns can't be open simultaneously.
                   setShowAdminSubmenu(false);
                   setShowProfileMenu(prev => !prev);
                 }}
-                className="flex items-center gap-2.5 py-1 rounded-full transition-all pl-1.5 pr-1.5 sm:pr-2.5"
+                className="flex items-center gap-2 rounded-full transition-all pl-0.5 pr-0.5 sm:pl-1 sm:pr-2.5 py-0.5"
                 style={{
                   background: showProfileMenu
                     ? (isLight ? 'rgba(15,7,3,0.05)' : 'rgba(255,255,255,0.08)')
                     : 'transparent',
                 }}
+                aria-label="Open profile menu"
               >
-                {/* Avatar */}
-                <div className="relative">
-                  <div
-                    className="w-9 h-9 rounded-full flex items-center justify-center text-sm font-extrabold transition-all"
-                    style={{
-                      background: `linear-gradient(135deg, ${colors.primary}, ${colors.primary}aa)`,
-                      color: '#fff',
-                      boxShadow: showProfileMenu
-                        ? `0 0 0 2px ${colors.primary}, 0 8px 18px -6px ${colors.primary}66`
-                        : `0 0 0 2px ${isLight ? 'rgba(15,7,3,0.06)' : 'rgba(255,255,255,0.10)'}, 0 4px 10px -4px ${colors.primary}55`,
-                    }}
-                  >
-                    {userInitial}
-                  </div>
-                  {/* Online dot */}
-                  <span
-                    className="absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full border-2"
-                    style={{
-                      background: '#10B981',
-                      borderColor: isLight ? '#FFFFFF' : colors.secondaryLight,
-                      boxShadow: '0 0 6px rgba(16, 185, 129, 0.55)',
-                    }}
-                  />
-                </div>
-
-                {/* Role chip beside the avatar. Drops off on the
-                    smallest phones (< 400px width) so the org name +
-                    avatar still fit comfortably on a 320px viewport.
-                    Tailwind doesn't ship an xs breakpoint by default,
-                    so we use the arbitrary `max-[399px]:hidden` syntax. */}
-                <div className="max-[399px]:hidden sm:hidden text-left">
-                  <p
-                    className="text-[10px] font-semibold uppercase tracking-wide truncate"
-                    style={{
-                      color: isExecContext ? colors.primary : (isLight ? 'rgba(15,7,3,0.6)' : colors.textSecondary),
-                      maxWidth: '70px',
-                    }}
-                  >
-                    {activeRole?.label || (isExecContext ? 'Exec' : 'Student')}
-                  </p>
-                </div>
-
-                <div className="hidden sm:block text-left">
-                  <p
-                    className="text-sm font-bold leading-tight"
-                    style={{ color: isLight ? '#0F0703' : '#FFFFFF' }}
-                  >
-                    {firstName}
-                  </p>
-                  {showAdmin && (
-                    <p className="text-[10px] font-semibold tracking-wide uppercase" style={{ color: colors.primary }}>
-                      Admin
-                    </p>
-                  )}
-                </div>
-
-                <motion.div
-                  animate={{ rotate: showProfileMenu ? 180 : 0 }}
-                  transition={{ duration: 0.2 }}
-                  className="hidden sm:block"
+                {/* Avatar — solid brand, subtle ring, no decorative
+                    online-dot. The dot was visual noise and forced an
+                    extra 12px to the corner. */}
+                <div
+                  className="w-9 h-9 rounded-full flex items-center justify-center text-sm font-extrabold transition-all shrink-0"
+                  style={{
+                    background: `linear-gradient(135deg, ${colors.primary} 0%, ${colors.primary}cc 100%)`,
+                    color: '#FFFFFF',
+                    boxShadow: showProfileMenu
+                      ? `0 0 0 2px ${colors.primary}66, 0 8px 18px -6px ${colors.primary}66`
+                      : `0 0 0 1px ${isLight ? 'rgba(15,7,3,0.08)' : 'rgba(255,255,255,0.10)'}, 0 4px 12px -4px ${colors.primary}55, inset 0 1px 0 rgba(255,255,255,0.30)`,
+                  }}
                 >
-                  <ChevronDown
-                    size={14}
-                    style={{ color: isLight ? 'rgba(15,7,3,0.45)' : colors.textTertiary }}
-                  />
-                </motion.div>
+                  {userInitial}
+                </div>
+
+                {/* Identity strip — only renders sm: and up. Mobile
+                    is avatar-only so the chip fits comfortably even
+                    on a 320px viewport. */}
+                <div className="hidden sm:flex items-center gap-1.5">
+                  <div className="text-left">
+                    <p
+                      className="text-[13px] font-bold leading-tight tracking-tight"
+                      style={{ color: tk.text }}
+                    >
+                      {firstName}
+                    </p>
+                    {showAdmin && (
+                      <p
+                        className="text-[9.5px] font-bold tracking-wider uppercase leading-tight mt-0.5"
+                        style={{ color: tk.primary }}
+                      >
+                        {activeRole?.label || 'Admin'}
+                      </p>
+                    )}
+                  </div>
+
+                  <motion.div
+                    animate={{ rotate: showProfileMenu ? 180 : 0 }}
+                    transition={{ duration: 0.2 }}
+                    className="shrink-0"
+                  >
+                    <ChevronDown
+                      size={13}
+                      style={{ color: tk.textTer }}
+                    />
+                  </motion.div>
+                </div>
               </button>
             </div>
           </div>
@@ -1118,8 +1095,15 @@ export default function OrgLayout() {
               // count, role switcher height, or admin group count.
               className="fixed left-0 right-0 bottom-0 z-95 lg:hidden rounded-t-3xl overflow-hidden flex flex-col"
               style={{
-                ...glass.strong,
-                borderTop: `1px solid rgba(255,104,3,0.18)`,
+                // Theme-aware surface. Was `glass.strong` (a hardcoded
+                // glassy ember) which read as a dark slab on light
+                // theme. Now uses the same card surface as the rest
+                // of the app, so light users get a clean off-white
+                // sheet and dark users get a tinted-ember sheet.
+                background: isLight ? '#FFFFFF' : 'rgba(15, 7, 3, 0.96)',
+                backdropFilter: 'saturate(180%) blur(22px)',
+                WebkitBackdropFilter: 'saturate(180%) blur(22px)',
+                borderTop: `1px solid ${isLight ? 'rgba(15,7,3,0.08)' : 'rgba(255,104,3,0.18)'}`,
                 paddingBottom: 'calc(env(safe-area-inset-bottom, 0px) + 12px)',
                 maxHeight: '85vh',
                 minHeight: '40vh',
