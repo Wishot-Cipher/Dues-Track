@@ -29,7 +29,7 @@
  */
 
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { useNavigate, useSearchParams } from 'react-router-dom';
+import { useNavigate, useSearchParams, useParams } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   AlertCircle,
@@ -188,6 +188,17 @@ export default function CreateDuePage() {
   const navigate = useNavigate();
   const toast = useToast();
 
+  // Edit mode: when the route is /admin/dues/:id/edit, useParams gives
+  // us the payment_type id. We fetch the existing row, map it to
+  // FormState on mount, and the submit handler branches to UPDATE
+  // instead of CREATE. Everything else (validation, panels, payout
+  // checks) reuses the create-mode UI so a publisher gets the same
+  // surface in both flows — the user explicitly asked for this so
+  // editing doesn't feel like a different page.
+  const { id: editId } = useParams<{ id?: string }>();
+  const isEditMode = Boolean(editId);
+  const [editLoading, setEditLoading] = useState<boolean>(isEditMode);
+
   const [form, setForm] = useState<FormState>(EMPTY);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -219,6 +230,99 @@ export default function CreateDuePage() {
       navigate(-1);
     }
   }, [user, hasPermission, navigate, toast]);
+
+  // Edit-mode prefill. When ?id is present, fetch the existing
+  // payment_type row and map it back into the FormState so every
+  // field lands at the value the publisher last saved. Event tiers
+  // are loaded separately because they live in event_ticket_tiers,
+  // a sibling table.
+  useEffect(() => {
+    if (!editId) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const { data: pt, error: ptErr } = await supabase
+          .from('payment_types')
+          .select('*')
+          .eq('id', editId)
+          .maybeSingle();
+        if (ptErr) throw ptErr;
+        if (!pt) {
+          setError('That due no longer exists. It may have been deleted.');
+          setEditLoading(false);
+          return;
+        }
+        // Tiers (events only) — sibling table. Skip the query when
+        // category is not 'event' so we don't waste a round-trip.
+        let tiers: TierInput[] = [{ name: 'Regular', price: '', quantity: '' }];
+        if ((pt as { category?: string }).category === 'event') {
+          const { data: tierRows } = await supabase
+            .from('event_ticket_tiers')
+            .select('name, price, quantity, sort_order')
+            .eq('payment_type_id', editId)
+            .order('sort_order', { ascending: true });
+          if (tierRows && tierRows.length > 0) {
+            tiers = (tierRows as Array<{
+              name: string; price: number; quantity: number | null;
+            }>).map((t) => ({
+              name: t.name,
+              price: String(t.price ?? ''),
+              quantity: t.quantity == null ? '' : String(t.quantity),
+            }));
+          }
+        }
+        if (cancelled) return;
+        const row = pt as Record<string, unknown>;
+        // The form's deadline / event_date inputs expect 'YYYY-MM-DD'
+        // (or empty). Strip the time/zone off so the date picker
+        // doesn't read it as invalid.
+        const fmtDate = (v: unknown) => {
+          if (typeof v !== 'string' || !v) return '';
+          // ISO with time → date only
+          return v.length > 10 ? v.slice(0, 10) : v;
+        };
+        setForm({
+          title:                  (row.title as string) || '',
+          description:            (row.description as string) || '',
+          category:               (row.category as string) || 'dues',
+          icon:                   (row.icon as string) || '🎓',
+          color:                  (row.color as string) || tk.primary,
+          amount:                 row.amount == null ? '' : String(row.amount),
+          deadline:               fmtDate(row.deadline),
+          late_fee_per_day:       row.late_fee_per_day == null ? '' : String(row.late_fee_per_day),
+          is_mandatory:           Boolean(row.is_mandatory ?? true),
+          allow_partial:          Boolean(row.allow_partial ?? false),
+          minimum_partial_amount: row.minimum_partial_amount == null ? '' : String(row.minimum_partial_amount),
+          is_public:              Boolean(row.is_public ?? false),
+          target_levels:          Array.isArray(row.target_levels) ? (row.target_levels as string[]) : [],
+          target_sections:        Array.isArray(row.target_sections) ? (row.target_sections as string[]) : [],
+          accepts_paystack:       Boolean(row.accepts_paystack ?? true),
+          accepts_manual:         Boolean(row.accepts_manual ?? true),
+          bank_name:              (row.bank_name as string) || '',
+          account_name:           (row.account_name as string) || '',
+          account_number:         (row.account_number as string) || '',
+          event_date:             fmtDate(row.event_date),
+          event_venue:            (row.event_venue as string) || '',
+          event_cover_url:        (row.event_cover_url as string) || '',
+          event_max_attendees:    row.event_max_attendees == null ? '' : String(row.event_max_attendees),
+          tiers,
+        });
+        // Also lock the targeting: edit doesn't move a due to a
+        // different scope. We populate targetScope + targetGroupId
+        // from the row so the read-only targeting panel still shows
+        // the right context.
+        const grp = row.group_id as string | null;
+        if (!grp) setTargetScope('org');
+        else { setTargetScope('group'); setTargetGroupId(grp); }
+        setEditLoading(false);
+      } catch (err) {
+        if (cancelled) return;
+        setError(err instanceof Error ? err.message : 'Could not load that due for editing.');
+        setEditLoading(false);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [editId]);
 
   // Read query params from the dept-/faculty-exec targeting cards so
   // we can prefill the form. Accepted keys:
@@ -548,6 +652,53 @@ export default function CreateDuePage() {
       ? Math.min(...validTiers.map((t) => Number(t.price)))
       : Number(form.amount);
 
+    // ── EDIT BRANCH ───────────────────────────────────────────
+    // Direct UPDATE on payment_types (matches the legacy modal's
+    // submit shape). We don't move the due between scopes here —
+    // re-targeting would re-fan notifications and is a separate
+    // operation.
+    if (isEditMode && editId) {
+      try {
+        const { error: updateErr } = await supabase
+          .from('payment_types')
+          .update({
+            title:                  form.title.trim(),
+            description:            form.description.trim() || null,
+            category:               form.category,
+            amount:                 eventBaseAmount,
+            icon:                   form.icon,
+            color:                  form.color,
+            deadline:               form.deadline || null,
+            late_fee_per_day:       isEvent ? null : (form.late_fee_per_day || null),
+            is_mandatory:           isEvent ? false : form.is_mandatory,
+            allow_partial:          isEvent ? false : form.allow_partial,
+            minimum_partial_amount: !isEvent && form.allow_partial ? Number(form.minimum_partial_amount || 0) : null,
+            is_public:              form.is_public,
+            target_levels:          form.target_levels.length ? form.target_levels : null,
+            target_sections:        form.target_sections.length ? form.target_sections : null,
+            bank_name:              !isEvent && form.accepts_manual ? form.bank_name.trim() : null,
+            account_name:           !isEvent && form.accepts_manual ? form.account_name.trim() : null,
+            account_number:         !isEvent && form.accepts_manual ? form.account_number.trim() : null,
+            accepts_paystack:       isEvent ? true : form.accepts_paystack,
+            accepts_manual:         isEvent ? false : form.accepts_manual,
+            event_date:             isEvent ? (form.event_date || null) : null,
+            event_venue:            isEvent ? (form.event_venue || null) : null,
+            event_cover_url:        isEvent ? (form.event_cover_url || null) : null,
+            event_max_attendees:    isEvent && form.event_max_attendees ? Number(form.event_max_attendees) : null,
+            updated_at:             new Date().toISOString(),
+          })
+          .eq('id', editId);
+        if (updateErr) throw updateErr;
+        toast?.success?.(isEvent ? 'Event updated.' : 'Due updated.');
+        go(`/admin/manage-dues?updated=${editId}`);
+        return;
+      } catch (err) {
+        setError(err instanceof Error ? err.message : 'Could not save changes.');
+        setSubmitting(false);
+        return;
+      }
+    }
+
     // Build the payload that maps to the create_due_with_scope_check payload JSON
     const payload: Record<string, unknown> = {
       title:                  form.title.trim(),
@@ -654,13 +805,17 @@ export default function CreateDuePage() {
         <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-semibold mb-4"
           style={{ background: `${form.color}14`, color: form.color, border: `1px solid ${form.color}28` }}>
           <Sparkles className="w-3.5 h-3.5" />
-          {isEvent ? 'Event ticketing' : 'New due'}
+          {isEditMode ? (isEvent ? 'Editing event' : 'Editing due') : (isEvent ? 'Event ticketing' : 'New due')}
         </div>
         <h1 className="text-3xl sm:text-4xl font-extrabold text-white tracking-tight leading-tight">
-          {isEvent ? 'Sell tickets to an event' : 'Create a new due'}
+          {isEditMode
+            ? (isEvent ? 'Edit event details' : 'Edit due details')
+            : (isEvent ? 'Sell tickets to an event' : 'Create a new due')}
         </h1>
         <p className="text-sm sm:text-base max-w-2xl leading-7 mt-2" style={{ color: tk.textSec }}>
-          Members get notified the moment you publish. The preview on the right shows exactly what they'll see.
+          {isEditMode
+            ? "Changes apply to every reference to this due. Members who already paid keep their payments — the new title, amount, and deadline are what they'll see going forward."
+            : 'Members get notified the moment you publish. The preview on the right shows exactly what they\'ll see.'}
         </p>
       </header>
 
@@ -1221,8 +1376,10 @@ export default function CreateDuePage() {
               whileTap={canSubmit && !submitting ? { scale: 0.97 } : undefined}
             >
               {submitting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
-              Publish {isEvent ? 'event' : 'due'}
-              <ArrowRight className="w-4 h-4" />
+              {isEditMode
+                ? (submitting ? 'Saving…' : 'Save changes')
+                : `Publish ${isEvent ? 'event' : 'due'}`}
+              {!isEditMode && <ArrowRight className="w-4 h-4" />}
             </motion.button>
           </div>
         </div>

@@ -44,7 +44,7 @@ import {
   X as XIcon,
 } from 'lucide-react';
 // import Footer from '@/components/Footer';
-import { colors, glows, glass } from '@/config/colors';
+import { colors, glass } from '@/config/colors';
 import { isAcademicOrgType } from '@/config/constants';
 import { useMultiTenantAuth } from '@/hooks/useMultiTenantAuth';
 import { useActiveRole } from '@/hooks/useActiveRole';
@@ -600,8 +600,16 @@ export default function OrgLayout() {
                             transition={{ duration: 0.15, ease: 'easeOut' }}
                             className="absolute top-full mt-2 left-0 w-60 rounded-2xl overflow-hidden z-50"
                             style={{
-                              ...glass.strong,
-                              boxShadow: `0 20px 60px rgba(0,0,0,0.6), ${glows.amber.replace('30px', '12px').replace('0.5', '0.1')}`,
+                              // Theme-aware. Was `glass.strong` (dark
+                              // glassy ember) which read as a dark
+                              // slab on light theme.
+                              background: isLight ? '#FFFFFF' : 'rgba(15, 7, 3, 0.96)',
+                              backdropFilter: 'saturate(180%) blur(22px)',
+                              WebkitBackdropFilter: 'saturate(180%) blur(22px)',
+                              border: `1px solid ${isLight ? 'rgba(15,7,3,0.06)' : 'rgba(255,255,255,0.08)'}`,
+                              boxShadow: isLight
+                                ? '0 18px 50px -16px rgba(15,7,3,0.18), 0 4px 14px -4px rgba(15,7,3,0.06)'
+                                : '0 20px 60px rgba(0,0,0,0.6)',
                             }}
                           >
                             <div className="p-1.5">

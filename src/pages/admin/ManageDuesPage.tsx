@@ -820,9 +820,15 @@ export default function ManageDuesPage() {
                         <button
                           type="button"
                           onClick={() => {
-                            setSelectedPaymentType(pt)
-                            setEditingPaymentType(normalizePaymentTypeToForm(pt))
-                            setShowEditConfirm(true)
+                            // Edit-due now navigates to the dedicated
+                            // editor page (CreateDuePage in edit
+                            // mode). The cramped in-page modal was
+                            // replaced — the publisher gets the same
+                            // panels, preview column, and validation
+                            // they got when creating the due. No
+                            // pre-confirm modal needed: the edit
+                            // page itself is the review surface.
+                            navigate(`/admin/dues/${pt.id}/edit`)
                           }}
                           className="inline-flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold transition-all active:scale-[0.98]"
                           style={{

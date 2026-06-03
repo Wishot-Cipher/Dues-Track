@@ -186,6 +186,11 @@ function App() {
                     never have an exec role so they're rejected too. */}
                 <Route path="admin/members" element={<OrgProtectedRoute requiredPermission="can_manage_members" requireVerified allowedScopes={['group', 'org']}><OrgMembersPage /></OrgProtectedRoute>} />
                 <Route path="admin/create-payment" element={<OrgProtectedRoute requiredPermission="can_create_payments" requireVerified><CreateDuePage /></OrgProtectedRoute>} />
+                {/* Edit due — reuses CreateDuePage in edit mode. The
+                    :id param triggers the prefill + UPDATE branch in
+                    CreateDuePage so the publisher gets the full
+                    create-style editor, not a cramped modal. */}
+                <Route path="admin/dues/:id/edit" element={<OrgProtectedRoute requiredPermission="can_create_payments" requireVerified><CreateDuePage /></OrgProtectedRoute>} />
                 <Route path="admin/manage-dues" element={<OrgProtectedRoute requiredPermission="can_create_payments" requireVerified><ManageDuesPage /></OrgProtectedRoute>} />
                 <Route path="admin/review" element={<OrgProtectedRoute requiredPermission="can_approve_payments" requireVerified><AdminReviewPage /></OrgProtectedRoute>} />
                 <Route path="admin/expenses" element={<OrgProtectedRoute requiredPermission="can_manage_expenses" requireVerified><ExpensesPage /></OrgProtectedRoute>} />
