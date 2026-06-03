@@ -3,7 +3,7 @@
  * Accessed via /create
  */
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
@@ -30,9 +30,9 @@ import { organizationService } from '@/services/organizationService';
 import { supabase } from '@/config/supabase';
 import { useMultiTenantAuth } from '@/hooks/useMultiTenantAuth';
 import { multiTenantAuthService } from '@/services/multiTenantAuthService';
-import PageWrapper from '@/components/ui/PageWrapper';
 import ProfessionalDropdown from '@/components/ui/ProfessionalDropdown';
 import Checkbox from '@/components/ui/Checkbox';
+import { useTheme, getDashboardTokens } from '@/hooks/useTheme';
 import type { OrganizationType } from '@/config/constants';
 
 const ORG_TYPE_OPTIONS: { type: OrganizationType; label: string; icon: React.ReactNode; desc: string }[] = [
@@ -96,6 +96,13 @@ const FACULTIES = [
 export default function CreateOrganizationPage() {
   const navigate = useNavigate();
   const { login } = useMultiTenantAuth();
+  const { theme } = useTheme();
+  // Theme tokens for the page chrome. Drops the dark-only `colors`
+  // const in favour of the same getDashboardTokens the exec dashboards
+  // use — gives us light + dark parity and the soft-blob look that
+  // matches the rest of the app.
+  const tt = useMemo(() => getDashboardTokens(theme), [theme]);
+  const isLight = theme === 'light';
   const [step, setStep] = useState(1);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -133,7 +140,13 @@ export default function CreateOrganizationPage() {
   });
 
   const isAcademic = form.organization_type === 'university' || form.organization_type === 'school';
-  const totalSteps = isAcademic ? 5 : 4;
+  // Steps: type → details → [academic shape] → group → owner → review.
+  // The review step is always the last; previous step indices used to
+  // submit straight from owner, but a final "this is your org, look
+  // it over" screen catches bad slugs / typos before money-locking
+  // the founder claim. Bumped by +1 vs the legacy 4/5 count.
+  const totalSteps = isAcademic ? 6 : 5;
+  const reviewStep = totalSteps;
 
   // Check if user is authorized to create organizations
   // This runs on component mount
@@ -401,89 +414,169 @@ export default function CreateOrganizationPage() {
     form.organization_type === 'church' ? 'Ministry / Unit' :
     form.organization_type === 'school' ? 'Class' : 'Group';
 
+  // Friendly labels for each step — surfaced in the chip, the stepper
+  // tooltips, and the live preview's "you are here" hint. Keeping
+  // them centralised so the four touchpoints stay in sync.
+  const stepLabel = (n: number): string => {
+    if (n === 1) return 'Type';
+    if (n === 2) return 'Details';
+    if (isAcademic && n === academicStep) return 'Academic shape';
+    if (n === groupStep) return form.organization_type === 'university'
+      ? 'Your department' : form.organization_type === 'school'
+      ? 'Your class' : 'First group';
+    if (n === ownerStep) return 'Owner account';
+    if (n === reviewStep) return 'Review';
+    return `Step ${n}`;
+  };
+
+  // Subtitle that explains the step in one line. Same source of
+  // truth as the H2 inside each step body, just promoted to the
+  // hero for instant context.
+  const stepHelp = (n: number): string => {
+    if (n === 1) return 'Tell us what kind of organisation this is — we tune everything else around the answer.';
+    if (n === 2) return 'Name it, give it a URL handle, pick a contact channel.';
+    if (isAcademic && n === academicStep) return 'How is your school organised? By level or by faculty/department?';
+    if (n === groupStep) return form.organization_type === 'university'
+      ? 'Most owners are in one department to begin with. Pick yours.'
+      : 'Your first internal unit — the place dues are collected at by default.';
+    if (n === ownerStep) return 'Set up the account you\'ll use to sign in and run the org.';
+    if (n === reviewStep) return 'Last look. Confirm the choices below before we set up your org.';
+    return '';
+  };
+
   return (
-    <PageWrapper centered noPadding className="p-4 sm:p-6">
-      <motion.div
-        className="w-full max-w-lg"
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-      >
-        {/* Access Denied Message */}
+    <div
+      className="min-h-screen relative overflow-hidden py-6 px-4"
+      style={{ background: tt.bgWash, color: tt.text }}
+    >
+      {/* Soft brand blobs — same look as the exec dashboards. */}
+      <div
+        aria-hidden
+        className="pointer-events-none absolute -top-32 -right-24 w-[520px] h-[520px] rounded-full"
+        style={{ background: tt.blob1, filter: 'blur(120px)' }}
+      />
+      <div
+        aria-hidden
+        className="pointer-events-none absolute -bottom-40 -left-32 w-[420px] h-[420px] rounded-full"
+        style={{ background: tt.blob2, filter: 'blur(110px)' }}
+      />
+
+      <div className="max-w-5xl mx-auto relative z-10 space-y-6">
+        {/* Access Denied — early-out card */}
         {accessDenied && (
-          <div className="mb-6 p-4 rounded-xl border border-red-500/30 bg-red-500/5">
-            <p className="text-red-400 font-semibold mb-2">Access Denied</p>
-            <p className="text-sm text-red-300">
-              Organization creation is currently restricted. Please contact your administrator.
+          <div className="p-5 rounded-2xl" style={{ background: `${tt.danger}10`, border: `1px solid ${tt.danger}40` }}>
+            <p className="font-bold mb-1" style={{ color: tt.danger }}>Access denied</p>
+            <p className="text-sm" style={{ color: tt.textSec }}>
+              Organisation creation is currently restricted. Please contact platform support.
             </p>
             <button
               onClick={() => navigate('/')}
-              className="mt-3 px-4 py-2 rounded-lg bg-red-500/20 hover:bg-red-500/30 text-red-300 text-sm font-medium transition-colors"
+              className="mt-3 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold transition-all"
+              style={{ background: `${tt.danger}18`, color: tt.danger, border: `1px solid ${tt.danger}40` }}
             >
-              Return to Home
+              Return home
             </button>
           </div>
         )}
 
-        {/* Loading Auth Check */}
+        {/* Auth check loading */}
         {!authChecked && (
-          <div className="flex flex-col items-center justify-center py-12">
-            <Loader2 size={32} className="animate-spin mb-3" style={{ color: colors.primary }} />
-            <p className="text-sm" style={{ color: colors.textTertiary }}>Verifying access...</p>
+          <div className="flex flex-col items-center justify-center py-16">
+            <Loader2 size={28} className="animate-spin mb-3" style={{ color: tt.primary }} />
+            <p className="text-sm" style={{ color: tt.textSec }}>Verifying access…</p>
           </div>
         )}
 
-        {/* Main Form (only show if auth check passed) */}
+        {/* Main wizard — only when auth check is green */}
         {authChecked && !accessDenied && (
         <>
-        <div className="flex items-center gap-2 sm:gap-3 mb-8">
-          <button
-            onClick={() => step > 1 ? prevStep() : navigate('/')}
-            className="p-2 rounded-xl hover:bg-white/5 transition-colors shrink-0"
-          >
-            <ArrowLeft size={20} className="text-white" />
-          </button>
-          <div className="flex-1 min-w-0">
-            <h1 className="text-lg sm:text-xl font-bold text-white truncate">Create Organization</h1>
-            <p className="text-sm" style={{ color: colors.textTertiary }}>
-              Step {step} of {totalSteps}
-            </p>
-          </div>
-          <div className="hidden sm:flex items-center gap-2 text-sm font-bold shrink-0" style={{ color: colors.primary }}>
-            <div className="w-8 h-8 rounded-full flex items-center justify-center text-white text-xs"
-              style={{ background: colors.primary }}>
-              P
+        {/* ── Header ──────────────────────────────────────────── */}
+        <motion.header
+          initial={{ opacity: 0, y: 12 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="space-y-3"
+        >
+          <div className="flex items-start justify-between gap-3 flex-wrap">
+            <div className="flex items-center gap-2 flex-wrap">
+              <button
+                type="button"
+                onClick={() => step > 1 ? prevStep() : navigate('/')}
+                className="inline-flex items-center gap-1 text-[11px] font-semibold uppercase tracking-wider transition-opacity hover:opacity-80"
+                style={{ color: tt.textTer }}
+              >
+                <ArrowLeft className="w-3 h-3" />
+                {step > 1 ? 'Back' : 'Home'}
+              </button>
+              <span
+                className="inline-flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-[0.18em] px-2 py-1 rounded-full"
+                style={{ background: tt.primarySoft, color: tt.primary, border: `1px solid ${tt.primaryRing}` }}
+              >
+                <Sparkles className="w-3 h-3" />
+                Create {APP_NAME} organisation
+              </span>
+              <span
+                className="inline-flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wider"
+                style={{ color: tt.textTer }}
+              >
+                Step {step}/{totalSteps} · {stepLabel(step)}
+              </span>
             </div>
-            {APP_NAME}
           </div>
-        </div> 
 
-        {/* Progress Bar */}
-        <div className="flex gap-2 mb-8">
-          {Array.from({ length: totalSteps }, (_, i) => (
-            <div
-              key={i}
-              className="flex-1 h-1.5 rounded-full transition-all duration-300"
-              style={{
-                background: i < step ? colors.primary : 'rgba(255,255,255,0.1)',
-              }}
-            />
-          ))}
-        </div>
+          <h1 className="text-2xl sm:text-[28px] font-extrabold tracking-tight" style={{ color: tt.text }}>
+            {stepLabel(step)}
+          </h1>
+          <p className="text-sm max-w-2xl" style={{ color: tt.textSec }}>
+            {stepHelp(step)}
+          </p>
+
+          {/* Stepper — segments fill as the user advances. Active
+              segment has a brand-soft glow; future segments are flat. */}
+          <div className="flex gap-1.5 pt-1">
+            {Array.from({ length: totalSteps }, (_, i) => {
+              const n = i + 1;
+              const done = n < step;
+              const active = n === step;
+              return (
+                <div
+                  key={n}
+                  className="flex-1 h-1.5 rounded-full transition-all duration-300"
+                  style={{
+                    background: done || active ? tt.primary : (isLight ? 'rgba(15,7,3,0.08)' : 'rgba(255,255,255,0.08)'),
+                    boxShadow: active ? `0 0 12px ${tt.primary}50` : 'none',
+                    opacity: done ? 0.7 : 1,
+                  }}
+                  aria-label={`${stepLabel(n)} ${active ? '(current)' : done ? '(complete)' : '(upcoming)'}`}
+                />
+              );
+            })}
+          </div>
+        </motion.header>
 
         {/* Error */}
         <AnimatePresence>
           {error && (
             <motion.div
-              initial={{ opacity: 0, y: -10 }}
+              initial={{ opacity: 0, y: -8 }}
               animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -10 }}
-              className="mb-4 p-3 rounded-xl text-sm text-red-400"
-              style={{ background: 'rgba(255,77,77,0.1)', border: '1px solid rgba(255,77,77,0.2)' }}
+              exit={{ opacity: 0, y: -8 }}
+              className="p-3 rounded-xl text-sm"
+              style={{ background: `${tt.danger}12`, border: `1px solid ${tt.danger}38`, color: tt.danger }}
             >
               {error}
             </motion.div>
           )}
         </AnimatePresence>
+
+        {/* 2-column: step body on the left, live preview on the right.
+            Desktop sees both side-by-side; mobile collapses to a
+            single column with the preview sliding in BELOW the form
+            (no sticky on mobile — that would compete with the keyboard). */}
+        <div className="grid lg:grid-cols-[1fr_340px] gap-6 lg:items-start">
+        <div
+          className="rounded-2xl p-5 sm:p-6"
+          style={{ background: tt.card, border: `1px solid ${tt.cardBorder}` }}
+        >
 
         {/* Steps */}
         <AnimatePresence mode="wait">
@@ -1063,46 +1156,309 @@ export default function CreateOrganizationPage() {
               </div>
             </motion.div>
           )}
-        </AnimatePresence>
 
-        {/* Navigation Buttons */}
-        <div className="flex gap-3 mt-8">
-          {step > 1 && (
-            <button
-              onClick={prevStep}
-              className="px-6 py-3 rounded-xl text-white font-medium transition-all hover:bg-white/5"
-              style={{ border: `1px solid ${colors.borderLight}` }}
+          {/* ── STEP: Review and confirm ───────────────────────────
+              Final sanity check before we provision the org. Shows
+              every key choice so the user can spot a typo (especially
+              the slug, which becomes part of the URL) before submit.
+              The right-column LivePreview already shows most of this,
+              but this on-page summary is the explicit "look it over"
+              moment — and important on mobile, where the preview is
+              below the form and easy to miss. */}
+          {step === reviewStep && (
+            <motion.div
+              key="step-review"
+              initial={{ opacity: 0, x: 20 }}
+              animate={{ opacity: 1, x: 0 }}
+              exit={{ opacity: 0, x: -20 }}
             >
+              <h2 className="text-lg font-extrabold tracking-tight mb-1" style={{ color: tt.text }}>
+                Look it over
+              </h2>
+              <p className="text-sm mb-5" style={{ color: tt.textSec }}>
+                Once you create the organisation, the slug stays — it's
+                part of every URL members will see. Confirm everything
+                reads right.
+              </p>
+
+              <div className="space-y-3">
+                <ReviewRow label="Organisation" value={form.name} extra={form.short_name ? `(${form.short_name.toUpperCase()})` : ''} tt={tt} />
+                <ReviewRow label="URL slug" value={form.slug ? `${APP_NAME.toLowerCase()}.app/${form.slug.trim().toLowerCase()}` : '—'} mono tt={tt} />
+                <ReviewRow label="Type" value={ORG_TYPE_OPTIONS.find(o => o.type === form.organization_type)?.label || '—'} tt={tt} />
+                {form.email && <ReviewRow label="Contact email" value={form.email} tt={tt} />}
+                {form.country && <ReviewRow label="Country" value={`${form.country} · ${form.currency_code}`} tt={tt} />}
+
+                {isAcademic && form.academic_scope && (
+                  <>
+                    <ReviewRow
+                      label="Academic shape"
+                      value={form.academic_scope === 'level' ? 'Single level' : 'Faculty + departments'}
+                      tt={tt}
+                    />
+                    {form.academic_year && (
+                      <ReviewRow label="Academic year" value={form.academic_year} tt={tt} />
+                    )}
+                    {form.academic_scope === 'level' && (
+                      <ReviewRow
+                        label="Level"
+                        value={form.academic_level === '__custom__' ? form.custom_level : form.academic_level}
+                        tt={tt}
+                      />
+                    )}
+                    {form.academic_scope === 'faculty' && (
+                      <ReviewRow
+                        label="Faculty"
+                        value={form.faculty === '__custom__' ? form.custom_faculty : form.faculty}
+                        tt={tt}
+                      />
+                    )}
+                  </>
+                )}
+
+                <ReviewRow
+                  label="First group"
+                  value={form.group_name}
+                  extra={form.group_short_name ? `(${form.group_short_name.toUpperCase()})` : ''}
+                  tt={tt}
+                />
+                <ReviewRow label="Owner name" value={form.owner_name} tt={tt} />
+                <ReviewRow label="Owner sign-in ID" value={form.owner_member_id} mono tt={tt} />
+              </div>
+
+              {/* What happens next — sets the right expectation about
+                  the Layer-2 acting state. Without this banner a
+                  founder hits the dashboard and wonders why money is
+                  locked. */}
+              <div
+                className="mt-5 p-3 rounded-xl text-xs"
+                style={{
+                  background: `${tt.amber}12`,
+                  border: `1px solid ${tt.amber}38`,
+                  color: tt.amber,
+                }}
+              >
+                <p className="font-bold mb-1">What happens next</p>
+                <p style={{ color: tt.textSec }}>
+                  You'll land in your new org as an <strong style={{ color: tt.text }}>acting owner</strong>.
+                  Setup (groups, theme, invites) is unlocked immediately.
+                  Collecting dues, payouts, and billing unlock once your
+                  founder claim is verified — peer votes or platform review.
+                </p>
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+        </div>{/* /step body card */}
+
+          {/* Right-column live preview. Desktop: sticky to the top so
+              it stays visible as the form column scrolls. Mobile: a
+              normal-flow card below the form, so the keyboard doesn't
+              fight it. */}
+          <aside className="lg:sticky lg:top-6 lg:self-start">
+            <LivePreview form={form} step={step} totalSteps={totalSteps} isAcademic={isAcademic} tt={tt} />
+          </aside>
+        </div>{/* /grid */}
+
+        {/* Footer: Back + Continue/Create. Matches the chip-button
+            style of the exec dashboards (no shadow-lg, no gradients). */}
+        <div className="flex justify-between gap-3 pt-1">
+          {step > 1 ? (
+            <button
+              type="button"
+              onClick={prevStep}
+              disabled={loading}
+              className="inline-flex items-center gap-1.5 px-4 py-2.5 rounded-xl text-sm font-bold transition-all hover:-translate-y-0.5 active:scale-[0.98] disabled:opacity-50"
+              style={{
+                background: tt.card,
+                color: tt.text,
+                border: `1px solid ${tt.cardBorder}`,
+              }}
+            >
+              <ArrowLeft className="w-4 h-4" />
               Back
             </button>
-          )}
+          ) : <span />}
           <button
-            onClick={step === totalSteps ? handleSubmit : nextStep}
+            type="button"
+            onClick={step === reviewStep ? handleSubmit : nextStep}
             disabled={loading || (form.organization_type === 'university' && step === ownerStep && !ownerAcknowledged)}
-            className="flex-1 px-6 py-3 rounded-xl text-white font-semibold flex items-center justify-center gap-2 transition-all hover:scale-[1.02] active:scale-[0.98] disabled:opacity-60"
-            style={{ background: colors.primary }}
+            className="inline-flex items-center gap-1.5 px-5 py-2.5 rounded-xl text-sm font-bold transition-all hover:-translate-y-0.5 active:scale-[0.98] disabled:opacity-60"
+            style={{
+              background: tt.primary,
+              color: '#FFFFFF',
+              border: `1px solid ${tt.primary}`,
+            }}
           >
             {loading ? (
               <>
-                <Loader2 size={18} className="animate-spin" />
-                Creating...
+                <Loader2 className="w-4 h-4 animate-spin" />
+                Creating…
               </>
-            ) : step === totalSteps ? (
+            ) : step === reviewStep ? (
               <>
-                Create Organization
-                <Check size={18} />
+                Create organisation
+                <Check className="w-4 h-4" />
               </>
             ) : (
               <>
                 Continue
-                <ArrowRight size={18} />
+                <ArrowRight className="w-4 h-4" />
               </>
             )}
           </button>
         </div>
         </>
         )}
-      </motion.div>
-    </PageWrapper>
+      </div>{/* /max-w-5xl */}
+    </div>
+  );
+}
+
+/**
+ * LivePreview — sticky right-column card that mirrors the user's
+ * choices in real time. Shows the avatar, name, slug, URL preview,
+ * org type, and (when filled) the first group + owner. The point
+ * is to make the wizard feel CONNECTED — every keystroke updates
+ * a tangible artefact the user is building.
+ */
+function LivePreview({
+  form, step, totalSteps, isAcademic, tt,
+}: {
+  form: FormData;
+  step: number;
+  totalSteps: number;
+  isAcademic: boolean;
+  tt: ReturnType<typeof getDashboardTokens>;
+}) {
+  const initial = (form.short_name || form.name || '?').charAt(0).toUpperCase();
+  const typeLabel = ORG_TYPE_OPTIONS.find(o => o.type === form.organization_type)?.label || '—';
+  const url = form.slug.trim() ? `${APP_NAME.toLowerCase()}.app/${form.slug.trim().toLowerCase()}` : '—';
+
+  return (
+    <div
+      className="rounded-2xl p-5 sm:p-6 relative overflow-hidden"
+      style={{ background: tt.card, border: `1px solid ${tt.cardBorder}` }}
+    >
+      <span
+        aria-hidden
+        className="absolute -right-10 -top-10 w-32 h-32 rounded-full pointer-events-none"
+        style={{ background: tt.blob1, filter: 'blur(40px)' }}
+      />
+      <div className="relative">
+        <p className="text-[10px] uppercase tracking-[0.18em] font-bold mb-3" style={{ color: tt.primary }}>
+          Live preview
+        </p>
+
+        {/* Avatar + name */}
+        <div className="flex items-center gap-3">
+          <div
+            className="w-14 h-14 rounded-2xl flex items-center justify-center text-xl font-extrabold"
+            style={{ background: tt.primarySoft, color: tt.primary, border: `1px solid ${tt.primaryRing}` }}
+          >
+            {initial}
+          </div>
+          <div className="flex-1 min-w-0">
+            <p className="text-base font-extrabold truncate" style={{ color: tt.text }}>
+              {form.name || 'Your organisation'}
+            </p>
+            <p className="text-[11px] truncate" style={{ color: tt.textTer }}>
+              {typeLabel}
+              {form.short_name ? ` · ${form.short_name.toUpperCase()}` : ''}
+            </p>
+          </div>
+        </div>
+
+        {/* URL chip */}
+        <div className="mt-4">
+          <p className="text-[10px] uppercase tracking-wider font-bold mb-1" style={{ color: tt.textTer }}>
+            URL
+          </p>
+          <p
+            className="text-xs font-mono px-3 py-2 rounded-lg truncate"
+            style={{
+              background: tt.primarySoft,
+              color: tt.primary,
+              border: `1px solid ${tt.primaryRing}`,
+            }}
+          >
+            {url}
+          </p>
+        </div>
+
+        {/* Academic shape — surfaces once a value is chosen */}
+        {isAcademic && form.academic_scope && (
+          <div className="mt-4">
+            <p className="text-[10px] uppercase tracking-wider font-bold mb-1" style={{ color: tt.textTer }}>
+              Academic shape
+            </p>
+            <p className="text-xs" style={{ color: tt.text }}>
+              {form.academic_scope === 'level' ? 'Single level' : 'Faculty + departments'}
+              {form.academic_year ? ` · ${form.academic_year}` : ''}
+            </p>
+          </div>
+        )}
+
+        {/* First group */}
+        {form.group_name && (
+          <div className="mt-4">
+            <p className="text-[10px] uppercase tracking-wider font-bold mb-1" style={{ color: tt.textTer }}>
+              First group
+            </p>
+            <p className="text-xs" style={{ color: tt.text }}>
+              {form.group_name}
+              {form.group_short_name ? ` (${form.group_short_name.toUpperCase()})` : ''}
+            </p>
+          </div>
+        )}
+
+        {/* Owner */}
+        {form.owner_name && (
+          <div className="mt-4">
+            <p className="text-[10px] uppercase tracking-wider font-bold mb-1" style={{ color: tt.textTer }}>
+              Owner
+            </p>
+            <p className="text-xs font-bold" style={{ color: tt.text }}>{form.owner_name}</p>
+            {form.owner_member_id && (
+              <p className="text-[11px] font-mono mt-0.5" style={{ color: tt.textTer }}>
+                {form.owner_member_id}
+              </p>
+            )}
+          </div>
+        )}
+
+        {/* "You are here" */}
+        <div
+          className="mt-5 pt-4 text-[10px] flex items-center justify-between"
+          style={{ borderTop: `1px solid ${tt.cardBorder}`, color: tt.textTer }}
+        >
+          <span className="uppercase tracking-wider font-bold">Progress</span>
+          <span>{step} / {totalSteps}</span>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function ReviewRow({
+  label, value, extra, mono, tt,
+}: {
+  label: string;
+  value: string;
+  extra?: string;
+  mono?: boolean;
+  tt: ReturnType<typeof getDashboardTokens>;
+}) {
+  return (
+    <div className="flex items-start justify-between gap-3 py-2" style={{ borderBottom: `1px dashed ${tt.cardBorder}` }}>
+      <span className="text-[11px] uppercase tracking-wider font-bold shrink-0" style={{ color: tt.textTer }}>
+        {label}
+      </span>
+      <span
+        className={`text-sm font-semibold text-right truncate ${mono ? 'font-mono' : ''}`}
+        style={{ color: value && value !== '—' ? tt.text : tt.textTer }}
+      >
+        {value || '—'} {extra && <span className="font-normal" style={{ color: tt.textTer }}>{extra}</span>}
+      </span>
+    </div>
   );
 }

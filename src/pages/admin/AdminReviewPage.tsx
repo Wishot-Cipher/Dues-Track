@@ -13,7 +13,6 @@ import GlassCard from "@/components/ui/GlassCard";
 import { formatCurrency, formatDate } from "@/utils/formatters";
 import { PrivacyMask } from '@/components/ui/PrivacyMask';
 import Modal from '@/components/ui/Modal';
-import AnimatedCounter from "@/components/ui/AnimatedCounter";
 import { getDashboardTokens, useTheme } from '@/hooks/useTheme';
 // AdminNotificationCenter removed - using push notifications instead
 import {
@@ -463,232 +462,180 @@ export default function AdminReviewPage() {
     }
   };
 
+  // Pre-compute counts once for the chips + stats strip. Was repeated
+  // five times inline; pulling it out keeps the JSX readable.
+  const pendingCount = payments.filter(p => p.status === 'pending').length;
+  const approvedCount = payments.filter(p => p.status === 'approved').length;
+  const rejectedCount = payments.filter(p => p.status === 'rejected').length;
+  const totalSum = payments
+    .filter(p => p.status === 'approved')
+    .reduce((s, p) => s + Number(p.amount || 0), 0);
+
   return (
     <div
-      className="min-h-screen py-4 sm:py-6 relative overflow-x-hidden"
-      style={{
-        background: tk.bgWash,
-      }}
+      className="min-h-screen py-6 px-4 relative overflow-hidden"
+      style={{ background: tk.bgWash, color: tk.text }}
     >
-      {/* Background Grid Pattern */}
+      {/* Soft brand blobs — replaces the 50px grid + dual pulsing orbs
+          + ECE photo the legacy hero rendered. Matches the exec
+          dashboards. */}
       <div
-        className="absolute inset-0 opacity-20 pointer-events-none"
-        style={{
-          backgroundImage: `
-            linear-gradient(${colors.primary}40 1px, transparent 1px),
-            linear-gradient(90deg, ${colors.primary}40 1px, transparent 1px)
-          `,
-          backgroundSize: "50px 50px",
-        }}
+        aria-hidden
+        className="pointer-events-none absolute -top-32 -right-24 w-[520px] h-[520px] rounded-full"
+        style={{ background: tk.blob1, filter: 'blur(120px)' }}
+      />
+      <div
+        aria-hidden
+        className="pointer-events-none absolute -bottom-40 -left-32 w-[420px] h-[420px] rounded-full"
+        style={{ background: tk.blob2, filter: 'blur(110px)' }}
       />
 
-      {/* Animated Gradient Orbs */}
-      <div className="fixed inset-0 overflow-hidden pointer-events-none">
-        <div
-          className="absolute w-[500px] h-[500px] rounded-full blur-[120px] opacity-30 animate-pulse"
-          style={{
-            background: `radial-gradient(circle, ${colors.primary} 0%, transparent 70%)`,
-            top: "-10%",
-            right: "-5%",
-            animationDuration: "4s",
-          }}
-        />
-        <div
-          className="absolute w-[400px] h-[400px] rounded-full blur-[100px] opacity-20"
-          style={{
-            background: `radial-gradient(circle, ${colors.accentMint} 0%, transparent 70%)`,
-            bottom: "-5%",
-            left: "-5%",
-            animation: "pulse 6s ease-in-out infinite",
-          }}
-        />
-
-        {/* ECE Logo Background - Creative Element */}
-        <div className="hidden lg:block absolute right-0 top-1/2 -translate-y-1/2 w-[600px] h-[600px] opacity-[0.08] pointer-events-none">
-          <img
-            src="/Ece picture.jpg"
-            alt="ECE Background"
-            className="w-full h-full object-contain"
-            style={{
-              filter: "grayscale(0.5) brightness(0.8)",
-              mixBlendMode: "soft-light",
-            }}
-          />
-        </div>
-      </div>
-
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-6 relative z-10">
-        {/* Header */}
-        <motion.div
-          initial={{ opacity: 0, y: -20 }}
+      <div className="max-w-5xl mx-auto space-y-6 relative z-10">
+        {/* ── Header ─────────────────────────────────────────────── */}
+        <motion.header
+          initial={{ opacity: 0, y: 12 }}
           animate={{ opacity: 1, y: 0 }}
+          className="space-y-3"
         >
-          <GlassCard className="relative overflow-hidden">
-            {/* Decorative Elements */}
-            <div className="absolute top-0 right-0 w-64 h-64 opacity-5 pointer-events-none">
-              <Shield className="w-full h-full" style={{ color: colors.warning }} />
-            </div>
-            <div 
-              className="absolute top-0 left-0 w-full h-1"
-              style={{ background: `linear-gradient(90deg, ${colors.warning}, ${colors.primary}, transparent)` }}
-            />
-            
-            <div className="relative z-10 flex flex-col sm:flex-row items-center sm:items-start justify-between gap-4">
-              <div className="text-center sm:text-left w-full sm:w-auto">
-                <motion.button
-                  whileHover={{ x: -4 }}
-                  onClick={() => navigate("/admin/dashboard")}
-                  className="flex items-center justify-center sm:justify-start gap-2 mb-4 px-4 py-2 rounded-xl transition-all"
-                  style={{ 
-                    background: `${colors.primary}15`,
-                    border: `1px solid ${colors.primary}30`,
-                    color: colors.primary 
-                  }}
-                >
-                  <ArrowLeft size={16} />
-                  <span className="font-medium">Back to Dashboard</span>
-                </motion.button>
-                
-                {/* Badge */}
-                <motion.div 
-                  initial={{ opacity: 0, scale: 0.9 }}
-                  animate={{ opacity: 1, scale: 1 }}
-                  transition={{ delay: 0.1 }}
-                  className="inline-flex items-center gap-2 px-3 py-1 rounded-full text-xs font-semibold mb-3"
-                  style={{ 
-                    background: `linear-gradient(135deg, ${colors.warning}30, ${colors.warning}10)`,
-                    border: `1px solid ${colors.warning}40`,
-                    color: colors.warning,
-                  }}
-                >
-                  <Sparkles className="w-3 h-3" />
-                  PAYMENT REVIEW CENTER
-                </motion.div>
-                
-                <h1 className="text-2xl sm:text-3xl font-bold text-white mb-2">
-                  Review Submissions
-                </h1>
-                
-                <p
-                  className="text-sm sm:text-base flex items-center justify-center sm:justify-start gap-2"
-                  style={{ color: tk.textSec }}
-                >
-                  <Filter className="w-4 h-4" />
-                  Approve or reject pending payment submissions
-                </p>
-              </div>
-              
-              {/* Stats Card */}
-              <motion.div
-                whileHover={{ scale: 1.02, y: -2 }}
-                className="flex items-center gap-4 px-6 py-4 rounded-2xl cursor-pointer"
+          <button
+            type="button"
+            onClick={() => navigate('/admin/dashboard')}
+            className="inline-flex items-center gap-1 text-[11px] font-semibold uppercase tracking-wider transition-opacity hover:opacity-80"
+            style={{ color: tk.textTer }}
+          >
+            <ArrowLeft className="w-3 h-3" />
+            Back to dashboard
+          </button>
+
+          <div className="flex items-start justify-between gap-3 flex-wrap">
+            <div className="flex items-center gap-2 flex-wrap">
+              <span
+                className="inline-flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-[0.18em] px-2 py-1 rounded-full"
                 style={{
-                  background: `linear-gradient(135deg, ${colors.warning}20, ${colors.warning}05)`,
-                  border: `1px solid ${colors.warning}40`,
-                  boxShadow: `0 4px 20px ${colors.warning}20`
+                  background: tk.primarySoft,
+                  color: tk.primary,
+                  border: `1px solid ${tk.primaryRing}`,
                 }}
-                onClick={() => setFilter('pending')}
               >
-                {/* Pulsing indicator */}
-                {payments.filter((p) => p.status === "pending").length > 0 && (
-                  <div className="absolute -top-1 -right-1 w-3 h-3 rounded-full animate-pulse"
-                       style={{ background: colors.warning, boxShadow: `0 0 8px ${colors.warning}` }} />
-                )}
-                <div className="w-14 h-14 rounded-xl flex items-center justify-center"
-                     style={{ background: `${colors.warning}30` }}>
-                  <Clock className="w-7 h-7" style={{ color: colors.warning }} />
-                </div>
-                <div>
-                  <p className="text-xs font-medium" style={{ color: colors.textSecondary }}>
-                    Pending Review
-                  </p>
-                  <p className="text-3xl font-bold" style={{ color: colors.warning }}>
-                    <AnimatedCounter value={payments.filter((p) => p.status === "pending").length} />
-                  </p>
-                </div>
-              </motion.div>
-              
-            </div>
-          </GlassCard>
-        </motion.div>
-
-        {/* Filter Tabs */}
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.1 }}
-        >
-          <GlassCard className="relative overflow-hidden">
-            <div 
-              className="absolute top-0 left-0 w-full h-0.5 opacity-40"
-              style={{ background: `linear-gradient(90deg, ${colors.accentMint}, transparent)` }}
-            />
-            
-            <div className="flex items-center gap-3 mb-4">
-              <Filter className="w-5 h-5" style={{ color: tk.textSec }} />
-              <span className="text-sm font-medium" style={{ color: tk.textSec }}>Filter by status</span>
-            </div>
-            
-            <div className="flex flex-wrap gap-2">
-              {[
-                { value: "all", label: "All Payments", count: payments.length, color: colors.primary },
-                {
-                  value: "pending",
-                  label: "Pending",
-                  count: payments.filter((p) => p.status === "pending").length,
-                  color: colors.warning
-                },
-                {
-                  value: "approved",
-                  label: "Approved",
-                  count: payments.filter((p) => p.status === "approved").length,
-                  color: colors.statusPaid
-                },
-                {
-                  value: "rejected",
-                  label: "Rejected",
-                  count: payments.filter((p) => p.status === "rejected").length,
-                  color: colors.statusUnpaid
-                },
-              ].map(({ value, label, count, color }) => (
-                <motion.button
-                  key={value}
-                  whileHover={{ scale: 1.02, y: -1 }}
-                  whileTap={{ scale: 0.98 }}
-                  onClick={() => {
-                    setFilter(value as typeof filter);
-                    setCurrentPage(1);
-                  }}
-                  className="px-4 py-2.5 rounded-xl text-sm font-medium transition-all relative"
+                <Shield className="w-3 h-3" />
+                Payment review
+              </span>
+              {pendingCount > 0 && (
+                <span
+                  className="inline-flex items-center gap-1 text-[10px] font-bold uppercase tracking-wider px-2 py-1 rounded-full"
                   style={{
-                    background:
-                      filter === value
-                        ? `linear-gradient(135deg, ${color}30, ${color}10)`
-                        : (theme === 'light' ? '#FFFFFF' : "rgba(255, 255, 255, 0.03)"),
-                    border: `1px solid ${
-                      filter === value ? color + "60" : tk.cardBorder
-                    }`,
-                    color: filter === value ? color : tk.textSec,
-                    boxShadow: filter === value ? `0 2px 10px ${color}20` : 'none'
+                    background: `${tk.amber}18`,
+                    color: tk.amber,
+                    border: `1px solid ${tk.amber}40`,
                   }}
                 >
-                  <span className="flex items-center gap-2">
-                    {value === 'pending' && <Clock className="w-3.5 h-3.5" />}
-                    {value === 'approved' && <CheckCircle className="w-3.5 h-3.5" />}
-                    {value === 'rejected' && <XCircle className="w-3.5 h-3.5" />}
-                    {label}
-                    <span className="px-1.5 py-0.5 rounded-md text-xs font-bold"
-                          style={{ 
-                            background: filter === value ? `${color}40` : 'rgba(255, 255, 255, 0.1)',
-                            color: filter === value ? '#FFFFFF' : tk.textSec
-                          }}>
-                      {count}
-                    </span>
-                  </span>
-                </motion.button>
-              ))}
+                  <Clock className="w-3 h-3" />
+                  {pendingCount} pending
+                </span>
+              )}
             </div>
-          </GlassCard>
+          </div>
+
+          <h1 className="text-2xl sm:text-[28px] font-extrabold tracking-tight" style={{ color: tk.text }}>
+            Review submissions
+          </h1>
+          <p className="text-sm max-w-2xl" style={{ color: tk.textSec }}>
+            Approve, reject, or waive payment submissions toward dues
+            you publish. Each tier sees only their own queue — class
+            reps handle class dues; dept and faculty execs handle
+            their own tier's dues; org owners see everything.
+          </p>
+
+          {/* Stats strip — 4 numbers visible at a glance. The amber
+              pending tile clicks through to the pending filter (same
+              affordance the legacy hero's stats card had). */}
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 pt-1">
+            <ReviewStat
+              label="Pending"
+              value={pendingCount}
+              icon={<Clock className="w-3.5 h-3.5" />}
+              color={tk.amber}
+              tk={tk}
+              onClick={() => { setFilter('pending'); setCurrentPage(1); }}
+              active={filter === 'pending'}
+            />
+            <ReviewStat
+              label="Approved"
+              value={approvedCount}
+              icon={<CheckCircle className="w-3.5 h-3.5" />}
+              color={tk.mint}
+              tk={tk}
+              onClick={() => { setFilter('approved'); setCurrentPage(1); }}
+              active={filter === 'approved'}
+            />
+            <ReviewStat
+              label="Rejected"
+              value={rejectedCount}
+              icon={<XCircle className="w-3.5 h-3.5" />}
+              color={tk.danger}
+              tk={tk}
+              onClick={() => { setFilter('rejected'); setCurrentPage(1); }}
+              active={filter === 'rejected'}
+            />
+            <ReviewStat
+              label="Total approved"
+              value={`₦${totalSum.toLocaleString()}`}
+              icon={<Sparkles className="w-3.5 h-3.5" />}
+              color={tk.primary}
+              tk={tk}
+            />
+          </div>
+        </motion.header>
+
+        {/* ── Filter chip row ─────────────────────────────────────── */}
+        <motion.div
+          initial={{ opacity: 0, y: 12 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.05 }}
+          className="rounded-2xl p-3 sm:p-4"
+          style={{ background: tk.card, border: `1px solid ${tk.cardBorder}` }}
+        >
+          <div className="flex items-center gap-2 mb-2.5">
+            <Filter className="w-3.5 h-3.5" style={{ color: tk.textTer }} />
+            <span className="text-[10px] uppercase tracking-[0.14em] font-bold" style={{ color: tk.textTer }}>
+              Filter
+            </span>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            {[
+              { value: 'all',      label: 'All',      count: payments.length, color: tk.primary, icon: null },
+              { value: 'pending',  label: 'Pending',  count: pendingCount,    color: tk.amber,   icon: <Clock className="w-3 h-3" /> },
+              { value: 'approved', label: 'Approved', count: approvedCount,   color: tk.mint,    icon: <CheckCircle className="w-3 h-3" /> },
+              { value: 'rejected', label: 'Rejected', count: rejectedCount,   color: tk.danger,  icon: <XCircle className="w-3 h-3" /> },
+            ].map(({ value, label, count, color, icon }) => {
+              const isActive = filter === value;
+              return (
+                <button
+                  key={value}
+                  type="button"
+                  onClick={() => { setFilter(value as typeof filter); setCurrentPage(1); }}
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-bold transition-all"
+                  style={{
+                    background: isActive ? `${color}18` : (theme === 'light' ? 'rgba(15,7,3,0.03)' : 'rgba(255,255,255,0.04)'),
+                    color: isActive ? color : tk.textSec,
+                    border: `1px solid ${isActive ? `${color}40` : tk.cardBorder}`,
+                  }}
+                >
+                  {icon}
+                  {label}
+                  <span
+                    className="ml-0.5 inline-flex items-center justify-center text-[10px] font-bold rounded-full px-1.5 min-w-[18px] h-[18px] tabular-nums"
+                    style={{
+                      background: isActive ? `${color}28` : (theme === 'light' ? 'rgba(15,7,3,0.06)' : 'rgba(255,255,255,0.08)'),
+                      color: isActive ? color : tk.textSec,
+                    }}
+                  >
+                    {count}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
         </motion.div>
 
         {/* Table */}
@@ -909,185 +856,75 @@ export default function AdminReviewPage() {
                 </table>
               </div>
 
-              {/* Mobile Card View */}
-              <div className="lg:hidden space-y-4">
-                {paginatedPayments.map((payment, index) => (
-                  <motion.div
-                    key={payment.id}
-                    initial={{ opacity: 0, y: 20 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ delay: Math.min(index * 0.02, 0.3) }}
-                    className="p-4 rounded-lg"
-                    style={{ background: "rgba(255, 255, 255, 0.05)" }}
-                  >
-                    {/* Student Info - Centered */}
-                    <div className="flex flex-col items-center text-center mb-4">
+              {/* Mobile compact list — matches the My Dues row style.
+                  Was a big centred card per payment (avatar, name,
+                  status pill, 3 mini-cards for Type / Amount /
+                  Submitted, full tx-ref, then a stack of action
+                  buttons). 4-5 payments and the screen was full,
+                  triage was slow. New layout: one compact row per
+                  payment with avatar + name/title + amount + status
+                  chip + a single Open button that pops the detail
+                  modal where Approve/Reject already live. */}
+              <div className="lg:hidden space-y-2">
+                {paginatedPayments.map((payment, index) => {
+                  const badge = getStatusBadge(payment.status, payment.transaction_ref);
+                  return (
+                    <motion.button
+                      type="button"
+                      key={payment.id}
+                      initial={{ opacity: 0, y: 8 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      transition={{ delay: Math.min(index * 0.015, 0.2) }}
+                      onClick={() => setSelectedPayment(payment)}
+                      className="w-full rounded-2xl p-3 flex items-center gap-3 text-left transition-all active:scale-[0.99]"
+                      style={{
+                        background: tk.card,
+                        border: `1px solid ${tk.cardBorder}`,
+                      }}
+                    >
+                      {/* Avatar — single brand-soft tile, no extra
+                          decoration. Cheap to render at scale. */}
                       <div
-                        className="w-14 h-14 rounded-full flex items-center justify-center mb-3"
-                        style={{ background: `${colors.primary}20` }}
-                      >
-                        <User
-                          className="w-6 h-6"
-                          style={{ color: colors.primary }}
-                        />
-                      </div>
-                      <p className="text-white font-semibold text-lg">
-                        {payment.member.full_name}
-                      </p>
-                      <p
-                        className="text-sm mb-2"
-                        style={{ color: colors.textSecondary }}
-                      >
-                        {payment.member.member_id}
-                      </p>
-                      {(() => {
-                        const badge = getStatusBadge(
-                          payment.status,
-                          payment.transaction_ref
-                        );
-                        return (
-                          <span
-                            className="px-3 py-1.5 rounded-full text-xs font-medium"
-                            style={{ background: badge.bg, color: badge.color }}
-                          >
-                            {badge.label}
-                          </span>
-                        );
-                      })()}
-                    </div>
-
-                    {/* Payment Details - Organized Grid */}
-                    <div className="space-y-3 mb-4">
-                      <div
-                        className="p-3 rounded-lg text-center"
-                        style={{ background: "rgba(255, 255, 255, 0.03)" }}
-                      >
-                        <p
-                          className="text-xs mb-1"
-                          style={{ color: colors.textSecondary }}
-                        >
-                          Payment Type
-                        </p>
-                        <p className="text-white text-sm font-medium">
-                          {payment.payment_types.title}
-                        </p>
-                      </div>
-                      <div className="grid grid-cols-2 gap-3">
-                        <div
-                          className="p-3 rounded-lg text-center"
-                          style={{ background: "rgba(255, 255, 255, 0.03)" }}
-                        >
-                          <p
-                            className="text-xs mb-1"
-                            style={{ color: colors.textSecondary }}
-                          >
-                            Amount
-                          </p>
-                          <p className="text-white font-semibold text-sm">
-                            <PrivacyMask>{formatCurrency(payment.amount)}</PrivacyMask>
-                          </p>
-                        </div>
-                        <div
-                          className="p-3 rounded-lg text-center"
-                          style={{ background: "rgba(255, 255, 255, 0.03)" }}
-                        >
-                          <p
-                            className="text-xs mb-1"
-                            style={{ color: colors.textSecondary }}
-                          >
-                            Submitted
-                          </p>
-                          <p className="text-white text-xs">
-                            {formatDate(payment.created_at, "short")}
-                          </p>
-                        </div>
-                      </div>
-                      <div
-                        className="p-3 rounded-lg text-center"
-                        style={{ background: "rgba(255, 255, 255, 0.03)" }}
-                      >
-                        <p
-                          className="text-xs mb-1"
-                          style={{ color: colors.textSecondary }}
-                        >
-                          Transaction Ref
-                        </p>
-                        <p className="text-white text-xs font-mono break-all">
-                          {payment.transaction_ref}
-                        </p>
-                      </div>
-                    </div>
-
-                    {/* Actions - Stacked Layout */}
-                    <div className="space-y-2">
-                      <button
-                        onClick={() => setSelectedPayment(payment)}
-                        className="w-full flex items-center justify-center gap-2 py-2.5 rounded-lg text-sm font-medium transition-all"
+                        className="w-10 h-10 rounded-xl flex items-center justify-center shrink-0 text-sm font-extrabold"
                         style={{
-                          background: `${colors.primary}20`,
-                          border: `1px solid ${colors.primary}40`,
-                          color: colors.primary,
+                          background: tk.primarySoft,
+                          color: tk.primary,
+                          border: `1px solid ${tk.primaryRing}`,
                         }}
+                        aria-hidden
                       >
-                        <Eye className="w-4 h-4" />
-                        View Receipt
-                      </button>
-                            {payment.status === "pending" && hasPermission('can_approve_payments') && (
-                        <div className="grid grid-cols-2 gap-2">
-                          <button
-                            onClick={() => {
-                              setSelectedPayment(payment);
-                              setShowApproveModal(true);
-                            }}
-                            disabled={processingId === payment.id}
-                            className="flex items-center justify-center gap-2 py-2.5 rounded-lg text-sm font-medium transition-all disabled:opacity-50"
-                            style={{
-                              background: `${colors.statusPaid}20`,
-                              border: `1px solid ${colors.statusPaid}40`,
-                              color: colors.statusPaid,
-                            }}
-                          >
-                            {processingId === payment.id ? (
-                              <>
-                                <div
-                                  className="animate-spin rounded-full h-4 w-4 border-2 border-t-transparent"
-                                  style={{
-                                    borderColor: colors.statusPaid,
-                                    borderTopColor: "transparent",
-                                  }}
-                                />
-                                <span className="hidden sm:inline">
-                                  Processing
-                                </span>
-                              </>
-                            ) : (
-                              <>
-                                <Check className="w-4 h-4" />
-                                Approve
-                              </>
-                            )}
-                          </button>
-                          <button
-                            onClick={() => {
-                              setSelectedPayment(payment);
-                              setShowRejectModal(true);
-                            }}
-                            disabled={processingId === payment.id}
-                            className="flex items-center justify-center gap-2 py-2.5 rounded-lg text-sm font-medium transition-all disabled:opacity-50"
-                            style={{
-                              background: `${colors.statusUnpaid}20`,
-                              border: `1px solid ${colors.statusUnpaid}40`,
-                              color: colors.statusUnpaid,
-                            }}
-                          >
-                            <X className="w-4 h-4" />
-                            Reject
-                          </button>
-                        </div>
-                      )}
-                    </div>
-                  </motion.div>
-                ))}
+                        {(payment.member.full_name || '?').charAt(0).toUpperCase()}
+                      </div>
+
+                      {/* Identity column — name on top, due title below.
+                          Both truncate so a long string can't push the
+                          chip off the right edge. */}
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-bold truncate" style={{ color: tk.text }}>
+                          {payment.member.full_name}
+                        </p>
+                        <p className="text-[11px] truncate" style={{ color: tk.textTer }}>
+                          {payment.payment_types.title} · {formatDate(payment.created_at, 'short')}
+                        </p>
+                      </div>
+
+                      {/* Right column — amount stacked on top of a
+                          tiny status chip. tabular-nums keeps the
+                          column aligned across rows. */}
+                      <div className="shrink-0 text-right">
+                        <p className="text-sm font-extrabold tabular-nums" style={{ color: tk.text }}>
+                          <PrivacyMask>{formatCurrency(payment.amount)}</PrivacyMask>
+                        </p>
+                        <span
+                          className="inline-flex items-center mt-1 px-1.5 py-0.5 rounded-full text-[9.5px] font-bold uppercase tracking-wider"
+                          style={{ background: badge.bg, color: badge.color }}
+                        >
+                          {badge.label}
+                        </span>
+                      </div>
+                    </motion.button>
+                  );
+                })}
               </div>
             </GlassCard>
           </motion.div>
@@ -1456,5 +1293,46 @@ export default function AdminReviewPage() {
       />
       <Footer />
     </div>
+  );
+}
+
+function ReviewStat({
+  label, value, icon, color, tk, onClick, active,
+}: {
+  label: string;
+  value: number | string;
+  icon: React.ReactNode;
+  color: string;
+  tk: ReturnType<typeof getDashboardTokens>;
+  onClick?: () => void;
+  active?: boolean;
+}) {
+  const Tag = onClick ? 'button' : 'div';
+  return (
+    <Tag
+      type={onClick ? 'button' : undefined}
+      onClick={onClick}
+      className={`rounded-2xl p-3 sm:p-4 text-left transition-all ${onClick ? 'cursor-pointer hover:-translate-y-0.5 active:scale-[0.99]' : ''}`}
+      style={{
+        background: tk.card,
+        border: `1px solid ${active ? `${color}50` : tk.cardBorder}`,
+        boxShadow: active ? `0 8px 22px -12px ${color}` : 'none',
+      }}
+    >
+      <div className="flex items-center gap-2">
+        <span
+          className="w-7 h-7 rounded-lg flex items-center justify-center"
+          style={{ background: `${color}18`, color }}
+        >
+          {icon}
+        </span>
+        <p className="text-[10px] uppercase tracking-[0.14em] font-bold" style={{ color: tk.textTer }}>
+          {label}
+        </p>
+      </div>
+      <p className="text-xl font-extrabold tabular-nums mt-2 truncate" style={{ color: tk.text }}>
+        {value}
+      </p>
+    </Tag>
   );
 }

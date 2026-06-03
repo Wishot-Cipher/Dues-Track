@@ -1,75 +1,82 @@
 import { motion } from 'framer-motion';
-import { colors } from '@/config/colors';
-import { Twitter, Heart } from 'lucide-react';
+import { useTheme, getDashboardTokens } from '@/hooks/useTheme';
 
+/**
+ * Footer — professional product footer.
+ *
+ * The previous version read as a personal portfolio ("Developed with
+ * ❤️ by Dev_Wishot" + a Twitter handle). Fine on a hobby project,
+ * wrong on a SaaS that collects money. This one is theme-aware,
+ * neutral, and surfaces the things a real user might need: support
+ * email, version, copyright. Personal credit lives in the about /
+ * platform-admin pages instead.
+ */
 export default function Footer() {
+  const { theme } = useTheme();
+  const tt = getDashboardTokens(theme);
+  const year = new Date().getFullYear();
+
   return (
     <motion.footer
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
-      transition={{ delay: 0.5 }}
-      className="mt-auto py-4 sm:py-6 px-4 border-t"
-      style={{ 
-        borderColor: 'rgba(255, 104, 3, 0.1)',
-        background: 'rgba(15, 7, 3, 0.5)',
-        backdropFilter: 'blur(10px)'
+      transition={{ delay: 0.4 }}
+      className="mt-auto pt-6 pb-5 px-4 relative"
+      style={{
+        borderTop: `1px solid ${tt.cardBorder}`,
+        color: tt.textSec,
       }}
     >
-      <div className="max-w-7xl mx-auto">
-        <div className="flex flex-col items-center justify-center gap-3 sm:gap-4 text-center sm:text-left sm:flex-row sm:justify-between">
-          {/* Developer Credit */}
-          <motion.div 
-            className="flex items-center gap-2 order-1"
-            whileHover={{ scale: 1.05 }}
-            transition={{ type: "spring", stiffness: 400 }}
+      <div className="max-w-5xl mx-auto flex flex-col items-center sm:flex-row sm:items-center sm:justify-between gap-3 text-center sm:text-left">
+        {/* Brand mark — left */}
+        <div className="flex items-center gap-2">
+          <div
+            className="w-7 h-7 rounded-lg flex items-center justify-center text-xs font-extrabold"
+            style={{ background: tt.primarySoft, color: tt.primary, border: `1px solid ${tt.primaryRing}` }}
+            aria-hidden
           >
-            <p className="text-xs sm:text-sm flex items-center gap-1.5" style={{ color: colors.textSecondary }}>
-              Developed with{' '}
-              <motion.span 
-                animate={{ scale: [1, 1.2, 1] }}
-                transition={{ duration: 1.5, repeat: Infinity, ease: 'easeInOut' }}
-              >
-                <Heart className="w-3.5 h-3.5 inline fill-current" style={{ color: colors.primary }} />
-              </motion.span>{' '}
-              by{' '}
-              <a
-                href="https://x.com/wishotstudio?s=21"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="font-bold bg-clip-text text-transparent bg-linear-to-r from-orange-400 to-orange-600 hover:from-orange-300 hover:to-orange-500 transition-all"
-              >
-                Dev_Wishot
-              </a>
-            </p>
-          </motion.div>
-
-          {/* Social Links */}
-          <motion.div 
-            className="flex items-center gap-4 order-2 sm:order-3"
-            whileHover={{ scale: 1.05 }}
-            transition={{ type: "spring", stiffness: 400 }}
-          >
-            <a
-              href="https://x.com/wishotstudio?s=21"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="flex items-center gap-2 px-3 py-1.5 rounded-lg transition-all hover:scale-105 active:scale-95"
-              style={{ 
-                background: 'rgba(255, 104, 3, 0.1)',
-                color: colors.textSecondary,
-                border: `1px solid rgba(255, 104, 3, 0.2)`
-              }}
-            >
-              <Twitter className="w-3.5 h-3.5 sm:w-4 sm:h-4" style={{ color: colors.primary }} />
-              <span className="text-xs sm:text-sm font-medium">@Dev_Wishot</span>
-            </a>
-          </motion.div>
-
-          {/* Copyright + Version */}
-          <p className="text-[10px] sm:text-xs order-3 sm:order-2" style={{ color: colors.textSecondary }}>
-            © {new Date().getFullYear()} Payvexo · <span style={{ color: colors.primary }}>v2.0</span>
-          </p>
+            P
+          </div>
+          <span className="text-xs font-bold" style={{ color: tt.text }}>
+            Payvexo
+          </span>
+          <span className="text-[10px] font-mono px-1.5 py-0.5 rounded-md" style={{ background: tt.primarySoft, color: tt.primary }}>
+            v2.0
+          </span>
         </div>
+
+        {/* Legal / support links — center on desktop, stacks below on mobile */}
+        <nav
+          className="flex items-center flex-wrap justify-center gap-x-4 gap-y-1 text-[11px] font-semibold"
+          aria-label="Footer"
+        >
+          <a
+            href="mailto:support@payvexo.com"
+            className="transition-opacity hover:opacity-80"
+            style={{ color: tt.textSec }}
+          >
+            Support
+          </a>
+          <a
+            href="/privacy"
+            className="transition-opacity hover:opacity-80"
+            style={{ color: tt.textSec }}
+          >
+            Privacy
+          </a>
+          <a
+            href="/terms"
+            className="transition-opacity hover:opacity-80"
+            style={{ color: tt.textSec }}
+          >
+            Terms
+          </a>
+        </nav>
+
+        {/* Copyright — right */}
+        <p className="text-[11px]" style={{ color: tt.textTer }}>
+          © {year} Payvexo. All rights reserved.
+        </p>
       </div>
     </motion.footer>
   );

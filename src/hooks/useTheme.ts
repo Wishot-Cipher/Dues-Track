@@ -50,6 +50,25 @@ function paintHtml(theme: ResolvedTheme) {
     html.setAttribute('data-theme', theme);
     // Keep the legacy `.dark` class in sync so Tailwind dark: works.
     html.classList.toggle('dark', theme === 'dark');
+
+    // Also paint the page-shell colours so the body / html bg + the
+    // PWA chrome (status bar, address bar tint) follow the active
+    // theme without waiting for any specific page to render. Mirrors
+    // the bootstrap script in index.html so a runtime theme toggle
+    // applies the same set of colours.
+    const bg = theme === 'light' ? '#FFFBF7' : '#0F0703';
+    html.style.backgroundColor = bg;
+    html.style.colorScheme = theme;
+    if (document.body) document.body.style.backgroundColor = bg;
+    // Update the un-media-queried theme-color meta so a manual theme
+    // pick beats the prefers-color-scheme query above it.
+    let meta = document.querySelector<HTMLMetaElement>('meta[name="theme-color"]:not([media])');
+    if (!meta) {
+      meta = document.createElement('meta');
+      meta.setAttribute('name', 'theme-color');
+      document.head.appendChild(meta);
+    }
+    meta.setAttribute('content', bg);
   } catch { /* noop */ }
 }
 

@@ -1,6 +1,6 @@
 import { motion, AnimatePresence } from 'framer-motion'
 import { AlertTriangle, AlertCircle, Info, CheckCircle, X } from 'lucide-react'
-import { colors } from '@/config/colors'
+import { useTheme, getDashboardTokens } from '@/hooks/useTheme'
 
 interface ConfirmDialogProps {
   isOpen: boolean
@@ -13,6 +13,16 @@ interface ConfirmDialogProps {
   cancelText?: string
 }
 
+/**
+ * ConfirmDialog — the project's standard confirmation modal.
+ *
+ * Theme-aware (light + dark) and visually consistent with the rest of
+ * the app's exec-dashboard surfaces. The previous version was dark-only
+ * (`background: rgba(30, 20, 15, 0.95)` + hardcoded white text), so on
+ * light theme a delete-confirm popped up as a dark slab over a light
+ * page. Now both themes get the right card colour, border and text
+ * tones from getDashboardTokens.
+ */
 export default function ConfirmDialog({
   isOpen,
   onClose,
@@ -23,46 +33,28 @@ export default function ConfirmDialog({
   confirmText = 'Confirm',
   cancelText = 'Cancel'
 }: ConfirmDialogProps) {
-  
+  const { theme } = useTheme()
+  const tt = getDashboardTokens(theme)
+  const isLight = theme === 'light'
+
   const handleConfirm = () => {
     onConfirm()
     onClose()
   }
 
+  // Type → accent colour mapping. Each variant uses one of the theme's
+  // status tokens so colour selection stays consistent with the rest
+  // of the UI (info = primary, success = mint, etc.).
   const getConfig = () => {
     switch (type) {
       case 'warning':
-        return {
-          icon: <AlertTriangle className="w-7 h-7" />,
-          color: colors.warning,
-          bgGradient: `linear-gradient(135deg, ${colors.warning}25, ${colors.warning}10)`,
-          borderColor: `${colors.warning}40`,
-          buttonBg: `linear-gradient(135deg, ${colors.warning}, #D97706)`
-        }
+        return { icon: <AlertTriangle className="w-7 h-7" />, color: tt.amber }
       case 'danger':
-        return {
-          icon: <AlertCircle className="w-7 h-7" />,
-          color: '#EF4444',
-          bgGradient: 'linear-gradient(135deg, rgba(239, 68, 68, 0.25), rgba(239, 68, 68, 0.10))',
-          borderColor: 'rgba(239, 68, 68, 0.4)',
-          buttonBg: 'linear-gradient(135deg, #EF4444, #DC2626)'
-        }
+        return { icon: <AlertCircle className="w-7 h-7" />, color: tt.danger }
       case 'success':
-        return {
-          icon: <CheckCircle className="w-7 h-7" />,
-          color: colors.success,
-          bgGradient: `linear-gradient(135deg, ${colors.success}25, ${colors.success}10)`,
-          borderColor: `${colors.success}40`,
-          buttonBg: `linear-gradient(135deg, ${colors.success}, #16A34A)`
-        }
+        return { icon: <CheckCircle className="w-7 h-7" />, color: tt.mint }
       default:
-        return {
-          icon: <Info className="w-7 h-7" />,
-          color: colors.primary,
-          bgGradient: `linear-gradient(135deg, ${colors.primary}25, ${colors.primary}10)`,
-          borderColor: `${colors.primary}40`,
-          buttonBg: `linear-gradient(135deg, ${colors.primary}, ${colors.accentMint})`
-        }
+        return { icon: <Info className="w-7 h-7" />, color: tt.primary }
     }
   }
 
@@ -71,14 +63,16 @@ export default function ConfirmDialog({
   return (
     <AnimatePresence>
       {isOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-          {/* Backdrop */}
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
+          {/* Backdrop — same dim level on both themes; the card sits
+              clearly above it. */}
           <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             onClick={onClose}
-            className="absolute inset-0 bg-black/80 sm:bg-black/70 sm:backdrop-blur-sm"
+            className="absolute inset-0"
+            style={{ background: 'rgba(0, 0, 0, 0.55)', backdropFilter: 'blur(6px)', WebkitBackdropFilter: 'blur(6px)' }}
           />
 
           {/* Dialog */}
@@ -86,76 +80,81 @@ export default function ConfirmDialog({
             initial={{ opacity: 0, scale: 0.9, y: 20 }}
             animate={{ opacity: 1, scale: 1, y: 0 }}
             exit={{ opacity: 0, scale: 0.9, y: 20 }}
-            className="relative w-full max-w-sm rounded-2xl overflow-hidden shadow-2xl"
+            transition={{ type: 'spring', stiffness: 400, damping: 30 }}
+            className="relative w-full max-w-sm rounded-2xl overflow-hidden"
             style={{
-              background: 'rgba(30, 20, 15, 0.95)',
-              border: `1px solid ${config.borderColor}`,
-              boxShadow: `0 25px 50px -12px rgba(0, 0, 0, 0.5), 0 0 40px ${config.color}15`
+              background: isLight ? '#FFFFFF' : tt.card,
+              border: `1px solid ${isLight ? 'rgba(15,7,3,0.06)' : tt.cardBorder}`,
+              boxShadow: isLight
+                ? '0 25px 60px -16px rgba(15,7,3,0.22), 0 6px 16px -4px rgba(15,7,3,0.08)'
+                : '0 25px 50px -12px rgba(0,0,0,0.5)',
             }}
           >
-            {/* Top accent bar */}
-            <div className="h-1" style={{ background: config.buttonBg }} />
-            
+            {/* Top accent bar — uses the variant colour as a single
+                solid line so it doesn't read like a gradient banner. */}
+            <div className="h-1" style={{ background: config.color }} />
+
             {/* Close button */}
             <button
+              type="button"
               onClick={onClose}
-              className="absolute top-3 right-3 p-1.5 rounded-lg transition-colors hover:bg-white/10"
-              style={{ color: colors.textSecondary }}
+              className="absolute top-3 right-3 p-1.5 rounded-lg transition-colors"
+              style={{ color: tt.textTer }}
+              aria-label="Close"
             >
-              <X className="w-5 h-5" />
+              <X className="w-4 h-4" />
             </button>
 
             {/* Content */}
-            <div className="p-6 pt-5">
+            <div className="p-6 pt-5 text-center">
               {/* Icon */}
               <div
                 className="w-14 h-14 mx-auto rounded-2xl flex items-center justify-center mb-4"
                 style={{
-                  background: config.bgGradient,
-                  border: `1px solid ${config.borderColor}`,
-                  color: config.color
+                  background: `${config.color}18`,
+                  border: `1px solid ${config.color}38`,
+                  color: config.color,
                 }}
               >
                 {config.icon}
               </div>
 
               {/* Title */}
-              <h2 className="text-xl font-bold text-white text-center mb-2">
+              <h2 className="text-lg font-extrabold tracking-tight mb-2" style={{ color: tt.text }}>
                 {title}
               </h2>
 
               {/* Message */}
-              <p className="text-sm text-center leading-relaxed mb-6" style={{ color: colors.textSecondary }}>
+              <p className="text-sm leading-relaxed mb-5" style={{ color: tt.textSec }}>
                 {message}
               </p>
 
               {/* Actions */}
-              <div className="flex gap-3">
-                <motion.button
-                  whileHover={{ scale: 1.02 }}
-                  whileTap={{ scale: 0.98 }}
+              <div className="flex gap-2">
+                <button
+                  type="button"
                   onClick={onClose}
-                  className="flex-1 px-4 py-3 rounded-xl font-medium text-sm transition-all"
+                  className="flex-1 px-4 py-2.5 rounded-xl text-sm font-bold transition-all hover:-translate-y-0.5 active:scale-[0.98]"
                   style={{
-                    background: 'rgba(255, 255, 255, 0.05)',
-                    border: '1px solid rgba(255, 255, 255, 0.1)',
-                    color: colors.textSecondary
+                    background: tt.card,
+                    color: tt.text,
+                    border: `1px solid ${tt.cardBorder}`,
                   }}
                 >
                   {cancelText}
-                </motion.button>
-                <motion.button
-                  whileHover={{ scale: 1.02 }}
-                  whileTap={{ scale: 0.98 }}
+                </button>
+                <button
+                  type="button"
                   onClick={handleConfirm}
-                  className="flex-1 px-4 py-3 rounded-xl font-medium text-sm text-white shadow-lg transition-all"
+                  className="flex-1 px-4 py-2.5 rounded-xl text-sm font-bold transition-all hover:-translate-y-0.5 active:scale-[0.98]"
                   style={{
-                    background: config.buttonBg,
-                    boxShadow: `0 4px 15px ${config.color}30`
+                    background: config.color,
+                    color: '#FFFFFF',
+                    border: `1px solid ${config.color}`,
                   }}
                 >
                   {confirmText}
-                </motion.button>
+                </button>
               </div>
             </div>
           </motion.div>

@@ -41,6 +41,7 @@ import type { SeedInstitution } from '@/types/multiTenant';
 type BringTokens = {
   primary: string;
   mint: string;
+  amber: string;
   bg: string;
   panel: string;
   panelHov: string;
@@ -60,6 +61,10 @@ function buildBringTokens(theme: 'light' | 'dark'): BringTokens {
   return {
     primary: dtk.primary,
     mint: dtk.mint,
+    // Amber is used by the review step's "what happens next" callout
+    // (community-trust warning). Was missing from BringTokens and the
+    // review block referenced tk.amber directly — type error.
+    amber: dtk.amber,
     bg: dtk.bg,
     panel: dtk.card,
     panelHov: dtk.cardHover,
@@ -279,6 +284,20 @@ export default function BringMySchoolPage() {
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  // ── Wizard state ──────────────────────────────────────────────
+  // Was a single long page that asked for everything at once. The
+  // user kept seeing "school → faculty → account" as a wall of
+  // fields and bouncing off. Splitting into 4 focused steps + a
+  // review screen keeps each moment small and lets us write a
+  // helper paragraph per step explaining WHY we're asking.
+  //   1. School       — name, slug-able short name, type, location
+  //   2. Structure    — first faculty (academic only) + first group
+  //   3. Account      — the founder's login + contact
+  //   4. Review       — every choice, confirm, then create
+  const [step, setStep] = useState<1 | 2 | 3 | 4>(1);
+  const totalSteps = 4;
+  const reviewStep = 4;
+
   // ── Prefill from seed ──
   useEffect(() => {
     if (!seedId) return;
@@ -317,11 +336,87 @@ export default function BringMySchoolPage() {
     );
   }, [form]);
 
+  // Convenience flags re-used across step rendering + the live preview.
+  const isAcademicType = useMemo(() => {
+    const t = form.orgType;
+    return t === 'university' || t === 'polytechnic'
+      || t === 'college_of_education' || t === 'monotechnic' || t === 'seminary';
+  }, [form.orgType]);
+
+  // Per-step validation. Returns an error message (string) when the
+  // step is incomplete, or null when it's good to advance. Wraps the
+  // existing canSubmit logic, but split by tier so the user sees the
+  // exact field they missed rather than a blanket "fill everything".
+  const validateStep = (n: number): string | null => {
+    if (n === 1) {
+      if (form.orgName.trim().length < 3) return 'Organisation name needs at least 3 characters.';
+      if (!form.orgType) return 'Pick the organisation type so we set up the right terminology.';
+    }
+    if (n === 2) {
+      if (form.groupName.trim().length < 2) {
+        const what = isAcademicType ? 'class / department'
+          : form.orgType === 'church' ? 'ministry'
+          : form.orgType === 'club' || form.orgType === 'association' ? 'chapter'
+          : 'group';
+        return `Tell us the ${what} you belong to.`;
+      }
+    }
+    if (n === 3) {
+      if (form.fullName.trim().length < 2) return 'Enter your full name.';
+      if (!form.email.includes('@')) return 'Enter a valid email address.';
+      if (form.memberNumber.trim().length < 2) return 'Enter your member / matric / staff ID.';
+      if (form.password.length < 6) return 'Password needs to be at least 6 characters.';
+      if (form.password !== form.passwordConfirm) return 'Passwords do not match.';
+    }
+    return null;
+  };
+
+  const nextStep = () => {
+    const msg = validateStep(step);
+    if (msg) { setError(msg); return; }
+    setError(null);
+    setStep((s) => (Math.min(reviewStep, s + 1) as 1 | 2 | 3 | 4));
+  };
+  const prevStep = () => {
+    setError(null);
+    setStep((s) => (Math.max(1, s - 1) as 1 | 2 | 3 | 4));
+  };
+
+  // Per-step labels for the chip + stepper + live preview "you are here".
+  const stepLabel = (n: number): string => {
+    if (n === 1) return 'Your school';
+    if (n === 2) return isAcademicType ? 'Faculty + class' : 'Your first group';
+    if (n === 3) return 'Your account';
+    return 'Review';
+  };
+  // Per-step helper text. Was missing on several steps — the user
+  // specifically called this out. Each paragraph explains WHAT the
+  // step is for so they don't have to guess.
+  const stepHelp = (n: number): string => {
+    if (n === 1) return 'Tell us about your school. We use this to set the right labels everywhere — Faculty / Department / Ministry / Chapter — so the rest of the app speaks your dialect.';
+    if (n === 2) {
+      return isAcademicType
+        ? 'Create the slice you actually belong to. We make the faculty (optional) and your class with you sitting in it. You can add more faculties, departments, and classes later from the Org Structure page.'
+        : "Name the smallest unit you belong to — a ministry, a chapter, a working group. You're the founding member of this group; you can add more groups once you're inside.";
+    }
+    if (n === 3) return "This is the account you'll sign in with. Use the ID your members actually know you by (matric, staff number, member number) — the same one you use to identify yourself in real life.";
+    return 'One last look. Confirm everything reads right — the slug becomes part of every URL your members see, and the org type controls labels across the whole app.';
+  };
+
   // ── Submit ──
   const setField = <K extends keyof FormState>(k: K, v: FormState[K]) => setForm((f) => ({ ...f, [k]: v }));
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    // Hard guard: hitting Enter on a text input inside steps 1-3
+    // would otherwise fire the form's onSubmit and try to provision
+    // the org with half-filled state. Refuse unless the user is
+    // actually on the review screen.
+    if (step !== reviewStep) {
+      // Behave like Continue did — validate the current step, advance.
+      nextStep();
+      return;
+    }
     if (!canSubmit || submitting) return;
     setSubmitting(true);
     setError(null);
@@ -411,20 +506,35 @@ export default function BringMySchoolPage() {
         </div>
       </nav>
 
-      {/* ── Header ── */}
-      <header className="relative z-10 max-w-3xl mx-auto px-5 sm:px-6 pt-4 pb-8">
+      {/* ── Header (wizard) ─────────────────────────────────────
+          Chip + step-aware H1 + helper paragraph. Previous version
+          rendered the same hero for every page state, which made
+          the long single-page form feel undifferentiated. Now the
+          H1 tells the user what THIS screen is and the paragraph
+          below explains WHY we're asking for it. */}
+      <header className="relative z-10 max-w-3xl mx-auto px-5 sm:px-6 pt-4 pb-6 space-y-3">
         <motion.div
-          className="inline-flex items-center gap-2 mb-4 px-3 py-1.5 rounded-full text-xs font-semibold"
-          style={{ background: `${tk.primary}14`, color: tk.primary, border: `1px solid ${tk.primary}25` }}
+          className="flex items-center gap-2 flex-wrap"
           initial={{ opacity: 0, y: 8 }}
           animate={{ opacity: 1, y: 0 }}
         >
-          <Sparkles className="w-3.5 h-3.5" />
-          Bring your school online
+          <span
+            className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-bold uppercase tracking-[0.18em]"
+            style={{ background: `${tk.primary}14`, color: tk.primary, border: `1px solid ${tk.primary}25` }}
+          >
+            <Sparkles className="w-3 h-3" />
+            Bring your school online
+          </span>
+          <span
+            className="inline-flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wider"
+            style={{ color: tk.textTer }}
+          >
+            Step {step}/{totalSteps} · {stepLabel(step)}
+          </span>
         </motion.div>
 
         <motion.h1
-          className="text-3xl sm:text-4xl font-extrabold tracking-tight leading-tight mb-3"
+          className="text-2xl sm:text-[28px] font-extrabold tracking-tight leading-tight"
           style={{ color: tk.text }}
           initial={{ opacity: 0, y: 12 }}
           animate={{ opacity: 1, y: 0 }}
@@ -432,24 +542,61 @@ export default function BringMySchoolPage() {
         >
           {seedLoading
             ? 'Loading your school…'
-            : seed
-              ? <>Activate <span style={{ color: tk.primary }}>{seed.name}</span> on Payvexo</>
-              : 'Add a new organization'}
+            : step === 1 && seed
+              ? <>Activate <span style={{ color: tk.primary }}>{seed.name}</span></>
+              : stepLabel(step)}
         </motion.h1>
 
         <motion.p
-          className="text-sm sm:text-base max-w-2xl leading-7"
+          className="text-sm max-w-2xl leading-6"
           style={{ color: tk.textSec }}
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
-          transition={{ delay: 0.15 }}
+          transition={{ delay: 0.1 }}
         >
-          You'll become the founding member. Your school launches at{' '}
-          <span className="inline-flex translate-y-0.5">
-            <TrustBadge level="community" size="sm" />
-          </span>{' '}
-          trust. Once a verified executive (HOD, treasurer, class rep) claims it, the trust level rises automatically.
+          {stepHelp(step)}
         </motion.p>
+
+        {/* Trust note — only on step 1 so it doesn't repeat. Tells
+            the founder up-front that they're starting at "community"
+            trust until a verified exec claims it; matches what the
+            graduated-trust system actually does. */}
+        {step === 1 && !seedLoading && (
+          <motion.p
+            className="text-xs leading-5 max-w-2xl"
+            style={{ color: tk.textTer }}
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            transition={{ delay: 0.15 }}
+          >
+            You'll become the founding member. Your school launches at{' '}
+            <span className="inline-flex translate-y-0.5">
+              <TrustBadge level="community" size="sm" />
+            </span>{' '}
+            trust. Once a verified executive (HOD, treasurer, class rep) claims it, the trust level rises automatically.
+          </motion.p>
+        )}
+
+        {/* Stepper — fills as the user advances. The active segment
+            glows so the current spot is unmistakable. */}
+        <div className="flex gap-1.5 pt-2">
+          {Array.from({ length: totalSteps }, (_, i) => {
+            const n = i + 1;
+            const done = n < step;
+            const active = n === step;
+            return (
+              <div
+                key={n}
+                className="flex-1 h-1.5 rounded-full transition-all duration-300"
+                style={{
+                  background: done || active ? tk.primary : (theme === 'light' ? 'rgba(15,7,3,0.08)' : 'rgba(255,255,255,0.08)'),
+                  boxShadow: active ? `0 0 12px ${tk.primary}50` : 'none',
+                  opacity: done ? 0.7 : 1,
+                }}
+              />
+            );
+          })}
+        </div>
       </header>
 
       {/* ── Form ── */}
@@ -457,7 +604,8 @@ export default function BringMySchoolPage() {
         onSubmit={handleSubmit}
         className="relative z-10 max-w-3xl mx-auto px-5 sm:px-6 pb-24 space-y-6"
       >
-        {/* ── Section 1: Your school ── */}
+        {/* ── Step 1: Your school ── */}
+        {step === 1 && (
         <Panel tk={tk} title="Your school" subtitle="The organization you're bringing online." icon={<Building2 className="w-4 h-4" />}>
           <Field tk={tk} label="Organization name" required>
             <TextInput tk={tk} value={form.orgName} onChange={(v) => setField('orgName', v)} placeholder="University of Nigeria, Nsukka" required />
@@ -482,13 +630,14 @@ export default function BringMySchoolPage() {
             </Field>
           </div>
         </Panel>
+        )}
 
-        {/* ── Section 2: Your faculty + class ──
+        {/* ── Step 2: Your faculty + class / first group ──
             Faculty subgroup only makes sense for academic orgs.
             A church / club / NGO doesn't have a Faculty — hiding it
             keeps the form honest. The leaf group is always required
             (church → first ministry; club → first chapter; uni → first class). */}
-        {(() => {
+        {step === 2 && (() => {
           const t = form.orgType;
           const isAcademic = t === 'university' || t === 'polytechnic'
             || t === 'college_of_education' || t === 'monotechnic' || t === 'seminary';
@@ -560,7 +709,8 @@ export default function BringMySchoolPage() {
           );
         })()}
 
-        {/* ── Section 3: Your account ── */}
+        {/* ── Step 3: Your account ── */}
+        {step === 3 && (
         <Panel
           tk={tk}
           title="Your account"
@@ -600,6 +750,63 @@ export default function BringMySchoolPage() {
             </p>
           )}
         </Panel>
+        )}
+
+        {/* ── Step 4: Review and confirm ──
+            One pure "look it over" screen before submit. Catches a
+            slug typo, a wrong faculty, a misspelled member ID — all
+            of which become permanent once the org is provisioned.
+            The right column would clutter mobile, so all rows are
+            inline and grouped by section. */}
+        {step === 4 && (
+          <Panel
+            tk={tk}
+            title="Look it over"
+            subtitle="Once you submit, the org is provisioned and the slug becomes permanent. Confirm everything reads right."
+            icon={<Check className="w-4 h-4" />}
+          >
+            <ReviewSection tk={tk} heading="Your school">
+              <ReviewRow tk={tk} label="Name"        value={form.orgName} />
+              <ReviewRow tk={tk} label="Short name"  value={form.orgShortName} />
+              <ReviewRow tk={tk} label="Type"        value={form.orgType} />
+              {(form.state || form.city) && (
+                <ReviewRow tk={tk} label="Location"   value={[form.city, form.state].filter(Boolean).join(', ')} />
+              )}
+              {form.website && <ReviewRow tk={tk} label="Website" value={form.website} mono />}
+            </ReviewSection>
+
+            <ReviewSection tk={tk} heading={isAcademicType ? 'Faculty + class' : 'Your first group'}>
+              {isAcademicType && form.facultyName && (
+                <ReviewRow tk={tk} label="Faculty" value={`${form.facultyName}${form.facultyShort ? ` (${form.facultyShort})` : ''}`} />
+              )}
+              <ReviewRow tk={tk} label="Group"     value={`${form.groupName}${form.groupShort ? ` (${form.groupShort})` : ''}`} />
+              <ReviewRow tk={tk} label="Kind"      value={form.groupKind} />
+              {form.userLevel && <ReviewRow tk={tk} label="Your level" value={form.userLevel} />}
+            </ReviewSection>
+
+            <ReviewSection tk={tk} heading="Your account">
+              <ReviewRow tk={tk} label="Full name" value={form.fullName} />
+              <ReviewRow tk={tk} label="Member ID" value={form.memberNumber} mono />
+              <ReviewRow tk={tk} label="Email"     value={form.email} mono />
+              {form.phone && <ReviewRow tk={tk} label="Phone" value={form.phone} mono />}
+            </ReviewSection>
+
+            <div
+              className="p-3 rounded-xl text-xs"
+              style={{
+                background: `${tk.amber}12`,
+                border: `1px solid ${tk.amber}38`,
+                color: tk.amber,
+              }}
+            >
+              <p className="font-bold mb-1">What happens next</p>
+              <p style={{ color: tk.textSec }}>
+                You'll land in your new organisation as the founding member at <strong style={{ color: tk.text }}>community</strong> trust.
+                A verified executive (HOD, treasurer, class rep) can later claim the role to lift the trust level — money, payouts, and member management unlock then.
+              </p>
+            </div>
+          </Panel>
+        )}
 
         {/* ── Error ── */}
         <AnimatePresence>
@@ -619,38 +826,120 @@ export default function BringMySchoolPage() {
           )}
         </AnimatePresence>
 
-        {/* ── Submit ── */}
-        <div className="pt-2 flex items-center justify-between gap-4 flex-wrap">
-          <p className="text-xs leading-5" style={{ color: tk.textTer, maxWidth: 380 }}>
-            By creating, you agree to {APP_NAME}'s terms. Your data is isolated to this organization and never shared with others.
-          </p>
-          <motion.button
-            type="submit"
-            disabled={!canSubmit || submitting}
-            className="px-7 py-3.5 rounded-2xl font-bold text-sm flex items-center gap-2 disabled:opacity-40 disabled:cursor-not-allowed"
-            style={{
-              background: 'linear-gradient(135deg, #FF6803 0%, #FFAC5F 100%)',
-              color: tk.text,
-              boxShadow: canSubmit ? '0 8px 30px rgba(255,104,3,0.4)' : 'none',
-            }}
-            whileHover={canSubmit && !submitting ? { scale: 1.03 } : undefined}
-            whileTap={canSubmit && !submitting ? { scale: 0.97 } : undefined}
-          >
-            {submitting ? (
-              <>
-                <Loader2 className="w-4 h-4 animate-spin" />
-                Creating…
-              </>
-            ) : (
-              <>
-                <Check className="w-4 h-4" />
-                Bring my school online
-                <ArrowRight className="w-4 h-4" />
-              </>
-            )}
-          </motion.button>
+        {/* ── Wizard footer: Back + Continue/Create ──
+            Continue advances after per-step validation. The Create
+            button only renders on the review step (step === 4), so
+            the form's onSubmit is only ever triggered once — no risk
+            of accidental submit on step 1/2/3 hitting Enter on a
+            text input (those keystrokes get intercepted and call
+            nextStep instead). */}
+        <div className="pt-2 flex items-center justify-between gap-3 flex-wrap">
+          {step > 1 ? (
+            <button
+              type="button"
+              onClick={prevStep}
+              disabled={submitting}
+              className="inline-flex items-center gap-1.5 px-4 py-2.5 rounded-xl text-sm font-bold transition-all hover:-translate-y-0.5 active:scale-[0.98] disabled:opacity-50"
+              style={{
+                background: tk.panel,
+                color: tk.text,
+                border: `1px solid ${tk.border}`,
+              }}
+            >
+              <ArrowLeft className="w-4 h-4" />
+              Back
+            </button>
+          ) : <span />}
+
+          {step < reviewStep ? (
+            <button
+              type="button"
+              onClick={nextStep}
+              className="inline-flex items-center gap-1.5 px-5 py-2.5 rounded-xl text-sm font-bold transition-all hover:-translate-y-0.5 active:scale-[0.98]"
+              style={{
+                background: tk.primary,
+                color: '#FFFFFF',
+                border: `1px solid ${tk.primary}`,
+              }}
+            >
+              Continue
+              <ArrowRight className="w-4 h-4" />
+            </button>
+          ) : (
+            <motion.button
+              type="submit"
+              disabled={!canSubmit || submitting}
+              className="inline-flex items-center gap-1.5 px-5 py-2.5 rounded-xl text-sm font-bold disabled:opacity-50"
+              style={{
+                background: tk.primary,
+                color: '#FFFFFF',
+                border: `1px solid ${tk.primary}`,
+              }}
+              whileHover={canSubmit && !submitting ? { y: -2 } : undefined}
+              whileTap={canSubmit && !submitting ? { scale: 0.98 } : undefined}
+            >
+              {submitting ? (
+                <>
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                  Creating…
+                </>
+              ) : (
+                <>
+                  <Check className="w-4 h-4" />
+                  Bring my school online
+                </>
+              )}
+            </motion.button>
+          )}
         </div>
+
+        {/* Terms note — only on review so it doesn't clutter every step. */}
+        {step === reviewStep && (
+          <p className="text-[11px] leading-5" style={{ color: tk.textTer }}>
+            By creating, you agree to {APP_NAME}'s terms. Your data is isolated to this organisation and never shared with others.
+          </p>
+        )}
       </form>
+    </div>
+  );
+}
+
+// ────────────────────────────────────────────────────────────────────────────
+// Review helpers
+// ────────────────────────────────────────────────────────────────────────────
+
+function ReviewSection({
+  tk, heading, children,
+}: { tk: BringTokens; heading: string; children: React.ReactNode }) {
+  return (
+    <div className="space-y-1.5">
+      <p className="text-[10px] uppercase tracking-[0.18em] font-bold" style={{ color: tk.primary }}>
+        {heading}
+      </p>
+      <div className="space-y-0">
+        {children}
+      </div>
+    </div>
+  );
+}
+
+function ReviewRow({
+  tk, label, value, mono,
+}: { tk: BringTokens; label: string; value: string; mono?: boolean }) {
+  return (
+    <div
+      className="flex items-start justify-between gap-3 py-2"
+      style={{ borderBottom: `1px dashed ${tk.border}` }}
+    >
+      <span className="text-[11px] uppercase tracking-wider font-bold shrink-0" style={{ color: tk.textTer }}>
+        {label}
+      </span>
+      <span
+        className={`text-sm font-semibold text-right truncate ${mono ? 'font-mono' : ''}`}
+        style={{ color: value ? tk.text : tk.textTer }}
+      >
+        {value || '—'}
+      </span>
     </div>
   );
 }

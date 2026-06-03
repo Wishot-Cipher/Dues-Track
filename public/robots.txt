@@ -1,8 +1,49 @@
 # https://www.robotstxt.org/robotstxt.html
+#
+# Public, indexable surfaces only. Anything under an org slug, the
+# admin/platform console, or the API is gated by auth — we'd rather
+# crawlers not waste budget on routes that always redirect.
 User-agent: *
 Allow: /
+Allow: /login
+Allow: /signup
+Allow: /create-organization
+
+# Authenticated / org-scoped surfaces — never useful to a public crawler.
 Disallow: /api/
 Disallow: /pvx-console
+Disallow: /pvx-console/*
+Disallow: /admin/
+Disallow: /admin/*
+Disallow: /dashboard
+Disallow: /payment/
+Disallow: /payment/*
+Disallow: /payments
+Disallow: /expenses
+Disallow: /settings
+Disallow: /profile
+Disallow: /change-password
+Disallow: /complete-profile
+Disallow: /tickets
+Disallow: /claim/
+Disallow: /claim/*
 
-# Sitemaps
+# Org-scoped routes follow the pattern /:orgSlug/<anything>. Block
+# the common subpaths so search engines don't try to fetch
+# /random-org/dashboard etc. (Leading "/*/" is a wildcard org slug.)
+Disallow: /*/dashboard
+Disallow: /*/admin
+Disallow: /*/admin/*
+Disallow: /*/payments
+Disallow: /*/payment/
+Disallow: /*/payment/*
+Disallow: /*/settings
+Disallow: /*/profile
+Disallow: /*/claim
+Disallow: /*/claim/*
+
+# Standard tooling courtesy
+Crawl-delay: 1
+
+# Sitemap
 Sitemap: https://payvexo.vercel.app/sitemap.xml

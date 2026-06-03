@@ -136,11 +136,12 @@ function TabBtn({ active, onClick, children }: { active: boolean; onClick: () =>
 
 // ── Group card ──────────────────────────────────────────────────────────────
 function GroupCard({
-  group, groups, isAcademicOrg, onEdit,
+  group, groups, isAcademicOrg, onEdit, canEdit,
 }: {
   group: OrganizationGroup; groups: OrganizationGroup[];
   isAcademicOrg: boolean;
   onEdit: (g: OrganizationGroup) => void;
+  canEdit: boolean;
 }) {
   const [hov, setHov] = useState(false)
   const kc = kindColor(group.kind)
@@ -201,19 +202,22 @@ function GroupCard({
                 </div>
               </div>
 
-              {/* Edit btn */}
-              <motion.button
-                whileHover={{ scale: 1.06 }} whileTap={{ scale: 0.94 }}
-                onClick={() => onEdit(group)}
-                className="shrink-0 w-8 h-8 rounded-xl flex items-center justify-center transition-all"
-                style={{
-                  background: hov ? `${kc}18` : 'rgba(255,255,255,0.04)',
-                  color: hov ? kc : tk.textTer,
-                  border: `1px solid ${hov ? kc + '30' : tk.cardBorder}`,
-                }}
-              >
-                <Edit2 className="w-3.5 h-3.5" />
-              </motion.button>
+              {/* Edit btn — hidden when the viewer doesn't own this
+                  tier. Other rows stay visible but read-only. */}
+              {canEdit && (
+                <motion.button
+                  whileHover={{ scale: 1.06 }} whileTap={{ scale: 0.94 }}
+                  onClick={() => onEdit(group)}
+                  className="shrink-0 w-8 h-8 rounded-xl flex items-center justify-center transition-all"
+                  style={{
+                    background: hov ? `${kc}18` : 'rgba(255,255,255,0.04)',
+                    color: hov ? kc : tk.textTer,
+                    border: `1px solid ${hov ? kc + '30' : tk.cardBorder}`,
+                  }}
+                >
+                  <Edit2 className="w-3.5 h-3.5" />
+                </motion.button>
+              )}
             </div>
 
             {/* Description */}
@@ -543,12 +547,74 @@ export default function OrgGroupsPage() {
     )
   }, [scopedGroups, isAcademicOrg, activeTab, facultyGroups, classGroups, searchQuery])
 
+  // ── Authorisation model (per user design) ────────────────────
+  // Each tier owns ONLY its own row. A dept exec doesn't get to
+  // rename their faculty (that's the dean's call) or rename sibling
+  // departments (that's the other HODs'). Creating a child is
+  // allowed one tier below — faculty exec creates departments,
+  // dept exec creates classes. Org owner has the master key.
+  const canEditGroup = useCallback((group: OrganizationGroup): boolean => {
+    if (!activeRole || activeRole.kind !== 'exec') return false
+    if (activeRole.scopeLevel === 'org') return true
+    return group.id === activeRole.groupId
+  }, [activeRole])
+
+  // What new group can this viewer create, if any? Returns the
+  // pre-filled kind + parent + a label for the CTA. null = the
+  // viewer has no new-group powers and the button hides.
+  const createTarget = useMemo<{ kind: GroupKind; parentId: string | null; label: string } | null>(() => {
+    if (!activeRole || activeRole.kind !== 'exec') return null
+
+    // Org owner — top of the tree. Academic orgs default to a new
+    // faculty; non-academic orgs default to a generic group.
+    if (activeRole.scopeLevel === 'org') {
+      return isAcademicOrg
+        ? { kind: 'faculty', parentId: null, label: 'New faculty' }
+        : { kind: 'general', parentId: null, label: `New ${groupLabel.toLowerCase()}` }
+    }
+
+    if (!activeRole.groupId) return null
+    const ownGroup = groups.find(g => g.id === activeRole.groupId)
+    if (!ownGroup) return null
+
+    // Faculty / college exec — creates departments under their own.
+    if (ownGroup.kind === 'faculty' || ownGroup.kind === 'college') {
+      return { kind: 'department', parentId: ownGroup.id, label: 'New department' }
+    }
+    // Dept exec — creates classes under their own.
+    if (ownGroup.kind === 'department') {
+      return { kind: 'class', parentId: ownGroup.id, label: `New ${classLabel.toLowerCase()}` }
+    }
+    // Class / leaf — nothing to create downstream.
+    return null
+  }, [activeRole, groups, isAcademicOrg, groupLabel, classLabel])
+
   const openCreate = () => {
-    setForm({ ...DEFAULT_FORM, kind: isAcademicOrg ? 'class' : 'general' })
+    if (!createTarget) {
+      // Defensive — the button shouldn't even render in this case,
+      // but if something deeper opens the modal (e.g. an empty-state
+      // CTA) we surface a clear refusal rather than letting the
+      // user fill in a doomed form.
+      setFormError('You don\'t have permission to create a new group at this tier.')
+      setShowModal(true)
+      return
+    }
+    setForm({
+      ...DEFAULT_FORM,
+      kind: createTarget.kind,
+      parent_group_id: createTarget.parentId || '',
+    })
     setEditTarget(null); setFormError(''); setShowModal(true)
   }
 
   const openEdit = (group: OrganizationGroup) => {
+    if (!canEditGroup(group)) {
+      // Soft guard — UI hides the Edit button when canEditGroup is
+      // false, but a stale ref / keyboard path could still call us.
+      // Refuse silently rather than letting the form open with a
+      // misleading "Save" button.
+      return
+    }
     const kind = (group.kind || (isAcademicOrg ? 'class' : 'general')) as GroupKind
     setForm({
       name: group.name || '', short_name: group.short_name || '', description: group.description || '',
@@ -662,19 +728,21 @@ export default function OrgGroupsPage() {
               )}
             </div>
 
-            <button
-              type="button"
-              onClick={openCreate}
-              className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-bold transition-all hover:-translate-y-0.5 active:scale-[0.98]"
-              style={{
-                background: tt.primary,
-                color: '#FFFFFF',
-                border: `1px solid ${tt.primary}`,
-              }}
-            >
-              <Plus className="w-3.5 h-3.5" />
-              New {isAcademicOrg ? classLabel : groupLabel}
-            </button>
+            {createTarget && (
+              <button
+                type="button"
+                onClick={openCreate}
+                className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-bold transition-all hover:-translate-y-0.5 active:scale-[0.98]"
+                style={{
+                  background: tt.primary,
+                  color: '#FFFFFF',
+                  border: `1px solid ${tt.primary}`,
+                }}
+              >
+                <Plus className="w-3.5 h-3.5" />
+                {createTarget.label}
+              </button>
+            )}
           </div>
 
           <h1 className="text-2xl sm:text-[28px] font-extrabold tracking-tight" style={{ color: tt.text }}>
@@ -875,7 +943,7 @@ export default function OrgGroupsPage() {
               <p className="text-sm max-w-sm mx-auto mb-5" style={{ color: tt.textSec }}>
                 {searchQuery ? 'Try a different search term.' : 'Create your first group to start organising members.'}
               </p>
-              {!searchQuery && (
+              {!searchQuery && createTarget && (
                 <button
                   type="button"
                   onClick={openCreate}
@@ -883,7 +951,7 @@ export default function OrgGroupsPage() {
                   style={{ background: tt.primary, color: '#FFFFFF', border: `1px solid ${tt.primary}` }}
                 >
                   <Plus className="w-4 h-4" />
-                  Create {isAcademicOrg ? classLabel : groupLabel}
+                  {createTarget.label}
                 </button>
               )}
             </div>
@@ -898,6 +966,7 @@ export default function OrgGroupsPage() {
                     groups={groups}
                     isAcademicOrg={isAcademicOrg}
                     onEdit={openEdit}
+                    canEdit={canEditGroup(group)}
                   />
                 ))}
               </AnimatePresence>
@@ -918,6 +987,7 @@ export default function OrgGroupsPage() {
                       groups={groups}
                       isAcademicOrg={isAcademicOrg}
                       onEdit={openEdit}
+                      canEdit={canEditGroup(group)}
                     />
                   ))}
                 </AnimatePresence>
@@ -945,6 +1015,7 @@ export default function OrgGroupsPage() {
                       toggledKeys={toggledKeys}
                       onToggle={toggleExpand}
                       onEdit={openEdit}
+                      canEditFn={canEditGroup}
                       isAcademicOrg={isAcademicOrg}
                       tt={tt}
                       depth={0}
@@ -973,7 +1044,14 @@ export default function OrgGroupsPage() {
             )}
           </AnimatePresence>
 
-          {isAcademicOrg && (
+          {/* Group Type — only the org owner can swing between faculty
+              and class. A faculty exec creating from their own page
+              has parent_group_id pre-pinned to their faculty so it
+              must be a class; switching to 'faculty' would orphan
+              the row. We hide the dropdown for non-org callers so
+              they can't pick the wrong shape. Editing an existing
+              group also locks the kind. */}
+          {isAcademicOrg && !editTarget && activeRole?.scopeLevel === 'org' && (
             <div>
               <FL>Group Type</FL>
               <ProfessionalDropdown
@@ -1003,13 +1081,27 @@ export default function OrgGroupsPage() {
           {isAcademicOrg && form.kind === 'class' && (
             <div>
               <FL>Faculty (optional)</FL>
-              <ProfessionalDropdown
-                value={form.parent_group_id}
-                onChange={v => setForm(p => ({ ...p, parent_group_id: v as string }))}
-                placeholder="Select faculty"
-                options={[{ value: '', label: 'No faculty' }, ...facultyGroups.map(g => ({ value: g.id, label: `${g.name} (${g.short_name})` }))]}
-                clearable
-              />
+              {/* Parent picker — only the org owner can rehome a group
+                  between faculties. A faculty exec creates classes
+                  under their OWN faculty, full stop, so we lock the
+                  parent (pre-filled in openCreate) and just show it
+                  as a read-only line. */}
+              {activeRole?.scopeLevel === 'org' || editTarget ? (
+                <ProfessionalDropdown
+                  value={form.parent_group_id}
+                  onChange={v => setForm(p => ({ ...p, parent_group_id: v as string }))}
+                  placeholder="Select faculty"
+                  options={[{ value: '', label: 'No faculty' }, ...facultyGroups.map(g => ({ value: g.id, label: `${g.name} (${g.short_name})` }))]}
+                  clearable
+                />
+              ) : (
+                <div
+                  className="px-3 py-2.5 rounded-xl text-xs"
+                  style={{ background: 'rgba(255,255,255,0.04)', border: `1px solid ${tk.cardBorder}`, color: tk.textSec }}
+                >
+                  Parent locked to {groups.find(g => g.id === form.parent_group_id)?.name || 'your faculty'} — only the org owner can move classes between faculties.
+                </div>
+              )}
             </div>
           )}
 
@@ -1149,7 +1241,7 @@ function getGroupLabel(kind: GroupKind, classLabel: string, groupLabel: string, 
  * the tree its visual hierarchy without an explicit guideline.
  */
 function GroupTreeNode({
-  group, groups, duesCounts, payoutFlags, toggledKeys, onToggle, onEdit, isAcademicOrg, tt, depth,
+  group, groups, duesCounts, payoutFlags, toggledKeys, onToggle, onEdit, canEditFn, isAcademicOrg, tt, depth,
 }: {
   group: OrganizationGroup
   groups: OrganizationGroup[]
@@ -1158,6 +1250,7 @@ function GroupTreeNode({
   toggledKeys: Set<string>
   onToggle: (id: string) => void
   onEdit: (g: OrganizationGroup) => void
+  canEditFn: (g: OrganizationGroup) => boolean
   isAcademicOrg: boolean
   tt: ReturnType<typeof getDashboardTokens>
   depth: number
@@ -1273,21 +1366,25 @@ function GroupTreeNode({
             </span>
           </div>
 
-          {/* Edit — stopPropagation so clicking this doesn't also
-              toggle the row's expand state. */}
-          <button
-            type="button"
-            onClick={(e) => { e.stopPropagation(); onEdit(group) }}
-            className="shrink-0 w-8 h-8 rounded-lg flex items-center justify-center transition-all"
-            style={{
-              background: tt.primarySoft,
-              color: tt.primary,
-              border: `1px solid ${tt.primaryRing}`,
-            }}
-            aria-label="Edit group"
-          >
-            <Edit2 className="w-3.5 h-3.5" />
-          </button>
+          {/* Edit — only rendered for rows the viewer actually owns.
+              A dept exec sees the pencil on their own dept; their
+              faculty is read-only to them. stopPropagation so a
+              click doesn't also toggle the row's expand state. */}
+          {canEditFn(group) && (
+            <button
+              type="button"
+              onClick={(e) => { e.stopPropagation(); onEdit(group) }}
+              className="shrink-0 w-8 h-8 rounded-lg flex items-center justify-center transition-all"
+              style={{
+                background: tt.primarySoft,
+                color: tt.primary,
+                border: `1px solid ${tt.primaryRing}`,
+              }}
+              aria-label="Edit group"
+            >
+              <Edit2 className="w-3.5 h-3.5" />
+            </button>
+          )}
         </div>
 
         {/* Mobile: stats row collapses below the identity. */}
@@ -1321,6 +1418,7 @@ function GroupTreeNode({
               toggledKeys={toggledKeys}
               onToggle={onToggle}
               onEdit={onEdit}
+              canEditFn={canEditFn}
               isAcademicOrg={isAcademicOrg}
               tt={tt}
               depth={depth + 1}

@@ -154,6 +154,11 @@ export default function ManageDuesPage() {
   const [searchTerm, setSearchTerm] = useState('')
   const [filterStatus, setFilterStatus] = useState<'all' | 'active' | 'inactive'>('all')
   const [filterCategory, setFilterCategory] = useState<string>('all')
+  // Pagination — keeps the page responsive as the dues catalogue
+  // grows. perPage is conservative for mobile (renders ~25 cards
+  // before the user has to scroll into the pagination footer).
+  const [currentPage, setCurrentPage] = useState(1)
+  const PER_PAGE = 25
   
   // Modals
   const [showEditModal, setShowEditModal] = useState(false)
@@ -377,12 +382,23 @@ export default function ManageDuesPage() {
     const matchesSearch = pt.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
                          pt.description?.toLowerCase().includes(searchTerm.toLowerCase()) ||
                          pt.category.toLowerCase().includes(searchTerm.toLowerCase())
-    const matchesStatus = filterStatus === 'all' || 
+    const matchesStatus = filterStatus === 'all' ||
                          (filterStatus === 'active' && pt.is_active) ||
                          (filterStatus === 'inactive' && !pt.is_active)
     const matchesCategory = filterCategory === 'all' || pt.category === filterCategory
     return matchesSearch && matchesStatus && matchesCategory
   })
+
+  // Pagination math. Clamp page when the underlying list shrinks
+  // (e.g. user filters down and the current page is past the new
+  // last page). Keeps the visible window stable for the user.
+  const totalPages = Math.max(1, Math.ceil(filteredPaymentTypes.length / PER_PAGE))
+  const clampedPage = Math.min(currentPage, totalPages)
+  if (clampedPage !== currentPage && currentPage !== 1) setCurrentPage(clampedPage)
+  const paginatedPaymentTypes = filteredPaymentTypes.slice(
+    (clampedPage - 1) * PER_PAGE,
+    clampedPage * PER_PAGE,
+  )
 
   const getCategoryLabel = (category: string) => {
     const cat = CATEGORIES.find(c => c.value === category)
@@ -564,7 +580,7 @@ export default function ManageDuesPage() {
               <input
                 type="text"
                 value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
+                onChange={(e) => { setSearchTerm(e.target.value); setCurrentPage(1); }}
                 placeholder="Search by title, description, category..."
                 className="w-full pl-10 pr-4 py-2.5 rounded-xl text-sm focus:outline-none focus:ring-2 transition-all"
                 style={{
@@ -578,7 +594,7 @@ export default function ManageDuesPage() {
 
             <ProfessionalDropdown
               value={filterStatus}
-              onChange={(value) => setFilterStatus(value as 'all' | 'active' | 'inactive')}
+              onChange={(value) => { setFilterStatus(value as 'all' | 'active' | 'inactive'); setCurrentPage(1); }}
               options={[
                 { value: 'all', label: 'All Status' },
                 { value: 'active', label: 'Active Only' },
@@ -589,7 +605,7 @@ export default function ManageDuesPage() {
 
             <ProfessionalDropdown
               value={filterCategory}
-              onChange={(value) => setFilterCategory(typeof value === 'string' ? value : value[0] || 'all')}
+              onChange={(value) => { setFilterCategory(typeof value === 'string' ? value : value[0] || 'all'); setCurrentPage(1); }}
               options={[
                 { value: 'all', label: 'All Categories' },
                 ...CATEGORIES.map((cat) => ({
@@ -665,7 +681,7 @@ export default function ManageDuesPage() {
 
           {!loading && filteredPaymentTypes.length > 0 && (
             <div className="space-y-3">
-              {filteredPaymentTypes.map((pt, index) => {
+              {paginatedPaymentTypes.map((pt, index) => {
                 const accent = pt.color || tk.primary
                 return (
                   <motion.div
@@ -839,6 +855,75 @@ export default function ManageDuesPage() {
                   </motion.div>
                 )
               })}
+            </div>
+          )}
+
+          {/* Pagination footer — only renders when there's more than
+              one page worth of dues. "Showing X-Y of Z" sits left;
+              prev/page-numbers/next sit right. Numbered buttons
+              window around the current page so very long lists don't
+              spew dozens of chips. */}
+          {!loading && filteredPaymentTypes.length > PER_PAGE && (
+            <div
+              className="rounded-2xl p-3 sm:p-4 flex flex-col sm:flex-row items-center justify-between gap-3"
+              style={{ background: tk.card, border: `1px solid ${tk.cardBorder}` }}
+            >
+              <p className="text-[11px]" style={{ color: tk.textSec }}>
+                Showing <span className="font-bold" style={{ color: tk.text }}>
+                  {(clampedPage - 1) * PER_PAGE + 1}–{Math.min(clampedPage * PER_PAGE, filteredPaymentTypes.length)}
+                </span> of {filteredPaymentTypes.length}
+              </p>
+              <div className="flex items-center gap-1">
+                <button
+                  type="button"
+                  onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                  disabled={clampedPage === 1}
+                  className="px-2.5 py-1.5 rounded-lg text-xs font-bold transition-all disabled:opacity-40"
+                  style={{
+                    background: tk.card,
+                    color: tk.text,
+                    border: `1px solid ${tk.cardBorder}`,
+                  }}
+                >
+                  Prev
+                </button>
+                {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
+                  let pageNum: number
+                  if (totalPages <= 5) pageNum = i + 1
+                  else if (clampedPage <= 3) pageNum = i + 1
+                  else if (clampedPage >= totalPages - 2) pageNum = totalPages - 4 + i
+                  else pageNum = clampedPage - 2 + i
+                  const isActive = pageNum === clampedPage
+                  return (
+                    <button
+                      key={pageNum}
+                      type="button"
+                      onClick={() => setCurrentPage(pageNum)}
+                      className="w-8 h-8 rounded-lg text-xs font-bold tabular-nums transition-all"
+                      style={{
+                        background: isActive ? tk.primary : tk.card,
+                        color: isActive ? '#FFFFFF' : tk.text,
+                        border: `1px solid ${isActive ? tk.primary : tk.cardBorder}`,
+                      }}
+                    >
+                      {pageNum}
+                    </button>
+                  )
+                })}
+                <button
+                  type="button"
+                  onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+                  disabled={clampedPage >= totalPages}
+                  className="px-2.5 py-1.5 rounded-lg text-xs font-bold transition-all disabled:opacity-40"
+                  style={{
+                    background: tk.card,
+                    color: tk.text,
+                    border: `1px solid ${tk.cardBorder}`,
+                  }}
+                >
+                  Next
+                </button>
+              </div>
             </div>
           )}
         </motion.div>

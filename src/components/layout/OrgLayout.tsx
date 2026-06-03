@@ -51,6 +51,7 @@ import { useTheme } from '@/hooks/useTheme';
 import { useThemeTokens, type ThemeTokens } from '@/hooks/useThemeTokens';
 import { supabase } from '@/config/supabase';
 import LoadingSpinner from '@/components/ui/LoadingSpinner';
+import ConfirmDialog from '@/components/ui/ConfirmDialog';
 import { NotificationCenter } from '@/components/NotificationCenter';
 import { organizationService } from '@/services/organizationService';
 import { multiTenantAuthService, type MembershipSummary } from '@/services/multiTenantAuthService';
@@ -340,22 +341,29 @@ export default function OrgLayout() {
   // For non-admins we want 4 plain tabs (Home, Dues, Receipts, Profile).
   // For admins the right two tabs become Admin / Members so the FAB
   // is the way to reach secondary admin pages.
+  // Member-side bottom tabs (4 slots around the center FAB).
+  // Both `Dues` and `Receipts` previously pointed at /payments —
+  // the same page with two different icons / labels on either side
+  // of the FAB. The user kept tapping the wrong one. Now: Home,
+  // Dues, Tickets (their event tickets), Profile — four distinct
+  // destinations. Tickets uses the dedicated /tickets route that
+  // already exists in App.tsx.
   const memberTabs: NavItem[] = [
-    { path: '/dashboard', label: 'Home',    icon: <LayoutDashboard size={22} />, section: 'member' },
-    { path: '/payments',  label: organization.payment_label || 'Dues',
-      icon: <CreditCard size={22} />, section: 'member' },
+    { path: '/dashboard', label: 'Home',                                 icon: <LayoutDashboard size={22} />, section: 'member' },
+    { path: '/payments',  label: organization.payment_label || 'Dues',   icon: <CreditCard size={22} />,      section: 'member' },
   ];
   const memberTrailingTabs: NavItem[] = [
-    { path: '/payments', label: 'Receipts',
-      icon: <Receipt size={22} />, section: 'member' },
-    { path: '/profile',  label: 'Profile',
-      icon: <UserCog size={22} />, section: 'member' },
+    { path: '/tickets',   label: 'Tickets',                              icon: <TicketIcon size={22} />,      section: 'member' },
+    { path: '/profile',   label: 'Profile',                              icon: <UserCog size={22} />,         section: 'member' },
   ];
-  // Mobile exec tabs (left two slots). For a class-tier rep (or the
-  // org owner) the second slot is Members — that's their core daily
-  // surface. For a dept or faculty exec, Members management isn't
-  // theirs to wield, so the second slot becomes Manage Dues, which
-  // IS their daily surface.
+  // Mobile exec tabs (4 slots around the center FAB). The four picked
+  // depend on the active role's tier — a class rep / org owner has
+  // Members as their daily surface, while a dept/faculty exec
+  // doesn't manage members at all so their "personal" slot becomes
+  // the org-structure page. Previously the dept/faculty path put
+  // /admin/manage-dues in BOTH the left and right halves — two
+  // identical "Dues" tabs sitting either side of the FAB. Now each
+  // slot is distinct: Overview, (Members or Groups), Review, Dues.
   const showMembersInExecTabs =
     activeRole?.kind === 'exec' &&
     (activeRole.scopeLevel === 'group' || activeRole.scopeLevel === 'org');
@@ -363,11 +371,11 @@ export default function OrgLayout() {
     { path: '/admin/dashboard', label: 'Overview', icon: <PieChart size={22} />, section: 'admin' },
     showMembersInExecTabs
       ? { path: '/admin/members', label: organization.member_label_plural || 'Members', icon: <Users size={22} />, section: 'admin' }
-      : { path: '/admin/manage-dues', label: organization.payment_label || 'Dues', icon: <Receipt size={22} />, section: 'admin' },
+      : { path: '/admin/groups',  label: groupNavLabel,                                  icon: <Building2 size={22} />, section: 'admin' },
   ];
   const execTabsRight: NavItem[] = [
-    { path: '/admin/review', label: 'Review', icon: <ClipboardCheck size={22} />, section: 'admin' },
-    { path: '/admin/manage-dues', label: organization.payment_label || 'Dues', icon: <Receipt size={22} />, section: 'admin' },
+    { path: '/admin/review',      label: 'Review',                                      icon: <ClipboardCheck size={22} />, section: 'admin' },
+    { path: '/admin/manage-dues', label: organization.payment_label || 'Dues',          icon: <Receipt size={22} />, section: 'admin' },
   ];
   const leftTabs = isExecContext ? execTabsLeft : memberTabs;
   const rightTabs = isExecContext ? execTabsRight : memberTrailingTabs;
@@ -679,6 +687,10 @@ export default function OrgLayout() {
                 </motion.div>
               </button>
 
+              {/* Desktop: positioned dropdown anchored to the chip.
+                  Mobile gets the bottom-sheet variant below. The
+                  `hidden sm:block` wrapper keeps this off the small
+                  screens where the dropdown couldn't fit cleanly. */}
               <AnimatePresence>
                 {showProfileMenu && (
                   <motion.div
@@ -686,22 +698,18 @@ export default function OrgLayout() {
                     animate={{ opacity: 1, y: 0, scale: 1 }}
                     exit={{ opacity: 0, y: -8, scale: 0.96 }}
                     transition={{ duration: 0.15, ease: 'easeOut' }}
-                    className="absolute right-0 top-full mt-2 w-64 rounded-2xl overflow-hidden z-50"
+                    className="hidden sm:block absolute right-0 top-full mt-2 rounded-2xl overflow-hidden z-50"
                     style={{
-                      // Theme-aware dropdown surface. In light mode it's
-                      // a true white card with a crisp shadow + 1px
-                      // border. In dark mode it stays glassy ember.
-                      ...(isLight
-                        ? {
-                            background: '#FFFFFF',
-                            backdropFilter: 'saturate(180%) blur(20px)',
-                            WebkitBackdropFilter: 'saturate(180%) blur(20px)',
-                          }
-                        : glass.strong),
-                      border: `1px solid ${isLight ? 'rgba(15, 7, 3, 0.06)' : colors.borderLight}`,
+                      width: 'min(17rem, calc(100vw - 1.5rem))',
+                      maxHeight: 'calc(100vh - 6rem)',
+                      overflowY: 'auto',
+                      background: isLight ? '#FFFFFF' : 'rgba(15, 7, 3, 0.92)',
+                      backdropFilter: 'saturate(180%) blur(22px)',
+                      WebkitBackdropFilter: 'saturate(180%) blur(22px)',
+                      border: `1px solid ${isLight ? 'rgba(15, 7, 3, 0.06)' : 'rgba(255,255,255,0.08)'}`,
                       boxShadow: isLight
                         ? '0 20px 50px -16px rgba(15, 7, 3, 0.18), 0 4px 12px -2px rgba(15, 7, 3, 0.06)'
-                        : `0 20px 60px rgba(0,0,0,0.6), ${glows.amber.replace('30px', '12px').replace('0.5', '0.1')}`,
+                        : '0 20px 60px rgba(0,0,0,0.6), 0 4px 16px rgba(0,0,0,0.3)',
                     }}
                   >
                     {/* Profile header */}
@@ -844,6 +852,189 @@ export default function OrgLayout() {
                   </motion.div>
                 )}
               </AnimatePresence>
+
+              {/* ── Mobile: bottom sheet ──────────────────────────
+                  On phones the right-anchored dropdown above is
+                  hidden (`hidden sm:block`). Instead we slide a
+                  full-width sheet up from the bottom — the standard
+                  mobile pattern. Backdrop + drag handle + the same
+                  content. Gets out of the way of the keyboard and
+                  never clips off the right edge. */}
+              <AnimatePresence>
+                {showProfileMenu && (
+                  <>
+                    <motion.div
+                      key="profile-sheet-backdrop"
+                      initial={{ opacity: 0 }}
+                      animate={{ opacity: 1 }}
+                      exit={{ opacity: 0 }}
+                      transition={{ duration: 0.2 }}
+                      className="sm:hidden fixed inset-0 z-[80]"
+                      style={{ background: 'rgba(0,0,0,0.5)', backdropFilter: 'blur(6px)' }}
+                      onClick={() => setShowProfileMenu(false)}
+                    />
+                    <motion.div
+                      key="profile-sheet"
+                      initial={{ y: '100%' }}
+                      animate={{ y: 0 }}
+                      exit={{ y: '100%' }}
+                      transition={{ type: 'spring', stiffness: 340, damping: 32 }}
+                      className="sm:hidden fixed left-0 right-0 bottom-0 z-[90] rounded-t-3xl overflow-hidden"
+                      style={{
+                        background: isLight ? '#FFFFFF' : 'rgba(15, 7, 3, 0.98)',
+                        border: `1px solid ${isLight ? 'rgba(15, 7, 3, 0.08)' : 'rgba(255,255,255,0.08)'}`,
+                        borderBottom: 'none',
+                        boxShadow: '0 -12px 40px rgba(0,0,0,0.35)',
+                        maxHeight: 'calc(100vh - 4rem)',
+                        display: 'flex',
+                        flexDirection: 'column',
+                        paddingBottom: 'env(safe-area-inset-bottom, 0px)',
+                      }}
+                    >
+                      {/* Drag handle */}
+                      <div className="pt-2 pb-1 flex justify-center shrink-0">
+                        <span
+                          className="block w-10 h-1 rounded-full"
+                          style={{ background: isLight ? 'rgba(15,7,3,0.18)' : 'rgba(255,255,255,0.22)' }}
+                        />
+                      </div>
+
+                      {/* Header — bigger avatar than the desktop pop,
+                          mobile users have the room and it reads more
+                          like a profile screen. */}
+                      <div
+                        className="px-5 pb-4 shrink-0"
+                        style={{ borderBottom: `1px solid ${isLight ? 'rgba(15, 7, 3, 0.06)' : 'rgba(255,255,255,0.06)'}` }}
+                      >
+                        <div className="flex items-center gap-3">
+                          <div
+                            className="w-12 h-12 rounded-2xl flex items-center justify-center text-base font-extrabold shrink-0"
+                            style={{
+                              background: `linear-gradient(135deg, ${colors.primary}, ${colors.primary}aa)`,
+                              color: '#fff',
+                              boxShadow: `0 8px 20px -6px ${colors.primary}66`,
+                            }}
+                          >
+                            {userInitial}
+                          </div>
+                          <div className="min-w-0 flex-1">
+                            <p className="text-base font-bold truncate" style={{ color: isLight ? '#0F0703' : '#FFFFFF' }}>
+                              {user.full_name}
+                            </p>
+                            <p className="text-xs truncate" style={{ color: isLight ? 'rgba(15,7,3,0.55)' : colors.textTertiary }}>
+                              {user.member_id}
+                            </p>
+                            {showAdmin && (
+                              <span
+                                className="inline-flex items-center gap-1 mt-1.5 px-2 py-0.5 rounded-full text-[10px] font-bold tracking-wide uppercase"
+                                style={{
+                                  background: `${colors.primary}18`,
+                                  color: colors.primary,
+                                  border: `1px solid ${colors.primary}30`,
+                                }}
+                              >
+                                <Shield size={9} />
+                                Admin
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Scrollable body. Without `flex-1 + overflow-y-auto`
+                          a long org list pushed the Sign Out button past
+                          the safe-area and it was unreachable on phones.
+                          Now the body scrolls inside the sheet. */}
+                      <div className="flex-1 overflow-y-auto px-3 py-2">
+                        <ProfileMenuItem
+                          to={`${basePath}/profile`}
+                          icon={<Building2 size={16} />}
+                          label="My Profile"
+                          onClose={() => setShowProfileMenu(false)}
+                          isLight={isLight}
+                        />
+                        <ProfileMenuItem
+                          to={`${basePath}/settings`}
+                          icon={<Settings size={16} />}
+                          label="Settings"
+                          onClose={() => setShowProfileMenu(false)}
+                          isLight={isLight}
+                        />
+                        <ProfileMenuItem
+                          to={`${basePath}/change-password`}
+                          icon={<UserCog size={16} />}
+                          label="Change Password"
+                          onClose={() => setShowProfileMenu(false)}
+                          isLight={isLight}
+                        />
+
+                        {/* Your organizations (global identity) — only when >1 */}
+                        {myOrgs.length > 1 && (
+                          <div
+                            className="mt-2 pt-2"
+                            style={{ borderTop: `1px solid ${isLight ? 'rgba(15, 7, 3, 0.06)' : 'rgba(255,255,255,0.06)'}` }}
+                          >
+                            <p className="px-3 pt-1 pb-1 text-[10px] font-bold uppercase tracking-wider" style={{ color: colors.textTertiary }}>
+                              Your organizations
+                            </p>
+                            {myOrgs.map((m) => (
+                              <button
+                                key={m.member_id}
+                                onClick={() => handleSwitchOrg(m)}
+                                disabled={switchingId !== null}
+                                className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-left transition-all disabled:opacity-60"
+                                style={{ background: m.is_current ? `${colors.primary}12` : 'transparent' }}
+                              >
+                                <div
+                                  className="w-9 h-9 rounded-lg flex items-center justify-center shrink-0 overflow-hidden text-xs font-bold"
+                                  style={{ background: `${colors.primary}1a`, color: colors.primary }}
+                                >
+                                  {m.logo_url ? <img src={m.logo_url} alt="" className="w-full h-full object-cover" /> : (m.org_name?.[0] || '?')}
+                                </div>
+                                <div className="min-w-0 flex-1">
+                                  <p className="text-sm font-semibold truncate" style={{ color: isLight ? '#0F0703' : '#FFFFFF' }}>
+                                    {m.org_name}
+                                  </p>
+                                  <p className="text-[11px] truncate" style={{ color: colors.textTertiary }}>
+                                    {m.role_label || (m.is_admin ? 'Admin' : 'Member')}{m.group_name ? ` · ${m.group_name}` : ''}
+                                  </p>
+                                </div>
+                                {switchingId === m.member_id
+                                  ? <LoadingSpinner size="sm" />
+                                  : m.is_current
+                                    ? <CheckCircle2 size={16} style={{ color: colors.primary }} />
+                                    : null}
+                              </button>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Sign Out — anchored at the bottom of the sheet
+                          (outside the scrollable body) so it stays
+                          reachable even when the org list is long. */}
+                      <div
+                        className="px-3 py-3 shrink-0"
+                        style={{ borderTop: `1px solid ${isLight ? 'rgba(15, 7, 3, 0.06)' : 'rgba(255,255,255,0.06)'}` }}
+                      >
+                        <button
+                          type="button"
+                          onClick={() => { setShowProfileMenu(false); setShowLogoutModal(true); }}
+                          className="w-full flex items-center justify-center gap-2 px-4 py-3 rounded-xl text-sm font-bold transition-all active:scale-[0.98]"
+                          style={{
+                            background: `${tk.danger}12`,
+                            color: tk.danger,
+                            border: `1px solid ${tk.danger}38`,
+                          }}
+                        >
+                          <LogOut size={16} />
+                          Sign out
+                        </button>
+                      </div>
+                    </motion.div>
+                  </>
+                )}
+              </AnimatePresence>
             </div>
              <div className="relative">
               <NotificationCenter />
@@ -967,28 +1158,38 @@ export default function OrgLayout() {
               onClick={() => setShowMoreSheet(false)}
             />
             <motion.div
-              className="fixed left-0 right-0 bottom-0 z-95 lg:hidden rounded-t-3xl overflow-hidden"
+              // Flex column: drag handle + header stay fixed at the
+              // top, body (role switcher + tools) flex-grows and
+              // SCROLLS. The previous layout had the body alone
+              // scrolling at `calc(80vh - 80px)` — a static estimate.
+              // When the role list was tall, it pushed the body's
+              // top edge down and the body couldn't reach the lower
+              // tools at all. flex-1 + overflow-y-auto makes the
+              // whole body region scrollable regardless of role
+              // count, role switcher height, or admin group count.
+              className="fixed left-0 right-0 bottom-0 z-95 lg:hidden rounded-t-3xl overflow-hidden flex flex-col"
               style={{
                 ...glass.strong,
                 borderTop: `1px solid rgba(255,104,3,0.18)`,
                 paddingBottom: 'calc(env(safe-area-inset-bottom, 0px) + 12px)',
-                maxHeight: '80vh',
+                maxHeight: '85vh',
+                minHeight: '40vh',
               }}
               initial={{ y: '100%' }}
               animate={{ y: 0 }}
               exit={{ y: '100%' }}
               transition={{ type: 'spring', stiffness: 380, damping: 38 }}
             >
-              {/* Drag handle */}
-              <div className="flex justify-center pt-3 pb-1">
+              {/* Drag handle (fixed) */}
+              <div className="flex justify-center pt-3 pb-1 shrink-0">
                 <span
                   className="block w-10 h-1 rounded-full"
                   style={{ background: tk.divider }}
                 />
               </div>
 
-              {/* Header */}
-              <div className="px-5 pt-2 pb-3 flex items-center justify-between">
+              {/* Header (fixed) */}
+              <div className="px-5 pt-2 pb-3 flex items-center justify-between shrink-0">
                 <div>
                   <p className="text-[10px] uppercase tracking-[0.18em] font-bold" style={{ color: tk.primary }}>
                     {isExecContext ? 'Admin tools' : 'Quick actions'}
@@ -1005,12 +1206,15 @@ export default function OrgLayout() {
                 </button>
               </div>
 
-              {/* Role switcher (mobile) */}
-              <RoleSwitcherSheet onSelect={() => setShowMoreSheet(false)} />
+              {/* Scrollable body — role switcher + tools live HERE so
+                  they share one scroll surface. A tall role list no
+                  longer pushes the lower tool grid below the sheet. */}
+              <div className="flex-1 min-h-0 overflow-y-auto">
+                <RoleSwitcherSheet onSelect={() => setShowMoreSheet(false)} />
 
               {/* Items — grouped on the admin side (Overview · Money ·
                   Structure · Org); flat on the member side. */}
-              <div className="px-3 pb-3 overflow-y-auto" style={{ maxHeight: 'calc(80vh - 80px)' }}>
+              <div className="px-3 pb-3">
                 {showAdmin ? (
                   ADMIN_GROUP_ORDER.map((g) => {
                     const items = moreSheetItems.filter((i) => (i.adminGroup ?? 'overview') === g.id);
@@ -1038,104 +1242,29 @@ export default function OrgLayout() {
                     ))}
                   </div>
                 )}
-              </div>
+              </div>{/* /tools grid wrapper */}
+              </div>{/* /flex-1 scrollable body */}
             </motion.div>
           </>
         )}
       </AnimatePresence>
 
-      {/* ═══════════ LOGOUT CONFIRMATION MODAL ═══════════ */}
-      <AnimatePresence>
-        {showLogoutModal && (
-          <motion.div
-            className="fixed inset-0 z-100 flex items-center justify-center p-4"
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            transition={{ duration: 0.2 }}
-          >
-            {/* Backdrop */}
-            <motion.div
-              className="absolute inset-0"
-              style={{ background: 'rgba(0, 0, 0, 0.6)', backdropFilter: 'blur(8px)' }}
-              onClick={() => setShowLogoutModal(false)}
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-            />
-
-            {/* Modal Card */}
-            <motion.div
-              className="relative w-full max-w-sm rounded-3xl overflow-hidden"
-              style={{
-                background: tk.card,
-                border: `1px solid ${tk.cardBorder}`,
-                boxShadow: `0 25px 60px ${tk.shadowLg}, 0 0 40px rgba(239, 68, 68, 0.08)`,
-              }}
-              initial={{ opacity: 0, scale: 0.9, y: 20 }}
-              animate={{ opacity: 1, scale: 1, y: 0 }}
-              exit={{ opacity: 0, scale: 0.95, y: 10 }}
-              transition={{ type: 'spring', stiffness: 400, damping: 30 }}
-            >
-              {/* Top accent */}
-              <div className="h-1" style={{ background: 'linear-gradient(90deg, #ef4444, #f97316, #ef4444)' }} />
-
-              <div className="p-6 pt-7 text-center">
-                {/* Icon */}
-                <motion.div
-                  className="mx-auto w-16 h-16 rounded-2xl flex items-center justify-center mb-5"
-                  style={{
-                    background: 'rgba(239, 68, 68, 0.1)',
-                    border: '1px solid rgba(239, 68, 68, 0.2)',
-                  }}
-                  initial={{ rotate: -10 }}
-                  animate={{ rotate: 0 }}
-                  transition={{ type: 'spring', stiffness: 300, damping: 20 }}
-                >
-                  <LogOut size={28} style={{ color: '#ef4444' }} />
-                </motion.div>
-
-                {/* Text */}
-                <h3 className="text-xl font-bold mb-2" style={{ color: tk.text }}>Sign Out?</h3>
-                <p className="text-sm leading-relaxed mb-6" style={{ color: tk.textSec }}>
-                  You'll need to sign back in to access<br />
-                  <span className="font-medium" style={{ color: tk.text }}>{organization.name}</span>
-                </p>
-
-                {/* Buttons */}
-                <div className="flex gap-3">
-                  <motion.button
-                    className="flex-1 py-3 px-4 rounded-xl text-sm font-semibold transition-all"
-                    style={{
-                      background: tk.overlay,
-                      color: tk.textSec,
-                      border: `1px solid ${tk.cardBorder}`,
-                    }}
-                    whileTap={{ scale: 0.98 }}
-                    onClick={() => setShowLogoutModal(false)}
-                  >
-                    Cancel
-                  </motion.button>
-                  <motion.button
-                    className="flex-1 py-3 px-4 rounded-xl text-sm font-semibold flex items-center justify-center gap-2 transition-all"
-                    style={{
-                      background: 'linear-gradient(135deg, #ef4444, #dc2626)',
-                      color: '#FFFFFF',
-                      boxShadow: '0 4px 14px rgba(239, 68, 68, 0.3)',
-                    }}
-                    whileHover={{ scale: 1.02, boxShadow: '0 6px 20px rgba(239, 68, 68, 0.4)' }}
-                    whileTap={{ scale: 0.98 }}
-                    onClick={handleLogout}
-                  >
-                    <LogOut size={16} />
-                    Sign Out
-                  </motion.button>
-                </div>
-              </div>
-            </motion.div>
-          </motion.div>
-        )}
-      </AnimatePresence>
+      {/* ═══════════ LOGOUT CONFIRMATION ═══════════
+          Uses ConfirmDialog (the project's standard) so the look
+          matches every other delete / approve / reject confirm in
+          the app. Was a bespoke inline modal with a different visual
+          (gradient top bar, glassy ember surface) which felt
+          inconsistent with the rest of the system. */}
+      <ConfirmDialog
+        isOpen={showLogoutModal}
+        onClose={() => setShowLogoutModal(false)}
+        onConfirm={handleLogout}
+        title="Sign out?"
+        message={`You'll need to sign back in to access ${organization.name}.`}
+        type="danger"
+        confirmText="Sign out"
+        cancelText="Stay signed in"
+      />
     </div>
   );
 }

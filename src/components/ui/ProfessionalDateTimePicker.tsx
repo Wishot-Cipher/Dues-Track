@@ -391,7 +391,19 @@ export default function ProfessionalDateTimePicker({
             top: pos.top,
             left: pos.left,
             zIndex: 999999,
-            minWidth: Math.min(effectiveDropdownW, window.innerWidth - VIEWPORT_MARGIN * 2),
+            // Width: capped to viewport so the dropdown never extends
+            // past the screen edge on small phones. minWidth and
+            // maxWidth match so the layout doesn't snap between
+            // values during resize.
+            width: Math.min(effectiveDropdownW, window.innerWidth - VIEWPORT_MARGIN * 2),
+            maxWidth: window.innerWidth - VIEWPORT_MARGIN * 2,
+            // Height: cap to viewport minus a small inset. The inner
+            // calendar + time panes can scroll if we run out of room;
+            // the action footer is sticky so the Confirm button never
+            // gets pushed past the bottom edge.
+            maxHeight: window.innerHeight - VIEWPORT_MARGIN * 4,
+            display: 'flex',
+            flexDirection: 'column',
             background: panelBg,
             border: `1px solid ${panelBorder}`,
             borderRadius: 16,
@@ -401,9 +413,21 @@ export default function ProfessionalDateTimePicker({
           // Stop any pointer events from bubbling up to scroll listeners
           onPointerDown={e => e.stopPropagation()}
         >
-          <div className="flex">
+          {/* Scrollable body — wraps both panes. flex-1 so it fills
+              everything except the sticky footer below. On narrow
+              widths (where the dropdown got clamped under ~520px) the
+              panes stack vertically instead of overflowing horizontally. */}
+          <div
+            className="flex"
+            style={{
+              flexWrap: mode === 'datetime' ? 'wrap' : 'nowrap',
+              flex: '1 1 auto',
+              minHeight: 0,
+              overflowY: 'auto',
+            }}
+          >
             {/* ── Calendar pane ── */}
-            <div className="p-4" style={{ minWidth: 260 }}>
+            <div className="p-4" style={{ minWidth: 260, flex: '1 1 260px' }}>
               {/* Month navigation */}
               <div className="flex items-center justify-between mb-3">
                 <button
@@ -508,9 +532,20 @@ export default function ProfessionalDateTimePicker({
               </div>
             </div>
 
-            {/* ── Time pane (datetime only) ── */}
+            {/* ── Time pane (datetime only). flex-basis lets it sit
+                beside the calendar on wide dropdowns and wrap below
+                on narrow ones. The divider becomes a top border when
+                the pane wraps so the visual separation still reads. */}
             {mode === 'datetime' && (
-              <div className="flex flex-col p-4 gap-3" style={{ minWidth: 200, borderLeft: `1px solid ${panelBorder}` }}>
+              <div
+                className="flex flex-col p-4 gap-3"
+                style={{
+                  minWidth: 200,
+                  flex: '1 1 200px',
+                  borderLeft: `1px solid ${panelBorder}`,
+                  borderTop: `1px solid ${panelBorder}`,
+                }}
+              >
                 <p className="text-xs font-semibold" style={{ color: colors.textSecondary }}>Time</p>
                 <div className="flex gap-2 flex-1">
                   <TimeScroller label="HR"  items={hours}   selected={hour - 1}  onSelect={i => setHour(i + 1)} />

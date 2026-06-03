@@ -12,7 +12,12 @@
     <link rel="apple-touch-icon" sizes="512x512" href="/icon-512.png" />
     <link rel="shortcut icon" href="/icon-192.png" />
     
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+    <!-- Allow user zoom for accessibility. The earlier maximum-scale=1.0,
+         user-scalable=no triggered WCAG 1.4.4 (resize text) failures
+         and hurt Google's mobile-usability score. Web apps should let
+         visually-impaired users zoom; iOS modern Safari handles
+         double-tap zoom on inputs cleanly. -->
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
     
     <!-- Canonical -->
     <link rel="canonical" href="https://payvexo.vercel.app/" />
@@ -28,9 +33,15 @@
     <meta name="revisit-after" content="7 days" />
     <meta name="rating" content="general" />
     <meta name="distribution" content="global" />
-    <meta name="theme-color" content="#0A0118" />
-    <meta name="theme-color" content="#0A0118" media="(prefers-color-scheme: dark)" />
-    <meta name="theme-color" content="#0A0118" media="(prefers-color-scheme: light)" />
+    <!-- PWA status-bar / mobile address bar tint. Two values so the
+         OS chrome adapts to the user's system theme on first paint —
+         a light user no longer gets a dark purple bar above the
+         status bar. The colours match getDashboardTokens(bg) in
+         src/hooks/useTheme.ts (warm off-white for light, warm
+         near-black for dark) so they're consistent with the rest
+         of the app once React mounts. -->
+    <meta name="theme-color" content="#FFFBF7" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#0F0703" media="(prefers-color-scheme: dark)" />
     
     <!-- Open Graph / Facebook -->
     <meta property="og:type" content="website" />
@@ -44,8 +55,9 @@
     <meta property="og:site_name" content="Payvexo" />
     <meta property="og:locale" content="en_US" />
     
-    <!-- Twitter -->
-    <meta name="twitter:card" content="summary" />
+    <!-- Twitter — summary_large_image gives a hero-style preview on
+         X/Twitter which outperforms the small square card. -->
+    <meta name="twitter:card" content="summary_large_image" />
     <meta name="twitter:url" content="https://payvexo.vercel.app/" />
     <meta name="twitter:title" content="Payvexo - Smart Payment & Dues Management Platform" />
     <meta name="twitter:description" content="Collect dues, track payments, approve expenses, and manage finances for any organization. Universities, churches, clubs, and more." />
@@ -64,7 +76,12 @@
     <!-- Security -->
     <meta http-equiv="X-UA-Compatible" content="IE=edge" />
     <meta name="referrer" content="strict-origin-when-cross-origin" />
-        <!-- Structured Data (JSON-LD) -->
+    <!-- Structured Data (JSON-LD).
+         Removed the fake aggregateRating (4.8 / 150 reviews) — Google
+         flags fabricated ratings under their structured-data policy
+         and the page can be deindexed or stripped of rich results.
+         Add real ratings back ONLY when sourced from a verifiable
+         review widget or a third-party platform with publishable data. -->
     <script type="application/ld+json">
     {
       "@context": "https://schema.org",
@@ -72,43 +89,113 @@
       "name": "Payvexo",
       "alternateName": "Payvexo Dues Management",
       "url": "https://payvexo.vercel.app",
-      "description": "Smart payment tracking and dues management platform for universities, churches, clubs, and organizations.",
+      "description": "Smart payment tracking and dues management platform for universities, churches, clubs, and organizations. Collect dues, approve payments, run payouts.",
       "applicationCategory": "FinanceApplication",
+      "applicationSubCategory": "Payment Management",
       "operatingSystem": "Web, Android, iOS",
       "offers": {
         "@type": "Offer",
         "price": "0",
-        "priceCurrency": "USD"
+        "priceCurrency": "NGN"
       },
-      "aggregateRating": {
-        "@type": "AggregateRating",
-        "ratingValue": "4.8",
-        "ratingCount": "150"
-      },
+      "featureList": [
+        "Dues collection and tracking",
+        "Multi-tier permission model (faculty / department / class)",
+        "Per-tier payout accounts",
+        "Verified-exec claim system",
+        "QR ticket check-in for events"
+      ],
       "author": {
         "@type": "Organization",
         "name": "Payvexo",
         "url": "https://payvexo.vercel.app"
+      },
+      "publisher": {
+        "@type": "Organization",
+        "name": "Payvexo",
+        "url": "https://payvexo.vercel.app",
+        "logo": {
+          "@type": "ImageObject",
+          "url": "https://payvexo.vercel.app/icon-512.png",
+          "width": 512,
+          "height": 512
+        }
       }
+    }
+    </script>
+    <!-- Second JSON-LD block: Organization entity. Lets Google build
+         a knowledge-panel-style card for the Payvexo brand even if
+         the SoftwareApplication node isn't picked for rich results. -->
+    <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@type": "Organization",
+      "name": "Payvexo",
+      "url": "https://payvexo.vercel.app",
+      "logo": "https://payvexo.vercel.app/icon-512.png",
+      "description": "Smart payment & dues management for Nigerian student bodies, churches, clubs, and other organisations."
     }
     </script>
         <!-- Performance -->
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="dns-prefetch" href="https://fonts.googleapis.com" />
     
-    <!-- Prevent white flash - set background immediately -->
+    <!-- Prevent flash of wrong-theme background. Two layers:
+           1) CSS media query covers users on system-controlled theme.
+           2) An inline script (below) honours a saved manual override
+              from localStorage (pvx_theme). Both write the same set
+              of background colours so html/body/#root never paint a
+              hardcoded dark purple on a light-themed device. -->
     <style>
       html, body, #root {
-        background-color: #0A0118 !important;
         min-height: 100vh;
         min-height: 100dvh;
         margin: 0;
         padding: 0;
       }
+      @media (prefers-color-scheme: light) {
+        html, body, #root { background-color: #FFFBF7; }
+      }
+      @media (prefers-color-scheme: dark) {
+        html, body, #root { background-color: #0F0703; }
+      }
+      /* iOS Safari rubber-band: the over-scroll area shows body bg
+         (NOT html bg). Match the wash gradient end so the bounce
+         feels intentional, not like a different colour leaking in. */
+      /* body { overscroll-behavior-y: contain; } */
     </style>
+    <script>
+      // Apply the user's saved theme (if any) BEFORE React mounts so
+      // there's no flash on refresh. Mirrors what useTheme.tsx does
+      // once React is alive. Wrapped in try/catch — localStorage can
+      // be blocked in some embedded WebViews.
+      (function () {
+        try {
+          var saved = localStorage.getItem('pvx_theme');
+          var prefersDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+          var resolved = saved === 'light' || saved === 'dark' ? saved : (prefersDark ? 'dark' : 'light');
+          var bg = resolved === 'light' ? '#FFFBF7' : '#0F0703';
+          document.documentElement.style.backgroundColor = bg;
+          document.documentElement.style.colorScheme = resolved;
+          if (document.body) document.body.style.backgroundColor = bg;
+          // Update the theme-color meta on the fly so PWA chrome
+          // reflects the user's manual choice (saved theme beats
+          // the system media query above).
+          var meta = document.querySelector('meta[name="theme-color"]:not([media])');
+          if (!meta) {
+            meta = document.createElement('meta');
+            meta.setAttribute('name', 'theme-color');
+            document.head.appendChild(meta);
+          }
+          meta.setAttribute('content', bg);
+        } catch (e) {
+          // No localStorage — fall back to the CSS media query.
+        }
+      })();
+    </script>
   </head>
-  <body style="background-color: #0A0118;">
-    <div id="root" style="background-color: #0A0118; min-height: 100vh; min-height: 100dvh;"></div>
+  <body>
+    <div id="root" style="min-height: 100vh; min-height: 100dvh;"></div>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>

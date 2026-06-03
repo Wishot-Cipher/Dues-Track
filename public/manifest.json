@@ -4,8 +4,8 @@
   "description": "The all-in-one payment tracking and dues management platform for universities, churches, clubs, and organizations.",
   "start_url": "/",
   "display": "standalone",
-  "background_color": "#0A0118",
-  "theme_color": "#0A0118",
+  "background_color": "#0F0703",
+  "theme_color": "#0F0703",
   "orientation": "portrait-primary",
   "categories": ["finance", "education", "utilities"],
   "icons": [

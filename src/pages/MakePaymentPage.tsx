@@ -201,6 +201,13 @@ export default function MakePaymentPage() {
 
   // ── Paystack handoff ────────────────────────────────────────────
   const handlePayWithPaystack = useCallback(async () => {
+    // Guard against double-fire. The button is disabled={submitting}
+    // but the disabled attribute can be bypassed by keyboard,
+    // screen-reader, or a programmatic .click(). Guarding here means
+    // a flaky network click-spammer can't open multiple Paystack
+    // sessions — each session would consume a Paystack channel slot
+    // and the user would see two "pay" tabs.
+    if (submitting) return;
     if (!user?.id || !id) {
       setError('You need to be signed in to pay.');
       return;
@@ -240,7 +247,7 @@ export default function MakePaymentPage() {
     }
 
     window.location.assign(res.authorization_url);
-  }, [user?.id, id, fullyPaid, toast, isEvent, tiers, selectedTierId, selectedTier, eventEnded]);
+  }, [submitting, user?.id, id, fullyPaid, toast, isEvent, tiers, selectedTierId, selectedTier, eventEnded]);
 
   // ── Render ───────────────────────────────────────────────────────
   return (
