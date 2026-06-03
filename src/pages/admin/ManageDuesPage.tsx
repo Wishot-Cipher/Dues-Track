@@ -25,7 +25,6 @@ import {
   Trash2, 
   AlertTriangle,
   RefreshCw,
-  Sparkles,
   Plus,
   DollarSign,
   CheckCircle,
@@ -419,458 +418,429 @@ export default function ManageDuesPage() {
   }
 
   return (
-    <div className="min-h-screen relative overflow-hidden" style={{ background: tk.bgWash }}>
-      {/* Background Grid Pattern */}
+    <div
+      className="min-h-screen py-6 px-4 relative overflow-hidden"
+      style={{ background: tk.bgWash, color: tk.text }}
+    >
+      {/* Soft brand blobs — match exec dashboards. Replaces the
+          50px grid + two animated radial orbs the legacy hero used. */}
       <div
-        className="absolute inset-0 opacity-20 pointer-events-none"
-        style={{
-          backgroundImage: `
-            linear-gradient(${colors.primary}40 1px, transparent 1px),
-            linear-gradient(90deg, ${colors.primary}40 1px, transparent 1px)
-          `,
-          backgroundSize: '50px 50px',
-        }}
+        aria-hidden
+        className="pointer-events-none absolute -top-32 -right-24 w-[520px] h-[520px] rounded-full"
+        style={{ background: tk.blob1, filter: 'blur(120px)' }}
+      />
+      <div
+        aria-hidden
+        className="pointer-events-none absolute -bottom-40 -left-32 w-[420px] h-[420px] rounded-full"
+        style={{ background: tk.blob2, filter: 'blur(110px)' }}
       />
 
-      {/* Animated Gradient Orbs */}
-      <div className="fixed inset-0 overflow-hidden pointer-events-none">
-        <div
-          className="absolute w-[500px] h-[500px] rounded-full blur-[120px] opacity-30 animate-pulse"
-          style={{
-            background: `radial-gradient(circle, ${colors.primary} 0%, transparent 70%)`,
-            top: '-10%',
-            right: '-5%',
-            animationDuration: '4s',
-          }}
-        />
-        <div
-          className="absolute w-[400px] h-[400px] rounded-full blur-[100px] opacity-20"
-          style={{
-            background: `radial-gradient(circle, ${colors.accentMint} 0%, transparent 70%)`,
-            bottom: '-5%',
-            left: '-5%',
-            animation: 'pulse 6s ease-in-out infinite',
-          }}
-        />
-      </div>
-
-      {/* Content */}
-      <div className="relative z-10 max-w-6xl mx-auto px-4 py-8">
-        {/* Dashboard Switcher — single-tenant only */}
+      <div className="relative z-10 max-w-5xl mx-auto space-y-6">
+        {/* Single-tenant DashboardSwitcher slot */}
         {!orgSlug && (
-        <div className="mb-6">
-          <DashboardSwitcher />
-        </div>
+          <div className="flex justify-end">
+            <DashboardSwitcher />
+          </div>
         )}
 
-        {/* Header */}
-        <motion.div
-          initial={{ opacity: 0, y: -20 }}
+        {/* ── Header ────────────────────────────────────────────── */}
+        <motion.header
+          initial={{ opacity: 0, y: 12 }}
           animate={{ opacity: 1, y: 0 }}
-          className="mb-6"
+          className="space-y-3"
         >
-          <GlassCard className="relative overflow-hidden">
-            <div 
-              className="absolute top-0 left-0 w-full h-1"
-              style={{ background: `linear-gradient(90deg, ${colors.primary}, ${colors.accentMint}, transparent)` }}
-            />
-            
-            <div className="relative z-10">
-              <motion.button
-                whileHover={{ x: -4 }}
-                onClick={() => navigate('/admin/dashboard')}
-                className="flex items-center gap-2 mb-4 px-4 py-2 rounded-xl transition-all"
-                style={{ 
-                  background: `${colors.primary}15`,
-                  border: `1px solid ${colors.primary}30`,
-                  color: colors.primary 
+          {/* Back link as a quiet text chip — not a giant orange button */}
+          <button
+            type="button"
+            onClick={() => navigate('/admin/dashboard')}
+            className="inline-flex items-center gap-1 text-[11px] font-semibold uppercase tracking-wider transition-opacity hover:opacity-80"
+            style={{ color: tk.textTer }}
+          >
+            <ArrowLeft className="w-3 h-3" />
+            Back to dashboard
+          </button>
+
+          <div className="flex items-start justify-between gap-3 flex-wrap">
+            <div className="flex items-center gap-2 flex-wrap">
+              <span
+                className="inline-flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-[0.18em] px-2 py-1 rounded-full"
+                style={{
+                  background: tk.primarySoft,
+                  color: tk.primary,
+                  border: `1px solid ${tk.primaryRing}`,
                 }}
               >
-                <ArrowLeft size={16} />
-                <span className="font-medium">Back to Dashboard</span>
-              </motion.button>
-
-              <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
-                <div className="flex items-center gap-4">
-                  <motion.div
-                    initial={{ scale: 0.8 }}
-                    animate={{ scale: 1 }}
-                    className="relative"
-                  >
-                    <div
-                      className="w-14 h-14 rounded-2xl flex items-center justify-center shadow-lg"
-                      style={{
-                        background: `linear-gradient(135deg, ${colors.primary}30, ${colors.primary}10)`,
-                        border: `1px solid ${colors.primary}40`,
-                        boxShadow: `0 4px 20px ${colors.primary}20`
-                      }}
-                    >
-                      <CreditCard className="w-7 h-7" style={{ color: colors.primary }} />
-                    </div>
-                  </motion.div>
-                  <div>
-                    <div className="flex items-center gap-2 mb-1">
-                      <h1 className="text-xl lg:text-2xl font-bold text-white">Manage Dues</h1>
-                      <motion.span
-                        initial={{ opacity: 0, x: -10 }}
-                        animate={{ opacity: 1, x: 0 }}
-                        className="hidden sm:inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold"
-                        style={{ 
-                          background: `linear-gradient(135deg, ${colors.primary}30, ${colors.primary}10)`,
-                          border: `1px solid ${colors.primary}40`,
-                          color: colors.primary
-                        }}
-                      >
-                        <Sparkles className="w-3 h-3" />
-                        ADMIN
-                      </motion.span>
-                    </div>
-                    <p className="text-sm" style={{ color: colors.textSecondary }}>
-                      View, edit, and manage all payment types
-                    </p>
-                  </div>
-                </div>
-                
-                <div className="flex items-center gap-3">
-                  <motion.button
-                    whileHover={{ scale: 1.02 }}
-                    whileTap={{ scale: 0.98 }}
-                    onClick={loadPaymentTypes}
-                    disabled={loading}
-                    className="flex items-center gap-2 px-4 py-2.5 rounded-xl font-medium transition-all"
-                    style={{
-                      background: 'rgba(255, 255, 255, 0.05)',
-                      border: '1px solid rgba(255, 255, 255, 0.1)',
-                      color: colors.textSecondary
-                    }}
-                  >
-                    <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
-                    <span className="hidden sm:inline">Refresh</span>
-                  </motion.button>
-                  
-                  <motion.button
-                    whileHover={{ scale: 1.02 }}
-                    whileTap={{ scale: 0.98 }}
-                    onClick={() => navigate('/admin/create-payment')}
-                    className="flex items-center gap-2 px-5 py-2.5 rounded-xl font-medium transition-all"
-                    style={{
-                      background: `linear-gradient(135deg, ${colors.primary}, ${colors.accentMint})`,
-                      color: 'white'
-                    }}
-                  >
-                    <Plus className="w-4 h-4" />
-                    <span>Create New</span>
-                  </motion.button>
-                </div>
-              </div>
-
-              {/* Stats Row */}
-              <div className="grid grid-cols-3 gap-2 sm:gap-3 mt-6">
-                <div className="p-2 sm:p-3 rounded-xl text-center overflow-hidden" style={{ background: `${colors.primary}10`, border: `1px solid ${colors.primary}20` }}>
-                  <div className="flex flex-col items-center justify-center mb-0.5 sm:mb-1">
-                    <Tag className="w-3.5 h-3.5 sm:w-4 sm:h-4 mb-0.5" style={{ color: colors.primary }} />
-                    <span className="text-[11px] sm:text-base font-bold leading-tight" style={{ color: colors.primary }}>{stats.total}</span>
-                  </div>
-                  <p className="text-[9px] sm:text-[10px] uppercase tracking-wider" style={{ color: colors.textSecondary }}>Total Dues</p>
-                </div>
-                <div className="p-2 sm:p-3 rounded-xl text-center overflow-hidden" style={{ background: 'rgba(34, 197, 94, 0.1)', border: '1px solid rgba(34, 197, 94, 0.2)' }}>
-                  <div className="flex flex-col items-center justify-center mb-0.5 sm:mb-1">
-                    <CheckCircle className="w-3.5 h-3.5 sm:w-4 sm:h-4 mb-0.5" style={{ color: '#22C55E' }} />
-                    <span className="text-[11px] sm:text-base font-bold leading-tight" style={{ color: '#22C55E' }}>{stats.active}</span>
-                  </div>
-                  <p className="text-[9px] sm:text-[10px] uppercase tracking-wider" style={{ color: colors.textSecondary }}>Active</p>
-                </div>
-                <div className="p-2 sm:p-3 rounded-xl text-center overflow-hidden" style={{ background: 'rgba(251, 191, 36, 0.1)', border: '1px solid rgba(251, 191, 36, 0.2)' }}>
-                  <div className="flex flex-col items-center justify-center mb-0.5 sm:mb-1">
-                    <DollarSign className="w-3.5 h-3.5 sm:w-4 sm:h-4 mb-0.5" style={{ color: colors.warning }} />
-                    <span className="text-[11px] sm:text-base font-bold leading-tight truncate w-full" style={{ color: colors.warning }}>
-                      ₦{stats.totalAmount.toLocaleString()}
-                    </span>
-                  </div>
-                  <p className="text-[9px] sm:text-[10px] uppercase tracking-wider" style={{ color: colors.textSecondary }}>Total Value</p>
-                </div>
-              </div>
+                <CreditCard className="w-3 h-3" />
+                Dues catalogue
+              </span>
+              <span
+                className="inline-flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wider"
+                style={{ color: tk.textTer }}
+              >
+                {stats.total} {stats.total === 1 ? 'due' : 'dues'} in scope
+              </span>
             </div>
-          </GlassCard>
-        </motion.div>
+
+            <div className="flex items-center gap-2 shrink-0">
+              <button
+                type="button"
+                onClick={loadPaymentTypes}
+                disabled={loading}
+                className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold transition-all hover:-translate-y-0.5 active:scale-[0.98] disabled:opacity-50"
+                style={{
+                  background: tk.card,
+                  color: tk.text,
+                  border: `1px solid ${tk.cardBorder}`,
+                }}
+              >
+                <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} />
+                <span className="hidden sm:inline">Refresh</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => navigate('/admin/create-payment')}
+                className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-bold transition-all hover:-translate-y-0.5 active:scale-[0.98]"
+                style={{
+                  background: tk.primary,
+                  color: '#FFFFFF',
+                  border: `1px solid ${tk.primary}`,
+                }}
+              >
+                <Plus className="w-3.5 h-3.5" />
+                Create new
+              </button>
+            </div>
+          </div>
+
+          <h1 className="text-2xl sm:text-[28px] font-extrabold tracking-tight" style={{ color: tk.text }}>
+            Manage dues
+          </h1>
+          <p className="text-sm" style={{ color: tk.textSec }}>
+            Every due your scope publishes lives here — edit terms,
+            toggle visibility, retire stale ones. Class reps see their
+            class; dept and faculty execs see their whole subtree.
+          </p>
+
+          {/* Stats strip — same shape as exec-dashboard Stat cards */}
+          <div className="grid grid-cols-3 gap-3 pt-1">
+            <ManageStat
+              label="Total dues"
+              value={stats.total}
+              icon={<Tag className="w-3.5 h-3.5" />}
+              color={tk.primary}
+              tk={tk}
+            />
+            <ManageStat
+              label="Active"
+              value={stats.active}
+              icon={<CheckCircle className="w-3.5 h-3.5" />}
+              color={tk.mint}
+              tk={tk}
+            />
+            <ManageStat
+              label="Total value"
+              value={`₦${stats.totalAmount.toLocaleString()}`}
+              icon={<DollarSign className="w-3.5 h-3.5" />}
+              color={tk.amber}
+              tk={tk}
+            />
+          </div>
+        </motion.header>
 
         {/* Search and Filters */}
         <motion.div
-          initial={{ opacity: 0, y: 20 }}
+          initial={{ opacity: 0, y: 12 }}
           animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.1 }}
-          className="mb-6 relative z-20"
+          transition={{ delay: 0.08 }}
+          className="rounded-2xl p-3 sm:p-4 relative z-20"
+          style={{ background: tk.card, border: `1px solid ${tk.cardBorder}` }}
         >
-          <GlassCard className="p-4 overflow-visible">
-            <div className="flex flex-col sm:flex-row gap-3">
-              {/* Search */}
-              <div className="relative flex-1">
-                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4" style={{ color: colors.textSecondary }} />
-                <input
-                  type="text"
-                  value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
-                  placeholder="Search by title, description, category..."
-                  className="w-full pl-10 pr-4 py-2.5 rounded-xl bg-white/5 border text-white placeholder:text-gray-500 focus:outline-none focus:ring-2"
-                  style={{ borderColor: 'rgba(255, 255, 255, 0.1)', outlineColor: colors.primary }}
-                />
-              </div>
-              
-              {/* Status Filter */}
-              <ProfessionalDropdown
-                value={filterStatus}
-                onChange={(value) => setFilterStatus(value as 'all' | 'active' | 'inactive')}
-                options={[
-                  { value: 'all', label: 'All Status' },
-                  { value: 'active', label: 'Active Only' },
-                  { value: 'inactive', label: 'Inactive Only' }
-                ]}
-                placeholder="Status"
+          <div className="flex flex-col sm:flex-row gap-3">
+            <div className="relative flex-1">
+              <Search
+                className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 pointer-events-none"
+                style={{ color: tk.textTer }}
               />
-              
-              {/* Category Filter */}
-              <ProfessionalDropdown
-                value={filterCategory}
-                onChange={(value) => setFilterCategory(typeof value === 'string' ? value : value[0] || 'all')}
-                options={[
-                  { value: 'all', label: 'All Categories' },
-                  ...CATEGORIES.map((cat) => ({
-                    value: cat.value,
-                    label: `${cat.icon} ${cat.label}`
-                  }))
-                ]}
-                placeholder="Category"
+              <input
+                type="text"
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                placeholder="Search by title, description, category..."
+                className="w-full pl-10 pr-4 py-2.5 rounded-xl text-sm focus:outline-none focus:ring-2 transition-all"
+                style={{
+                  background: theme === 'light' ? 'rgba(15,7,3,0.03)' : 'rgba(255,255,255,0.04)',
+                  border: `1px solid ${tk.cardBorder}`,
+                  color: tk.text,
+                  ['--tw-ring-color' as any]: tk.primaryRing,
+                }}
               />
             </div>
-          </GlassCard>
+
+            <ProfessionalDropdown
+              value={filterStatus}
+              onChange={(value) => setFilterStatus(value as 'all' | 'active' | 'inactive')}
+              options={[
+                { value: 'all', label: 'All Status' },
+                { value: 'active', label: 'Active Only' },
+                { value: 'inactive', label: 'Inactive Only' }
+              ]}
+              placeholder="Status"
+            />
+
+            <ProfessionalDropdown
+              value={filterCategory}
+              onChange={(value) => setFilterCategory(typeof value === 'string' ? value : value[0] || 'all')}
+              options={[
+                { value: 'all', label: 'All Categories' },
+                ...CATEGORIES.map((cat) => ({
+                  value: cat.value,
+                  label: `${cat.icon} ${cat.label}`
+                }))
+              ]}
+              placeholder="Category"
+            />
+          </div>
         </motion.div>
 
-        {/* Payment Types List */}
+        {/* ── Payment types list ────────────────────────────────── */}
         <motion.div
-          initial={{ opacity: 0, y: 20 }}
+          initial={{ opacity: 0, y: 12 }}
           animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.2 }}
+          transition={{ delay: 0.12 }}
+          className="space-y-3"
         >
-          <GlassCard className="relative overflow-hidden">
-            <div className="px-6 pb-6">
-              {loading && (
-                <div className="text-center py-12">
-                  <div className="w-12 h-12 mx-auto border-4 border-t-transparent rounded-full animate-spin mb-4"
-                       style={{ borderColor: `${colors.primary}30`, borderTopColor: 'transparent' }} />
-                  <p style={{ color: colors.textSecondary }}>Loading payment types...</p>
-                </div>
-              )}
+          {loading && (
+            <div
+              className="text-center py-12 rounded-2xl"
+              style={{ background: tk.card, border: `1px solid ${tk.cardBorder}` }}
+            >
+              <div
+                className="w-10 h-10 mx-auto border-4 rounded-full animate-spin mb-3"
+                style={{ borderColor: `${tk.primary}30`, borderTopColor: 'transparent' }}
+              />
+              <p className="text-sm" style={{ color: tk.textSec }}>
+                Loading payment types…
+              </p>
+            </div>
+          )}
 
-              {!loading && filteredPaymentTypes.length === 0 && (
-                <motion.div
-                  initial={{ opacity: 0, scale: 0.95 }}
-                  animate={{ opacity: 1, scale: 1 }}
-                  className="text-center py-16"
+          {!loading && filteredPaymentTypes.length === 0 && (
+            <div
+              className="text-center py-14 rounded-2xl"
+              style={{ background: tk.card, border: `1px solid ${tk.cardBorder}` }}
+            >
+              <div
+                className="w-14 h-14 mx-auto mb-4 rounded-2xl flex items-center justify-center"
+                style={{ background: tk.primarySoft, border: `1px solid ${tk.primaryRing}` }}
+              >
+                <CreditCard className="w-7 h-7" style={{ color: tk.primary }} />
+              </div>
+              <h3 className="text-lg font-extrabold tracking-tight mb-1" style={{ color: tk.text }}>
+                {searchTerm || filterStatus !== 'all' || filterCategory !== 'all'
+                  ? 'No results found'
+                  : 'No payment types yet'}
+              </h3>
+              <p className="text-sm max-w-sm mx-auto mb-5" style={{ color: tk.textSec }}>
+                {searchTerm || filterStatus !== 'all' || filterCategory !== 'all'
+                  ? 'Try adjusting your search or filters.'
+                  : 'Create your first due to start collecting from your scope.'}
+              </p>
+              {!searchTerm && filterStatus === 'all' && filterCategory === 'all' && (
+                <button
+                  type="button"
+                  onClick={() => navigate('/admin/create-payment')}
+                  className="inline-flex items-center gap-1.5 px-4 py-2.5 rounded-xl text-sm font-bold transition-all hover:-translate-y-0.5 active:scale-[0.98]"
+                  style={{
+                    background: tk.primary,
+                    color: '#FFFFFF',
+                    border: `1px solid ${tk.primary}`,
+                  }}
                 >
-                  <div className="w-20 h-20 mx-auto mb-6 rounded-3xl flex items-center justify-center"
-                       style={{ background: `${colors.primary}10`, border: `1px solid ${colors.primary}30` }}>
-                    <CreditCard className="w-10 h-10" style={{ color: colors.primary }} />
-                  </div>
-                  <h3 className="text-xl font-bold text-white mb-2">
-                    {searchTerm || filterStatus !== 'all' || filterCategory !== 'all' ? 'No Results Found' : 'No Payment Types'}
-                  </h3>
-                  <p className="text-sm max-w-sm mx-auto mb-6" style={{ color: colors.textSecondary }}>
-                    {searchTerm || filterStatus !== 'all' || filterCategory !== 'all' 
-                      ? 'Try adjusting your search or filters.'
-                      : 'Create your first payment type to get started.'}
-                  </p>
-                  {!searchTerm && filterStatus === 'all' && filterCategory === 'all' && (
-                    <motion.button
-                      whileHover={{ scale: 1.02 }}
-                      whileTap={{ scale: 0.98 }}
-                      onClick={() => navigate('/admin/create-payment')}
-                      className="inline-flex items-center gap-2 px-6 py-3 rounded-xl font-medium"
-                      style={{
-                        background: `linear-gradient(135deg, ${colors.primary}, ${colors.accentMint})`,
-                        color: 'white'
-                      }}
-                    >
-                      <Plus className="w-5 h-5" />
-                      Create Payment Type
-                    </motion.button>
-                  )}
-                </motion.div>
-              )}
-
-              {!loading && filteredPaymentTypes.length > 0 && (
-                <div className="space-y-4 pt-6">
-                  {filteredPaymentTypes.map((pt, index) => (
-                    <motion.div
-                      key={pt.id}
-                      initial={{ opacity: 0, y: 20 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      transition={{ delay: Math.min(index * 0.02, 0.3) }}
-                      className="rounded-xl overflow-hidden"
-                      style={{ 
-                        background: 'rgba(255, 255, 255, 0.05)',
-                        border: `1px solid ${pt.is_active ? 'rgba(255, 255, 255, 0.1)' : 'rgba(239, 68, 68, 0.3)'}`
-                      }}
-                    >
-                      {/* Header with Icon and Title */}
-                      <div 
-                        className="p-4 flex items-center gap-4"
-                        style={{ 
-                          background: pt.is_active 
-                            ? `linear-gradient(135deg, ${pt.color || colors.primary}15, transparent)` 
-                            : 'linear-gradient(135deg, rgba(239, 68, 68, 0.1), transparent)'
-                        }}
-                      >
-                        <div
-                          className="w-14 h-14 rounded-full flex items-center justify-center text-2xl font-bold shrink-0"
-                          style={{ 
-                            background: `linear-gradient(135deg, ${pt.color || colors.primary}, ${pt.color || colors.primary}80)`
-                          }}
-                        >
-                          {pt.icon || getCategoryIcon(pt.category)}
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <p className="font-semibold text-white text-base truncate">{pt.title}</p>
-                          <p className="text-2xl font-bold" style={{ color: pt.color || colors.primary }}>
-                            ₦{(pt.amount || 0).toLocaleString()}
-                          </p>
-                        </div>
-                        {/* Status Badge */}
-                        <div
-                          className="px-2 py-1 rounded-full text-[10px] font-medium shrink-0"
-                          style={{
-                            background: pt.is_active ? `${colors.statusPaid}20` : `${colors.statusUnpaid}20`,
-                            color: pt.is_active ? colors.statusPaid : colors.statusUnpaid,
-                            border: `1px solid ${pt.is_active ? `${colors.statusPaid}40` : `${colors.statusUnpaid}40`}`
-                          }}
-                        >
-                          {pt.is_active ? '● Active' : '○ Inactive'}
-                        </div>
-                      </div>
-
-                      {/* Category & Type Badges */}
-                      <div className="px-4 pb-3">
-                        <div className="flex flex-wrap gap-2">
-                          <span 
-                            className="px-3 py-1.5 rounded-full text-xs font-semibold flex items-center gap-1.5"
-                            style={{ 
-                              background: `${pt.color || colors.primary}25`, 
-                              color: pt.color || colors.primary,
-                              border: `1px solid ${pt.color || colors.primary}40`
-                            }}
-                          >
-                            {getCategoryIcon(pt.category)}
-                            {getCategoryLabel(pt.category)}
-                          </span>
-                          <span 
-                            className="px-3 py-1.5 rounded-full text-xs font-medium flex items-center gap-1.5"
-                            style={{ 
-                              background: 'rgba(255, 255, 255, 0.05)', 
-                              color: colors.textSecondary,
-                              border: '1px solid rgba(255, 255, 255, 0.1)'
-                            }}
-                          >
-                            {pt.allow_partial ? '✓ Partial OK' : '⨉ Full Only'}
-                          </span>
-                          {pt.is_mandatory && (
-                            <span 
-                              className="px-3 py-1.5 rounded-full text-xs font-semibold flex items-center gap-1.5"
-                              style={{ 
-                                background: `${colors.warning}25`, 
-                                color: colors.warning,
-                                border: `1px solid ${colors.warning}40`
-                              }}
-                            >
-                              ★ Required
-                            </span>
-                          )}
-                        </div>
-                      </div>
-
-                      {/* Description */}
-                      {pt.description && (
-                        <div className="px-4 pb-3">
-                          <p className="text-sm leading-relaxed line-clamp-2" style={{ color: colors.textSecondary }}>
-                            {pt.description}
-                          </p>
-                        </div>
-                      )}
-
-                      {/* Details Grid */}
-                      <div className="px-4 pb-3">
-                        <div className="grid grid-cols-3 gap-2">
-                          <div className="p-2.5 rounded-lg text-center" style={{ background: 'rgba(255, 255, 255, 0.03)' }}>
-                            <p className="text-[10px] uppercase tracking-wider mb-0.5" style={{ color: colors.textSecondary }}>Deadline</p>
-                            <p className="text-white font-semibold text-sm">{formatDate(pt.deadline)}</p>
-                          </div>
-                          <div className="p-2.5 rounded-lg text-center" style={{ background: 'rgba(255, 255, 255, 0.03)' }}>
-                            <p className="text-[10px] uppercase tracking-wider mb-0.5" style={{ color: colors.textSecondary }}>Category</p>
-                            <p className="text-white font-semibold text-sm capitalize">{pt.category || 'General'}</p>
-                          </div>
-                          <div className="p-2.5 rounded-lg text-center" style={{ background: 'rgba(255, 255, 255, 0.03)' }}>
-                            <p className="text-[10px] uppercase tracking-wider mb-0.5" style={{ color: colors.textSecondary }}>Late Fee / Day</p>
-                            <p className="text-white font-semibold text-sm">{pt.late_fee_per_day ? `₦${Number(pt.late_fee_per_day).toLocaleString()}` : '₦0'}</p>
-                          </div>
-                        </div>
-                      </div>
-
-                      {/* Actions */}
-                      <div className="p-4 pt-2 space-y-3" style={{ borderTop: '1px solid rgba(255, 255, 255, 0.05)' }}>
-                        {/* Activate/Deactivate Button */}
-                        <button
-                          onClick={() => {
-                            setSelectedPaymentType(pt)
-                            setShowDeactivateConfirm(true)
-                          }}
-                          disabled={actionLoading}
-                          className="w-full px-4 py-2.5 rounded-lg text-sm font-medium transition-all active:scale-[0.98] disabled:opacity-50"
-                          style={{
-                            background: pt.is_active ? `${colors.statusUnpaid}15` : `${colors.statusPaid}15`,
-                            color: pt.is_active ? colors.statusUnpaid : colors.statusPaid,
-                            border: `1px solid ${pt.is_active ? `${colors.statusUnpaid}30` : `${colors.statusPaid}30`}`
-                          }}
-                        >
-                          {pt.is_active ? '⏸ Deactivate Payment Type' : '▶ Activate Payment Type'}
-                        </button>
-
-                        {/* Edit/Delete Buttons */}
-                        <div className="grid grid-cols-2 gap-2">
-                          <button
-                            onClick={() => {
-                              setSelectedPaymentType(pt)
-                              setEditingPaymentType(normalizePaymentTypeToForm(pt))
-                              setShowEditConfirm(true)
-                            }}
-                            className="p-3 rounded-xl transition-all active:scale-[0.95] flex items-center justify-center gap-2"
-                            style={{ 
-                              background: `${colors.primary}15`,
-                              border: `1px solid ${colors.primary}30`
-                            }}
-                          >
-                            <Edit3 className="w-4 h-4" style={{ color: colors.primary }} />
-                            <span className="text-xs font-medium" style={{ color: colors.primary }}>Edit Details</span>
-                          </button>
-                          <button
-                            onClick={() => {
-                              setSelectedPaymentType(pt)
-                              setShowDeleteConfirm(true)
-                            }}
-                            className="p-3 rounded-xl transition-all active:scale-[0.95] flex items-center justify-center gap-2"
-                            style={{ 
-                              background: 'rgba(239, 68, 68, 0.1)',
-                              border: '1px solid rgba(239, 68, 68, 0.2)'
-                            }}
-                          >
-                            <Trash2 className="w-4 h-4 text-red-400" />
-                            <span className="text-xs font-medium text-red-400">Delete</span>
-                          </button>
-                        </div>
-                      </div>
-                    </motion.div>
-                  ))}
-                </div>
+                  <Plus className="w-4 h-4" />
+                  Create payment type
+                </button>
               )}
             </div>
-          </GlassCard>
+          )}
+
+          {!loading && filteredPaymentTypes.length > 0 && (
+            <div className="space-y-3">
+              {filteredPaymentTypes.map((pt, index) => {
+                const accent = pt.color || tk.primary
+                return (
+                  <motion.div
+                    key={pt.id}
+                    initial={{ opacity: 0, y: 8 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: Math.min(index * 0.02, 0.25) }}
+                    className="rounded-2xl overflow-hidden"
+                    style={{
+                      background: tk.card,
+                      border: `1px solid ${pt.is_active ? tk.cardBorder : `${tk.danger}50`}`,
+                    }}
+                  >
+                    {/* Title row */}
+                    <div
+                      className="p-4 flex items-center gap-3"
+                      style={{
+                        background: pt.is_active
+                          ? `linear-gradient(135deg, ${accent}10, transparent 60%)`
+                          : `linear-gradient(135deg, ${tk.danger}10, transparent 60%)`,
+                      }}
+                    >
+                      <div
+                        className="w-12 h-12 rounded-xl flex items-center justify-center text-xl shrink-0"
+                        style={{
+                          background: `${accent}18`,
+                          color: accent,
+                          border: `1px solid ${accent}30`,
+                        }}
+                      >
+                        {pt.icon || getCategoryIcon(pt.category)}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="font-bold text-sm sm:text-base truncate" style={{ color: tk.text }}>
+                          {pt.title}
+                        </p>
+                        <p
+                          className="text-xl sm:text-2xl font-extrabold tabular-nums leading-tight"
+                          style={{ color: accent }}
+                        >
+                          ₦{(pt.amount || 0).toLocaleString()}
+                        </p>
+                      </div>
+                      <span
+                        className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider shrink-0"
+                        style={{
+                          background: pt.is_active ? `${tk.mint}18` : `${tk.danger}18`,
+                          color: pt.is_active ? tk.mint : tk.danger,
+                          border: `1px solid ${pt.is_active ? `${tk.mint}40` : `${tk.danger}40`}`,
+                        }}
+                      >
+                        <span
+                          className="w-1.5 h-1.5 rounded-full"
+                          style={{ background: pt.is_active ? tk.mint : tk.danger }}
+                        />
+                        {pt.is_active ? 'Active' : 'Inactive'}
+                      </span>
+                    </div>
+
+                    {/* Badges */}
+                    <div className="px-4 pb-3 flex flex-wrap gap-2">
+                      <span
+                        className="px-2.5 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider inline-flex items-center gap-1"
+                        style={{
+                          background: `${accent}14`,
+                          color: accent,
+                          border: `1px solid ${accent}30`,
+                        }}
+                      >
+                        {getCategoryIcon(pt.category)}
+                        {getCategoryLabel(pt.category)}
+                      </span>
+                      <span
+                        className="px-2.5 py-1 rounded-full text-[10px] font-semibold uppercase tracking-wider"
+                        style={{
+                          background: theme === 'light' ? 'rgba(15,7,3,0.04)' : 'rgba(255,255,255,0.04)',
+                          color: tk.textSec,
+                          border: `1px solid ${tk.cardBorder}`,
+                        }}
+                      >
+                        {pt.allow_partial ? 'Partial OK' : 'Full only'}
+                      </span>
+                      {pt.is_mandatory && (
+                        <span
+                          className="px-2.5 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider"
+                          style={{
+                            background: `${tk.amber}18`,
+                            color: tk.amber,
+                            border: `1px solid ${tk.amber}40`,
+                          }}
+                        >
+                          Required
+                        </span>
+                      )}
+                    </div>
+
+                    {/* Description */}
+                    {pt.description && (
+                      <div className="px-4 pb-3">
+                        <p className="text-sm leading-relaxed line-clamp-2" style={{ color: tk.textSec }}>
+                          {pt.description}
+                        </p>
+                      </div>
+                    )}
+
+                    {/* Details grid */}
+                    <div className="px-4 pb-3 grid grid-cols-3 gap-2">
+                      <DetailCell label="Deadline"      value={formatDate(pt.deadline)}                                   tk={tk} theme={theme} />
+                      <DetailCell label="Category"      value={(pt.category || 'General').toString()}                     tk={tk} theme={theme} />
+                      <DetailCell label="Late fee / day" value={pt.late_fee_per_day ? `₦${Number(pt.late_fee_per_day).toLocaleString()}` : '₦0'} tk={tk} theme={theme} />
+                    </div>
+
+                    {/* Actions */}
+                    <div
+                      className="p-4 pt-3 space-y-2"
+                      style={{ borderTop: `1px solid ${tk.cardBorder}` }}
+                    >
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setSelectedPaymentType(pt)
+                          setShowDeactivateConfirm(true)
+                        }}
+                        disabled={actionLoading}
+                        className="w-full px-3 py-2 rounded-xl text-xs font-bold transition-all active:scale-[0.98] disabled:opacity-50"
+                        style={{
+                          background: pt.is_active ? `${tk.danger}12` : `${tk.mint}12`,
+                          color: pt.is_active ? tk.danger : tk.mint,
+                          border: `1px solid ${pt.is_active ? `${tk.danger}30` : `${tk.mint}30`}`,
+                        }}
+                      >
+                        {pt.is_active ? 'Deactivate payment type' : 'Activate payment type'}
+                      </button>
+
+                      <div className="grid grid-cols-2 gap-2">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setSelectedPaymentType(pt)
+                            setEditingPaymentType(normalizePaymentTypeToForm(pt))
+                            setShowEditConfirm(true)
+                          }}
+                          className="inline-flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold transition-all active:scale-[0.98]"
+                          style={{
+                            background: tk.primarySoft,
+                            color: tk.primary,
+                            border: `1px solid ${tk.primaryRing}`,
+                          }}
+                        >
+                          <Edit3 className="w-3.5 h-3.5" />
+                          Edit details
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setSelectedPaymentType(pt)
+                            setShowDeleteConfirm(true)
+                          }}
+                          className="inline-flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold transition-all active:scale-[0.98]"
+                          style={{
+                            background: `${tk.danger}12`,
+                            color: tk.danger,
+                            border: `1px solid ${tk.danger}30`,
+                          }}
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                          Delete
+                        </button>
+                      </div>
+                    </div>
+                  </motion.div>
+                )
+              })}
+            </div>
+          )}
         </motion.div>
 
         <Footer />
@@ -1291,6 +1261,67 @@ export default function ManageDuesPage() {
         confirmText="Continue to Edit"
         cancelText="Cancel"
       />
+    </div>
+  )
+}
+
+function DetailCell({
+  label, value, tk, theme,
+}: {
+  label: string
+  value: string
+  tk: ReturnType<typeof getDashboardTokens>
+  theme: 'light' | 'dark'
+}) {
+  return (
+    <div
+      className="p-2.5 rounded-lg text-center"
+      style={{
+        background: theme === 'light' ? 'rgba(15,7,3,0.03)' : 'rgba(255,255,255,0.03)',
+        border: `1px solid ${tk.cardBorder}`,
+      }}
+    >
+      <p className="text-[10px] uppercase tracking-wider mb-0.5" style={{ color: tk.textTer }}>
+        {label}
+      </p>
+      <p className="font-bold text-sm truncate" style={{ color: tk.text }}>
+        {value}
+      </p>
+    </div>
+  )
+}
+
+function ManageStat({
+  label, value, icon, color, tk,
+}: {
+  label: string
+  value: number | string
+  icon: React.ReactNode
+  color: string
+  tk: ReturnType<typeof getDashboardTokens>
+}) {
+  return (
+    <div
+      className="rounded-2xl p-3 sm:p-4"
+      style={{ background: tk.card, border: `1px solid ${tk.cardBorder}` }}
+    >
+      <div className="flex items-center gap-2">
+        <span
+          className="w-7 h-7 rounded-lg flex items-center justify-center"
+          style={{ background: `${color}18`, color }}
+        >
+          {icon}
+        </span>
+        <p className="text-[10px] uppercase tracking-[0.14em] font-bold" style={{ color: tk.textTer }}>
+          {label}
+        </p>
+      </div>
+      <p
+        className="text-xl font-extrabold tabular-nums mt-2 truncate"
+        style={{ color: tk.text }}
+      >
+        {value}
+      </p>
     </div>
   )
 }

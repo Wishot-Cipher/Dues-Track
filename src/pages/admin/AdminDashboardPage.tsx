@@ -543,191 +543,141 @@ export default function AdminDashboardPage() {
   }
 
   return (
-    <div className="min-h-screen py-6 px-4 relative overflow-hidden"  style={{
-        background: tk.bgWash,
-        color: tk.text,
-      }}
+    <div
+      className="min-h-screen py-6 px-4 relative overflow-hidden"
+      style={{ background: tk.bgWash, color: tk.text }}
     >
-      {/* Background Grid Pattern */}
+      {/* Ambient brand blob — single, soft, matches exec dashboards.
+          The old design layered a 50px grid + two pulsing orbs + a
+          stock ECE photo. That was single-tenant decoration and read
+          as noisy/legacy next to the new dept & faculty dashboards. */}
       <div
-        className="absolute inset-0 opacity-20 pointer-events-none"
-        style={{
-          backgroundImage: `
-            linear-gradient(${theme === 'light' ? 'rgba(255, 104, 3, 0.12)' : 'rgba(255, 104, 3, 0.25)'} 1px, transparent 1px),
-            linear-gradient(90deg, ${theme === 'light' ? 'rgba(255, 104, 3, 0.12)' : 'rgba(255, 104, 3, 0.25)'} 1px, transparent 1px)
-          `,
-          backgroundSize: '50px 50px',
-        }}
+        aria-hidden
+        className="pointer-events-none absolute -top-32 -right-24 w-[520px] h-[520px] rounded-full"
+        style={{ background: tk.blob1, filter: 'blur(120px)' }}
+      />
+      <div
+        aria-hidden
+        className="pointer-events-none absolute -bottom-40 -left-32 w-[420px] h-[420px] rounded-full"
+        style={{ background: tk.blob2, filter: 'blur(110px)' }}
       />
 
-      {/* Animated Gradient Orbs */}
-      <div className="fixed inset-0 overflow-hidden pointer-events-none">
-        <div
-          className="absolute w-[500px] h-[500px] rounded-full blur-[120px] opacity-30 animate-pulse"
-          style={{
-            background: `radial-gradient(circle, ${tk.primary} 0%, transparent 70%)`,
-            top: '-10%',
-            right: '-5%',
-            animationDuration: '4s',
-          }}
-        />
-        <div
-          className="absolute w-[400px] h-[400px] rounded-full blur-[100px] opacity-20"
-          style={{
-            background: `radial-gradient(circle, ${tk.mint} 0%, transparent 70%)`,
-            bottom: '-5%',
-            left: '-5%',
-            animation: 'pulse 6s ease-in-out infinite',
-          }}
-        />
-        
-        {/* ECE Logo Background - Creative Element */}
-        <div className="hidden lg:block absolute right-0 top-1/2 -translate-y-1/2 w-[600px] h-[600px] opacity-[0.08] pointer-events-none">
-          <img 
-            src="/Ece picture.jpg" 
-            alt="ECE Background"
-            className="w-full h-full object-contain"
-            style={{
-              filter: 'grayscale(0.5) brightness(0.8)',
-              mixBlendMode: 'soft-light',
-            }}
-          />
-        </div>
-      </div>
-
-      <div className="max-w-7xl mx-auto space-y-6 relative z-10">
-        {/* Header */}
-        <motion.div
-          initial={{ opacity: 0, y: -20 }}
+      <div className="max-w-5xl mx-auto space-y-6 relative z-10">
+        {/* ── Header (matches DepartmentExec / FacultyExec pattern) ── */}
+        <motion.header
+          initial={{ opacity: 0, y: 12 }}
           animate={{ opacity: 1, y: 0 }}
+          className="space-y-3"
         >
-          <GlassCard className="relative overflow-hidden">
-            {/* Header Decorative Elements */}
-            <div className="absolute top-0 right-0 w-64 h-64 opacity-5 pointer-events-none">
-              <Shield className="w-full h-full" style={{ color: tk.primary }} />
-            </div>
-            <div 
-              className="absolute top-0 left-0 w-full h-1"
-              style={{ background: tk.gradOrange }}
-            />
-            
-            <div className="relative z-10 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-              {/* Mobile Dashboard Switcher - Single-tenant only */}
-              {!isMultiTenant && (
-              <div className="sm:hidden w-full mb-3 flex items-center justify-between">
-                <DashboardSwitcher variant="compact" />
-                <div className="relative">
-                  <AdminNotificationCenter />
-                </div>
-              </div>
+          {/* Top row: chips on the left, switcher/bell on the right */}
+          <div className="flex items-start justify-between gap-3 flex-wrap">
+            <div className="flex items-center gap-2 flex-wrap">
+              <span
+                className="inline-flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-[0.18em] px-2 py-1 rounded-full"
+                style={{
+                  background: tk.primarySoft,
+                  color: tk.primary,
+                  border: `1px solid ${tk.primaryRing}`,
+                }}
+              >
+                <Shield className="w-3 h-3" />
+                Admin control centre
+              </span>
+              {stats.pendingReview > 0 && (
+                <span
+                  className="inline-flex items-center gap-1 text-[10px] font-bold uppercase tracking-wider px-2 py-1 rounded-full"
+                  style={{
+                    background: `${tk.amber}18`,
+                    color: tk.amber,
+                    border: `1px solid ${tk.amber}40`,
+                  }}
+                >
+                  <Clock className="w-3 h-3" />
+                  {stats.pendingReview} pending review
+                </span>
               )}
-              
-              <div className="flex items-center gap-4">
-                <div>
-                  {/* Admin Badge */}
-                  <motion.div 
-                    initial={{ opacity: 0, scale: 0.9 }}
-                    animate={{ opacity: 1, scale: 1 }}
-                    transition={{ delay: 0.1 }}
-                    className="inline-flex items-center gap-2 px-3 py-1 rounded-full text-xs font-semibold mb-3"
-                    style={{ 
-                      background: theme === 'light' ? tk.primarySoft : `linear-gradient(135deg, ${tk.primary}30, ${tk.primary}10)`,
-                      border: `1px solid ${tk.primaryRing}`,
-                      color: tk.primary,
-                    }}
-                  >
-                    <Sparkles className="w-3 h-3" />
-                    ADMIN CONTROL CENTER
-                  </motion.div>
-                  
-                  <h1 className="text-2xl sm:text-3xl font-bold mb-2 flex items-center gap-3" style={{ color: tk.text }}>
-                    <span>Dashboard</span>
-                    <Activity className="w-6 h-6" style={{ color: tk.mint }} />
-                    <PrivacyToggle />
-                  </h1>
-                  <p style={{ color: tk.textSec }} className="flex items-center gap-2">
-                    <BarChart3 className="w-4 h-4" />
-                    Manage payments and monitor class finances
-                  </p>
-                </div>
-              </div>
+            </div>
 
-              {/* Dashboard Switcher + Notification Bell — single-tenant only */}
-              {!isMultiTenant && (
-              <div className="hidden sm:flex items-center gap-3 relative">
+            {!isMultiTenant && (
+              <div className="flex items-center gap-2 shrink-0">
                 <AdminNotificationCenter />
                 <DashboardSwitcher />
               </div>
-              )}
-              
-              <div className="flex flex-wrap gap-3">
-                {hasPermission('can_create_payments') && (
-                <motion.button
-                  whileHover={{ scale: 1.02, y: -2 }}
-                  whileTap={{ scale: 0.98 }}
-                  onClick={() => navigate('/admin/create-payment')}
-                  className="flex items-center gap-2 px-5 py-2.5 rounded-xl font-medium transition-all shadow-lg"
-                  style={{ 
-                    background: tk.gradOrange,
-                    color: tk.text,
-                    boxShadow: `0 4px 15px ${tk.primary}40`
-                  }}
-                >
-                  <Plus className="w-5 h-5" />
-                  <span className="hidden sm:inline">Create Payment</span>
-                </motion.button>
+            )}
+          </div>
+
+          {/* Title */}
+          <div className="flex items-center gap-3 flex-wrap">
+            <h1 className="text-2xl sm:text-[28px] font-extrabold tracking-tight" style={{ color: tk.text }}>
+              Dashboard
+            </h1>
+            <PrivacyToggle />
+          </div>
+          <p className="text-sm" style={{ color: tk.textSec }}>
+            Publish dues, review pending payments, and monitor the books
+            for your scope. Class reps see their class; dept and faculty
+            execs see their whole subtree.
+          </p>
+
+          {/* Quick actions — flat chips, no candy shadows */}
+          <div className="flex flex-wrap gap-2 pt-1">
+            {hasPermission('can_create_payments') && (
+              <button
+                type="button"
+                onClick={() => navigate('/admin/create-payment')}
+                className="inline-flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-bold transition-all hover:-translate-y-0.5 active:scale-[0.98]"
+                style={{
+                  background: tk.primary,
+                  color: '#FFFFFF',
+                  border: `1px solid ${tk.primary}`,
+                }}
+              >
+                <Plus className="w-3.5 h-3.5" />
+                Create payment
+              </button>
+            )}
+            {hasPermission('can_approve_payments') && (
+              <button
+                type="button"
+                onClick={() => navigate('/admin/scan-qr')}
+                className="inline-flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-bold transition-all hover:-translate-y-0.5 active:scale-[0.98]"
+                style={{
+                  background: tk.card,
+                  color: tk.text,
+                  border: `1px solid ${tk.cardBorder}`,
+                  boxShadow: theme === 'light' ? '0 4px 12px rgba(15,7,3,0.04)' : '0 4px 12px rgba(0,0,0,0.2)',
+                }}
+              >
+                <QrCode className="w-3.5 h-3.5" style={{ color: tk.mint }} />
+                Scan QR
+              </button>
+            )}
+            {hasPermission('can_approve_payments') && (
+              <button
+                type="button"
+                onClick={() => navigate('/admin/review')}
+                className="relative inline-flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-bold transition-all hover:-translate-y-0.5 active:scale-[0.98]"
+                style={{
+                  background: tk.card,
+                  color: tk.amber,
+                  border: `1px solid ${tk.amber}40`,
+                  boxShadow: theme === 'light' ? '0 4px 12px rgba(15,7,3,0.04)' : '0 4px 12px rgba(0,0,0,0.2)',
+                }}
+              >
+                <Clock className="w-3.5 h-3.5" />
+                Review
+                {stats.pendingReview > 0 && (
+                  <span
+                    className="ml-0.5 inline-flex items-center justify-center text-[10px] font-bold rounded-full px-1.5 min-w-[18px] h-[18px]"
+                    style={{ background: tk.danger, color: '#FFFFFF' }}
+                  >
+                    {stats.pendingReview}
+                  </span>
                 )}
-                {hasPermission('can_approve_payments') && (
-                <motion.button
-                  whileHover={{ scale: 1.02, y: -2 }}
-                  whileTap={{ scale: 0.98 }}
-                  onClick={() => navigate('/admin/scan-qr')}
-                  className="flex items-center gap-2 px-5 py-2.5 rounded-xl font-medium transition-all shadow-lg"
-                  style={{ 
-                    background: `linear-gradient(135deg, ${tk.mint} 0%, ${tk.blue} 100%)`,
-                    color: '#FFFFFF',
-                    boxShadow: `0 4px 15px ${tk.mint}40`
-                  }}
-                >
-                  <QrCode className="w-5 h-5" />
-                  <span className="hidden sm:inline">Scan QR</span>
-                </motion.button>
-                )}
-                {hasPermission('can_approve_payments') && (
-                <motion.button
-                  whileHover={{ scale: 1.02, y: -2 }}
-                  whileTap={{ scale: 0.98 }}
-                  onClick={() => navigate('/admin/review')}
-                  className="flex items-center gap-2 px-5 py-2.5 rounded-xl font-medium transition-all relative"
-                  style={{ 
-                    background: theme === 'light' ? 'rgba(245, 158, 11, 0.12)' : `${tk.amber}20`,
-                    border: `1px solid ${tk.amber}50`,
-                    color: tk.amber
-                  }}
-                >
-                  <Clock className="w-5 h-5" />
-                  <span className="hidden sm:inline">Review</span>
-                  {stats.pendingReview > 0 && (
-                    <motion.span 
-                      initial={{ scale: 0 }}
-                      animate={{ scale: 1 }}
-                      className="absolute -top-2 -right-2 w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold shadow-lg"
-                      style={{ 
-                        background: tk.danger,
-                        color: '#FFFFFF',
-                        boxShadow: `0 2px 8px ${tk.danger}60`
-                      }}
-                    >
-                      {stats.pendingReview}
-                    </motion.span>
-                  )}
-                </motion.button>
-                )}
-                
-              </div>
-            </div>
-          </GlassCard>
-        </motion.div>
+              </button>
+            )}
+          </div>
+        </motion.header>
 
           {/* Quick Admin Shortcuts (visible and prominent on mobile) */}
           <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.05 }}>
