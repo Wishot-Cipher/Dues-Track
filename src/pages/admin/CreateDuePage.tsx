@@ -472,6 +472,24 @@ export default function CreateDuePage() {
   );
 
   // ── Validation ──
+  // Tier rows the user *touched* but left incomplete (a name OR a price
+  // but not both). validTiers silently drops these, which caused
+  // events that the publisher created with "Regular" + "VIP" to land
+  // in the DB with only one tier row when one of the two had a blank
+  // price or blank name. Surface it as a hard error so the user can
+  // either complete the row or remove it.
+  const incompleteTierLabels = useMemo(() => {
+    return form.tiers
+      .map((t, i) => {
+        const hasName = t.name.trim().length > 0;
+        const hasPrice = t.price !== '' && Number(t.price) >= 0;
+        if (hasName && hasPrice) return null;
+        if (!hasName && !hasPrice) return null; // genuinely empty extra row — ignore
+        return hasName ? `"${t.name.trim()}"` : `row ${i + 1}`;
+      })
+      .filter((x): x is string => Boolean(x));
+  }, [form.tiers]);
+
   const validation = useMemo(() => {
     const errors: string[] = [];
     if (form.title.trim().length < 2) errors.push('Title is too short.');
@@ -480,6 +498,11 @@ export default function CreateDuePage() {
       if (!form.event_date) errors.push('Events need a date.');
       if (!form.event_venue) errors.push('Events need a venue.');
       if (validTiers.length === 0) errors.push('Add at least one ticket type with a price.');
+      if (incompleteTierLabels.length > 0) {
+        errors.push(
+          `${incompleteTierLabels.length === 1 ? 'Ticket type' : 'Ticket types'} ${incompleteTierLabels.join(', ')} ${incompleteTierLabels.length === 1 ? 'needs' : 'need'} both a name and a price — fill them in or remove the row.`,
+        );
+      }
     } else {
       if (!form.amount || Number(form.amount) <= 0) errors.push('Amount must be greater than zero.');
       if (form.accepts_manual && (!form.bank_name || !form.account_number)) {
@@ -493,7 +516,7 @@ export default function CreateDuePage() {
       }
     }
     return errors;
-  }, [form, isEvent, validTiers]);
+  }, [form, isEvent, validTiers, incompleteTierLabels]);
 
   const targetingValid =
     targetScope === 'org' ||

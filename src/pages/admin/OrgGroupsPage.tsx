@@ -11,15 +11,19 @@ import {
   X,
   AlertCircle,
   ChevronRight,
+  ChevronDown,
   BookOpen,
   Network,
+  Receipt,
+  Banknote,
+  CheckCircle2,
 } from 'lucide-react';
 import { useMultiTenantAuth } from '@/hooks/useMultiTenantAuth';
 import { useActiveRole } from '@/hooks/useActiveRole';
+import { useTheme, getDashboardTokens } from '@/hooks/useTheme';
 import { supabase } from '@/config/supabase';
 import organizationService from '@/services/organizationService';
 import type { OrganizationGroup, GroupKind } from '@/types/multiTenant';
-import PageWrapper from '@/components/ui/PageWrapper';
 import EmptyState from '@/components/ui/EmptyState';
 import Textarea from '@/components/ui/Textarea';
 import ProfessionalDropdown from '@/components/ui/ProfessionalDropdown';
@@ -225,17 +229,6 @@ function GroupCard({
   )
 }
 
-// ── Stat mini ───────────────────────────────────────────────────────────────
-function MiniStat({ label, value, color }: { label: string; value: number; color: string }) {
-  return (
-    <div className="rounded-2xl p-4 relative overflow-hidden" style={{ background: tk.card, border: `1px solid ${tk.cardBorder}` }}>
-      <div className="absolute top-0 left-0 right-0 h-[2px]" style={{ background: color }} />
-      <p className="text-[10px] uppercase tracking-[0.2em] font-semibold mb-1.5" style={{ color: tk.textTer }}>{label}</p>
-      <p className="text-2xl font-black text-white tabular-nums">{value}</p>
-    </div>
-  )
-}
-
 // ── Styled text input ────────────────────────────────────────────────────────
 function SInput({ value, onChange, placeholder, type = 'text', maxLength }: {
   value: string; onChange: (v: string) => void; placeholder?: string; type?: string; maxLength?: number;
@@ -292,6 +285,13 @@ const ISSUE_LABEL: Record<Orphan['issue'], string> = {
 
 export default function OrgGroupsPage() {
   const { organization, user } = useMultiTenantAuth()
+  const { theme } = useTheme()
+  // Themed tokens for the page chrome (background, surface, text).
+  // The legacy `tk` const below still drives accent / kind colors that
+  // were never theme-aware — keeping it avoids touching every per-card
+  // gradient. `tt` is the source of truth for surfaces the user sees
+  // as "the page" — wash, card background, text.
+  const tt = useMemo(() => getDashboardTokens(theme), [theme])
   const [groups, setGroups]         = useState<OrganizationGroup[]>([])
   const [loading, setLoading]       = useState(true)
   const [error, setError]           = useState('')
@@ -302,6 +302,25 @@ export default function OrgGroupsPage() {
   const [formError, setFormError]   = useState('')
   const [form, setForm]             = useState<GroupFormData>(DEFAULT_FORM)
   const [editTarget, setEditTarget] = useState<OrganizationGroup | null>(null)
+  // Per-group stats — fetched once after groups load. Used to power
+  // the tree-row badges (members, active dues, payout configured).
+  // Each map is keyed by group_id.
+  const [duesCounts, setDuesCounts] = useState<Map<string, number>>(new Map())
+  const [payoutFlags, setPayoutFlags] = useState<Set<string>>(new Set())
+  // Tree expansion state — the set of group ids the user has
+  // explicitly toggled. Top-level rows default to OPEN (so the user
+  // sees the tree at a glance); deeper rows default to closed.
+  // Toggling a node flips its bit in this set, so an opened-by-default
+  // top-level row appears in this set once the user closes it; a
+  // closed-by-default child row appears once the user opens it.
+  const [toggledKeys, setToggledKeys] = useState<Set<string>>(new Set())
+  const toggleExpand = useCallback((id: string) => {
+    setToggledKeys(prev => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id); else next.add(id)
+      return next
+    })
+  }, [])
 
   // ── Orphan cleanup state ────────────────────────────────────────────────
   const [orphans, setOrphans] = useState<Orphan[]>([])
@@ -333,6 +352,49 @@ export default function OrgGroupsPage() {
   }, [organization])
 
   useEffect(() => { void fetchGroups() }, [fetchGroups])
+
+  // ── Per-group stats: active dues count + payout-configured flag.
+  // Two cheap aggregates so the tree rows can show real numbers
+  // instead of just decorating with kind pills. payout column is
+  // mig 092; if the column isn't there yet the query gracefully
+  // returns an empty set rather than throwing.
+  const fetchGroupStats = useCallback(async () => {
+    if (!organization || groups.length === 0) return
+    const orgId = organization.id
+    try {
+      const { data: dues } = await supabase
+        .from('payment_types')
+        .select('group_id')
+        .eq('organization_id', orgId)
+        .eq('is_active', true)
+      const counts = new Map<string, number>()
+      ;(dues || []).forEach((row) => {
+        const gid = (row as { group_id: string | null }).group_id
+        if (!gid) return
+        counts.set(gid, (counts.get(gid) || 0) + 1)
+      })
+      setDuesCounts(counts)
+    } catch {
+      // Payment-types read failed (RLS, etc.) — leave duesCounts empty.
+    }
+    try {
+      const { data: payoutRows } = await supabase
+        .from('organization_groups')
+        .select('id, paystack_subaccount_code')
+        .eq('organization_id', orgId)
+      const flags = new Set<string>()
+      ;(payoutRows || []).forEach((row) => {
+        const r = row as { id: string; paystack_subaccount_code: string | null }
+        if (r.paystack_subaccount_code) flags.add(r.id)
+      })
+      setPayoutFlags(flags)
+    } catch {
+      // Migration 092 not applied yet — payout flags stay empty
+      // and the chip just renders as "not set". No throw.
+    }
+  }, [organization, groups.length])
+
+  useEffect(() => { void fetchGroupStats() }, [fetchGroupStats])
 
   // ── Orphan detection: pull every group that violates faculty→dept→class.
   //    Academic orgs only — the RPC short-circuits for everything else.
@@ -535,70 +597,114 @@ export default function OrgGroupsPage() {
     ? [{ value: 'all', label: 'All' }, { value: 'faculty', label: 'Faculties' }, { value: 'class', label: classLabelPlural }]
     : [{ value: 'all', label: groupLabelPlural }]
 
+  // Aggregate counts for the stats strip. memberTotal sums every
+  // group's member_count in scope — the page-level "people in your
+  // subtree" tile users see in dept/faculty exec dashboards.
+  const stats = useMemo(() => {
+    const faculties = scopedGroups.filter(g => g.kind === 'faculty' || g.kind === 'college').length
+    const departments = scopedGroups.filter(g => g.kind === 'department').length
+    const classes = scopedGroups.filter(g =>
+      g.kind === 'class' || g.kind === 'level' || g.kind === 'general' || g.kind === 'year_group' || g.kind === 'association'
+    ).length
+    const memberTotal = scopedGroups.reduce((sum, g) => sum + (g.member_count || 0), 0)
+    return { faculties, departments, classes, memberTotal }
+  }, [scopedGroups])
+
   return (
-    <div className="min-h-screen relative" style={{ background: tk.bg }}>
-      {/* Ambient glows */}
-      <div className="fixed inset-0 pointer-events-none overflow-hidden">
-        <motion.div className="absolute rounded-full blur-[200px]" style={{ width: 560, height: 560, background: `radial-gradient(circle, ${tk.blue}, transparent 70%)`, top: '-18%', right: '-12%', opacity: 0.09 }} animate={{ scale: [1, 1.08, 1] }} transition={{ duration: 11, repeat: Infinity, ease: 'easeInOut' }} />
-        <motion.div className="absolute rounded-full blur-[160px]" style={{ width: 400, height: 400, background: `radial-gradient(circle, ${tk.primary}, transparent 70%)`, bottom: '5%', left: '-8%', opacity: 0.07 }} animate={{ scale: [1, 1.1, 1] }} transition={{ duration: 13, repeat: Infinity, ease: 'easeInOut', delay: 3 }} />
-        <div className="absolute inset-0 opacity-[0.018]" style={{ backgroundImage: `repeating-linear-gradient(-45deg, transparent, transparent 50px, rgba(59,130,246,0.5) 50px, rgba(59,130,246,0.5) 51px)` }} />
-      </div>
+    <div
+      className="min-h-screen relative overflow-hidden py-6 px-4"
+      style={{ background: tt.bgWash, color: tt.text }}
+    >
+      {/* Soft brand blobs — match the exec dashboards. The legacy
+          page used two animated radial-blur orbs + a 45deg diagonal
+          stripe pattern, which read as old next to the new exec
+          surfaces. Single static blobs instead. */}
+      <div
+        aria-hidden
+        className="pointer-events-none absolute -top-32 -right-24 w-[520px] h-[520px] rounded-full"
+        style={{ background: tt.blob1, filter: 'blur(120px)' }}
+      />
+      <div
+        aria-hidden
+        className="pointer-events-none absolute -bottom-40 -left-32 w-[420px] h-[420px] rounded-full"
+        style={{ background: tt.blob2, filter: 'blur(110px)' }}
+      />
 
-      <PageWrapper>
-        <div className="max-w-6xl mx-auto space-y-6 relative z-10">
+      <div className="max-w-5xl mx-auto space-y-6 relative z-10">
 
-          {/* ── HERO ── */}
-          <motion.div {...fadeUp(0)}>
-            <div className="rounded-[32px] overflow-hidden relative" style={{ background: 'linear-gradient(135deg, rgba(59,130,246,0.1), rgba(255,104,3,0.08))', border: `1px solid ${tk.cardBorder}` }}>
-              <div className="absolute top-0 left-0 right-0 h-[2px]" style={{ background: `linear-gradient(90deg, ${tk.blue}, ${tk.primary} 50%, transparent)` }} />
-              <div className="absolute inset-0 pointer-events-none" style={{ background: 'radial-gradient(ellipse 55% 55% at 95% 5%, rgba(59,130,246,0.13), transparent)' }} />
-              <div className="absolute -right-10 -top-10 w-60 h-60 opacity-[0.03] pointer-events-none text-white"><Network className="w-full h-full" /></div>
-
-              <div className="relative p-7 sm:p-10">
-                <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-6">
-                  <div>
-                    <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-[0.2em] mb-4" style={{ background: `${tk.blue}14`, border: `1px solid ${tk.blue}28`, color: tk.blue }}>
-                      <Layers className="w-3 h-3" /> Organization Structure
-                    </div>
-                    <h1 className="text-3xl sm:text-5xl font-black text-white tracking-tight leading-none">
-                      {isAcademicOrg ? 'Faculties &' : groupLabelPlural}<br />
-                      <span style={{ color: tk.blue }}>{isAcademicOrg ? classLabelPlural : ''}</span>
-                    </h1>
-                    <p className="mt-3 text-sm max-w-lg leading-7" style={{ color: tk.textSec }}>
-                      Keep your structure clean and professional. Create, update, and organize {groupLabelPlural.toLowerCase()} with clarity.
-                    </p>
-
-                    {/* Scope banner — surfaces when the page has been
-                        narrowed to the caller's active role's subtree.
-                        Without it the filtering feels like a bug ("I
-                        had more faculties yesterday?"). */}
-                    {scopeRootName && (
-                      <div
-                        className="mt-4 inline-flex items-center gap-2 px-3 py-1.5 rounded-full text-[11px] font-semibold"
-                        style={{
-                          background: `${tk.primary}14`,
-                          border: `1px solid ${tk.primary}33`,
-                          color: tk.primary,
-                        }}
-                      >
-                        <Layers className="w-3 h-3" />
-                        Showing your scope: <span className="font-bold">{scopeRootName}</span>
-                      </div>
-                    )}
-                  </div>
-                  <motion.button
-                    whileHover={{ scale: 1.04 }} whileTap={{ scale: 0.97 }}
-                    onClick={openCreate}
-                    className="shrink-0 inline-flex items-center gap-2 px-6 py-3 rounded-2xl text-sm font-bold text-white"
-                    style={{ background: `linear-gradient(135deg, ${tk.blue}, ${tk.primary})`, boxShadow: `0 8px 28px ${tk.blue}30` }}
-                  >
-                    <Plus className="w-4 h-4" />
-                    New {isAcademicOrg ? classLabel : groupLabel}
-                  </motion.button>
-                </div>
-              </div>
+        {/* ── Header (matches DepartmentExec / FacultyExec pattern) ── */}
+        <motion.header {...fadeUp(0)} className="space-y-3">
+          <div className="flex items-start justify-between gap-3 flex-wrap">
+            <div className="flex items-center gap-2 flex-wrap">
+              <span
+                className="inline-flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-[0.18em] px-2 py-1 rounded-full"
+                style={{
+                  background: tt.primarySoft,
+                  color: tt.primary,
+                  border: `1px solid ${tt.primaryRing}`,
+                }}
+              >
+                <Layers className="w-3 h-3" />
+                Organisation structure
+              </span>
+              {scopeRootName && (
+                <span
+                  className="inline-flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wider px-2 py-1 rounded-full"
+                  style={{
+                    background: `${tt.blue}18`,
+                    color: tt.blue,
+                    border: `1px solid ${tt.blue}40`,
+                  }}
+                >
+                  <Network className="w-3 h-3" />
+                  Scope: {scopeRootName}
+                </span>
+              )}
             </div>
-          </motion.div>
+
+            <button
+              type="button"
+              onClick={openCreate}
+              className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-bold transition-all hover:-translate-y-0.5 active:scale-[0.98]"
+              style={{
+                background: tt.primary,
+                color: '#FFFFFF',
+                border: `1px solid ${tt.primary}`,
+              }}
+            >
+              <Plus className="w-3.5 h-3.5" />
+              New {isAcademicOrg ? classLabel : groupLabel}
+            </button>
+          </div>
+
+          <h1 className="text-2xl sm:text-[28px] font-extrabold tracking-tight" style={{ color: tt.text }}>
+            {isAcademicOrg ? `Faculties & ${classLabelPlural}` : groupLabelPlural}
+          </h1>
+          <p className="text-sm" style={{ color: tt.textSec }}>
+            The tree of your organisation — faculty, department, class.
+            Each row carries its own dues catalogue and payout account;
+            expand a row to see what lives underneath.
+          </p>
+
+          {/* Stats strip — three or four real numbers. The legacy hero
+              had no per-row stats; this gives the page weight. */}
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 pt-1">
+            {isAcademicOrg && (
+              <GroupStat label="Faculties"  value={stats.faculties}  icon={<GraduationCap className="w-3.5 h-3.5" />} color={tt.blue}    tt={tt} />
+            )}
+            {isAcademicOrg && (
+              <GroupStat label="Departments" value={stats.departments} icon={<Network className="w-3.5 h-3.5" />}     color={tt.primary} tt={tt} />
+            )}
+            <GroupStat
+              label={isAcademicOrg ? classLabelPlural : groupLabelPlural}
+              value={isAcademicOrg ? stats.classes : scopedGroups.length}
+              icon={<BookOpen className="w-3.5 h-3.5" />}
+              color={tt.mint}
+              tt={tt}
+            />
+            <GroupStat label="Members" value={stats.memberTotal} icon={<Users className="w-3.5 h-3.5" />} color={tt.amber} tt={tt} />
+          </div>
+        </motion.header>
 
           {/* ── ORPHANS / MISPLACED GROUPS ────────────────────────────────
               Only renders when the academic-org rules turn up violations
@@ -673,101 +779,182 @@ export default function OrgGroupsPage() {
             </motion.div>
           )}
 
-          {/* ── STATS ── */}
-          <div className="grid grid-cols-3 gap-4">
-            <MiniStat label={groupLabelPlural} value={groups.length} color={tk.primary} />
-            <MiniStat label={isAcademicOrg ? 'Faculties' : 'Active'} value={isAcademicOrg ? facultyGroups.length : groups.filter(g => g.is_active).length} color={tk.blue} />
-            <MiniStat label={isAcademicOrg ? classLabelPlural : 'Inactive'} value={isAcademicOrg ? classGroups.length : groups.filter(g => !g.is_active).length} color={tk.primary} />
-          </div>
-
-          {/* ── SEARCH + TABS ── */}
-          <motion.div {...fadeUp(0.08)}>
-            <div className="rounded-[24px] p-4 sm:p-5" style={{ background: tk.card, border: `1px solid ${tk.cardBorder}` }}>
-              <div className="flex flex-col sm:flex-row gap-3 sm:items-center">
-                {/* Search */}
-                <div className="flex-1 relative">
-                  <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 pointer-events-none" style={{ color: tk.textTer }} />
-                  <input
-                    value={searchQuery}
-                    onChange={e => setSearchQuery(e.target.value)}
-                    placeholder={`Search ${groupLabelPlural.toLowerCase()}…`}
-                    className="w-full pl-10 pr-9 py-3 rounded-xl text-white text-sm outline-none transition-all placeholder-white/20 focus:ring-2 focus:ring-blue-500/25"
-                    style={{ background: tk.inputBg, border: `1px solid ${tk.inputBor}` }}
-                  />
-                  {searchQuery && (
-                    <button onClick={() => setSearchQuery('')} className="absolute right-3 top-1/2 -translate-y-1/2 w-5 h-5 flex items-center justify-center rounded-full hover:bg-white/10">
-                      <X className="w-3 h-3" style={{ color: tk.textTer }} />
-                    </button>
-                  )}
-                </div>
-
-                {/* Tabs */}
-                <div className="flex gap-2">
-                  {tabOptions.map(t => (
-                    <TabBtn key={t.value} active={activeTab === t.value} onClick={() => setActiveTab(t.value)}>
-                      {t.label}
-                    </TabBtn>
-                  ))}
-                </div>
+          {/* ── Search + tab filter — theme-aware. The legacy `tk.inputBg`
+              (rgba(255,255,255,0.05)) was invisible on light theme. */}
+          <motion.div
+            {...fadeUp(0.08)}
+            className="rounded-2xl p-3 sm:p-4"
+            style={{ background: tt.card, border: `1px solid ${tt.cardBorder}` }}
+          >
+            <div className="flex flex-col sm:flex-row gap-3 sm:items-center">
+              <div className="flex-1 relative">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 pointer-events-none" style={{ color: tt.textTer }} />
+                <input
+                  value={searchQuery}
+                  onChange={e => setSearchQuery(e.target.value)}
+                  placeholder={`Search ${groupLabelPlural.toLowerCase()}…`}
+                  className="w-full pl-10 pr-9 py-2.5 rounded-xl text-sm outline-none transition-all focus:ring-2"
+                  style={{
+                    background: theme === 'light' ? 'rgba(15,7,3,0.03)' : 'rgba(255,255,255,0.04)',
+                    border: `1px solid ${tt.cardBorder}`,
+                    color: tt.text,
+                    ['--tw-ring-color' as string]: tt.primaryRing,
+                  } as React.CSSProperties}
+                />
+                {searchQuery && (
+                  <button
+                    type="button"
+                    onClick={() => setSearchQuery('')}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 w-5 h-5 flex items-center justify-center rounded-full"
+                  >
+                    <X className="w-3 h-3" style={{ color: tt.textTer }} />
+                  </button>
+                )}
               </div>
 
-              {/* Result count */}
-              {searchQuery && (
-                <motion.p initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="mt-3 text-xs" style={{ color: tk.textTer }}>
-                  {visibleGroups.length} result{visibleGroups.length !== 1 ? 's' : ''} for "{searchQuery}"
-                </motion.p>
-              )}
+              <div className="flex gap-2 flex-wrap">
+                {tabOptions.map(t => (
+                  <TabBtn key={t.value} active={activeTab === t.value} onClick={() => setActiveTab(t.value)}>
+                    {t.label}
+                  </TabBtn>
+                ))}
+              </div>
             </div>
+
+            {searchQuery && (
+              <p className="mt-2 text-[11px]" style={{ color: tt.textTer }}>
+                {visibleGroups.length} result{visibleGroups.length !== 1 ? 's' : ''} for "{searchQuery}"
+              </p>
+            )}
           </motion.div>
 
-          {/* ── GROUP GRID ── */}
+          {/* ── Tree of groups. When a search is active we show the FLAT
+              matches (otherwise the user would have to drill to find
+              what they typed). Otherwise we show the top-level nodes
+              (faculty / no-parent) and let the user expand for kids.
+              Top-level for non-academic orgs = every group. */}
           {loading ? (
-            <div className="py-20 flex justify-center">
+            <div
+              className="py-14 flex justify-center rounded-2xl"
+              style={{ background: tt.card, border: `1px solid ${tt.cardBorder}` }}
+            >
               <LoadingSpinner size="md" text="Loading groups…" />
             </div>
           ) : error ? (
-            <div className="rounded-[24px] p-12" style={{ background: tk.card, border: `1px solid ${tk.cardBorder}` }}>
-              <EmptyState illustration="error" title="Unable to load groups" description={error} action={<button onClick={fetchGroups} className="px-5 py-2.5 rounded-xl text-sm font-semibold" style={{ background: `${tk.primary}14`, color: tk.primary }}>Try Again</button>} />
+            <div className="rounded-2xl p-10" style={{ background: tt.card, border: `1px solid ${tt.cardBorder}` }}>
+              <EmptyState
+                illustration="error"
+                title="Unable to load groups"
+                description={error}
+                action={
+                  <button
+                    type="button"
+                    onClick={fetchGroups}
+                    className="px-4 py-2 rounded-xl text-sm font-bold"
+                    style={{ background: tt.primarySoft, color: tt.primary, border: `1px solid ${tt.primaryRing}` }}
+                  >
+                    Try again
+                  </button>
+                }
+              />
             </div>
           ) : visibleGroups.length === 0 ? (
-            <motion.div {...fadeUp(0.1)} className="rounded-[24px] p-14 text-center" style={{ background: tk.card, border: `1px solid ${tk.cardBorder}` }}>
-              <div className="w-20 h-20 rounded-3xl mx-auto mb-5 flex items-center justify-center" style={{ background: `${tk.blue}10`, border: `1px solid ${tk.blue}22` }}>
-                <Users className="w-10 h-10" style={{ color: tk.blue }} />
+            <div
+              className="rounded-2xl p-12 text-center"
+              style={{ background: tt.card, border: `1px solid ${tt.cardBorder}` }}
+            >
+              <div
+                className="w-14 h-14 rounded-2xl mx-auto mb-4 flex items-center justify-center"
+                style={{ background: tt.primarySoft, border: `1px solid ${tt.primaryRing}` }}
+              >
+                <Users className="w-7 h-7" style={{ color: tt.primary }} />
               </div>
-              <p className="font-bold text-white text-base">
+              <p className="text-base font-extrabold tracking-tight mb-1" style={{ color: tt.text }}>
                 {searchQuery ? `No results for "${searchQuery}"` : `No ${groupLabelPlural.toLowerCase()} yet`}
               </p>
-              <p className="mt-1.5 text-sm" style={{ color: tk.textTer }}>
-                {searchQuery ? 'Try a different search term.' : 'Create your first group and start organizing members.'}
+              <p className="text-sm max-w-sm mx-auto mb-5" style={{ color: tt.textSec }}>
+                {searchQuery ? 'Try a different search term.' : 'Create your first group to start organising members.'}
               </p>
               {!searchQuery && (
-                <motion.button whileHover={{ scale: 1.04 }} onClick={openCreate} className="mt-5 inline-flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-bold text-white" style={{ background: `linear-gradient(135deg, ${tk.blue}, ${tk.primary})` }}>
-                  <Plus className="w-4 h-4" /> Create {isAcademicOrg ? classLabel : groupLabel}
-                </motion.button>
+                <button
+                  type="button"
+                  onClick={openCreate}
+                  className="inline-flex items-center gap-1.5 px-4 py-2.5 rounded-xl text-sm font-bold transition-all hover:-translate-y-0.5 active:scale-[0.98]"
+                  style={{ background: tt.primary, color: '#FFFFFF', border: `1px solid ${tt.primary}` }}
+                >
+                  <Plus className="w-4 h-4" />
+                  Create {isAcademicOrg ? classLabel : groupLabel}
+                </button>
               )}
-            </motion.div>
-          ) : (
-            <motion.div
-              className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3"
-              variants={listVariants}
-              initial="hidden"
-              animate="show"
-            >
+            </div>
+          ) : searchQuery ? (
+            /* Flat-results mode — search is active. */
+            <motion.div className="grid gap-3 sm:grid-cols-2" variants={listVariants} initial="hidden" animate="show">
               <AnimatePresence>
                 {visibleGroups.map(group => (
                   <GroupCard
+                    key={group.id}
+                    group={group}
+                    groups={groups}
+                    isAcademicOrg={isAcademicOrg}
+                    onEdit={openEdit}
+                  />
+                ))}
+              </AnimatePresence>
+            </motion.div>
+          ) : (
+            /* Tree mode. When activeTab is 'class' we render the
+               filtered list FLAT because the user explicitly asked to
+               see classes / departments — drilling them down inside a
+               collapsed faculty would hide what they came for. The
+               'all' / 'faculty' tabs use the hierarchy. */
+            activeTab === 'class' ? (
+              <motion.div className="grid gap-3 sm:grid-cols-2" variants={listVariants} initial="hidden" animate="show">
+                <AnimatePresence>
+                  {visibleGroups.map(group => (
+                    <GroupCard
                       key={group.id}
                       group={group}
                       groups={groups}
                       isAcademicOrg={isAcademicOrg}
                       onEdit={openEdit}
                     />
-                ))}
-              </AnimatePresence>
-            </motion.div>
+                  ))}
+                </AnimatePresence>
+              </motion.div>
+            ) : (
+              <div className="space-y-3">
+                {/* Top-level set: anything in scope with no parent,
+                    plus faculties/colleges (which conceptually root the
+                    tree even if they accidentally got a parent_group_id).
+                    Falls back to the ENTIRE visibleGroups list when no
+                    rows survive — covers orgs where every group has a
+                    parent that's been filtered out by the scope walk. */}
+                {(() => {
+                  const tops = visibleGroups.filter(
+                    g => !g.parent_group_id || g.kind === 'faculty' || g.kind === 'college'
+                  )
+                  const list = tops.length > 0 ? tops : visibleGroups
+                  return list.map(top => (
+                    <GroupTreeNode
+                      key={top.id}
+                      group={top}
+                      groups={scopedGroups}
+                      duesCounts={duesCounts}
+                      payoutFlags={payoutFlags}
+                      toggledKeys={toggledKeys}
+                      onToggle={toggleExpand}
+                      onEdit={openEdit}
+                      isAcademicOrg={isAcademicOrg}
+                      tt={tt}
+                      depth={0}
+                    />
+                  ))
+                })()}
+              </div>
+            )
           )}
-        </div>
-      </PageWrapper>
+      </div>
 
       {/* ── CREATE / EDIT MODAL ── */}
       <Modal
@@ -946,4 +1133,253 @@ export default function OrgGroupsPage() {
 function getGroupLabel(kind: GroupKind, classLabel: string, groupLabel: string, isAcademic: boolean) {
   if (!isAcademic) return groupLabel
   return kind === 'faculty' ? 'Faculty' : classLabel
+}
+
+/**
+ * GroupTreeNode — recursive row that renders ONE group plus its
+ * descendants on expand.
+ *
+ *   faculty
+ *   └─ department
+ *      └─ class
+ *
+ * Each row shows: kind icon + name + short_name pill + member count
+ * + active-dues count + payout indicator + edit. Click the chevron
+ * to expand and surface its kids. Depth-driven left padding gives
+ * the tree its visual hierarchy without an explicit guideline.
+ */
+function GroupTreeNode({
+  group, groups, duesCounts, payoutFlags, toggledKeys, onToggle, onEdit, isAcademicOrg, tt, depth,
+}: {
+  group: OrganizationGroup
+  groups: OrganizationGroup[]
+  duesCounts: Map<string, number>
+  payoutFlags: Set<string>
+  toggledKeys: Set<string>
+  onToggle: (id: string) => void
+  onEdit: (g: OrganizationGroup) => void
+  isAcademicOrg: boolean
+  tt: ReturnType<typeof getDashboardTokens>
+  depth: number
+}) {
+  const children = useMemo(
+    () => groups.filter(g => g.parent_group_id === group.id),
+    [groups, group.id],
+  )
+  // Default: top-level nodes (depth 0) start OPEN; deeper nodes start
+  // closed. The user's toggle flips that bit per-id. Hence:
+  //   depth 0, NOT toggled → open
+  //   depth 0, toggled     → closed
+  //   depth >0, NOT toggled → closed
+  //   depth >0, toggled     → open
+  const defaultOpen = depth === 0
+  const isOpen = toggledKeys.has(group.id) ? !defaultOpen : defaultOpen
+  const hasChildren = children.length > 0
+  const accent = kindColor(group.kind)
+  const dues = duesCounts.get(group.id) || 0
+  const hasPayout = payoutFlags.has(group.id)
+  const kindLabel = group.kind || 'group'
+  const primaryLevel = group.levels?.[0] ? organizationService.canonicalizeLevel(group.levels[0]) : null
+  // Whole row toggles when there are children — the chevron alone
+  // was too small a target. Falls back to a no-op for leaves.
+  const handleRowClick = () => {
+    if (hasChildren) onToggle(group.id)
+  }
+
+  return (
+    <div className="space-y-2">
+      <div
+        className="rounded-2xl overflow-hidden transition-all"
+        style={{
+          background: tt.card,
+          border: `1px solid ${tt.cardBorder}`,
+          marginLeft: depth > 0 ? depth * 16 : 0,
+        }}
+      >
+        <div
+          className={`p-3 sm:p-4 flex items-center gap-3 ${hasChildren ? 'cursor-pointer' : ''}`}
+          onClick={handleRowClick}
+          role={hasChildren ? 'button' : undefined}
+          tabIndex={hasChildren ? 0 : undefined}
+        >
+          {/* Chevron — only when there are children. Acts as a visual
+              affordance for the row-level toggle. Click handler is on
+              the row, not just this button. */}
+          {hasChildren ? (
+            <span
+              aria-hidden
+              className="w-7 h-7 rounded-lg flex items-center justify-center shrink-0 transition-all"
+              style={{ background: `${accent}14`, color: accent, border: `1px solid ${accent}30` }}
+            >
+              {isOpen ? <ChevronDown className="w-3.5 h-3.5" /> : <ChevronRight className="w-3.5 h-3.5" />}
+            </span>
+          ) : (
+            <span className="w-7 h-7 shrink-0" />
+          )}
+
+          {/* Kind icon */}
+          <span
+            className="w-10 h-10 rounded-xl flex items-center justify-center shrink-0"
+            style={{ background: `${accent}18`, color: accent, border: `1px solid ${accent}30` }}
+          >
+            {kindIcon(group.kind)}
+          </span>
+
+          {/* Identity column */}
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center gap-2 flex-wrap">
+              <p className="font-bold text-sm truncate" style={{ color: tt.text }}>
+                {group.name}
+              </p>
+              <span
+                className="text-[10px] font-mono px-1.5 py-0.5 rounded-md shrink-0"
+                style={{ background: `${accent}14`, color: accent }}
+              >
+                {group.short_name}
+              </span>
+            </div>
+            <div className="flex flex-wrap items-center gap-1.5 mt-1">
+              <span
+                className="inline-flex items-center px-1.5 py-0.5 rounded-full text-[9.5px] font-bold uppercase tracking-wider"
+                style={{ background: `${accent}14`, color: accent, border: `1px solid ${accent}28` }}
+              >
+                {kindLabel}
+              </span>
+              {primaryLevel && (
+                <span
+                  className="inline-flex items-center px-1.5 py-0.5 rounded-full text-[9.5px] font-semibold"
+                  style={{ background: tt.primarySoft, color: tt.primary }}
+                >
+                  L{primaryLevel}
+                </span>
+              )}
+            </div>
+          </div>
+
+          {/* Stats column — members + active dues + payout flag. */}
+          <div className="hidden sm:flex items-center gap-3 shrink-0">
+            <Metric icon={<Users className="w-3 h-3" />} value={group.member_count || 0} label="members" tt={tt} />
+            <Metric icon={<Receipt className="w-3 h-3" />} value={dues}                  label="dues"    tt={tt} />
+            <span
+              className="inline-flex items-center gap-1 text-[10px] font-bold uppercase tracking-wider px-2 py-1 rounded-full"
+              style={{
+                background: hasPayout ? `${tt.mint}18` : `${tt.amber}14`,
+                color: hasPayout ? tt.mint : tt.amber,
+                border: `1px solid ${hasPayout ? `${tt.mint}40` : `${tt.amber}38`}`,
+              }}
+            >
+              {hasPayout ? <CheckCircle2 className="w-3 h-3" /> : <Banknote className="w-3 h-3" />}
+              {hasPayout ? 'Payout set' : 'No payout'}
+            </span>
+          </div>
+
+          {/* Edit — stopPropagation so clicking this doesn't also
+              toggle the row's expand state. */}
+          <button
+            type="button"
+            onClick={(e) => { e.stopPropagation(); onEdit(group) }}
+            className="shrink-0 w-8 h-8 rounded-lg flex items-center justify-center transition-all"
+            style={{
+              background: tt.primarySoft,
+              color: tt.primary,
+              border: `1px solid ${tt.primaryRing}`,
+            }}
+            aria-label="Edit group"
+          >
+            <Edit2 className="w-3.5 h-3.5" />
+          </button>
+        </div>
+
+        {/* Mobile: stats row collapses below the identity. */}
+        <div className="px-4 pb-3 sm:hidden flex flex-wrap gap-1.5">
+          <Metric icon={<Users className="w-3 h-3" />} value={group.member_count || 0} label="members" tt={tt} />
+          <Metric icon={<Receipt className="w-3 h-3" />} value={dues}                  label="dues"    tt={tt} />
+          <span
+            className="inline-flex items-center gap-1 text-[10px] font-bold uppercase tracking-wider px-2 py-1 rounded-full"
+            style={{
+              background: hasPayout ? `${tt.mint}18` : `${tt.amber}14`,
+              color: hasPayout ? tt.mint : tt.amber,
+              border: `1px solid ${hasPayout ? `${tt.mint}40` : `${tt.amber}38`}`,
+            }}
+          >
+            {hasPayout ? <CheckCircle2 className="w-3 h-3" /> : <Banknote className="w-3 h-3" />}
+            {hasPayout ? 'Payout set' : 'No payout'}
+          </span>
+        </div>
+      </div>
+
+      {/* Children — render on expand. depth+1 so they indent. */}
+      {isOpen && hasChildren && (
+        <div className="space-y-2">
+          {children.map(child => (
+            <GroupTreeNode
+              key={child.id}
+              group={child}
+              groups={groups}
+              duesCounts={duesCounts}
+              payoutFlags={payoutFlags}
+              toggledKeys={toggledKeys}
+              onToggle={onToggle}
+              onEdit={onEdit}
+              isAcademicOrg={isAcademicOrg}
+              tt={tt}
+              depth={depth + 1}
+            />
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
+function Metric({
+  icon, value, label, tt,
+}: {
+  icon: React.ReactNode
+  value: number | string
+  label: string
+  tt: ReturnType<typeof getDashboardTokens>
+}) {
+  return (
+    <span
+      className="inline-flex items-center gap-1 text-[10px] font-bold uppercase tracking-wider px-2 py-1 rounded-full"
+      style={{ background: tt.primarySoft, color: tt.textSec, border: `1px solid ${tt.cardBorder}` }}
+    >
+      {icon}
+      <span style={{ color: tt.text }} className="tabular-nums">{value}</span>
+      <span style={{ color: tt.textTer }}>{label}</span>
+    </span>
+  )
+}
+
+function GroupStat({
+  label, value, icon, color, tt,
+}: {
+  label: string
+  value: number | string
+  icon: React.ReactNode
+  color: string
+  tt: ReturnType<typeof getDashboardTokens>
+}) {
+  return (
+    <div
+      className="rounded-2xl p-3 sm:p-4"
+      style={{ background: tt.card, border: `1px solid ${tt.cardBorder}` }}
+    >
+      <div className="flex items-center gap-2">
+        <span
+          className="w-7 h-7 rounded-lg flex items-center justify-center"
+          style={{ background: `${color}18`, color }}
+        >
+          {icon}
+        </span>
+        <p className="text-[10px] uppercase tracking-[0.14em] font-bold" style={{ color: tt.textTer }}>
+          {label}
+        </p>
+      </div>
+      <p className="text-xl font-extrabold tabular-nums mt-2" style={{ color: tt.text }}>
+        {value}
+      </p>
+    </div>
+  )
 }

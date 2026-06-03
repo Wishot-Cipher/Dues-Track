@@ -281,7 +281,11 @@ export default function OrgLayout() {
 
   const adminNavAll: NavItem[] = showAdmin ? [
     { path: '/admin/dashboard', label: 'Overview', icon: <PieChart size={20} />, section: 'admin', adminGroup: 'overview' },
-    { path: '/admin/members', label: organization.member_label_plural || 'Members', icon: <Users size={20} />, section: 'admin', permission: 'can_manage_members', adminGroup: 'overview' },
+    // maxScope: 'group' hides Members from dept/faculty execs even
+    // when their permissions row carries can_manage_members (legacy
+    // grants from the claim-approval RPC blanket-enable it). Members
+    // management is a class-tier responsibility.
+    { path: '/admin/members', label: organization.member_label_plural || 'Members', icon: <Users size={20} />, section: 'admin', permission: 'can_manage_members', maxScope: 'group', adminGroup: 'overview' },
     // Tenant structure — org/unit execs only (a class rep doesn't reshape the org tree).
     { path: '/admin/groups', label: groupNavLabel, icon: <Building2 size={20} />, section: 'admin', hideOnMobile: true, permission: 'can_manage_settings', minScope: 'unit', adminGroup: 'structure' },
     ...(isAcademicOrg ? [{ path: '/admin/academic-calendar', label: 'Academic Calendar', icon: <CalendarDays size={20} />, section: 'admin' as const, hideOnMobile: true, permission: 'can_manage_settings', minScope: 'unit' as const, adminGroup: 'structure' as const }] : []),
@@ -347,9 +351,19 @@ export default function OrgLayout() {
     { path: '/profile',  label: 'Profile',
       icon: <UserCog size={22} />, section: 'member' },
   ];
+  // Mobile exec tabs (left two slots). For a class-tier rep (or the
+  // org owner) the second slot is Members — that's their core daily
+  // surface. For a dept or faculty exec, Members management isn't
+  // theirs to wield, so the second slot becomes Manage Dues, which
+  // IS their daily surface.
+  const showMembersInExecTabs =
+    activeRole?.kind === 'exec' &&
+    (activeRole.scopeLevel === 'group' || activeRole.scopeLevel === 'org');
   const execTabsLeft: NavItem[] = [
     { path: '/admin/dashboard', label: 'Overview', icon: <PieChart size={22} />, section: 'admin' },
-    { path: '/admin/members', label: organization.member_label_plural || 'Members', icon: <Users size={22} />, section: 'admin' },
+    showMembersInExecTabs
+      ? { path: '/admin/members', label: organization.member_label_plural || 'Members', icon: <Users size={22} />, section: 'admin' }
+      : { path: '/admin/manage-dues', label: organization.payment_label || 'Dues', icon: <Receipt size={22} />, section: 'admin' },
   ];
   const execTabsRight: NavItem[] = [
     { path: '/admin/review', label: 'Review', icon: <ClipboardCheck size={22} />, section: 'admin' },
@@ -435,22 +449,23 @@ export default function OrgLayout() {
                 {organization.short_name?.charAt(0) || 'P'}
               </motion.div>
             )}
-            <div className="min-w-0">
+            <div className="min-w-0 max-w-[60vw] sm:max-w-none">
               <p
-                className="text-sm font-semibold leading-tight transition-colors truncate"
-                style={{ color: tk.text, maxWidth: '200px' }}
+                className="text-sm font-semibold leading-tight transition-colors truncate max-w-[140px] sm:max-w-[200px]"
+                style={{ color: tk.text }}
               >
                 {organization.short_name || organization.name}
               </p>
               {/* Subtitle: group + level — single tidy line with a middot
                   separator. Theme-aware tokens, tighter typography, and
                   bounded width so a long class name can't push the
-                  whole header sideways on mobile. */}
+                  whole header sideways on mobile. The width caps are
+                  responsive: tight on phones, generous on desktop. */}
               <div className="flex items-center gap-1.5 mt-0.5 min-w-0">
                 {(group?.short_name || group?.name) && (
                   <span
-                    className="text-[10px] font-bold uppercase truncate"
-                    style={{ color: tk.textTer, maxWidth: '130px' }}
+                    className="text-[10px] font-bold uppercase truncate max-w-[80px] sm:max-w-[130px]"
+                    style={{ color: tk.textTer }}
                   >
                     {group?.short_name || group?.name}
                   </span>
@@ -621,12 +636,17 @@ export default function OrgLayout() {
                   />
                 </div>
 
-                <div className="sm:hidden text-left">
+                {/* Role chip beside the avatar. Drops off on the
+                    smallest phones (< 400px width) so the org name +
+                    avatar still fit comfortably on a 320px viewport.
+                    Tailwind doesn't ship an xs breakpoint by default,
+                    so we use the arbitrary `max-[399px]:hidden` syntax. */}
+                <div className="max-[399px]:hidden sm:hidden text-left">
                   <p
                     className="text-[10px] font-semibold uppercase tracking-wide truncate"
                     style={{
                       color: isExecContext ? colors.primary : (isLight ? 'rgba(15,7,3,0.6)' : colors.textSecondary),
-                      maxWidth: '90px',
+                      maxWidth: '70px',
                     }}
                   >
                     {activeRole?.label || (isExecContext ? 'Exec' : 'Student')}
@@ -1176,8 +1196,14 @@ function BottomTab({
   return (
     <Link
       to={`${basePath}${item.path}`}
-      className="relative flex flex-col items-center justify-center gap-0.5 py-1 px-2 transition-all"
-      style={{ minWidth: '52px' }}
+      // Tabs sit inside a half-width column with a 40px FAB pad, so on
+      // 320px-wide phones each tab gets ~60px. The old minWidth=52
+      // + non-truncating label pushed long labels ("Receipts",
+      // "Members" with the org's custom plural) past the column edge
+      // and the layout broke. min-w-0 + truncating the label keeps it
+      // tight. py-1.5 gives the inactive-state hit target some breathing
+      // room without growing the bar height.
+      className="relative flex flex-col items-center justify-center gap-0.5 py-1.5 px-1 min-w-0 flex-1 transition-all"
     >
       <span
         className="relative z-10 transition-colors"
@@ -1186,7 +1212,7 @@ function BottomTab({
         {item.icon}
       </span>
       <span
-        className="relative z-10 text-[10px] font-semibold transition-colors"
+        className="relative z-10 text-[10px] font-semibold transition-colors max-w-full truncate"
         style={{ color: active ? tk.primary : tk.textTer }}
       >
         {item.label}

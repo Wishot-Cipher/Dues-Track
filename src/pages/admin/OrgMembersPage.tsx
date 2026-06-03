@@ -864,11 +864,14 @@ export default function OrgMembersPage() {
           return;
         }
 
-        // Grant role
+        // Grant role. scope_level is set explicitly so the row never
+        // ends up with the table's default ('group') for a role that
+        // is actually org-tier — the active-role gate routes off
+        // scope_level, not the legacy role name.
         const permissions = {
-          admin: { can_create_payments: true, can_approve_payments: true, can_manage_members: true, can_view_analytics: true },
-          finsec: { can_create_payments: true, can_approve_payments: true, can_manage_members: false, can_view_analytics: true },
-          class_rep: { can_create_payments: true, can_approve_payments: true, can_manage_members: true, can_view_analytics: true },
+          admin:     { scope_level: 'org' as const,   can_create_payments: true, can_approve_payments: true, can_manage_members: true,  can_view_analytics: true },
+          finsec:    { scope_level: 'group' as const, can_create_payments: true, can_approve_payments: true, can_manage_members: false, can_view_analytics: true },
+          class_rep: { scope_level: 'group' as const, can_create_payments: true, can_approve_payments: true, can_manage_members: true,  can_view_analytics: true },
         };
 
         await supabase.from('member_admins').insert({

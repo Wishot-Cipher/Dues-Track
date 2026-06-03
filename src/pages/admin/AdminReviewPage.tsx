@@ -3,7 +3,6 @@ import { motion, AnimatePresence } from "framer-motion";
 import { useAuth } from '@/hooks/useAppAuth';
 import { useMultiTenantAuth } from '@/hooks/useMultiTenantAuth';
 import { useActiveRole } from '@/hooks/useActiveRole';
-import { getScopedGroupIds } from '@/utils/scopedGroups';
 import {  } from "react-router-dom";
 import { useAppNav } from '@/hooks/useAppNav';
 import { supabase } from "@/config/supabase";
@@ -204,28 +203,25 @@ export default function AdminReviewPage() {
       setLoading(true);
       const scope = getOrgScope();
 
-      // Narrow to the active role's subtree so a faculty/dept exec
-      // doesn't see another faculty's payments and a class rep keeps
-      // seeing only their class. We resolve the scoped group ids
-      // up-front; org-scope returns null (no filter, see all).
-      const scopedIds = scope ? await getScopedGroupIds({
-        orgId: scope.orgId,
-        activeGroupId: activeRole?.groupId ?? null,
-        activeScopeLevel: activeRole?.scopeLevel ?? null,
-      }) : null;
-
-      // When we have a scope set, we first look up payment_type ids
-      // whose group_id is in that set (or NULL = org-wide), then
-      // fetch payments referencing those types. We do it in two
-      // steps so the IN() clause doesn't blow past PostgREST's
-      // string-length limit on big orgs.
+      // STRICT tier filter (per user intent: "don't mix things up").
+      // Each exec sees ONLY payments toward dues at their OWN tier —
+      //   class rep   → their class's dues only
+      //   dept exec   → their dept's dues only (not class dues below)
+      //   faculty exec→ their faculty's dues only (not dept/class)
+      //   org owner   → everything (no filter)
+      // The cascade we use elsewhere (member dashboards seeing dues
+      // from parent tiers) does NOT apply here. The Review page is a
+      // tier's own approval queue — class reps approve class
+      // payments; dept execs handle dept-tier payments; faculty
+      // execs handle faculty-tier payments.
       let scopedPaymentTypeIds: string[] | null = null;
-      if (scope && scopedIds) {
+      const isOrgTier = !activeRole || activeRole.kind !== 'exec' || activeRole.scopeLevel === 'org';
+      if (scope && !isOrgTier && activeRole?.groupId) {
         const { data: ptRows } = await supabase
           .from('payment_types')
           .select('id')
           .eq('organization_id', scope.orgId)
-          .in('group_id', Array.from(scopedIds));
+          .eq('group_id', activeRole.groupId);
         scopedPaymentTypeIds = (ptRows ?? []).map((r: { id: string }) => r.id);
       }
 

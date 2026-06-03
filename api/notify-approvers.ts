@@ -191,8 +191,8 @@ export default async function handler(req: any, res: any) {
             const pushPayload = JSON.stringify({
               title: `💰 New Payment - ${paymentTypeName}`,
               body: `${memberName} submitted ${formattedAmount}. Tap to review.`,
-              icon: '/icons/icon-192.png',
-              badge: '/icons/icon-72.png',
+              icon: '/icon-512.png',
+              badge: '/icon-192.png',
               url: reviewLink,
               tag: 'new-payment',
             });

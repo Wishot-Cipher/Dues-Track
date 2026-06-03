@@ -157,8 +157,13 @@ async function handleSendPush(supabase: any, member: any, req: any, res: any) {
     const testPayload = JSON.stringify({
       title: '🔔 Test Notification',
       body:  'Push notifications are working! You will receive alerts here.',
-      icon:  '/icons/icon-192.png',
-      badge: '/icons/icon-72.png',
+      // Branded icon paths — at the public/ root, not /icons/ (that
+      // folder is empty). Without these the push showed the generic
+      // browser bell because the icon URLs 404'd. iOS PWAs use the
+      // apple-touch-icon as a fallback, so this only really visually
+      // affects Android; the URL fix is still right to make.
+      icon:  '/icon-512.png',
+      badge: '/icon-192.png',
       url:   '/',
       tag:   'test',
       timestamp: Date.now(),

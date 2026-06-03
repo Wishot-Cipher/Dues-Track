@@ -12,7 +12,7 @@ import {
 import { useMultiTenantAuth } from '@/hooks/useMultiTenantAuth';
 import { useAppNav } from '@/hooks/useAppNav';
 import { useTheme, getDashboardTokens } from '@/hooks/useTheme';
-import { loadEvents } from '@/components/student/dashboard/EventsSection';
+import { loadEvents, resolveBillingGroupIds } from '@/components/student/dashboard/EventsSection';
 import EventCard, { type EventCardItem } from '@/components/student/dashboard/EventCard';
 
 type FilterType = 'all' | 'available' | 'soldout';
@@ -32,7 +32,7 @@ export default function UpcomingEventsPage() {
   const isLight = theme === 'light';
 
   const orgId = member?.organization?.id ?? '';
-  const groupId = member?.group?.id ?? null;
+  const memberId = member?.id ?? null;
 
   const [events, setEvents] = useState<EventCardItem[]>([]);
   const [loading, setLoading] = useState(true);
@@ -43,14 +43,18 @@ export default function UpcomingEventsPage() {
     let cancelled = false;
     setLoading(true);
     (async () => {
-      const list = await loadEvents(orgId, groupId);
+      // Resolve the member's billing group chain (class → dept →
+      // faculty) so events targeted at a parent unit still show up
+      // when the viewer is a class member below it.
+      const billingGroupIds = await resolveBillingGroupIds(memberId);
+      const list = await loadEvents(orgId, billingGroupIds);
       if (!cancelled) {
         setEvents(list);
         setLoading(false);
       }
     })();
     return () => { cancelled = true; };
-  }, [orgId, groupId]);
+  }, [orgId, memberId]);
 
   const filtered = useMemo(() => {
     let result = events;

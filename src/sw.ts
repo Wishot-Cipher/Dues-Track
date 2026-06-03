@@ -102,18 +102,57 @@ self.addEventListener('push', (event) => {
 // Notification click - when user clicks on a notification
 self.addEventListener('notificationclick', (event) => {
   console.log('[SW] Notification clicked:', event);
-  
+
   event.notification.close();
-  
-  const urlToOpen = event.notification.data?.url || '/';
-  
+
+  let urlToOpen = event.notification.data?.url || '/';
+
   // Handle action clicks
   if (event.action === 'dismiss') {
     return;
   }
-  
+
   event.waitUntil(
     self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((clientList) => {
+      // Multi-tenant prefix: payment/claim notifications are sent with
+      // bare paths like /payment/abc or /dashboard. Those 404 inside an
+      // org because the actual route is /<orgSlug>/payment/abc. If we
+      // have an open window already, lift its org slug from the URL
+      // and prefix unprefixed paths. /<orgSlug>/ wins over a bare /.
+      try {
+        const orgSlug = (() => {
+          for (const c of clientList) {
+            try {
+              const u = new URL(c.url);
+              const seg = u.pathname.split('/').filter(Boolean)[0];
+              // First path segment is the org slug when it's not a
+              // top-level marketing route. Treat known top-level
+              // segments as "no org slug".
+              if (seg && !['login', 'signup', 'platform', 'create-organization', 'reset-password'].includes(seg)) {
+                return seg;
+              }
+            } catch { /* ignore malformed client URL */ }
+          }
+          return null;
+        })();
+
+        if (orgSlug && urlToOpen.startsWith('/') && !urlToOpen.startsWith(`/${orgSlug}/`) && urlToOpen !== `/${orgSlug}`) {
+          // Also normalise legacy plural paths the same way the in-app
+          // notification handler does, so a stale notification still
+          // lands on the right page after the prefix is applied.
+          if (urlToOpen.startsWith('/payments/') && !urlToOpen.includes('/history')) {
+            urlToOpen = `/payment/${urlToOpen.replace('/payments/', '')}`;
+          }
+          if (urlToOpen.startsWith('/claims/')) {
+            const id = urlToOpen.replace('/claims/', '').split('/')[0];
+            if (id) urlToOpen = `/claim/${id}/decide`;
+          }
+          urlToOpen = `/${orgSlug}${urlToOpen}`;
+        }
+      } catch (e) {
+        console.warn('[SW] Failed to apply org prefix to notification URL', e);
+      }
+
       // Check if there's already a window/tab open
       for (const client of clientList) {
         if (client.url.includes(self.location.origin) && 'focus' in client) {

@@ -177,7 +177,14 @@ function App() {
                 <Route path="admin/faculty" element={<OrgProtectedRoute requireVerified><FacultyExecDashboardPage /></OrgProtectedRoute>} />
                 <Route path="admin/groups" element={<OrgProtectedRoute requireActing><OrgGroupsPage /></OrgProtectedRoute>} />
                 <Route path="admin/academic-calendar" element={<OrgProtectedRoute requireActing><OrgAcademicCalendarPage /></OrgProtectedRoute>} />
-                <Route path="admin/members" element={<OrgProtectedRoute requiredPermission="can_manage_members" requireVerified><OrgMembersPage /></OrgProtectedRoute>} />
+                {/* Manage Members is a CLASS-REP capability. Dept and
+                    faculty execs do not add/remove/edit students in
+                    classes below them — that stays with each class
+                    rep. allowedScopes pins the route to class- or
+                    org-tier callers; unit-scope (dept/faculty)
+                    bounce back to their own dashboard. Plain members
+                    never have an exec role so they're rejected too. */}
+                <Route path="admin/members" element={<OrgProtectedRoute requiredPermission="can_manage_members" requireVerified allowedScopes={['group', 'org']}><OrgMembersPage /></OrgProtectedRoute>} />
                 <Route path="admin/create-payment" element={<OrgProtectedRoute requiredPermission="can_create_payments" requireVerified><CreateDuePage /></OrgProtectedRoute>} />
                 <Route path="admin/manage-dues" element={<OrgProtectedRoute requiredPermission="can_create_payments" requireVerified><ManageDuesPage /></OrgProtectedRoute>} />
                 <Route path="admin/review" element={<OrgProtectedRoute requiredPermission="can_approve_payments" requireVerified><AdminReviewPage /></OrgProtectedRoute>} />

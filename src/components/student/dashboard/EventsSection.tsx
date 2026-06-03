@@ -7,6 +7,17 @@ import EventCard, { type EventCardItem, type EventTier } from '@/components/stud
 export interface EventsSectionProps {
   theme: ResolvedTheme;
   orgId: string;
+  /**
+   * The member viewing the dashboard. Used to resolve their billing
+   * group chain (groups they belong to + every ancestor) so events
+   * a faculty/dept exec published cascade down to class members
+   * below — same model as dues.
+   */
+  memberId?: string | null;
+  /**
+   * Deprecated. Kept so older call sites still compile, but a single
+   * groupId no longer matches faculty/dept events. Use memberId.
+   */
   groupId?: string | null;
   currencySymbol?: string;
   onGetTicket?: (id: string) => void;
@@ -14,7 +25,42 @@ export interface EventsSectionProps {
   showAllHref?: string | null;
 }
 
-export async function loadEvents(orgId: string, groupId?: string | null): Promise<EventCardItem[]> {
+/**
+ * Resolve the set of group IDs whose events this member should see —
+ * their direct memberships PLUS every ancestor (class → dept → faculty).
+ *
+ * Returns null when we have no signal (no memberId, RPC unavailable
+ * AND no primary group), which the caller treats as "no group filter,
+ * show every event in the org".
+ */
+export async function resolveBillingGroupIds(memberId: string | null | undefined): Promise<string[] | null> {
+  if (!memberId) return null;
+  try {
+    const { data } = await supabase.rpc('get_my_billing_group_ids', { p_member_id: memberId });
+    const ids = data && (data as { ok?: boolean }).ok
+      ? (data as { group_ids?: string[] }).group_ids
+      : null;
+    if (Array.isArray(ids) && ids.length) return ids.filter(Boolean);
+  } catch {
+    // RPC not deployed — fall through.
+  }
+  return null;
+}
+
+/**
+ * Load active, upcoming events for a member.
+ *
+ * `billingGroupIds`:
+ *   - array → match events whose group_id is in this list OR is null
+ *     (org-wide). This is what we want for class/dept/faculty members:
+ *     they see every event published at their tier OR above.
+ *   - null  → no group filter. Use this for org-scope viewers (org
+ *     owners) and as a fallback when we couldn't resolve the chain.
+ */
+export async function loadEvents(
+  orgId: string,
+  billingGroupIds: string[] | null,
+): Promise<EventCardItem[]> {
   if (!orgId) return [];
 
   const { data, error } = await supabase
@@ -47,6 +93,9 @@ export async function loadEvents(orgId: string, groupId?: string | null): Promis
 
   if (error || !data) return [];
 
+  const allowedGroupIds = billingGroupIds && billingGroupIds.length > 0
+    ? new Set(billingGroupIds)
+    : null;
   const now = new Date().toISOString();
   const deduped = new Map<string, {
     id: string;
@@ -93,7 +142,14 @@ export async function loadEvents(orgId: string, groupId?: string | null): Promis
   }>)
     .filter((event) => {
       const isUpcoming = !event.event_date || event.event_date >= now;
-      const isInScope = !groupId || event.group_id === null || event.group_id === groupId;
+      // Org-wide events (group_id === null) are visible to everyone.
+      // Targeted events are visible when their group_id is in the
+      // viewer's billing chain — class members see their class's,
+      // their dept's, and their faculty's events. If we couldn't
+      // resolve the chain (allowedGroupIds === null) we don't filter.
+      const isInScope = !allowedGroupIds
+        || event.group_id === null
+        || allowedGroupIds.has(event.group_id);
       return isUpcoming && isInScope;
     })
     .sort((a, b) => {
@@ -149,6 +205,7 @@ export async function loadEvents(orgId: string, groupId?: string | null): Promis
 export default function EventsSection({
   theme,
   orgId,
+  memberId,
   groupId,
   currencySymbol = '₦',
   onGetTicket,
@@ -166,7 +223,13 @@ export default function EventsSection({
     setLoading(true);
 
     (async () => {
-      const data = await loadEvents(orgId, groupId);
+      // Prefer memberId (resolves the full ancestor chain via RPC).
+      // Fall back to a single-group filter when only groupId is passed
+      // (legacy callers); fall back to null (no filter) otherwise.
+      const billingGroupIds = memberId
+        ? await resolveBillingGroupIds(memberId)
+        : (groupId ? [groupId] : null);
+      const data = await loadEvents(orgId, billingGroupIds);
       if (mounted) {
         setEvents(data);
         setLoading(false);
@@ -176,7 +239,7 @@ export default function EventsSection({
     return () => {
       mounted = false;
     };
-  }, [orgId, groupId]);
+  }, [orgId, memberId, groupId]);
 
   if (!loading && events.length === 0) return null;
 

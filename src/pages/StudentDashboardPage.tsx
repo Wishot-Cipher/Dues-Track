@@ -414,7 +414,7 @@ export default function StudentDashboardPage() {
         <EventsSection
           theme={theme}
           orgId={orgId}
-          groupId={groupId}
+          memberId={mtMember?.id ?? null}
           maxItems={2}
           showAllHref={orgSlug ? `/${orgSlug}/events` : null}
           onGetTicket={(id) => go(`/payment/${id}`)}

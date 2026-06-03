@@ -469,12 +469,25 @@ export const NotificationCenter = () => {
 
                             // Handle navigation based on notification type
                             let targetLink = notification.link;
-                            
+
                             // Fix legacy links from database triggers that use /payments/{id} instead of /payment/{id}
                             if (targetLink && targetLink.startsWith('/payments/') && !targetLink.includes('/payments/history')) {
                               // Extract the payment ID and convert to correct route
                               const paymentId = targetLink.replace('/payments/', '');
                               targetLink = `/payment/${paymentId}`;
+                            }
+
+                            // Fix legacy claim links — SQL functions in mig
+                            // 039/042/052 insert /claims/{id} (plural, no
+                            // suffix) but App.tsx defines the route as
+                            // /claim/:claimId/decide (singular + /decide).
+                            // Without this normalizer those notifications
+                            // 404 silently. Match both bare /claims/{id}
+                            // and any old /claims/{id}/decide variants.
+                            if (targetLink && targetLink.startsWith('/claims/')) {
+                              const rest = targetLink.replace('/claims/', '');
+                              const claimId = rest.split('/')[0];
+                              if (claimId) targetLink = `/claim/${claimId}/decide`;
                             }
                             
                             // If no link provided, determine based on notification type

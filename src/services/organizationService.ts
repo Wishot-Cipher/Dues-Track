@@ -2047,15 +2047,22 @@ export const organizationService = {
 
       if (memberError) throw new Error(memberError.message);
 
-      // 5. Give the owner admin privileges
+      // 5. Give the owner admin privileges. Members-management
+      //    (add/edit/suspend students) is a class-tier capability —
+      //    a department or faculty exec does NOT manage individual
+      //    student rosters in the classes below them. scope_level
+      //    is set explicitly so the active-role gate can route them
+      //    to the right dashboard.
+      const isUnitTier = kind === 'faculty' || kind === 'department';
       await supabase.from('member_admins').insert({
         member_id: member.id,
         organization_id: orgId,
         group_id: group.id,
         role: kind === 'faculty' ? 'faculty_admin' : 'group_admin',
+        scope_level: isUnitTier ? 'unit' : 'group',
         can_create_payments: true,
         can_approve_payments: true,
-        can_manage_members: true,
+        can_manage_members: !isUnitTier,
         can_view_analytics: true,
       });
 
