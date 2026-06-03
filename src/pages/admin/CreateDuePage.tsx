@@ -64,46 +64,46 @@ import ProfessionalDateTimePicker from '@/components/ui/ProfessionalDateTimePick
 // Tokens
 // ────────────────────────────────────────────────────────────────────────────
 const tk = {
-  bg:        '#0F0703',
-  panel:     'rgba(255,255,255,0.025)',
-  panelHov:  'rgba(255,255,255,0.045)',
-  border:    'rgba(255,255,255,0.08)',
+  bg: '#0F0703',
+  panel: 'rgba(255,255,255,0.025)',
+  panelHov: 'rgba(255,255,255,0.045)',
+  border: 'rgba(255,255,255,0.08)',
   borderHov: 'rgba(255,104,3,0.32)',
-  text:      '#FFFFFF',
-  textSec:   'rgba(255,255,255,0.65)',
-  textTer:   'rgba(255,255,255,0.40)',
-  textQuat:  'rgba(255,255,255,0.22)',
-  primary:   '#FF6803',
+  text: '#FFFFFF',
+  textSec: 'rgba(255,255,255,0.65)',
+  textTer: 'rgba(255,255,255,0.40)',
+  textQuat: 'rgba(255,255,255,0.22)',
+  primary: '#FF6803',
   primaryHi: '#FFAC5F',
-  mint:      '#30FFAC',
-  blue:      '#5B9BFF',
-  purple:    '#8b5cf6',
-  pink:      '#ec4899',
-  amber:     '#F59E0B',
-  danger:    '#ef4444',
+  mint: '#30FFAC',
+  blue: '#5B9BFF',
+  purple: '#8b5cf6',
+  pink: '#ec4899',
+  amber: '#F59E0B',
+  danger: '#ef4444',
 };
 
 // ────────────────────────────────────────────────────────────────────────────
 // Static config
 // ────────────────────────────────────────────────────────────────────────────
 const CATEGORIES = [
-  { value: 'dues',         label: 'Dues',         icon: '🎓', color: tk.primary },
-  { value: 'fees',         label: 'Fees',         icon: '📚', color: tk.blue },
-  { value: 'levy',         label: 'Levy',         icon: '📋', color: tk.amber },
-  { value: 'event',        label: 'Event ticket', icon: '🎟️', color: tk.purple },
+  { value: 'dues', label: 'Dues', icon: '🎓', color: tk.primary },
+  { value: 'fees', label: 'Fees', icon: '📚', color: tk.blue },
+  { value: 'levy', label: 'Levy', icon: '📋', color: tk.amber },
+  { value: 'event', label: 'Event ticket', icon: '🎟️', color: tk.purple },
   { value: 'contribution', label: 'Contribution', icon: '🤝', color: tk.mint },
-  { value: 'welfare',      label: 'Welfare',      icon: '❤️', color: tk.pink },
-  { value: 'project',      label: 'Project',      icon: '📘', color: tk.blue },
-  { value: 'donation',     label: 'Donation',     icon: '💝', color: tk.pink },
+  { value: 'welfare', label: 'Welfare', icon: '❤️', color: tk.pink },
+  { value: 'project', label: 'Project', icon: '📘', color: tk.blue },
+  { value: 'donation', label: 'Donation', icon: '💝', color: tk.pink },
   { value: 'subscription', label: 'Subscription', icon: '🔄', color: tk.amber },
-  { value: 'savings',      label: 'Savings',      icon: '💰', color: tk.mint },
-  { value: 'custom',       label: 'Custom',       icon: '📦', color: tk.primary },
+  { value: 'savings', label: 'Savings', icon: '💰', color: tk.mint },
+  { value: 'custom', label: 'Custom', icon: '📦', color: tk.primary },
 ] as const;
 
 const ICONS = ['🎓', '📚', '🎉', '📘', '❤️', '📦', '💰', '🏆', '⚽', '🎨', '🎟️', '🎵', '🍕'];
 const COLOR_PALETTE = [
   tk.primary, tk.blue, tk.mint, tk.amber,
-  tk.danger,  tk.purple, tk.pink, '#06B6D4',
+  tk.danger, tk.purple, tk.pink, '#06B6D4',
 ];
 
 const NIGERIAN_BANKS = [
@@ -248,8 +248,9 @@ export default function CreateDuePage() {
         if (ptErr) throw ptErr;
         if (!pt) {
           setError('That due no longer exists. It may have been deleted.');
-            return;
+          return;
         }
+
         // Tiers (events only) — sibling table. Skip the query when
         // category is not 'event' so we don't waste a round-trip.
         let tiers: TierInput[] = [{ name: 'Regular', price: '', quantity: '' }];
@@ -280,29 +281,29 @@ export default function CreateDuePage() {
           return v.length > 10 ? v.slice(0, 10) : v;
         };
         setForm({
-          title:                  (row.title as string) || '',
-          description:            (row.description as string) || '',
-          category:               (row.category as string) || 'dues',
-          icon:                   (row.icon as string) || '🎓',
-          color:                  (row.color as string) || tk.primary,
-          amount:                 row.amount == null ? '' : String(row.amount),
-          deadline:               fmtDate(row.deadline),
-          late_fee_per_day:       row.late_fee_per_day == null ? '' : String(row.late_fee_per_day),
-          is_mandatory:           Boolean(row.is_mandatory ?? true),
-          allow_partial:          Boolean(row.allow_partial ?? false),
+          title: (row.title as string) || '',
+          description: (row.description as string) || '',
+          category: (row.category as string) || 'dues',
+          icon: (row.icon as string) || '🎓',
+          color: (row.color as string) || tk.primary,
+          amount: row.amount == null ? '' : String(row.amount),
+          deadline: fmtDate(row.deadline),
+          late_fee_per_day: row.late_fee_per_day == null ? '' : String(row.late_fee_per_day),
+          is_mandatory: Boolean(row.is_mandatory ?? true),
+          allow_partial: Boolean(row.allow_partial ?? false),
           minimum_partial_amount: row.minimum_partial_amount == null ? '' : String(row.minimum_partial_amount),
-          is_public:              Boolean(row.is_public ?? false),
-          target_levels:          Array.isArray(row.target_levels) ? (row.target_levels as string[]) : [],
-          target_sections:        Array.isArray(row.target_sections) ? (row.target_sections as string[]) : [],
-          accepts_paystack:       Boolean(row.accepts_paystack ?? true),
-          accepts_manual:         Boolean(row.accepts_manual ?? true),
-          bank_name:              (row.bank_name as string) || '',
-          account_name:           (row.account_name as string) || '',
-          account_number:         (row.account_number as string) || '',
-          event_date:             fmtDate(row.event_date),
-          event_venue:            (row.event_venue as string) || '',
-          event_cover_url:        (row.event_cover_url as string) || '',
-          event_max_attendees:    row.event_max_attendees == null ? '' : String(row.event_max_attendees),
+          is_public: Boolean(row.is_public ?? false),
+          target_levels: Array.isArray(row.target_levels) ? (row.target_levels as string[]) : [],
+          target_sections: Array.isArray(row.target_sections) ? (row.target_sections as string[]) : [],
+          accepts_paystack: Boolean(row.accepts_paystack ?? true),
+          accepts_manual: Boolean(row.accepts_manual ?? true),
+          bank_name: (row.bank_name as string) || '',
+          account_name: (row.account_name as string) || '',
+          account_number: (row.account_number as string) || '',
+          event_date: fmtDate(row.event_date),
+          event_venue: (row.event_venue as string) || '',
+          event_cover_url: (row.event_cover_url as string) || '',
+          event_max_attendees: row.event_max_attendees == null ? '' : String(row.event_max_attendees),
           tiers,
         });
         // Also lock the targeting: edit doesn't move a due to a
@@ -330,9 +331,9 @@ export default function CreateDuePage() {
   // we don't use them to filter yet — they're harmless and keep the
   // URL self-describing for future polish.
   const [searchParams] = useSearchParams();
-  const qpScope    = searchParams.get('scope');
-  const qpGroupId  = searchParams.get('groupId');
-  const qpByLevel  = searchParams.get('byLevel') === '1';
+  const qpScope = searchParams.get('scope');
+  const qpGroupId = searchParams.get('groupId');
+  const qpByLevel = searchParams.get('byLevel') === '1';
 
   // When the dept/faculty exec arrives via the "By level" targeting
   // card, we scroll the level picker into view + pulse it briefly so
@@ -380,8 +381,7 @@ export default function CreateDuePage() {
         } else if (qpGroupId) {
           setTargetGroupId(qpGroupId);
         }
-      } else if (data.ok && data.caller?.scope) {
-        // Seed sensible defaults for scope/target based on caller's level
+      } else if (!isEditMode && data.ok && data.caller?.scope) {
         const cscope = data.caller.scope;
         if (cscope === 'group') {
           setTargetScope('group');
@@ -397,7 +397,7 @@ export default function CreateDuePage() {
       setCtxLoading(false);
     })();
     return () => { cancelled = true; };
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [qpScope, qpGroupId]);
 
   // Derived: what kinds of targets are available given caller scope
@@ -419,10 +419,11 @@ export default function CreateDuePage() {
   );
 
   const callerScope = ctx?.caller?.scope;
-  const canChooseOrgScope     = callerScope === 'org';
+  const canChooseOrgScope = callerScope === 'org';
   const canChooseFacultyScope = callerScope === 'org' || callerScope === 'unit';
 
   useEffect(() => {
+    if (isEditMode) return;
     if (form.category !== 'event') return;
     setForm((f) => {
       if (
@@ -443,7 +444,7 @@ export default function CreateDuePage() {
         late_fee_per_day: '',
       };
     });
-  }, [form.category]);
+  }, [form.category]); // ← remove isEditMode, keep only form.category
 
   // ── Smart defaults: category sets default icon + color ──
   const setCategory = (value: string) => {
@@ -621,7 +622,7 @@ export default function CreateDuePage() {
   const targetingValid =
     targetScope === 'org' ||
     (targetScope === 'faculty' && Boolean(targetGroupId)) ||
-    (targetScope === 'group'   && Boolean(targetGroupId));
+    (targetScope === 'group' && Boolean(targetGroupId));
 
   const canSubmit =
     validation.length === 0 &&
@@ -658,30 +659,30 @@ export default function CreateDuePage() {
         const { error: updateErr } = await supabase
           .from('payment_types')
           .update({
-            title:                  form.title.trim(),
-            description:            form.description.trim() || null,
-            category:               form.category,
-            amount:                 eventBaseAmount,
-            icon:                   form.icon,
-            color:                  form.color,
-            deadline:               form.deadline || null,
-            late_fee_per_day:       isEvent ? null : (form.late_fee_per_day || null),
-            is_mandatory:           isEvent ? false : form.is_mandatory,
-            allow_partial:          isEvent ? false : form.allow_partial,
+            title: form.title.trim(),
+            description: form.description.trim() || null,
+            category: form.category,
+            amount: eventBaseAmount,
+            icon: form.icon,
+            color: form.color,
+            deadline: form.deadline || null,
+            late_fee_per_day: isEvent ? null : (form.late_fee_per_day || null),
+            is_mandatory: isEvent ? false : form.is_mandatory,
+            allow_partial: isEvent ? false : form.allow_partial,
             minimum_partial_amount: !isEvent && form.allow_partial ? Number(form.minimum_partial_amount || 0) : null,
-            is_public:              form.is_public,
-            target_levels:          form.target_levels.length ? form.target_levels : null,
-            target_sections:        form.target_sections.length ? form.target_sections : null,
-            bank_name:              !isEvent && form.accepts_manual ? form.bank_name.trim() : null,
-            account_name:           !isEvent && form.accepts_manual ? form.account_name.trim() : null,
-            account_number:         !isEvent && form.accepts_manual ? form.account_number.trim() : null,
-            accepts_paystack:       isEvent ? true : form.accepts_paystack,
-            accepts_manual:         isEvent ? false : form.accepts_manual,
-            event_date:             isEvent ? (form.event_date || null) : null,
-            event_venue:            isEvent ? (form.event_venue || null) : null,
-            event_cover_url:        isEvent ? (form.event_cover_url || null) : null,
-            event_max_attendees:    isEvent && form.event_max_attendees ? Number(form.event_max_attendees) : null,
-            updated_at:             new Date().toISOString(),
+            is_public: form.is_public,
+            target_levels: form.target_levels.length ? form.target_levels : null,
+            target_sections: form.target_sections.length ? form.target_sections : null,
+            bank_name: !isEvent && form.accepts_manual ? form.bank_name.trim() : null,
+            account_name: !isEvent && form.accepts_manual ? form.account_name.trim() : null,
+            account_number: !isEvent && form.accepts_manual ? form.account_number.trim() : null,
+            accepts_paystack: isEvent ? true : form.accepts_paystack,
+            accepts_manual: isEvent ? false : form.accepts_manual,
+            event_date: isEvent ? (form.event_date || null) : null,
+            event_venue: isEvent ? (form.event_venue || null) : null,
+            event_cover_url: isEvent ? (form.event_cover_url || null) : null,
+            event_max_attendees: isEvent && form.event_max_attendees ? Number(form.event_max_attendees) : null,
+            updated_at: new Date().toISOString(),
           })
           .eq('id', editId);
         if (updateErr) throw updateErr;
@@ -697,31 +698,31 @@ export default function CreateDuePage() {
 
     // Build the payload that maps to the create_due_with_scope_check payload JSON
     const payload: Record<string, unknown> = {
-      title:                  form.title.trim(),
-      description:            form.description.trim() || null,
-      category:               form.category,
-      amount:                 eventBaseAmount,
-      icon:                   form.icon,
-      color:                  form.color,
-      deadline:               form.deadline || null,
-      late_fee_per_day:       isEvent ? null : (form.late_fee_per_day || null),
-      is_mandatory:           isEvent ? false : form.is_mandatory,
-      allow_partial:          isEvent ? false : form.allow_partial,
+      title: form.title.trim(),
+      description: form.description.trim() || null,
+      category: form.category,
+      amount: eventBaseAmount,
+      icon: form.icon,
+      color: form.color,
+      deadline: form.deadline || null,
+      late_fee_per_day: isEvent ? null : (form.late_fee_per_day || null),
+      is_mandatory: isEvent ? false : form.is_mandatory,
+      allow_partial: isEvent ? false : form.allow_partial,
       minimum_partial_amount: !isEvent && form.allow_partial ? form.minimum_partial_amount : null,
-      is_public:              form.is_public,
-      target_levels:          form.target_levels.length ? form.target_levels : null,
-      target_sections:        form.target_sections.length ? form.target_sections : null,
-      bank_name:              !isEvent && form.accepts_manual ? form.bank_name : null,
-      account_name:           !isEvent && form.accepts_manual ? form.account_name : null,
-      account_number:         !isEvent && form.accepts_manual ? form.account_number : null,
-      accepts_paystack:       isEvent ? true : form.accepts_paystack,
-      accepts_manual:         isEvent ? false : form.accepts_manual,
+      is_public: form.is_public,
+      target_levels: form.target_levels.length ? form.target_levels : null,
+      target_sections: form.target_sections.length ? form.target_sections : null,
+      bank_name: !isEvent && form.accepts_manual ? form.bank_name : null,
+      account_name: !isEvent && form.accepts_manual ? form.account_name : null,
+      account_number: !isEvent && form.accepts_manual ? form.account_number : null,
+      accepts_paystack: isEvent ? true : form.accepts_paystack,
+      accepts_manual: isEvent ? false : form.accepts_manual,
     };
 
     if (isEvent) {
-      payload.event_date          = form.event_date || null;
-      payload.event_venue         = form.event_venue || null;
-      payload.event_cover_url     = form.event_cover_url || null;
+      payload.event_date = form.event_date || null;
+      payload.event_venue = form.event_venue || null;
+      payload.event_cover_url = form.event_cover_url || null;
       payload.event_max_attendees = form.event_max_attendees || null;
       payload.tiers = validTiers.map((t) => ({
         name: t.name.trim(),
@@ -744,8 +745,8 @@ export default function CreateDuePage() {
     if (!res.ok && res.code === 'no_payout') {
       setPayoutGate({
         groupId: res.group_id ?? (targetScope !== 'org' ? targetGroupId : null),
-        scope:   res.scope ?? targetScope,
-        detail:  res.detail || 'This tier has no payout account on file. Set it up first so members can pay.',
+        scope: res.scope ?? targetScope,
+        detail: res.detail || 'This tier has no payout account on file. Set it up first so members can pay.',
       });
       setSubmitting(false);
       return;
@@ -758,7 +759,7 @@ export default function CreateDuePage() {
     }
 
     const notified = res.notified_count ?? 0;
-    const targets  = res.target_count ?? 0;
+    const targets = res.target_count ?? 0;
     toast?.success?.(
       isEvent
         ? `Event published — ${notified} of ${targets} members notified.`
@@ -846,7 +847,7 @@ export default function CreateDuePage() {
                     {ctx.org?.state !== 'active'
                       ? `Your organization is in "${ctx.org?.state}" state — dues can't be published until it's Active.`
                       : ctx.caller?.verification_status &&
-                        !['email_verified','document_verified','admin_verified','member_confirmed'].includes(ctx.caller.verification_status)
+                        !['email_verified', 'document_verified', 'admin_verified', 'member_confirmed'].includes(ctx.caller.verification_status)
                         ? `Your exec role is "${ctx.caller.verification_status}". Complete verification before publishing.`
                         : 'You do not have permission to publish dues here.'}
                   </p>
@@ -928,34 +929,34 @@ export default function CreateDuePage() {
             </Row>
 
             {!isEvent && (
-            <Field label="Amount" required hint="in your org currency">
-              <div className="space-y-2">
-                <Input
-                  value={form.amount}
-                  onChange={(v) => setField('amount', v.replace(/[^0-9.]/g, ''))}
-                  placeholder="5000"
-                  type="text"
-                  inputMode="decimal"
-                />
-                <div className="flex flex-wrap gap-1.5">
-                  {AMOUNT_CHIPS.map((amt) => (
-                    <button
-                      key={amt}
-                      type="button"
-                      onClick={() => setField('amount', String(amt))}
-                      className="px-2.5 py-1 rounded-lg text-[11px] font-semibold transition-all"
-                      style={{
-                        background: form.amount === String(amt) ? `${form.color}18` : 'rgba(255,255,255,0.04)',
-                        color: form.amount === String(amt) ? form.color : tk.textSec,
-                        border: `1px solid ${form.amount === String(amt) ? `${form.color}40` : tk.border}`,
-                      }}
-                    >
-                      ₦{amt.toLocaleString()}
-                    </button>
-                  ))}
+              <Field label="Amount" required hint="in your org currency">
+                <div className="space-y-2">
+                  <Input
+                    value={form.amount}
+                    onChange={(v) => setField('amount', v.replace(/[^0-9.]/g, ''))}
+                    placeholder="5000"
+                    type="text"
+                    inputMode="decimal"
+                  />
+                  <div className="flex flex-wrap gap-1.5">
+                    {AMOUNT_CHIPS.map((amt) => (
+                      <button
+                        key={amt}
+                        type="button"
+                        onClick={() => setField('amount', String(amt))}
+                        className="px-2.5 py-1 rounded-lg text-[11px] font-semibold transition-all"
+                        style={{
+                          background: form.amount === String(amt) ? `${form.color}18` : 'rgba(255,255,255,0.04)',
+                          color: form.amount === String(amt) ? form.color : tk.textSec,
+                          border: `1px solid ${form.amount === String(amt) ? `${form.color}40` : tk.border}`,
+                        }}
+                      >
+                        ₦{amt.toLocaleString()}
+                      </button>
+                    ))}
+                  </div>
                 </div>
-              </div>
-            </Field>
+              </Field>
             )}
 
             <Row>
@@ -1495,8 +1496,8 @@ export default function CreateDuePage() {
 // Form primitives
 // ════════════════════════════════════════════════════════════════════════════
 function scopeLabel(scope: 'org' | 'unit' | 'group' | null | undefined): string {
-  if (scope === 'org')   return 'Org-wide admin';
-  if (scope === 'unit')  return 'Faculty admin';
+  if (scope === 'org') return 'Org-wide admin';
+  if (scope === 'unit') return 'Faculty admin';
   if (scope === 'group') return 'Class / dept admin';
   return 'Not an admin';
 }
