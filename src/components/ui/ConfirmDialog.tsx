@@ -103,7 +103,7 @@ export default function ConfirmDialog({
     <AnimatePresence>
       {isOpen && (
         <motion.div
-          className="fixed inset-0 z-[120] flex items-end sm:items-center justify-center p-4"
+          className="fixed inset-0 z-[120] flex items-end sm:items-center justify-center p-4 pb-24 sm:pb-4"
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
