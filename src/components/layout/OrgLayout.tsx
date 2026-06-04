@@ -138,6 +138,12 @@ export default function OrgLayout() {
     { top: number; left: number; width: number; originX: number; originY: number } | null
   >(null);
   const [fetchedLevel, setFetchedLevel] = useState<string | null>(null);
+  // Parent group (the member's class sits under their department,
+  // which sits under their faculty). Lifting the immediate parent's
+  // short_name into the header gives "BMD · UNN" the way a real
+  // student introduces themselves — "I'm in Biomedical Engineering,
+  // University of Nigeria." Single best-effort fetch, fails silent.
+  const [parentName, setParentName] = useState<string | null>(null);
 
   // Global identity — the orgs this person can switch between (one login).
   const [myOrgs, setMyOrgs] = useState<MembershipSummary[]>([]);
@@ -287,6 +293,39 @@ export default function OrgLayout() {
     void fetchLevel();
     return () => { mounted = false; };
   }, [user?.id, group?.id]);
+
+  // Resolve the immediate parent group (e.g. the member's department
+  // when their group is a class). Two-hop: read the active group's
+  // parent_group_id, then read that row's short_name. Cheap — one
+  // row each — and skips entirely when the active group is itself
+  // top-level (no parent_group_id means faculty or org-wide group).
+  useEffect(() => {
+    let mounted = true;
+    (async () => {
+      try {
+        const gid = group?.id;
+        if (!gid) { setParentName(null); return; }
+        const { data: row } = await supabase
+          .from('organization_groups')
+          .select('parent_group_id')
+          .eq('id', gid)
+          .maybeSingle();
+        const parentId = (row as { parent_group_id?: string | null } | null)?.parent_group_id;
+        if (!parentId) { if (mounted) setParentName(null); return; }
+        const { data: parent } = await supabase
+          .from('organization_groups')
+          .select('short_name, name')
+          .eq('id', parentId)
+          .maybeSingle();
+        if (!mounted) return;
+        const p = parent as { short_name?: string; name?: string } | null;
+        setParentName(p?.short_name || p?.name || null);
+      } catch {
+        if (mounted) setParentName(null);
+      }
+    })();
+    return () => { mounted = false; };
+  }, [group?.id]);
 
   if (loading) return <LoadingSpinner fullScreen size="lg" />;
   if (!user || !organization) return null;
@@ -547,15 +586,20 @@ export default function OrgLayout() {
               >
                 {organization.short_name || organization.name}
               </p>
-              {/* Subtitle: group label only — short, single line, no
-                  pill clutter. Hidden on screens below 400px so the
-                  smallest phones get a single-line brand. */}
-              {(group?.short_name || group?.name) && (
+              {/* Subtitle: parent-group label · group label.
+                  For a class member that reads as "BMD · 0'28"
+                  (their department, then class code). When there's
+                  no parent (top-level group / non-academic org) we
+                  drop straight to the group label, keeping the
+                  pattern stable. Single line, truncates hard,
+                  hidden on the smallest phones so the brand still
+                  fits on a 320px viewport. */}
+              {(group?.short_name || group?.name || parentName) && (
                 <p
                   className="text-[10.5px] font-bold uppercase tracking-wider leading-tight truncate mt-0.5 max-[399px]:hidden"
                   style={{ color: tk.textTer }}
                 >
-                  {group?.short_name || group?.name}
+                  {parentName ? `${parentName} · ` : ''}{group?.short_name || group?.name}
                 </p>
               )}
             </div>

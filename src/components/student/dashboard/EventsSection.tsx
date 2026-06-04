@@ -15,6 +15,36 @@ export interface EventsSectionProps {
   showAllHref?: string | null;
 }
 
+/**
+ * Set of payment_type_ids (events) the member has already paid for
+ * in this org. "Paid" here means an APPROVED payment that isn't a
+ * waiver (transaction_ref doesn't start with "WAIVED-"). Used so
+ * the dashboard can show "Ticket secured" on cards the member
+ * already bought without removing them — they can still grab
+ * another for a friend. Empty set when the query fails, so we
+ * don't silently hide everyone's tickets if RLS misbehaves.
+ */
+export async function loadPaidEventIds(memberId: string, orgId: string): Promise<Set<string>> {
+  if (!memberId || !orgId) return new Set();
+  try {
+    const { data } = await supabase
+      .from('payments')
+      .select('payment_type_id, transaction_ref, status')
+      .eq('member_id', memberId)
+      .eq('organization_id', orgId)
+      .eq('status', 'approved');
+    const ids = new Set<string>();
+    for (const row of (data || []) as Array<{ payment_type_id: string | null; transaction_ref: string | null }>) {
+      if (!row.payment_type_id) continue;
+      if (row.transaction_ref?.startsWith('WAIVED-')) continue;
+      ids.add(row.payment_type_id);
+    }
+    return ids;
+  } catch {
+    return new Set();
+  }
+}
+
 export async function resolveBillingGroupIds(memberId: string | null | undefined): Promise<string[] | null> {
   if (!memberId) return null;
   try {
@@ -176,6 +206,12 @@ export default function EventsSection({
   const navigate = useNavigate();
   const [events, setEvents] = useState<EventCardItem[]>([]);
   const [loading, setLoading] = useState(true);
+  // Set of payment_type_ids the member has already paid for. Used
+  // to render a "Ticket secured" badge on event cards they already
+  // bought + flip the CTA to "Buy another" — so a member can pick
+  // up tickets for friends without us removing the event from
+  // their dashboard. Empty set when memberId isn't known yet.
+  const [paidEventIds, setPaidEventIds] = useState<Set<string>>(new Set());
 
   useEffect(() => {
     let mounted = true;
@@ -185,9 +221,16 @@ export default function EventsSection({
       const billingGroupIds = memberId
         ? await resolveBillingGroupIds(memberId)
         : (groupId ? [groupId] : null);
-      const data = await loadEvents(orgId, billingGroupIds);
+      // Events + member's existing tickets in parallel. The two
+      // queries don't depend on each other, so paying the latency
+      // for them serially would just slow the dashboard down.
+      const [data, paidSet] = await Promise.all([
+        loadEvents(orgId, billingGroupIds),
+        memberId ? loadPaidEventIds(memberId, orgId) : Promise.resolve(new Set<string>()),
+      ]);
       if (mounted) {
         setEvents(data);
+        setPaidEventIds(paidSet);
         setLoading(false);
       }
     })();
@@ -274,6 +317,7 @@ export default function EventsSection({
                 item={event}
                 currencySymbol={currencySymbol}
                 onGetTicket={onGetTicket}
+                alreadyPurchased={paidEventIds.has(event.id)}
               />
             </div>
           ))}

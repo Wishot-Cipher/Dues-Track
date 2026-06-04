@@ -31,6 +31,14 @@ export interface EventCardProps {
   currencySymbol?: string;
   fixedWidth?: boolean;
   onGetTicket?: (id: string) => void;
+  /**
+   * True when the viewing member has already purchased a ticket
+   * for this event. Drives a "Ticket secured" badge over the cover
+   * art and flips the CTA to "Buy another" — so the event stays
+   * on the dashboard for friends-tickets without giving the false
+   * impression the member needs to buy it again.
+   */
+  alreadyPurchased?: boolean;
 }
 
 function formatMoney(amount: number, currencySymbol: string): string {
@@ -54,6 +62,7 @@ export default function EventCard({
   currencySymbol = '₦',
   fixedWidth = false,
   onGetTicket,
+  alreadyPurchased = false,
 }: EventCardProps) {
   const t = getDashboardTokens(theme);
   const isLight = theme === 'light';
@@ -64,7 +73,17 @@ export default function EventCard({
   const displayPrice = minTierPrice !== null && Number.isFinite(minTierPrice) ? minTierPrice : Number(item.amount || 0);
   const isEnded = item.isEnded || Boolean(item.event_date && new Date(item.event_date).getTime() < Date.now());
   const topLabel = tiers.length > 0 ? `${tiers.length} ticket type${tiers.length > 1 ? 's' : ''}` : 'General entry';
-  const ticketActionLabel = isEnded ? 'Ended' : item.isSoldOut ? 'Sold out' : 'Get Ticket';
+  // CTA labels. "Buy another" — kept lightweight, doesn't browbeat the
+  // member who already paid. They might want to grab tickets for a
+  // friend, or skip altogether. Soldout/ended still win as the hard
+  // states; alreadyPurchased only swaps the wording on the live state.
+  const ticketActionLabel = isEnded
+    ? 'Ended'
+    : item.isSoldOut
+      ? 'Sold out'
+      : alreadyPurchased
+        ? 'Buy another'
+        : 'Get Ticket';
 
   // Date-block ("poster stub") parts — Day of week + day-of-month
   const dateObj = item.event_date ? new Date(item.event_date) : null;
@@ -151,6 +170,27 @@ export default function EventCard({
             >
               <Clock className="w-3 h-3" />
               {countdown.label}
+            </motion.span>
+          )}
+          {/* "Ticket secured" badge — surfaces over the cover art
+              when the member has already paid for this event. Sits
+              next to the Event chip so the affordance is immediate;
+              the mint colour is the same approved/paid signal used
+              everywhere else in the app for consistency. */}
+          {alreadyPurchased && !isEnded && (
+            <motion.span
+              initial={{ scale: 0.9, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              transition={{ delay: 0.12, type: 'spring', stiffness: 400, damping: 24 }}
+              className="inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.14em] backdrop-blur-md"
+              style={{
+                background: hexAlpha(t.mint, 0.95),
+                color: '#0F0703',
+                boxShadow: `0 4px 14px ${hexAlpha(t.mint, 0.45)}`,
+              }}
+            >
+              <Ticket className="w-3 h-3" />
+              Ticket secured
             </motion.span>
           )}
         </div>

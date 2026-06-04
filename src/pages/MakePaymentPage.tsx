@@ -126,7 +126,10 @@ export default function MakePaymentPage() {
       setLoading(true);
       try {
         const scope = getOrgScope();
-        let ptQ = supabase.from('payment_types').select('*').eq('id', id);
+        let ptQ = supabase
+          .from('payment_types')
+          .select('id, title, description, amount, deadline, category, is_mandatory, event_date, event_venue, bank_name, account_number, account_name')
+          .eq('id', id);
         if (scope) ptQ = ptQ.eq('organization_id', scope.orgId);
         const { data: ptRow, error: ptErr } = await ptQ.maybeSingle();
         if (ptErr) throw ptErr;
@@ -175,21 +178,21 @@ export default function MakePaymentPage() {
     () => myPayments.filter(p => p.status === 'approved').reduce((s, p) => s + Number(p.amount || 0), 0),
     [myPayments],
   );
-  const isEvent     = (pt?.category || '').toLowerCase() === 'event';
-  const eventDate   = pt?.event_date ?? null;
-  const eventEnded  = isEvent && eventDate ? new Date(eventDate).getTime() < Date.now() : false;
+  const isEvent = (pt?.category || '').toLowerCase() === 'event';
+  const eventDate = pt?.event_date ?? null;
+  const eventEnded = isEvent && eventDate ? new Date(eventDate).getTime() < Date.now() : false;
   const selectedTier = useMemo(() => tiers.find(t => t.id === selectedTierId) || null, [tiers, selectedTierId]);
   const tierSoldOut = (t: TierRow) => t.quantity != null && t.sold_count >= t.quantity;
   const eventSoldOut = tiers.length > 0 && tiers.every(tierSoldOut);
-  const eventClosed  = eventEnded || eventSoldOut;
+  const eventClosed = eventEnded || eventSoldOut;
 
-  const dueAmount   = Number(pt?.amount || 0);
+  const dueAmount = Number(pt?.amount || 0);
   const approvedOutstanding = Math.max(0, dueAmount - approvedSum);
   // Events have no "outstanding" — you buy a ticket at the chosen tier price.
   const outstanding = isEvent ? Number(selectedTier?.price ?? dueAmount) : approvedOutstanding;
-  const fullyPaid   = isEvent ? false : approvedOutstanding <= 0;
-  const hasPending  = myPayments.some(p => p.status === 'pending');
-  const daysLeft    = daysFromNow(pt?.deadline ?? null);
+  const fullyPaid = isEvent ? false : approvedOutstanding <= 0;
+  const hasPending = myPayments.some(p => p.status === 'pending');
+  const daysLeft = daysFromNow(pt?.deadline ?? null);
 
   const Icon = iconForCategory(pt?.category);
 
@@ -234,9 +237,9 @@ export default function MakePaymentPage() {
     setError(null);
 
     const res = await paystackService.initialize({
-      memberId:      user.id,
+      memberId: user.id,
       paymentTypeId: id,
-      tierId:        isEvent ? selectedTierId : undefined,
+      tierId: isEvent ? selectedTierId : undefined,
       // server defaults callbackPath to /<orgSlug>/payments/verify
     });
 
@@ -343,7 +346,7 @@ export default function MakePaymentPage() {
                     {pt.is_mandatory ? 'Mandatory' : 'Optional'}
                     {daysLeft !== null
                       ? ` · ${daysLeft < 0 ? `${Math.abs(daysLeft)}d overdue`
-                          : daysLeft === 0 ? 'Due today'
+                        : daysLeft === 0 ? 'Due today'
                           : `${daysLeft}d left`}`
                       : ''}
                   </p>
@@ -485,7 +488,7 @@ export default function MakePaymentPage() {
                   style={{ borderTop: `1px dashed ${t.cardBorder}` }}
                 >
                   <div className="flex items-center gap-2">
-                    <CardBrandVisa  theme={theme} />
+                    <CardBrandVisa theme={theme} />
                     <CardBrandMastercard />
                     <CardBrandVerve />
                   </div>
@@ -644,7 +647,7 @@ function ProgressBar({
 }: { step: 'review' | 'payment' | 'confirm'; theme: 'light' | 'dark' }) {
   const t = getDashboardTokens(theme);
   const steps = [
-    { key: 'review',  label: 'Review' },
+    { key: 'review', label: 'Review' },
     { key: 'payment', label: 'Payment' },
     { key: 'confirm', label: 'Confirm' },
   ] as const;
@@ -652,16 +655,16 @@ function ProgressBar({
   return (
     <div className="flex items-center justify-between gap-2 px-1">
       {steps.map((s, i) => {
-        const stepIndex   = steps.findIndex(x => x.key === step);
-        const isCurrent   = s.key === step;
-        const isDone      = i < stepIndex;
-        const dotBg       = isCurrent ? t.primary
-                          : isDone    ? t.mint
-                          : (theme === 'light' ? '#FFFFFF' : 'rgba(255,255,255,0.06)');
-        const dotColor    = isCurrent || isDone ? '#FFFFFF' : t.textTer;
-        const dotBorder   = isCurrent ? t.primary
-                          : isDone    ? t.mint
-                          : t.cardBorder;
+        const stepIndex = steps.findIndex(x => x.key === step);
+        const isCurrent = s.key === step;
+        const isDone = i < stepIndex;
+        const dotBg = isCurrent ? t.primary
+          : isDone ? t.mint
+            : (theme === 'light' ? '#FFFFFF' : 'rgba(255,255,255,0.06)');
+        const dotColor = isCurrent || isDone ? '#FFFFFF' : t.textTer;
+        const dotBorder = isCurrent ? t.primary
+          : isDone ? t.mint
+            : t.cardBorder;
         return (
           <div key={s.key} className="flex-1 flex items-center gap-2">
             <div className="flex flex-col items-center gap-1 shrink-0">
@@ -757,9 +760,9 @@ function PaymentCardChip({ theme }: { theme: 'light' | 'dark' }) {
         }}
       >
         <div className="absolute left-1/2 top-0 bottom-0 w-px -translate-x-1/2"
-             style={{ background: 'rgba(0,0,0,0.22)' }} />
+          style={{ background: 'rgba(0,0,0,0.22)' }} />
         <div className="absolute top-1/2 left-0 right-0 h-px -translate-y-1/2"
-             style={{ background: 'rgba(0,0,0,0.22)' }} />
+          style={{ background: 'rgba(0,0,0,0.22)' }} />
       </div>
       {/* Wireless/contactless arcs — tiny lower-right detail */}
       <svg

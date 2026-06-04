@@ -136,9 +136,17 @@
       "description": "Smart payment & dues management for Nigerian student bodies, churches, clubs, and other organisations."
     }
     </script>
-        <!-- Performance -->
+        <!-- Performance — preconnect to the origins the app talks to
+             so DNS + TLS handshake happen in parallel with HTML parse.
+             Saves ~200-400ms on cold mobile loads where every RTT is
+             expensive. Supabase project URL is hardcoded here because
+             preconnect runs before any JS executes (env vars aren't
+             available yet); change it when migrating projects. -->
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="dns-prefetch" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link rel="preconnect" href="https://juyscofrpyawiuxioezi.supabase.co" crossorigin />
+    <link rel="dns-prefetch" href="https://juyscofrpyawiuxioezi.supabase.co" />
     
     <!-- Prevent flash of wrong-theme background. Two layers:
            1) CSS media query covers users on system-controlled theme.

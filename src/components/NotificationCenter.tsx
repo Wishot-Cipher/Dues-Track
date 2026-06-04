@@ -526,34 +526,45 @@ export const NotificationCenter = () => {
                             {getNotificationIcon(notification.type)}
                           </div>
                           
-                          {/* Content */}
+                          {/* Content. The title used to be hardcoded
+                              text-white — invisible on light theme,
+                              which is why notification headings
+                              "sometimes didn't show." All three
+                              text rows (title, message, timestamp)
+                              now read from theme tokens. Title is
+                              also allowed two lines so long
+                              "Payment for [long due name]" wording
+                              doesn't clip mid-word. */}
                           <div className="flex-1 min-w-0">
                             <div className="flex items-start justify-between gap-2 mb-1">
-                              <h4 className="text-sm font-semibold text-white line-clamp-1">
-                                {notification.title}
+                              <h4
+                                className="text-sm font-bold line-clamp-2"
+                                style={{ color: tk.text }}
+                              >
+                                {notification.title || 'Notification'}
                               </h4>
                               {!notification.is_read && (
                                 <motion.div
                                   initial={{ scale: 0 }}
                                   animate={{ scale: 1 }}
                                   className="w-2.5 h-2.5 rounded-full shrink-0 mt-1"
-                                  style={{ 
+                                  style={{
                                     background: getNotificationColor(notification.type),
-                                    boxShadow: `0 0 8px ${getNotificationColor(notification.type)}60`
+                                    boxShadow: `0 0 8px ${getNotificationColor(notification.type)}60`,
                                   }}
                                 />
                               )}
                             </div>
                             <p
                               className="text-xs mb-2 line-clamp-2 leading-relaxed"
-                              style={{ color: notification.is_read ? colors.textSecondary : 'rgba(255, 255, 255, 0.8)' }}
+                              style={{ color: notification.is_read ? tk.textTer : tk.textSec }}
                             >
                               {notification.message}
                             </p>
                             <div className="flex items-center justify-between">
-                              <span 
-                                className="text-[11px] font-medium"
-                                style={{ color: colors.textSecondary }}
+                              <span
+                                className="text-[11px] font-semibold"
+                                style={{ color: tk.textTer }}
                               >
                                 {formatTimeAgo(notification.created_at)}
                               </span>

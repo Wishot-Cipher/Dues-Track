@@ -70,8 +70,25 @@ interface PaymentRow {
   status: 'pending' | 'approved' | 'rejected';
   transaction_ref: string | null;
   approved_at: string | null;
-  member?: { full_name: string; member_id: string } | null;
-  payment_type?: { title: string } | null;
+  // Supabase resolves these joined relations as ARRAYS when the
+  // FK direction is many-to-one (the relevant relation could
+  // technically be many rows even when our schema's UNIQUE
+  // makes it always one). Accept both shapes so the strict TS
+  // 5.x typing doesn't fight us; readers normalise via
+  // `firstOf()` below.
+  member?: { full_name: string; member_id: string } | { full_name: string; member_id: string }[] | null;
+  payment_type?: { title: string } | { title: string }[] | null;
+}
+
+/**
+ * `firstOf(x)` — Supabase nested joins come back as `T | T[]`.
+ * Unwrap whichever shape PostgREST emitted into a single object
+ * for the renderer / exporter, or undefined when missing.
+ */
+function firstOf<T>(v: T | T[] | null | undefined): T | undefined {
+  if (v == null) return undefined;
+  if (Array.isArray(v)) return v[0];
+  return v;
 }
 
 interface AggregatedGroup {
@@ -333,10 +350,10 @@ export default function AuditPage() {
     };
     const header = ['Member name', 'Member ID', 'Group', 'Payment type', 'Amount', 'Status', 'Approved at', 'Transaction ref'];
     const body = rows.map((p) => [
-      escape(p.member?.full_name || ''),
-      escape(p.member?.member_id || ''),
+      escape(firstOf(p.member)?.full_name || ''),
+      escape(firstOf(p.member)?.member_id || ''),
       escape(p.group_id ? (groupNameById.get(p.group_id) || '') : ''),
-      escape(p.payment_type?.title || ''),
+      escape(firstOf(p.payment_type)?.title || ''),
       escape(p.amount || 0),
       escape(p.status),
       escape(p.approved_at ? new Date(p.approved_at).toISOString().slice(0, 10) : ''),
@@ -625,10 +642,10 @@ export default function AuditPage() {
                       >
                         <div className="flex-1 min-w-0">
                           <p className="text-sm font-bold truncate" style={{ color: tt.text }}>
-                            {p.member?.full_name || 'Unknown member'}
+                            {firstOf(p.member)?.full_name || 'Unknown member'}
                           </p>
                           <p className="text-[11px] mt-0.5 truncate" style={{ color: tt.textTer }}>
-                            {p.member?.member_id} · {p.payment_type?.title || 'Payment'}
+                            {firstOf(p.member)?.member_id} · {firstOf(p.payment_type)?.title || 'Payment'}
                           </p>
                         </div>
                         <div className="text-right shrink-0">

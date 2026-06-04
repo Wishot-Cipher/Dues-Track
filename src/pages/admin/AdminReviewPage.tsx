@@ -1046,225 +1046,299 @@ export default function AdminReviewPage() {
         )}
       </div>
 
-      {/* Receipt Viewer Modal */}
+      {/* ── Payment review sheet ───────────────────────────────
+          Console-pattern modal: bottom-sheet on phones (items-end),
+          centred card on desktop. Replaces the legacy GlassCard
+          modal that was dark-only, used hardcoded white text, and
+          spilled a noisy "Payment Receipt" + status chip cluster
+          across the header. Reads with the same hierarchy + spacing
+          as the rest of the admin chrome. */}
       <AnimatePresence>
-        {selectedPayment && !showRejectModal && !showApproveModal && (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 overflow-y-auto"
-            onClick={() => setSelectedPayment(null)}
-          >
-            <div className="min-h-full flex items-start justify-center p-4 py-8">
+        {selectedPayment && !showRejectModal && !showApproveModal && (() => {
+          const sp = selectedPayment;
+          const badge = getStatusBadge(sp.status, sp.transaction_ref);
+          const isPending = sp.status === 'pending';
+          const isLight = theme === 'light';
+          return (
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="fixed inset-0 z-[120] flex items-end sm:items-center justify-center p-4"
+              style={{
+                background: isLight ? 'rgba(15,7,3,0.30)' : 'rgba(3,7,18,0.68)',
+                backdropFilter: 'blur(10px)',
+                WebkitBackdropFilter: 'blur(10px)',
+              }}
+              onClick={() => setSelectedPayment(null)}
+            >
               <motion.div
-                initial={{ scale: 0.9, opacity: 0, y: 20 }}
-                animate={{ scale: 1, opacity: 1, y: 0 }}
-                exit={{ scale: 0.9, opacity: 0, y: 20 }}
-                transition={{ type: 'spring', damping: 25, stiffness: 300 }}
-                className="w-full max-w-4xl"
+                initial={{ opacity: 0, y: 12, scale: 0.98 }}
+                animate={{ opacity: 1, y: 0, scale: 1 }}
+                exit={{ opacity: 0, y: 12, scale: 0.98 }}
+                transition={{ duration: 0.18 }}
                 onClick={(e) => e.stopPropagation()}
+                className="w-full max-w-2xl max-h-[90vh] rounded-2xl overflow-hidden flex flex-col"
+                style={{
+                  background: isLight ? '#FFFFFF' : '#100A07',
+                  border: `1px solid ${tk.cardBorder}`,
+                  boxShadow: '0 24px 60px rgba(0,0,0,0.45)',
+                }}
               >
-                <GlassCard className="p-0 overflow-hidden">
-                  {/* Gradient Header */}
+                {/* ── Sheet header ─────────────────────────────
+                    Status pill + name + member_id + close. The
+                    big "Payment Receipt" branding from before was
+                    redundant — the user already clicked into a
+                    payment review row to get here. */}
+                <div
+                  className="p-4 sm:p-5 shrink-0 flex items-start gap-3"
+                  style={{ borderBottom: `1px solid ${tk.cardBorder}` }}
+                >
                   <div
-                    className="relative p-6 border-b"
-                    style={{ 
-                      borderColor: "rgba(255, 255, 255, 0.1)",
-                      background: `linear-gradient(135deg, ${colors.primary}15 0%, transparent 100%)`
+                    className="w-11 h-11 sm:w-12 sm:h-12 rounded-xl flex items-center justify-center shrink-0"
+                    style={{
+                      background: tk.primarySoft,
+                      color: tk.primary,
+                      border: `1px solid ${tk.primaryRing}`,
                     }}
                   >
-                    <div 
-                      className="absolute top-0 left-0 w-full h-1"
-                      style={{ background: `linear-gradient(90deg, ${colors.primary}, ${colors.accentMint}, transparent)` }}
-                    />
-                    <div className="flex items-start justify-between">
-                      <div className="flex items-center gap-4">
-                        <motion.div 
-                          initial={{ scale: 0.8 }}
-                          animate={{ scale: 1 }}
-                          className="w-14 h-14 rounded-2xl flex items-center justify-center shadow-lg"
-                          style={{ 
-                            background: `linear-gradient(135deg, ${colors.primary}40, ${colors.primary}20)`,
-                            border: `1px solid ${colors.primary}50`,
-                            boxShadow: `0 4px 15px ${colors.primary}30`
-                          }}
-                        >
-                          <FileText className="w-7 h-7" style={{ color: colors.primary }} />
-                        </motion.div>
-                        <div>
-                          <div className="flex items-center gap-2 mb-1">
-                            <span className="px-2 py-0.5 rounded-full text-[10px] font-bold uppercase"
-                                  style={{ background: `${colors.primary}30`, color: colors.primary }}>
-                              Payment Receipt
-                            </span>
-                            {(() => {
-                              const badge = getStatusBadge(selectedPayment.status, selectedPayment.transaction_ref);
-                              return (
-                                <span className="px-2 py-0.5 rounded-full text-[10px] font-bold uppercase"
-                                      style={{ background: badge.bg, color: badge.color }}>
-                                  {badge.label}
-                                </span>
-                              );
-                            })()}
-                          </div>
-                          <h2 className="text-xl sm:text-2xl font-bold text-white">
-                            {selectedPayment.member.full_name}
-                          </h2>
-                          <p className="flex items-center gap-2 text-sm" style={{ color: colors.textSecondary }}>
-                            <User className="w-4 h-4" />
-                            {selectedPayment.member.member_id} • {selectedPayment.member.level}
-                          </p>
-                        </div>
-                      </div>
-                      <motion.button
-                        whileHover={{ scale: 1.1, rotate: 90 }}
-                        whileTap={{ scale: 0.9 }}
-                        onClick={() => setSelectedPayment(null)}
-                        className="p-2 hover:bg-white/10 rounded-xl transition-colors"
+                    <FileText className="w-5 h-5" />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 flex-wrap mb-1">
+                      <span
+                        className="inline-flex items-center gap-1 text-[9.5px] font-bold uppercase tracking-[0.14em] px-2 py-0.5 rounded-full"
+                        style={{ background: badge.bg, color: badge.color }}
                       >
-                        <X className="w-6 h-6" style={{ color: colors.textSecondary }} />
-                      </motion.button>
+                        {badge.label}
+                      </span>
+                    </div>
+                    <p className="text-sm sm:text-base font-extrabold truncate" style={{ color: tk.text }}>
+                      {sp.member.full_name}
+                    </p>
+                    <p className="text-[11px] sm:text-xs truncate" style={{ color: tk.textTer }}>
+                      {sp.member.member_id}
+                      {sp.member.level ? ` · L${sp.member.level}` : ''}
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setSelectedPayment(null)}
+                    className="w-8 h-8 rounded-lg flex items-center justify-center shrink-0"
+                    style={{
+                      background: isLight ? 'rgba(15,7,3,0.05)' : 'rgba(255,255,255,0.05)',
+                      color: tk.textSec,
+                      border: `1px solid ${tk.cardBorder}`,
+                    }}
+                    aria-label="Close"
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
+                </div>
+
+                {/* ── Scrollable body ────────────────────────── */}
+                <div className="overflow-y-auto p-4 sm:p-5 flex-1 min-h-0 space-y-4">
+                  {/* Hero stat: Amount big. Type + Submitted secondary. */}
+                  <div
+                    className="rounded-2xl p-4 sm:p-5"
+                    style={{
+                      background: `linear-gradient(135deg, ${tk.primary}14, transparent 60%)`,
+                      border: `1px solid ${tk.cardBorder}`,
+                    }}
+                  >
+                    <p className="text-[10px] font-bold uppercase tracking-[0.14em] mb-1" style={{ color: tk.textTer }}>
+                      Amount
+                    </p>
+                    <p
+                      className="text-3xl sm:text-4xl font-extrabold tabular-nums leading-none"
+                      style={{ color: tk.primary }}
+                    >
+                      <PrivacyMask>{formatCurrency(sp.amount)}</PrivacyMask>
+                    </p>
+                    <div className="mt-3 flex flex-wrap gap-x-4 gap-y-1.5">
+                      <span className="text-[11px]" style={{ color: tk.textSec }}>
+                        <span style={{ color: tk.textTer }}>Type: </span>
+                        <span className="font-bold" style={{ color: tk.text }}>{sp.payment_types.title}</span>
+                      </span>
+                      <span className="text-[11px]" style={{ color: tk.textSec }}>
+                        <span style={{ color: tk.textTer }}>Category: </span>
+                        <span className="font-bold capitalize" style={{ color: tk.text }}>
+                          {sp.payment_types.category.replace(/_/g, ' ')}
+                        </span>
+                      </span>
+                      <span className="text-[11px]" style={{ color: tk.textSec }}>
+                        <span style={{ color: tk.textTer }}>Submitted: </span>
+                        <span className="font-bold" style={{ color: tk.text }}>
+                          {formatDate(sp.created_at, 'short')}
+                        </span>
+                      </span>
                     </div>
                   </div>
 
-                  {/* Body - Scrollable Content */}
-                  <div className="p-6 space-y-6">
-                    {/* Payment Details Grid */}
-                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                      <div className="p-4 rounded-xl text-center" 
-                           style={{ background: `linear-gradient(135deg, ${colors.primary}20, ${colors.primary}05)`, border: `1px solid ${colors.primary}30` }}>
-                        <p className="text-xs font-medium mb-1" style={{ color: colors.textSecondary }}>Amount</p>
-                        <p className="text-xl sm:text-2xl font-bold" style={{ color: colors.primary }}>
-                          <PrivacyMask>{formatCurrency(selectedPayment.amount)}</PrivacyMask>
-                        </p>
-                      </div>
-                      <div className="p-4 rounded-xl text-center" 
-                           style={{ background: 'rgba(255, 255, 255, 0.03)', border: '1px solid rgba(255, 255, 255, 0.08)' }}>
-                        <p className="text-xs font-medium mb-1" style={{ color: colors.textSecondary }}>Payment Type</p>
-                        <p className="text-white font-semibold text-sm sm:text-base">
-                          {selectedPayment.payment_types.title}
-                        </p>
-                      </div>
-                      <div className="p-4 rounded-xl text-center" 
-                           style={{ background: 'rgba(255, 255, 255, 0.03)', border: '1px solid rgba(255, 255, 255, 0.08)' }}>
-                        <p className="text-xs font-medium mb-1" style={{ color: colors.textSecondary }}>Category</p>
-                        <p className="text-white font-medium capitalize text-sm">
-                          {selectedPayment.payment_types.category.replace("_", " ")}
-                        </p>
-                      </div>
-                      <div className="p-4 rounded-xl text-center" 
-                           style={{ background: 'rgba(255, 255, 255, 0.03)', border: '1px solid rgba(255, 255, 255, 0.08)' }}>
-                        <p className="text-xs font-medium mb-1" style={{ color: colors.textSecondary }}>Submitted</p>
-                        <p className="text-white font-medium text-sm">
-                          {formatDate(selectedPayment.created_at, "short")}
-                        </p>
-                      </div>
-                    </div>
-
-                    {/* Transaction Reference */}
-                    <div className="p-4 rounded-xl" 
-                         style={{ background: 'rgba(255, 255, 255, 0.03)', border: '1px solid rgba(255, 255, 255, 0.08)' }}>
-                      <p className="text-xs font-medium mb-2" style={{ color: colors.textSecondary }}>Transaction Reference</p>
-                      <p className="text-white font-mono text-sm sm:text-base break-all bg-black/20 px-3 py-2 rounded-lg">
-                        {selectedPayment.transaction_ref}
+                  {/* Transaction reference — mono, copy-friendly */}
+                  {sp.transaction_ref && (
+                    <div
+                      className="rounded-xl p-3"
+                      style={{
+                        background: isLight ? 'rgba(15,7,3,0.03)' : 'rgba(255,255,255,0.03)',
+                        border: `1px solid ${tk.cardBorder}`,
+                      }}
+                    >
+                      <p
+                        className="text-[10px] font-bold uppercase tracking-[0.14em] mb-1.5"
+                        style={{ color: tk.textTer }}
+                      >
+                        Transaction reference
+                      </p>
+                      <p
+                        className="font-mono text-[12px] sm:text-[13px] break-all"
+                        style={{ color: tk.text }}
+                      >
+                        {sp.transaction_ref}
                       </p>
                     </div>
+                  )}
 
-                    {/* Notes if available */}
-                    {selectedPayment.notes && (
-                      <div className="p-4 rounded-xl" 
-                           style={{ background: `${colors.accentMint}08`, border: `1px solid ${colors.accentMint}20` }}>
-                        <p className="text-xs font-medium mb-2" style={{ color: colors.accentMint }}>Payment Notes</p>
-                        <p className="text-white text-sm whitespace-pre-wrap">
-                          {selectedPayment.notes}
-                        </p>
-                      </div>
-                    )}
-
-                    {/* Rejection reason if rejected */}
-                    {selectedPayment.status === 'rejected' && selectedPayment.rejection_reason && (
-                      <div className="p-4 rounded-xl" 
-                           style={{ background: `${colors.statusUnpaid}10`, border: `1px solid ${colors.statusUnpaid}30` }}>
-                        <p className="text-xs font-medium mb-2" style={{ color: colors.statusUnpaid }}>Rejection Reason</p>
-                        <p className="text-white text-sm">
-                          {selectedPayment.rejection_reason}
-                        </p>
-                      </div>
-                    )}
-
-                    {/* Receipt Image Section */}
-                    <div>
-                      <p className="text-xs font-semibold uppercase tracking-wider mb-3" style={{ color: colors.textSecondary }}>
-                        Receipt Image
+                  {/* Notes */}
+                  {sp.notes && (
+                    <div
+                      className="rounded-xl p-3"
+                      style={{
+                        background: `${tk.mint}10`,
+                        border: `1px solid ${tk.mint}30`,
+                      }}
+                    >
+                      <p
+                        className="text-[10px] font-bold uppercase tracking-[0.14em] mb-1.5"
+                        style={{ color: tk.mint }}
+                      >
+                        Payer's notes
                       </p>
-                      <div className="rounded-xl overflow-hidden border"
-                           style={{ background: 'rgba(0, 0, 0, 0.3)', borderColor: 'rgba(255, 255, 255, 0.1)' }}>
+                      <p className="text-[13px] whitespace-pre-wrap" style={{ color: tk.text }}>
+                        {sp.notes}
+                      </p>
+                    </div>
+                  )}
+
+                  {/* Rejection reason */}
+                  {sp.status === 'rejected' && sp.rejection_reason && (
+                    <div
+                      className="rounded-xl p-3"
+                      style={{
+                        background: `${tk.danger}12`,
+                        border: `1px solid ${tk.danger}30`,
+                      }}
+                    >
+                      <p
+                        className="text-[10px] font-bold uppercase tracking-[0.14em] mb-1.5"
+                        style={{ color: tk.danger }}
+                      >
+                        Rejection reason
+                      </p>
+                      <p className="text-[13px]" style={{ color: tk.text }}>
+                        {sp.rejection_reason}
+                      </p>
+                    </div>
+                  )}
+
+                  {/* Receipt image. Only shown when one was attached
+                      (manual / offline payments). Paystack payments
+                      live entirely on the transaction reference. */}
+                  {sp.receipt_url && (
+                    <div className="space-y-1.5">
+                      <div className="flex items-center justify-between">
+                        <p
+                          className="text-[10px] font-bold uppercase tracking-[0.14em]"
+                          style={{ color: tk.textTer }}
+                        >
+                          Receipt image
+                        </p>
+                        <button
+                          type="button"
+                          onClick={() => window.open(sp.receipt_url, '_blank')}
+                          className="inline-flex items-center gap-1 text-[11px] font-bold"
+                          style={{ color: tk.primary }}
+                        >
+                          <ExternalLink className="w-3 h-3" />
+                          Open
+                        </button>
+                      </div>
+                      <div
+                        className="rounded-xl overflow-hidden"
+                        style={{
+                          background: isLight ? 'rgba(15,7,3,0.03)' : 'rgba(0,0,0,0.30)',
+                          border: `1px solid ${tk.cardBorder}`,
+                        }}
+                      >
                         <img
-                          src={selectedPayment.receipt_url}
-                          alt="Payment Receipt"
+                          src={sp.receipt_url}
+                          alt="Payment receipt"
                           className="w-full h-auto"
-                          style={{ maxHeight: '500px', objectFit: 'contain' }}
+                          style={{ maxHeight: 480, objectFit: 'contain' }}
                         />
                       </div>
                     </div>
+                  )}
+                </div>
 
-                    {/* Actions */}
-                    <div className="flex flex-col sm:flex-row gap-3 pt-4 border-t" style={{ borderColor: 'rgba(255, 255, 255, 0.1)' }}>
-                      <motion.button
-                        whileHover={{ scale: 1.02 }}
-                        whileTap={{ scale: 0.98 }}
-                        onClick={() => window.open(selectedPayment.receipt_url, "_blank")}
-                        className="flex-1 flex items-center justify-center gap-2 py-3.5 rounded-xl font-medium transition-all"
+                {/* ── Footer actions ───────────────────────────
+                    Pending payments get Approve + Reject. Non-pending
+                    only show Close (Open Full Size moved inside the
+                    receipt section above where it actually relates). */}
+                <div
+                  className="p-4 sm:p-5 shrink-0 flex gap-2 flex-wrap justify-end"
+                  style={{ borderTop: `1px solid ${tk.cardBorder}` }}
+                >
+                  {isPending && hasPermission('can_approve_payments') ? (
+                    <>
+                      <button
+                        type="button"
+                        onClick={() => setShowRejectModal(true)}
+                        disabled={processingId === sp.id}
+                        className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-bold transition-all disabled:opacity-50"
                         style={{
-                          background: 'rgba(255, 255, 255, 0.05)',
-                          border: `1px solid ${colors.primary}40`,
-                          color: colors.primary,
+                          background: `${tk.danger}12`,
+                          color: tk.danger,
+                          border: `1px solid ${tk.danger}35`,
                         }}
                       >
-                        <ExternalLink className="w-5 h-5" />
-                        Open Full Size
-                      </motion.button>
-                      {selectedPayment.status === "pending" && hasPermission('can_approve_payments') && (
-                        <>
-                          <motion.button
-                            whileHover={{ scale: 1.02 }}
-                            whileTap={{ scale: 0.98 }}
-                            onClick={() => setShowApproveModal(true)}
-                            disabled={processingId === selectedPayment.id}
-                            className="flex-1 flex items-center justify-center gap-2 py-3.5 rounded-xl font-semibold text-white transition-all disabled:opacity-50 shadow-lg"
-                            style={{ 
-                              background: `linear-gradient(135deg, ${colors.statusPaid}, ${colors.accentMint})`,
-                              boxShadow: `0 4px 15px ${colors.statusPaid}40`
-                            }}
-                          >
-                            <CheckCircle className="w-5 h-5" />
-                            {processingId === selectedPayment.id ? "Approving..." : "Approve Payment"}
-                          </motion.button>
-                          <motion.button
-                            whileHover={{ scale: 1.02 }}
-                            whileTap={{ scale: 0.98 }}
-                            onClick={() => setShowRejectModal(true)}
-                            disabled={processingId === selectedPayment.id}
-                            className="flex-1 flex items-center justify-center gap-2 py-3.5 rounded-xl font-semibold transition-all disabled:opacity-50"
-                            style={{
-                              background: `linear-gradient(135deg, ${colors.statusUnpaid}30, ${colors.statusUnpaid}10)`,
-                              border: `1px solid ${colors.statusUnpaid}50`,
-                              color: colors.statusUnpaid,
-                            }}
-                          >
-                            <XCircle className="w-5 h-5" />
-                            Reject Payment
-                          </motion.button>
-                        </>
-                      )}
-                    </div>
-                  </div>
-                </GlassCard>
+                        <XCircle className="w-3.5 h-3.5" />
+                        Reject
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setShowApproveModal(true)}
+                        disabled={processingId === sp.id}
+                        className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-bold transition-all disabled:opacity-50"
+                        style={{
+                          background: tk.mint,
+                          color: '#FFFFFF',
+                          border: `1px solid ${tk.mint}`,
+                        }}
+                      >
+                        <CheckCircle className="w-3.5 h-3.5" />
+                        {processingId === sp.id ? 'Approving…' : 'Approve payment'}
+                      </button>
+                    </>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => setSelectedPayment(null)}
+                      className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-bold"
+                      style={{
+                        background: isLight ? 'rgba(15,7,3,0.05)' : 'rgba(255,255,255,0.05)',
+                        color: tk.textSec,
+                        border: `1px solid ${tk.cardBorder}`,
+                      }}
+                    >
+                      Close
+                    </button>
+                  )}
+                </div>
               </motion.div>
-            </div>
-          </motion.div>
-        )}
+            </motion.div>
+          );
+        })()}
       </AnimatePresence>
 
       <ReviewDecisionModal
