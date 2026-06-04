@@ -71,22 +71,25 @@ const SESSION_KEYS = {
 } as const;
 
 interface Form {
-  // Who is doing this? Drives which slides show + whether claim is offered.
-  // Two intents only — student vs helping. The "staff (no class)"
-  // intent was removed when Office was retired (Chunk H).
-  // 'student'  — they belong to a class inside this structure
-  // 'helping'  — just populating the directory; class skipped, NO claim offered
-  intent: 'student' | 'helping' | '';
+  // Every founder on this form is a real student/member of a real
+  // class. The legacy "intent" picker (student vs helping vs staff)
+  // was retired in Chunk G5c — the form now follows a single
+  // structure-then-class shape:
+  //   1. Department info       (structural — no personal details)
+  //   2. YOUR class            (where you actually live)
+  //   3. YOUR account          (personal details)
+  //   4. Claim a role          (opt-in via wantsClaim)
+  //   5. Review
+  // Founders who only want to populate the directory simply toggle
+  // wantsClaim off — they end up as a regular class member.
 
   // Department / class being created (semantic depends on the route)
   departmentName: string;
   departmentShortName: string;
-  departmentKind: 'department' | 'class' | 'general';
 
   // Founder's own class — always required when adding a dept under
-  // a faculty. The legacy "staff (no class)" path was removed in
-  // Chunk H (Office concept retired). Every founder now picks a real
-  // class — exec capabilities layer on top via member_admins.
+  // a faculty. Every founder lives in their class; the department is
+  // structural only (mig 100).
   className: string;
   classShortName: string;
 
@@ -106,10 +109,8 @@ interface Form {
 }
 
 const EMPTY: Form = {
-  intent: '',
   departmentName: '',
   departmentShortName: '',
-  departmentKind: 'department',
   className: '',
   classShortName: '',
   wantsClaim: false,    // safe default — wrong person who's just adding the structure isn't prompted
@@ -123,7 +124,7 @@ const EMPTY: Form = {
   userLevel: '',
 };
 
-type WizardStep = 'intent' | 'details' | 'class' | 'account' | 'claim' | 'recap';
+type WizardStep = 'details' | 'class' | 'account' | 'claim' | 'recap';
 
 export default function AddDepartmentPage() {
   // Page handles BOTH routes:
@@ -146,29 +147,24 @@ export default function AddDepartmentPage() {
   const [form, setForm] = useState<Form>(EMPTY);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [step, setStep] = useState<WizardStep>('intent');
+  const [step, setStep] = useState<WizardStep>('details');
 
   const isAddingClass = Boolean(departmentShort);
 
-  // The slide path is computed from the route + the picked intent:
-  //   • dept flow + student → intent · details · class · account · claim? · recap
-  //   • dept flow + student → intent · details · class · account · claim? · recap
-  //   • dept flow + helping → intent · details · class · account · recap (NO claim)
-  //   • class flow + student/helping → intent · details · account · claim?/no · recap
-  //
-  // The class step is now required for both intents on the dept flow
-  // because mig 100 (Office removal) makes class info mandatory on
-  // bootstrap. A "helper" still creates a class — they can name it
-  // anything sensible since they're seeding the structure for the
-  // real students who'll join later.
+  // Wizard path. The intent picker that used to lead this form was
+  // dropped in Chunk G5c — every founder on the dept-flow goes
+  // through the same structure-then-class shape so there's no
+  // confusion about "am I creating a dept or a class for me?".
+  //   • dept flow (/f/<fac>/new):   details · class · account · claim · recap
+  //   • class flow (/d/<dept>/new): details · account · claim · recap
+  // Founders who only want to populate the directory simply toggle
+  // wantsClaim off on the claim step.
   const steps: WizardStep[] = useMemo(() => {
-    const out: WizardStep[] = ['intent', 'details'];
-    if (!isAddingClass && form.intent !== '') out.push('class');
-    out.push('account');
-    if (form.intent !== 'helping' && form.intent !== '') out.push('claim');
-    out.push('recap');
+    const out: WizardStep[] = ['details'];
+    if (!isAddingClass) out.push('class');
+    out.push('account', 'claim', 'recap');
     return out;
-  }, [isAddingClass, form.intent]);
+  }, [isAddingClass]);
   const stepIdx = steps.indexOf(step);
   const isFirst = stepIdx === 0;
   const isLast  = stepIdx === steps.length - 1;
@@ -196,11 +192,10 @@ export default function AddDepartmentPage() {
       }) ?? null;
       setFaculty(parent);
 
-      // Seed sensible defaults: kind locked by URL, plus a starter title for
-      // the role claim so the founder isn't staring at an empty field.
+      // Seed a sensible default position title so the founder isn't
+      // staring at an empty claim field if they decide to claim a role.
       setForm((f) => ({
         ...f,
-        departmentKind: isAddingClass ? 'class' : 'department',
         positionTitle: f.positionTitle || (isAddingClass ? 'Class Rep' : 'Departmental President'),
       }));
       setLoading(false);
@@ -217,8 +212,6 @@ export default function AddDepartmentPage() {
   // re-checks the whole form for safety.
   const canAdvance = (s: WizardStep): boolean => {
     switch (s) {
-      case 'intent':
-        return form.intent !== '';
       case 'details':
         return form.departmentName.trim().length > 1 && form.departmentShortName.trim().length >= 2;
       case 'class':
@@ -244,9 +237,9 @@ export default function AddDepartmentPage() {
   };
 
   // True when ALL data is valid (used at the recap step's submit button).
-  const allValid = canAdvance('intent') && canAdvance('details') &&
+  const allValid = canAdvance('details') &&
     (!steps.includes('class') || canAdvance('class')) &&
-    canAdvance('account') && (!steps.includes('claim') || canAdvance('claim'));
+    canAdvance('account') && canAdvance('claim');
 
   const setF = <K extends keyof Form>(k: K, v: Form[K]) => setForm((f) => ({ ...f, [k]: v }));
 
@@ -260,8 +253,11 @@ export default function AddDepartmentPage() {
     setSubmitting(true);
     setError(null);
 
+    // wantsClaim is the only switch now — there's no more 'helping'
+    // intent. If the founder doesn't tick the claim toggle, the
+    // backend gets a null position title and no claim is filed.
     const positionToSend =
-      form.wantsClaim && form.intent !== 'helping' && form.positionTitle.trim().length > 1
+      form.wantsClaim && form.positionTitle.trim().length > 1
         ? form.positionTitle.trim()
         : null;
 
@@ -485,59 +481,15 @@ export default function AddDepartmentPage() {
             ))}
           </div>
           <p className="text-[10px] uppercase tracking-[0.2em] font-semibold text-center" style={{ color: tk.textTer }}>
-            Step {stepIdx + 1} of {steps.length} · {step}
+            Step {stepIdx + 1} of {steps.length} · {
+              step === 'details' ? (isAddingClass ? 'The class' : 'The department (structure)')
+              : step === 'class'   ? 'YOUR class'
+              : step === 'account' ? 'YOUR account'
+              : step === 'claim'   ? 'Claim a role'
+              : 'Review'
+            }
           </p>
         </div>
-
-        {/* ── Slide: Intent (who you are here) ── */}
-        {step === 'intent' && (
-          <motion.div
-            key="intent"
-            initial={{ opacity: 0, x: 20 }}
-            animate={{ opacity: 1, x: 0 }}
-            transition={{ duration: 0.22 }}
-          >
-            <Panel
-              title="First — who are you here?"
-              subtitle="This tells us whether to put you in a class and whether to offer a role claim. Be honest — no points for picking the wrong one."
-              icon={<Sparkles className="w-4 h-4" />}
-            >
-              <div className="grid gap-3">
-                {([
-                  // Two intents only — student vs helping. The "staff"
-                  // intent that parked founders into an Office bucket
-                  // was removed in Chunk H. Every founder is a real
-                  // member of a real class; exec powers (dept pres,
-                  // HOD, course rep) layer on top via member_admins.
-                  ['student', isAddingClass ? 'I belong to this class' : 'I’m a student in this department', 'You\'ll be added to your own class. Even if you\'re a dept president, HOD, or rep, pick this — exec powers are added on top of your class membership.'],
-                  ['helping', 'I\'m just helping (this is missing from the directory)',                       'No claim, no role — you just add the structure so others can join.'],
-                ] as const).map(([value, label, desc]) => {
-                  const active = form.intent === value;
-                  return (
-                    <button
-                      key={value}
-                      type="button"
-                      onClick={() => {
-                        setF('intent', value);
-                        // Helping intent never claims; force the opt-in off so they
-                        // can't accidentally toggle it later.
-                        if (value === 'helping') setF('wantsClaim', false);
-                      }}
-                      className="text-left rounded-2xl px-4 py-3.5 transition-all"
-                      style={{
-                        background: active ? `${tk.primary}14` : 'rgba(255,255,255,0.04)',
-                        border: `1.5px solid ${active ? tk.primary : tk.border}`,
-                      }}
-                    >
-                      <p className="text-sm font-bold" style={{ color: active ? tk.primary : tk.text }}>{label}</p>
-                      <p className="text-[11px] mt-0.5" style={{ color: tk.textSec }}>{desc}</p>
-                    </button>
-                  );
-                })}
-              </div>
-            </Panel>
-          </motion.div>
-        )}
 
         {/* ── Slide: Details (department or class — depends on route) ── */}
         {step === 'details' && (
@@ -547,10 +499,15 @@ export default function AddDepartmentPage() {
           animate={{ opacity: 1, x: 0 }}
           transition={{ duration: 0.22 }}
         >
-        {/* Section 1: Department */}
+        {/* Section 1 — STRUCTURE only.
+            The department is a container, not a roster. Founders type
+            its name + short code here; no personal details go on this
+            step. That arrives later, in "YOUR class" and "YOUR account". */}
         <Panel
-          title="The department"
-          subtitle="You'll be the founding admin. Members will join here."
+          title={isAddingClass ? 'The class — structure only' : 'The department — structure only'}
+          subtitle={isAddingClass
+            ? 'Just the name and short code. You\'ll add yourself + your role in the next steps.'
+            : 'Just the name and short code. The department is a container — your personal details go on the next two steps (your class, then your account).'}
           icon={<BookOpen className="w-4 h-4" />}
         >
           <Field label="Department name" required>
@@ -589,23 +546,23 @@ export default function AddDepartmentPage() {
         </motion.div>
         )}
 
-        {/* ── Slide: Your class (always shown on dept flow now that
-            Office is gone — class info is required for every founder
-            regardless of intent). ── */}
-        {step === 'class' && !isAddingClass && form.intent !== '' && (
+        {/* ── Slide: Your class (always shown on dept flow). Intent
+            picker is gone — every founder is a real student in
+            their class. ── */}
+        {step === 'class' && !isAddingClass && (
         <motion.div
           key="class"
           initial={{ opacity: 0, x: 20 }}
           animate={{ opacity: 1, x: 0 }}
           transition={{ duration: 0.22 }}
         >
-        {/* Section 2 (dept flow only): the founder's own class.
-            Nobody is "in" a department — students belong to a class inside one.
-            This makes the dept founder also declare WHICH class they're in (the
-            class is created at the same time and becomes their primary group). */}
+        {/* Section 2 — YOUR CLASS. This is where the founder
+            actually lives. Department is a structural container with
+            no member rows. Class is the roster. The founder's account
+            (next step) gets attached to THIS class, not to the dept. */}
         <Panel
-          title="Your class in this department"
-          subtitle="We'll create this class inside the dept and put you in it. You can change details later."
+          title="YOUR class — where you actually live"
+          subtitle="The department is just a container. THIS class is your roster: members will join here, and YOU are the first one. You can rename it later from the class admin page."
           icon={<Layers className="w-4 h-4" />}
         >
           <Row>
@@ -688,8 +645,12 @@ export default function AddDepartmentPage() {
         </motion.div>
         )}
 
-        {/* ── Slide: Claim (OPT-IN role request). Skipped entirely when intent='helping'. ── */}
-        {step === 'claim' && form.intent !== 'helping' && (
+        {/* ── Slide: Claim (OPT-IN role request).
+            The legacy 'helping' intent was retired in Chunk G5c — the
+            wantsClaim toggle below replaces it: skip means stay a
+            regular member; opt in means file a claim that goes
+            through verification. ── */}
+        {step === 'claim' && (
         <motion.div
           key="claim"
           initial={{ opacity: 0, x: 20 }}
@@ -753,23 +714,29 @@ export default function AddDepartmentPage() {
           icon={<Check className="w-4 h-4" />}
         >
           <div className="space-y-2.5">
-            <RecapRow tk={tk} label={isAddingClass ? 'New class' : 'New department'} value={`${form.departmentName} (${form.departmentShortName || '—'})`} />
+            <RecapRow
+              tk={tk}
+              label={isAddingClass ? 'New class' : 'New department (structure only)'}
+              value={`${form.departmentName} (${form.departmentShortName || '—'})`}
+            />
             <RecapRow tk={tk} label="Inside" value={faculty?.name ?? '—'} />
-            {!isAddingClass && form.intent !== '' && (
-              <RecapRow tk={tk} label={form.intent === 'student' ? 'Your class' : 'Class you\'re creating'} value={`${form.className} (${form.classShortName || form.userLevel || 'auto'})`} />
+            {!isAddingClass && (
+              <RecapRow
+                tk={tk}
+                label="YOUR class (where you live)"
+                value={`${form.className} (${form.classShortName || form.userLevel || 'auto'})`}
+              />
             )}
-            <RecapRow tk={tk} label="Your role here" value={
-              form.intent === 'student'
-                ? 'Student in this class'
-                : 'Just helping populate the directory'
-            } />
             <RecapRow tk={tk} label="Account" value={`${form.fullName} · ${form.email}`} />
             <RecapRow tk={tk} label="Login ID" value={form.memberNumber} />
-            <RecapRow tk={tk} label="Claim a role" value={
-              form.wantsClaim && form.intent !== 'helping' && form.positionTitle.trim()
+            <RecapRow
+              tk={tk}
+              label="Claim a role"
+              value={form.wantsClaim && form.positionTitle.trim()
                 ? `Yes — "${form.positionTitle.trim()}" (awaits verification)`
-                : 'No — you stay a regular member'
-            } highlight={form.wantsClaim && form.intent !== 'helping'} />
+                : 'No — you stay a regular member'}
+              highlight={form.wantsClaim}
+            />
           </div>
         </Panel>
         </motion.div>

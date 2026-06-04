@@ -456,7 +456,12 @@ export default function BringMySchoolPage() {
       facultyShort: form.facultyShort || undefined,
       groupName:    form.groupName,
       groupShort:   form.groupShort || undefined,
-      groupKind:    form.groupKind,
+      // Force 'class' for academic orgs regardless of the form
+      // state — the picker is hidden there in G5c, so a stale
+      // value from a flow that started non-academic shouldn't
+      // sneak through. Non-academic flows keep whatever the user
+      // picked.
+      groupKind:    isAcademicType ? 'class' : form.groupKind,
       userLevel:    form.userLevel || undefined,
     });
 
@@ -714,10 +719,18 @@ export default function BringMySchoolPage() {
                 </Field>
               </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <Field tk={tk} label="Group kind" required>
-                  <SelectInput tk={tk} value={form.groupKind} onChange={(v) => setField('groupKind', v)} options={GROUP_KINDS} />
-                </Field>
+              <div className={`grid grid-cols-1 ${isAcademic ? '' : 'sm:grid-cols-2'} gap-4`}>
+                {/* Group kind picker hidden for academic orgs in
+                    Chunk G5c — every founder there is in a class,
+                    and the picker just made people second-guess
+                    themselves ("am I a class or a department?").
+                    Non-academic orgs (church, club, etc.) still see
+                    the picker because their hierarchy varies. */}
+                {!isAcademic && (
+                  <Field tk={tk} label="Group kind" required>
+                    <SelectInput tk={tk} value={form.groupKind} onChange={(v) => setField('groupKind', v)} options={GROUP_KINDS} />
+                  </Field>
+                )}
                 <Field
                   tk={tk}
                   label={levelLabel}
