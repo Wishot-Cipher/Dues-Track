@@ -705,244 +705,69 @@ export default function AdminDashboardPage() {
             </div>
           </motion.div>
 
-          {/* Stats Grid */}
-        {loading ? (
-          <AdminDashboardSkeleton />
-        ) : (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-            {/* Total Students */}
-            <motion.div
-              initial={{ opacity: 0, scale: 0.9 }}
-              animate={{ opacity: 1, scale: 1 }}
-              transition={{ delay: 0.1 }}
-              whileHover={{ scale: hasPermission('can_manage_students') ? 1.02 : 1, y: hasPermission('can_manage_students') ? -4 : 0 }}
-              className={hasPermission('can_manage_students') ? "cursor-pointer" : "cursor-default"}
-              onClick={() => hasPermission('can_manage_students') && navigate('admin/members')}
-            >
-              <GlassCard className="relative overflow-hidden group">
-                {/* Gradient border on hover */}
-                <div className="absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-none rounded-xl"
-                     style={{ 
-                       background: `linear-gradient(135deg, ${tk.primary}20, transparent)`,
-                       border: `1px solid ${tk.primary}40`
-                     }} />
-                
-                {/* Background Icon */}
-                <div className="absolute -bottom-4 -right-4 w-24 h-24 opacity-10 group-hover:opacity-20 transition-opacity">
-                  <Users className="w-full h-full" style={{ color: tk.primary }} />
-                </div>
-                
-                <div className="flex items-center justify-between relative z-10">
-                  <div>
-                    <p className="text-sm mb-1 flex items-center gap-2" style={{ color: tk.textSec }}>
-                      Total Students
-                      <ChevronRight className="w-3 h-3 opacity-0 group-hover:opacity-100 transition-opacity" style={{ color: tk.primary }} />
-                    </p>
-                    <p className="text-3xl font-bold">
-                      <AnimatedCounter value={stats.totalStudents} />
-                    </p>
-                    <p className="text-xs mt-1" style={{ color: tk.mint }}>Active members</p>
-                  </div>
-                  <div className="w-14 h-14 rounded-xl flex items-center justify-center transition-all group-hover:scale-110"
-                       style={{ background: `linear-gradient(135deg, ${tk.primary}30, ${tk.primary}10)` }}>
-                    <Users className="w-7 h-7" style={{ color: tk.primary }} />
-                  </div>
-                </div>
-              </GlassCard>
-            </motion.div>
-
-            {/* Pending Review */}
-            <motion.div
-              initial={{ opacity: 0, scale: 0.9 }}
-              animate={{ opacity: 1, scale: 1 }}
-              transition={{ delay: 0.2 }}
-              whileHover={{ scale: 1.02, y: -4 }}
-              className="cursor-pointer"
-              onClick={() => navigate('/admin/review')}
-            >
-              <GlassCard className="relative overflow-hidden group">
-                <div className="absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-none rounded-xl"
-                     style={{ 
-                       background: `linear-gradient(135deg, ${tk.amber}20, transparent)`,
-                       border: `1px solid ${tk.amber}40`
-                     }} />
-                
-                <div className="absolute -bottom-4 -right-4 w-24 h-24 opacity-10 group-hover:opacity-20 transition-opacity">
-                  <Clock className="w-full h-full" style={{ color: tk.amber }} />
-                </div>
-                
-                {/* Pulsing indicator for pending */}
-                {stats.pendingReview > 0 && (
-                  <div className="absolute top-3 right-3 w-3 h-3 rounded-full animate-pulse"
-                       style={{ background: tk.amber, boxShadow: `0 0 8px ${tk.amber}` }} />
-                )}
-                
-                <div className="flex items-center justify-between relative z-10">
-                  <div>
-                    <p className="text-sm mb-1 flex items-center gap-2" style={{ color: tk.textSec }}>
-                      Pending Review
-                      <ChevronRight className="w-3 h-3 opacity-0 group-hover:opacity-100 transition-opacity" style={{ color: tk.amber }} />
-                    </p>
-                    <p className="text-3xl font-bold" style={{ color: tk.amber }}>
-                      <AnimatedCounter value={stats.pendingReview} />
-                    </p>
-                    <p className="text-xs mt-1" style={{ color: tk.textSec }}>Awaiting action</p>
-                  </div>
-                  <div className="w-14 h-14 rounded-xl flex items-center justify-center transition-all group-hover:scale-110"
-                       style={{ background: `linear-gradient(135deg, ${tk.amber}30, ${tk.amber}10)` }}>
-                    <Clock className="w-7 h-7" style={{ color: tk.amber }} />
-                  </div>
-                </div>
-              </GlassCard>
-            </motion.div>
-
-            {/* Total Collected */}
-            <motion.div
-              initial={{ opacity: 0, scale: 0.9 }}
-              animate={{ opacity: 1, scale: 1 }}
-              transition={{ delay: 0.3 }}
-              whileHover={{ scale: 1.02, y: -4 }}
-              className="cursor-pointer"
-              onClick={() => navigate('/admin/collected')}
-            >
-              <GlassCard className="relative overflow-hidden group">
-                <div className="absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-none rounded-xl"
-                     style={{ 
-                       background: `linear-gradient(135deg, ${tk.mint}20, transparent)`,
-                       border: `1px solid ${tk.mint}40`
-                     }} />
-                
-                <div className="absolute -bottom-4 -right-4 w-24 h-24 opacity-10 group-hover:opacity-20 transition-opacity">
-                  <Wallet className="w-full h-full" style={{ color: tk.mint }} />
-                </div>
-                
-                <div className="flex items-center justify-between relative z-10">
-                  <div>
-                    <p className="text-sm mb-1 flex items-center gap-2" style={{ color: tk.textSec }}>
-                      Total Collected
-                      <TrendingUp className="w-3 h-3" style={{ color: tk.mint }} />
-                    </p>
-                    <PrivacyMask><p className="text-2xl font-bold">
-                      {formatCurrency(stats.totalCollected)}
-                    </p></PrivacyMask>
-                    <p className="text-xs mt-1" style={{ color: tk.mint }}>Revenue to date</p>
-                  </div>
-                  <div className="w-14 h-14 rounded-xl flex items-center justify-center transition-all group-hover:scale-110"
-                       style={{ background: `linear-gradient(135deg, ${tk.mint}30, ${tk.mint}10)` }}>
-                    <Wallet className="w-7 h-7" style={{ color: tk.mint }} />
-                  </div>
-                </div>
-              </GlassCard>
-            </motion.div>
-
-            {/* Active Payment Types */}
-            <motion.div
-              initial={{ opacity: 0, scale: 0.9 }}
-              animate={{ opacity: 1, scale: 1 }}
-              transition={{ delay: 0.4 }}
-              whileHover={{ scale: 1.02, y: -4 }}
-              className="cursor-pointer"
-              onClick={() => navigate('/admin/create-payment')}
-            >
-              <GlassCard className="relative overflow-hidden group">
-                <div className="absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-none rounded-xl"
-                     style={{ 
-                       background: `linear-gradient(135deg, ${tk.mint}20, transparent)`,
-                       border: `1px solid ${tk.mint}40`
-                     }} />
-                
-                <div className="absolute -bottom-4 -right-4 w-24 h-24 opacity-10 group-hover:opacity-20 transition-opacity">
-                  <FileText className="w-full h-full" style={{ color: tk.mint }} />
-                </div>
-                
-                <div className="flex items-center justify-between relative z-10">
-                  <div>
-                    <p className="text-sm mb-1 flex items-center gap-2" style={{ color: tk.textSec }}>
-                      Active Payments
-                      <ChevronRight className="w-3 h-3 opacity-0 group-hover:opacity-100 transition-opacity" style={{ color: tk.mint }} />
-                    </p>
-                    <p className="text-3xl font-bold">
-                      <AnimatedCounter value={stats.totalPaymentTypes} />
-                    </p>
-                    <p className="text-xs mt-1" style={{ color: tk.mint }}>Payment types</p>
-                  </div>
-                  <div className="w-14 h-14 rounded-xl flex items-center justify-center transition-all group-hover:scale-110"
-                       style={{ background: `linear-gradient(135deg, ${tk.mint}30, ${tk.mint}10)` }}>
-                    <FileText className="w-7 h-7" style={{ color: tk.mint }} />
-                  </div>
-                </div>
-              </GlassCard>
-            </motion.div>
-
-            {/* Approved Today */}
-            <motion.div
-              initial={{ opacity: 0, scale: 0.9 }}
-              animate={{ opacity: 1, scale: 1 }}
-              transition={{ delay: 0.5 }}
-              whileHover={{ scale: 1.02, y: -4 }}
-            >
-              <GlassCard className="relative overflow-hidden group">
-                <div className="absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-none rounded-xl"
-                     style={{ 
-                       background: `linear-gradient(135deg, ${tk.mint}20, transparent)`,
-                       border: `1px solid ${tk.mint}40`
-                     }} />
-                
-                <div className="absolute -bottom-4 -right-4 w-24 h-24 opacity-10 group-hover:opacity-20 transition-opacity">
-                  <CheckCircle className="w-full h-full" style={{ color: tk.mint }} />
-                </div>
-                
-                <div className="flex items-center justify-between relative z-10">
-                  <div>
-                    <p className="text-sm mb-1" style={{ color: tk.textSec }}>Approved Today</p>
-                    <p className="text-3xl font-bold" style={{ color: tk.mint }}>
-                      <AnimatedCounter value={stats.approvedToday} />
-                    </p>
-                    <p className="text-xs mt-1" style={{ color: tk.textSec }}>Today's activity</p>
-                  </div>
-                  <div className="w-14 h-14 rounded-xl flex items-center justify-center transition-all group-hover:scale-110"
-                       style={{ background: `linear-gradient(135deg, ${tk.mint}30, ${tk.mint}10)` }}>
-                    <CheckCircle className="w-7 h-7" style={{ color: tk.mint }} />
-                  </div>
-                </div>
-              </GlassCard>
-            </motion.div>
-
-            {/* Rejected Payments */}
-            <motion.div
-              initial={{ opacity: 0, scale: 0.9 }}
-              animate={{ opacity: 1, scale: 1 }}
-              transition={{ delay: 0.6 }}
-              whileHover={{ scale: 1.02, y: -4 }}
-            >
-              <GlassCard className="relative overflow-hidden group">
-                <div className="absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-none rounded-xl"
-                     style={{ 
-                       background: `linear-gradient(135deg, ${tk.danger}20, transparent)`,
-                       border: `1px solid ${tk.danger}40`
-                     }} />
-                
-                <div className="absolute -bottom-4 -right-4 w-24 h-24 opacity-10 group-hover:opacity-20 transition-opacity">
-                  <XCircle className="w-full h-full" style={{ color: tk.danger }} />
-                </div>
-                
-                <div className="flex items-center justify-between relative z-10">
-                  <div>
-                    <p className="text-sm mb-1" style={{ color: tk.textSec }}>Rejected</p>
-                    <p className="text-3xl font-bold" style={{ color: tk.danger }}>
-                      <AnimatedCounter value={stats.rejectedPayments} />
-                    </p>
-                    <p className="text-xs mt-1" style={{ color: tk.textSec }}>Total rejected</p>
-                  </div>
-                  <div className="w-14 h-14 rounded-xl flex items-center justify-center transition-all group-hover:scale-110"
-                       style={{ background: `linear-gradient(135deg, ${tk.danger}30, ${tk.danger}10)` }}>
-                    <XCircle className="w-7 h-7" style={{ color: tk.danger }} />
-                  </div>
-                </div>
-              </GlassCard>
-            </motion.div>
-          </div>
-        )}
+          {/* ── Stats grid ────────────────────────────────────
+              Six metric tiles in the same shape as the dept / faculty
+              exec dashboards: card surface, small accent icon chip,
+              uppercase label, big number, no decorative GlassCard
+              wrapper or background-icon. Clicking a tile drives the
+              same nav as before (Total → /admin/members, Pending →
+              /admin/review, etc.). The previous version used
+              GlassCard + hover-gradient + background-icon + chevron
+              + right-side icon container — read as the old era of
+              the app next to the new exec dashboards. */}
+          {loading ? (
+            <AdminDashboardSkeleton />
+          ) : (
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+              <AdminStatTile
+                tk={tk}
+                color={tk.primary}
+                icon={<Users className="w-3.5 h-3.5" />}
+                label="Total students"
+                value={<AnimatedCounter value={stats.totalStudents} />}
+                onClick={hasPermission('can_manage_students') ? () => navigate('admin/members') : undefined}
+              />
+              <AdminStatTile
+                tk={tk}
+                color={tk.amber}
+                icon={<Clock className="w-3.5 h-3.5" />}
+                label="Pending review"
+                value={<AnimatedCounter value={stats.pendingReview} />}
+                badge={stats.pendingReview > 0 ? 'awaiting' : undefined}
+                onClick={() => navigate('/admin/review')}
+              />
+              <AdminStatTile
+                tk={tk}
+                color={tk.mint}
+                icon={<Wallet className="w-3.5 h-3.5" />}
+                label="Total collected"
+                value={<PrivacyMask>{formatCurrency(stats.totalCollected)}</PrivacyMask>}
+                onClick={() => navigate('/admin/collected')}
+              />
+              <AdminStatTile
+                tk={tk}
+                color={tk.primary}
+                icon={<FileText className="w-3.5 h-3.5" />}
+                label="Active dues"
+                value={<AnimatedCounter value={stats.totalPaymentTypes} />}
+                onClick={() => navigate('/admin/create-payment')}
+              />
+              <AdminStatTile
+                tk={tk}
+                color={tk.mint}
+                icon={<CheckCircle className="w-3.5 h-3.5" />}
+                label="Approved today"
+                value={<AnimatedCounter value={stats.approvedToday} />}
+              />
+              <AdminStatTile
+                tk={tk}
+                color={tk.danger}
+                icon={<XCircle className="w-3.5 h-3.5" />}
+                label="Rejected"
+                value={<AnimatedCounter value={stats.rejectedPayments} />}
+              />
+            </div>
+          )}
 
         {/* Recent Payments Table */}
         <motion.div
@@ -2025,5 +1850,66 @@ export default function AdminDashboardPage() {
 
       <Footer />
     </div>
+  );
+}
+
+/**
+ * AdminStatTile — single metric tile in the admin dashboard's
+ * stats grid. Same visual recipe as the Stat() helpers used by
+ * DepartmentExecDashboardPage / FacultyExecDashboardPage so the
+ * org-tier dashboard reads as part of the same family. Clickable
+ * variant lifts on hover; static variant just renders the card.
+ */
+function AdminStatTile({
+  tk, color, icon, label, value, badge, onClick,
+}: {
+  tk: ReturnType<typeof getDashboardTokens>;
+  color: string;
+  icon: React.ReactNode;
+  label: string;
+  value: React.ReactNode;
+  badge?: string;
+  onClick?: () => void;
+}) {
+  const interactive = Boolean(onClick);
+  return (
+    <motion.div
+      whileHover={interactive ? { y: -3 } : undefined}
+      whileTap={interactive ? { scale: 0.98 } : undefined}
+      onClick={onClick}
+      className={`rounded-2xl p-3 sm:p-4 relative ${interactive ? 'cursor-pointer' : ''}`}
+      style={{
+        background: tk.card,
+        border: `1px solid ${tk.cardBorder}`,
+      }}
+    >
+      {badge && (
+        <span
+          aria-hidden
+          className="absolute top-2 right-2 w-2 h-2 rounded-full animate-pulse"
+          style={{ background: color, boxShadow: `0 0 8px ${color}` }}
+        />
+      )}
+      <div className="flex items-center gap-2">
+        <span
+          className="w-7 h-7 rounded-lg flex items-center justify-center shrink-0"
+          style={{ background: `${color}18`, color }}
+        >
+          {icon}
+        </span>
+        <p
+          className="text-[10px] uppercase tracking-[0.14em] font-bold truncate"
+          style={{ color: tk.textTer }}
+        >
+          {label}
+        </p>
+      </div>
+      <p
+        className="text-xl sm:text-2xl font-extrabold tabular-nums mt-2 truncate"
+        style={{ color: tk.text }}
+      >
+        {value}
+      </p>
+    </motion.div>
   );
 }

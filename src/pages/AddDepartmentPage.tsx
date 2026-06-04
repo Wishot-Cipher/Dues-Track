@@ -497,9 +497,15 @@ export default function AddDepartmentPage() {
             >
               <div className="grid gap-3">
                 {([
-                  ['student', isAddingClass ? 'I belong to this class' : 'I’m a student in this department', 'You’ll be added to a class inside this structure.'],
-                  ['staff',   'I’m staff / faculty',                                                       'No class membership — you’re here as staff.'],
-                  ['helping', 'I’m just helping (this is missing from the directory)',                    'No claim, no role — you just add the structure so others can join.'],
+                  // Tightened labels — a dept president is a STUDENT
+                  // in their own class, not staff. The previous
+                  // "staff / faculty" label could be misread by an
+                  // HOD or course rep; "admin staff" makes the
+                  // separation unambiguous and the description spells
+                  // out who that path is actually for.
+                  ['student', isAddingClass ? 'I belong to this class' : 'I’m a student in this department', 'You\'ll be added to your own class. Even if you\'re a dept president or rep, pick this — exec powers are added on top of your class membership.'],
+                  ['staff',   'I\'m admin staff (no class)',                                                   'Pick this ONLY if you\'re a registrar / secretariat / non-academic staff. You\'ll be parked in a small Office bucket since you don\'t belong to a student class.'],
+                  ['helping', 'I\'m just helping (this is missing from the directory)',                       'No claim, no role — you just add the structure so others can join.'],
                 ] as const).map(([value, label, desc]) => {
                   const active = form.intent === value;
                   return (
