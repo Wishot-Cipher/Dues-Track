@@ -645,9 +645,19 @@ export default function CreateDuePage() {
 
     // For events, the price comes from the cheapest ticket tier; events are
     // online-only (Paystack) so a ticket can be auto-issued, and never mandatory.
+    // Defensive: Math.min(...[]) returns Infinity, which JSON.stringify
+    // emits as `null`. A non-null amount column would reject the PATCH
+    // with a confusing 400. Bail with a useful message instead.
     const eventBaseAmount = isEvent
-      ? Math.min(...validTiers.map((t) => Number(t.price)))
+      ? (validTiers.length > 0 ? Math.min(...validTiers.map((t) => Number(t.price))) : NaN)
       : Number(form.amount);
+    if (!Number.isFinite(eventBaseAmount)) {
+      setError(isEvent
+        ? 'Add at least one valid ticket tier (name + price) before saving.'
+        : 'Enter a valid amount before saving.');
+      setSubmitting(false);
+      return;
+    }
 
     // ── EDIT BRANCH ───────────────────────────────────────────
     // Direct UPDATE on payment_types (matches the legacy modal's
@@ -796,7 +806,23 @@ export default function CreateDuePage() {
         go(`/admin/manage-dues?updated=${editId}`);
         return;
       } catch (err) {
-        setError(err instanceof Error ? err.message : 'Could not save changes.');
+        // Surface the real cause. The "PATCH ... net::ERR_FAILED"
+        // we kept seeing was getting swallowed by a generic message.
+        // Console.error gives the network tab + stack; the inline
+        // setError shows the user what to do next.
+        console.error('Edit due save failed:', err);
+        const errObj = err as { message?: string; code?: string; details?: string; hint?: string };
+        let msg = 'Could not save changes.';
+        if (errObj?.message) {
+          if (/fetch|network|err_failed|failed to fetch/i.test(errObj.message)) {
+            msg = 'Network failed mid-save. Check your connection and try again.';
+          } else if (errObj.code === '42501' || errObj.code === '42503' || /denied|forbidden|permission/i.test(errObj.message)) {
+            msg = 'You don\'t have permission to edit this due. Contact a higher-tier exec.';
+          } else {
+            msg = errObj.message;
+          }
+        }
+        setError(msg);
         setSubmitting(false);
         return;
       }

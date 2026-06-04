@@ -13,7 +13,7 @@
  * - Collapsible admin section
  */
 
-import { useEffect, useState, useRef } from 'react';
+import { useEffect, useState, useRef, Suspense } from 'react';
 import { createPortal } from 'react-dom';
 import { Outlet, useParams, useNavigate, useLocation, Link } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -987,7 +987,20 @@ export default function OrgLayout() {
           focused checkout routes we hide the tab bar entirely, so we
           drop the padding too. */}
       <main className={`flex-1 ${hideBottomNav ? '' : 'pb-20 lg:pb-0'}`}>
-        <Outlet />
+        {/* Suspense boundary INSIDE the layout — so a lazy chunk
+            loading for an admin/console route shows a content-area
+            spinner with the top header and bottom nav still visible.
+            Without this, the App-level Suspense would replace the
+            entire viewport (including chrome) with the fallback. */}
+        <Suspense
+          fallback={
+            <div className="flex items-center justify-center py-24 min-h-[40vh]">
+              <LoadingSpinner size="md" />
+            </div>
+          }
+        >
+          <Outlet />
+        </Suspense>
       </main>
 
       {/* ═══════════ MOBILE BOTTOM TAB BAR ═══════════

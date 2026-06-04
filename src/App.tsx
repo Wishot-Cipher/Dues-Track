@@ -95,7 +95,18 @@ function App() {
             <OfflineIndicator />
             <InstallPWA />
             <UpdateNotification />
-            <Suspense fallback={<LoadingSpinner fullScreen size="lg" />}>
+            {/* Lazy-route fallback. fullScreen LoadingSpinner uses
+                position:fixed + inset:0 + bg:#0F0703 + z:9999 — it
+                covers the OrgLayout's top header and bottom tab bar
+                while the chunk downloads, which read as "my nav
+                disappeared." Replaced with a minimal centred
+                spinner that occupies only the content area; the
+                layout chrome (header + bottom tabs) stays visible. */}
+            <Suspense fallback={
+              <div className="flex items-center justify-center py-24 min-h-[40vh]">
+                <LoadingSpinner size="md" />
+              </div>
+            }>
             <Routes>
               {/* ============================================ */}
               {/* PUBLIC ROUTES                                */}

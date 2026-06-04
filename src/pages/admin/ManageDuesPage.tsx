@@ -174,9 +174,20 @@ export default function ManageDuesPage() {
         activeGroupId: activeRole?.groupId ?? null,
         activeScopeLevel: activeRole?.scopeLevel ?? null,
       }) : null
+      // Trimmed projection — only the columns this page actually
+      // renders. The previous `select *` pulled every event_*
+      // metadata column (cover URL, max attendees, RFC-shape JSON…)
+      // for rows that aren't events. On a uni with hundreds of
+      // dues that doubled the payload size and the time-to-first-row.
       let query = supabase
         .from('payment_types')
-        .select('*')
+        .select(`
+          id, title, description, category, amount, minimum_partial_amount,
+          allow_partial, is_mandatory, deadline, target_levels, target_sections,
+          icon, color, bank_name, account_name, account_number,
+          accepts_paystack, accepts_manual, late_fee_per_day,
+          is_active, is_public, group_id, created_at, updated_at
+        `)
         .order('created_at', { ascending: false })
       if (scope) {
         query = query.eq('organization_id', scope.orgId)
