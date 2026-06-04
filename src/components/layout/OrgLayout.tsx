@@ -596,14 +596,30 @@ export default function OrgLayout() {
                   pattern stable. Single line, truncates hard,
                   hidden on the smallest phones so the brand still
                   fits on a 320px viewport. */}
-              {(group?.short_name || group?.name || parentName) && (
-                <p
-                  className="text-[10.5px] font-bold uppercase tracking-wider leading-tight truncate mt-0.5"
-                  style={{ color: tk.textTer }}
-                >
-                  {parentName ? `${parentName} · ` : ''}{group?.short_name || group?.name}
-                </p>
-              )}
+              {(group?.short_name || group?.name || parentName) && (() => {
+                // Pick the most readable label for the member's own
+                // group. Prefer the group's NAME ("Office") over the
+                // short_name ("ECE-OFC") so the subtitle doesn't
+                // double up the parent code ("ECE · ECE-OFC" reads
+                // like a stutter). Fall back to short_name only when
+                // there's no name; truncation handles long names.
+                const own = group?.name || group?.short_name;
+                // Drop the parent prefix when it's redundant with the
+                // own label — e.g. parent="ECE" + own="ECE 0'29"
+                // becomes just "ECE 0'29".
+                const dedupedParent = parentName && own && !own.toUpperCase().startsWith(parentName.toUpperCase())
+                  ? parentName
+                  : null;
+                const label = dedupedParent ? `${dedupedParent} · ${own}` : own;
+                return (
+                  <p
+                    className="text-[10.5px] font-bold uppercase tracking-wider leading-tight truncate mt-0.5"
+                    style={{ color: tk.textTer }}
+                  >
+                    {label}
+                  </p>
+                );
+              })()}
             </div>
           </Link>
 

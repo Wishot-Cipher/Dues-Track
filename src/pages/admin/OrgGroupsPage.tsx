@@ -994,18 +994,52 @@ export default function OrgGroupsPage() {
               </motion.div>
             ) : (
               <div className="space-y-3">
-                {/* Top-level set: anything in scope with no parent,
-                    plus faculties/colleges (which conceptually root the
-                    tree even if they accidentally got a parent_group_id).
-                    Falls back to the ENTIRE visibleGroups list when no
-                    rows survive — covers orgs where every group has a
-                    parent that's been filtered out by the scope walk. */}
+                {/* Top-level set — picking what to render at depth 0
+                    so descendants render nested under their roots
+                    (not flat alongside them):
+
+                      1. A scope is active (dept exec / faculty exec).
+                         The user's OWN group is the root; everything
+                         else in scope is their subtree and renders
+                         on expand. Single-root output, no duplicates.
+
+                      2. Org-scope (no filter).
+                         Show faculties / colleges as the natural roots
+                         of the org tree. Departments + classes render
+                         on expand under their faculty.
+
+                      3. Non-academic / fallback.
+                         Anything without a parent_group_id is a root.
+
+                    The previous version filtered "no parent OR faculty/
+                    college", then fell back to visibleGroups if empty.
+                    For a dept exec the scope walk includes the dept +
+                    its kids, NONE of which are faculties and ALL of
+                    which have a parent_group_id → the filter returned
+                    empty and the fallback rendered every group flat,
+                    while ALSO expanding the dept's children inline →
+                    each class listed twice. Single-root resolution
+                    here keeps every group on the page exactly once. */}
                 {(() => {
-                  const tops = visibleGroups.filter(
-                    g => !g.parent_group_id || g.kind === 'faculty' || g.kind === 'college'
-                  )
-                  const list = tops.length > 0 ? tops : visibleGroups
-                  return list.map(top => (
+                  let tops: typeof visibleGroups
+                  if (inScopeIds && activeRole?.groupId) {
+                    // Scoped view → root is the active group itself.
+                    const own = visibleGroups.find(g => g.id === activeRole.groupId)
+                    tops = own ? [own] : []
+                  } else if (isAcademicOrg) {
+                    tops = visibleGroups.filter(g => g.kind === 'faculty' || g.kind === 'college')
+                  } else {
+                    tops = visibleGroups.filter(g => !g.parent_group_id)
+                  }
+                  // Last-resort fallback so a misconfigured tree still
+                  // renders SOMETHING — but only when zero tops landed.
+                  // Deduplicated against itself so the bug above can't
+                  // recur silently.
+                  if (tops.length === 0) {
+                    tops = visibleGroups.filter(g => !g.parent_group_id)
+                  }
+                  if (tops.length === 0) tops = visibleGroups
+                  return tops.map(top => (
                     <GroupTreeNode
                       key={top.id}
                       group={top}
