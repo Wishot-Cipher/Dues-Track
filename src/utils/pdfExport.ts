@@ -1688,8 +1688,11 @@ export function exportTableToPDF<Row extends Record<string, unknown>>(
   const doc = new jsPDF({ orientation: 'portrait', unit: 'pt', format: 'a4' });
   const pageWidth = doc.internal.pageSize.getWidth();
   const pageHeight = doc.internal.pageSize.getHeight();
-  const margin = 36;
+  const margin = 40;
 
+  // ── Colour palette derived from accent ──────────────────────────
+  // Statement aesthetic: ink-dark body text, muted secondary, a
+  // soft accent tint for surfaces, accent itself for the brand band.
   const hexToRgb = (hex: string): [number, number, number] => {
     const m = hex.replace('#', '');
     if (m.length !== 6) return [255, 104, 3];
@@ -1700,61 +1703,123 @@ export function exportTableToPDF<Row extends Record<string, unknown>>(
     ];
   };
   const accent = hexToRgb(accentColor);
-  const muted: [number, number, number] = [110, 110, 110];
+  const ink: [number, number, number] = [22, 17, 14];      // primary body text
+  const muted: [number, number, number] = [115, 110, 105]; // secondary text
+  const subtle: [number, number, number] = [232, 228, 222]; // hairline + table divider
+  const tintBg: [number, number, number] = [
+    Math.min(255, Math.round(255 - (255 - accent[0]) * 0.07)),
+    Math.min(255, Math.round(255 - (255 - accent[1]) * 0.07)),
+    Math.min(255, Math.round(255 - (255 - accent[2]) * 0.07)),
+  ];
 
-  const drawHeader = () => {
+  // Build a short document reference — non-cryptographic, just a
+  // human-readable label like "PVX-A4F0". Lets a treasurer cite the
+  // PDF in meeting minutes without sharing the entire title.
+  const ref = (() => {
+    const seed = (orgName + title + Date.now().toString()).toLowerCase();
+    let h = 0;
+    for (let i = 0; i < seed.length; i++) h = (h * 31 + seed.charCodeAt(i)) >>> 0;
+    return 'PVX-' + (h % 0x10000).toString(16).toUpperCase().padStart(4, '0');
+  })();
+
+  const generatedAt = new Date().toLocaleString('en-NG', {
+    year: 'numeric', month: 'short', day: 'numeric',
+    hour: '2-digit', minute: '2-digit',
+  });
+
+  // ── Brand band: full-width accent strip at the top of every page.
+  // Drawn before any content so autotable's page-break can re-run
+  // this and the band keeps appearing on every page. ──────────────
+  const drawBrandBand = () => {
+    const bandHeight = 56;
+    // Solid accent fill
+    doc.setFillColor(accent[0], accent[1], accent[2]);
+    doc.rect(0, 0, pageWidth, bandHeight, 'F');
+
+    // Org name (large) on the left
     doc.setFont('helvetica', 'bold');
-    doc.setFontSize(11);
-    doc.setTextColor(20, 20, 20);
-    doc.text(orgName, margin, margin + 4);
+    doc.setFontSize(15);
+    doc.setTextColor(255, 255, 255);
+    doc.text(orgName, margin, 28);
 
+    // App + ref on the right, smaller / lighter
     doc.setFont('helvetica', 'normal');
-    doc.setFontSize(9);
-    doc.setTextColor(...muted);
-    const generatedAt = new Date().toLocaleString('en-NG', {
-      year: 'numeric', month: 'short', day: 'numeric',
-      hour: '2-digit', minute: '2-digit',
-    });
-    doc.text(generatedAt, pageWidth - margin, margin + 4, { align: 'right' });
-
-    doc.setDrawColor(accent[0], accent[1], accent[2]);
-    doc.setLineWidth(1.5);
-    doc.line(margin, margin + 12, pageWidth - margin, margin + 12);
-  };
-
-  const drawFooter = (pageNo: number, pageCount: number) => {
+    doc.setFontSize(8.5);
+    doc.setTextColor(255, 255, 255);
+    doc.text(`${appName} · ${ref}`, pageWidth - margin, 22, { align: 'right' });
     doc.setFont('helvetica', 'normal');
     doc.setFontSize(8);
-    doc.setTextColor(...muted);
-    const footerY = pageHeight - margin / 2;
+    doc.text(generatedAt, pageWidth - margin, 35, { align: 'right' });
+  };
+
+  // ── Footer: thin top hairline + powered-by + page count. ────────
+  const drawFooter = (pageNo: number, pageCount: number) => {
+    const footerY = pageHeight - 22;
+    doc.setDrawColor(subtle[0], subtle[1], subtle[2]);
+    doc.setLineWidth(0.5);
+    doc.line(margin, footerY - 10, pageWidth - margin, footerY - 10);
+
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(7.5);
+    doc.setTextColor(muted[0], muted[1], muted[2]);
+    doc.text(`Powered by ${appName}`, margin, footerY);
     doc.text(
-      `${appName} · ${new Date().toISOString().slice(0, 10)}`,
-      margin, footerY,
-    );
-    doc.text(
-      `Page ${pageNo} of ${pageCount}`,
+      `Page ${pageNo} of ${pageCount} · Ref ${ref}`,
       pageWidth - margin, footerY,
       { align: 'right' },
     );
   };
 
-  // First-page title
-  drawHeader();
+  // ── First-page header content ───────────────────────────────────
+  drawBrandBand();
+
+  // Title block sits 24pt below the band.
+  let cursorY = 56 + 32;
   doc.setFont('helvetica', 'bold');
-  doc.setFontSize(18);
-  doc.setTextColor(15, 7, 3);
-  doc.text(title, margin, margin + 38);
-  let cursorY = margin + 38;
+  doc.setFontSize(22);
+  doc.setTextColor(ink[0], ink[1], ink[2]);
+  doc.text(title, margin, cursorY);
+  cursorY += 8;
+
   if (subtitle) {
     doc.setFont('helvetica', 'normal');
-    doc.setFontSize(11);
-    doc.setTextColor(...muted);
-    doc.text(subtitle, margin, cursorY + 16);
-    cursorY += 16;
+    doc.setFontSize(10.5);
+    doc.setTextColor(muted[0], muted[1], muted[2]);
+    doc.text(subtitle, margin, cursorY + 12);
+    cursorY += 14;
   }
 
-  // Table data
-  const head: string[][] = [columns.map(c => c.label)];
+  // Meta strip — small label/value pairs in a soft tinted bar.
+  // Reads like a statement header (Period · Records · Reference).
+  cursorY += 14;
+  const metaHeight = 36;
+  doc.setFillColor(tintBg[0], tintBg[1], tintBg[2]);
+  doc.roundedRect(margin, cursorY, pageWidth - margin * 2, metaHeight, 6, 6, 'F');
+
+  const metaItems: Array<{ label: string; value: string }> = [
+    { label: 'GENERATED', value: generatedAt },
+    { label: 'RECORDS', value: String(rows.length) },
+    { label: 'REFERENCE', value: ref },
+  ];
+  const colWidth = (pageWidth - margin * 2) / metaItems.length;
+  metaItems.forEach((m, i) => {
+    const x = margin + colWidth * i + 12;
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(7);
+    doc.setTextColor(muted[0], muted[1], muted[2]);
+    doc.text(m.label, x, cursorY + 14);
+
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(10);
+    doc.setTextColor(ink[0], ink[1], ink[2]);
+    doc.text(m.value, x, cursorY + 28);
+  });
+  cursorY += metaHeight + 18;
+
+  // ── Table ───────────────────────────────────────────────────────
+  // Statement-style: bold uppercase column headers in accent ink,
+  // monospace-ish amounts (right-aligned), thin row separators.
+  const head: string[][] = [columns.map(c => c.label.toUpperCase())];
   const body: string[][] = rows.map(row =>
     columns.map(col => {
       const raw = row[col.key];
@@ -1766,30 +1831,38 @@ export function exportTableToPDF<Row extends Record<string, unknown>>(
   autoTable(doc, {
     head,
     body,
-    startY: cursorY + 16,
-    margin: { left: margin, right: margin },
+    startY: cursorY,
+    margin: { left: margin, right: margin, top: 64 /* room for brand band on subsequent pages */ },
     theme: 'plain',
     styles: {
       font: 'helvetica',
-      fontSize: 9,
-      cellPadding: 6,
-      lineColor: [225, 225, 225],
+      fontSize: 9.5,
+      cellPadding: { top: 8, right: 8, bottom: 8, left: 8 },
+      lineColor: subtle,
       lineWidth: 0.5,
-      textColor: [30, 30, 30],
+      textColor: ink,
     },
     headStyles: {
-      fillColor: [accent[0], accent[1], accent[2]],
-      textColor: [255, 255, 255],
+      fillColor: [255, 255, 255],
+      textColor: muted,
       fontStyle: 'bold',
-      halign: 'left',
+      fontSize: 7.5,
+      cellPadding: { top: 6, right: 8, bottom: 8, left: 8 },
+      lineWidth: 0,
     },
     alternateRowStyles: {
-      fillColor: [248, 248, 248],
+      // Zebra: slightly off-white so the data still reads as the
+      // hero. Saturation pulled WAY down from the previous
+      // [248,248,248] which was visually distracting.
+      fillColor: [252, 251, 249],
     },
-    columnStyles: columns.reduce<Record<number, { halign?: 'left' | 'center' | 'right'; cellWidth?: number }>>(
+    columnStyles: columns.reduce<Record<number, { halign?: 'left' | 'center' | 'right'; cellWidth?: number; fontStyle?: 'normal' | 'bold' }>>(
       (acc, col, idx) => {
         acc[idx] = {
           halign: col.align || 'left',
+          // Amount columns get bold weight so they're the eye's
+          // anchor point — a treasurer scans the right column first.
+          ...(col.align === 'right' ? { fontStyle: 'bold' as const } : {}),
           ...(col.width ? { cellWidth: col.width } : {}),
         };
         return acc;
@@ -1797,36 +1870,65 @@ export function exportTableToPDF<Row extends Record<string, unknown>>(
       {},
     ),
     didDrawPage: (data) => {
-      // Re-draw the header band on every page so multi-page PDFs
-      // stay branded. The first page already drew it above.
-      if (data.pageNumber > 1) drawHeader();
+      // Re-paint brand band + table on every page break.
+      if (data.pageNumber > 1) drawBrandBand();
     },
   });
 
   const finalY = doc.lastAutoTable?.finalY ?? cursorY + 100;
 
+  // ── Summary "totals card" — the financial-document flourish.
+  // First summary entry rendered HUGE as the headline value (e.g.
+  // "Total collected · ₦125,000"); subsequent entries stack
+  // underneath in a smaller secondary row.
   if (summary && summary.length > 0) {
-    let y = finalY + 22;
-    const lineHeight = 18;
-    if (y + summary.length * lineHeight > pageHeight - margin - 30) {
-      doc.addPage();
-      drawHeader();
-      y = margin + 38;
-    }
-    doc.setDrawColor(225, 225, 225);
-    doc.setLineWidth(0.5);
-    doc.line(margin, y - 10, pageWidth - margin, y - 10);
+    const cardTop = finalY + 24;
+    const cardH = 24 + (summary.length > 1 ? 22 : 0) + 56;
 
-    for (const s of summary) {
-      doc.setFont('helvetica', 'normal');
-      doc.setFontSize(10);
-      doc.setTextColor(...muted);
-      doc.text(s.label, margin, y);
-      doc.setFont('helvetica', 'bold');
-      doc.setFontSize(11);
-      doc.setTextColor(15, 7, 3);
-      doc.text(s.value, pageWidth - margin, y, { align: 'right' });
-      y += lineHeight;
+    // If the card won't fit on this page, push to next.
+    if (cardTop + cardH > pageHeight - 50) {
+      doc.addPage();
+      drawBrandBand();
+    }
+    const y0 = doc.lastAutoTable?.finalY === finalY ? cardTop : (56 + 32);
+
+    // Tinted card backdrop with rounded corners + accent border.
+    doc.setFillColor(tintBg[0], tintBg[1], tintBg[2]);
+    doc.setDrawColor(accent[0], accent[1], accent[2]);
+    doc.setLineWidth(1);
+    doc.roundedRect(margin, y0, pageWidth - margin * 2, cardH, 8, 8, 'FD');
+
+    // Headline row — first summary entry rendered big.
+    const headline = summary[0];
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(8);
+    doc.setTextColor(muted[0], muted[1], muted[2]);
+    doc.text(headline.label.toUpperCase(), margin + 14, y0 + 22);
+
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(20);
+    doc.setTextColor(accent[0], accent[1], accent[2]);
+    doc.text(headline.value, pageWidth - margin - 14, y0 + 36, { align: 'right' });
+
+    // Hairline separator between headline + secondary rows.
+    if (summary.length > 1) {
+      doc.setDrawColor(accent[0], accent[1], accent[2]);
+      doc.setLineWidth(0.5);
+      doc.line(margin + 14, y0 + 48, pageWidth - margin - 14, y0 + 48);
+
+      let sy = y0 + 64;
+      for (let i = 1; i < summary.length; i++) {
+        const s = summary[i];
+        doc.setFont('helvetica', 'normal');
+        doc.setFontSize(9);
+        doc.setTextColor(muted[0], muted[1], muted[2]);
+        doc.text(s.label, margin + 14, sy);
+        doc.setFont('helvetica', 'bold');
+        doc.setFontSize(10);
+        doc.setTextColor(ink[0], ink[1], ink[2]);
+        doc.text(s.value, pageWidth - margin - 14, sy, { align: 'right' });
+        sy += 18;
+      }
     }
   }
 

@@ -1,27 +1,35 @@
 /**
- * OrgChangePasswordPage - Multi-tenant password change
- * Uses useMultiTenantAuth instead of legacy useAuth
+ * OrgChangePasswordPage — invite-flow step.
+ *
+ * The first screen a new member sees after using their invite code.
+ * Forces a password reset before any other interaction; if the member
+ * doesn't have email/phone yet either, the form routes to
+ * /complete-profile after success. Same chrome as
+ * OrgCompleteProfilePage so the two pages read as a sequence.
  */
 
 import { useState } from 'react';
-import { Lock, CheckCircle, AlertCircle, Shield, Eye, EyeOff, Info } from 'lucide-react';
-import { colors, gradients } from '@/config/colors';
-import Button from '@/components/ui/CustomButton';
-import { useMultiTenantAuth } from '@/hooks/useMultiTenantAuth';
-import { useNavigate, useParams } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-import PageWrapper from '@/components/ui/PageWrapper';
+import {
+  Lock, AlertCircle, ShieldCheck, Eye, EyeOff, CheckCircle2,
+} from 'lucide-react';
+import { useNavigate, useParams } from 'react-router-dom';
+import { useMultiTenantAuth } from '@/hooks/useMultiTenantAuth';
+import { useTheme, getDashboardTokens } from '@/hooks/useTheme';
 
 const PASSWORD_RULES = [
-  { label: 'At least 8 characters', test: (p: string) => p.length >= 8 },
-  { label: 'Contains a number', test: (p: string) => /\d/.test(p) },
-  { label: 'Contains uppercase letter', test: (p: string) => /[A-Z]/.test(p) },
+  { label: 'At least 8 characters',     test: (p: string) => p.length >= 8 },
+  { label: 'Contains a number',         test: (p: string) => /\d/.test(p) },
+  { label: 'Contains an uppercase',     test: (p: string) => /[A-Z]/.test(p) },
 ];
 
 export default function OrgChangePasswordPage() {
   const { orgSlug } = useParams<{ orgSlug: string }>();
   const { user, organization, changePassword, needsPasswordChange, isProfileComplete } = useMultiTenantAuth();
   const navigate = useNavigate();
+  const { theme } = useTheme();
+  const tt = getDashboardTokens(theme);
+  const isLight = theme === 'light';
 
   const [currentPassword, setCurrentPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
@@ -33,6 +41,9 @@ export default function OrgChangePasswordPage() {
 
   const isFirstTime = needsPasswordChange;
   const basePath = `/${orgSlug}`;
+  const orgInitial = organization?.short_name?.charAt(0) || 'P';
+  const accent = organization?.primary_color || tt.primary;
+  const memberLabel = organization?.member_label || 'Member';
 
   const validate = (): boolean => {
     if (!currentPassword) { setError('Enter your current password'); return false; }
@@ -48,20 +59,18 @@ export default function OrgChangePasswordPage() {
     e.preventDefault();
     setError('');
     if (!validate()) return;
-
     setLoading(true);
     try {
       await changePassword(currentPassword, newPassword);
-
       if (!isProfileComplete) {
         navigate(`${basePath}/complete-profile`, { replace: true });
       } else {
         navigate(`${basePath}/dashboard`, { replace: true });
       }
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : 'Failed to change password';
-      if (msg.includes('incorrect')) {
-        setError('Current password is incorrect. Please try again.');
+      const msg = err instanceof Error ? err.message : 'Could not change password.';
+      if (msg.toLowerCase().includes('incorrect')) {
+        setError('Current password is incorrect. Try again.');
       } else {
         setError(msg);
       }
@@ -71,262 +80,319 @@ export default function OrgChangePasswordPage() {
   };
 
   const passedRules = PASSWORD_RULES.filter(r => r.test(newPassword));
-  const strength = newPassword.length === 0 ? 0 : Math.min(100, (passedRules.length / PASSWORD_RULES.length) * 100);
+  const strength = newPassword.length === 0 ? 0 : (passedRules.length / PASSWORD_RULES.length) * 100;
+  const strengthColor =
+    strength === 0 ? tt.cardBorder :
+    strength < 67  ? tt.amber :
+                     tt.mint;
 
   return (
-    <PageWrapper centered noPadding className="p-4 sm:p-6 lg:p-8">
+    <div
+      className="min-h-screen relative overflow-hidden flex items-center justify-center px-4 py-8"
+      style={{ background: tt.bgWash, color: tt.text }}
+    >
+      <div
+        aria-hidden
+        className="pointer-events-none absolute -top-32 -right-24 w-[520px] h-[520px] rounded-full"
+        style={{ background: tt.blob1, filter: 'blur(120px)' }}
+      />
+      <div
+        aria-hidden
+        className="pointer-events-none absolute -bottom-40 -left-32 w-[420px] h-[420px] rounded-full"
+        style={{ background: tt.blob2, filter: 'blur(110px)' }}
+      />
+
       <motion.div
-        className="relative w-full max-w-5xl grid lg:grid-cols-2 gap-10 items-center"
-        initial={{ opacity: 0, y: 20 }}
+        initial={{ opacity: 0, y: 12 }}
         animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.4 }}
+        className="relative z-10 w-full max-w-md space-y-5"
       >
-        {/* Left Side */}
-        <motion.div
-          className="hidden lg:flex flex-col space-y-8"
-          initial={{ opacity: 0, x: -40 }}
-          animate={{ opacity: 1, x: 0 }}
-          transition={{ delay: 0.2 }}
+        {/* Step indicator — this is step 1 of 2 for first-time
+            sign-ins. Returning members who change their password
+            via settings see the same component but without the
+            "Step X of Y" wording. */}
+        {isFirstTime && (
+          <div className="flex items-center justify-center gap-2">
+            <StepDot active tt={tt} />
+            <span className="text-[10px] font-bold uppercase tracking-[0.18em]" style={{ color: tt.textTer }}>
+              Step 1 of 2
+            </span>
+            <StepDot tt={tt} />
+          </div>
+        )}
+
+        {/* Org identity card */}
+        <div
+          className="rounded-2xl p-4 flex items-center gap-3"
+          style={{
+            background: tt.card,
+            border: `1px solid ${tt.cardBorder}`,
+            boxShadow: isLight
+              ? '0 10px 30px -16px rgba(15, 7, 3, 0.10)'
+              : '0 10px 30px rgba(0, 0, 0, 0.25)',
+          }}
         >
-          <div className="space-y-4">
-            <motion.div
-              className="w-16 h-16 rounded-2xl flex items-center justify-center"
-              style={{ background: gradients.primary, boxShadow: `0 0 40px ${colors.primary}60` }}
-              whileHover={{ scale: 1.05, rotate: 5 }}
+          {organization?.logo_url ? (
+            <img
+              src={organization.logo_url}
+              alt={organization.short_name}
+              className="w-11 h-11 rounded-xl object-cover shrink-0"
+              style={{ boxShadow: `0 0 0 1px ${tt.cardBorder}` }}
+            />
+          ) : (
+            <div
+              className="w-11 h-11 rounded-xl flex items-center justify-center text-base font-extrabold shrink-0"
+              style={{
+                background: `linear-gradient(135deg, ${accent} 0%, ${accent}cc 100%)`,
+                color: '#FFFFFF',
+                boxShadow: `0 6px 16px -6px ${accent}66, inset 0 1px 0 rgba(255,255,255,0.30)`,
+              }}
             >
-              <Shield size={32} className="text-white" />
-            </motion.div>
-
-            <h2 className="text-3xl sm:text-4xl font-bold leading-tight">
-              {isFirstTime ? 'Set Your' : 'Change Your'}<br />
-              <span style={{ color: colors.primary }}>Password</span>
-            </h2>
-
-            <p className="text-lg" style={{ color: colors.textSecondary }}>
-              {isFirstTime
-                ? 'For security, please set a personal password to replace the default one.'
-                : 'Keep your account secure with a strong password.'}
+              {orgInitial}
+            </div>
+          )}
+          <div className="flex-1 min-w-0">
+            <p className="text-sm font-extrabold truncate" style={{ color: tt.text }}>
+              {organization?.name || organization?.short_name}
+            </p>
+            <p className="text-[11px] font-bold uppercase tracking-wider truncate" style={{ color: tt.textTer }}>
+              {memberLabel} · {user?.member_id}
             </p>
           </div>
+        </div>
 
-          {/* Tips */}
-          <div className="space-y-3">
-            <h3 className="font-semibold text-xs uppercase tracking-wider" style={{ color: colors.textTertiary }}>
-              Security Tips
-            </h3>
-            {[
-              'Use a mix of letters, numbers & symbols',
-              'Don\'t reuse passwords from other sites',
-              'Never share your password with anyone',
-            ].map((tip, i) => (
-              <div key={i} className="flex items-center gap-3">
-                <div className="w-1.5 h-1.5 rounded-full" style={{ background: colors.accentMint }} />
-                <p className="text-sm" style={{ color: colors.textSecondary }}>{tip}</p>
-              </div>
-            ))}
-          </div>
+        {/* Hero copy */}
+        <div className="text-center space-y-1.5">
+          <h1 className="text-2xl sm:text-[28px] font-extrabold tracking-tight" style={{ color: tt.text }}>
+            {isFirstTime ? 'Set a strong password' : 'Change your password'}
+          </h1>
+          <p className="text-sm" style={{ color: tt.textSec }}>
+            {isFirstTime
+              ? 'Pick something only you would guess. Your invite code is single-use.'
+              : 'Replacing the password you currently sign in with.'}
+          </p>
+        </div>
 
-          {/* Org Badge */}
-          <div className="flex items-center gap-3 p-3 rounded-xl" style={{ background: `${colors.primary}08`, border: `1px solid ${colors.borderPrimary}` }}>
-            <div className="w-10 h-10 rounded-lg flex items-center justify-center text-white font-bold" style={{ background: organization?.primary_color || colors.primary }}>
-              {organization?.short_name?.charAt(0) || 'P'}
-            </div>
-            <div>
-              <p className="text-sm font-medium text-white">{organization?.name}</p>
-              <p className="text-xs" style={{ color: colors.textTertiary }}>{user?.full_name}</p>
-            </div>
-          </div>
-        </motion.div>
-
-        {/* Right Side - Form */}
-        <motion.div
-          className="w-full"
-          initial={{ opacity: 0, x: 40 }}
-          animate={{ opacity: 1, x: 0 }}
-          transition={{ delay: 0.3 }}
+        {/* Form card */}
+        <form
+          onSubmit={handleSubmit}
+          className="rounded-2xl p-5 space-y-4"
+          style={{
+            background: tt.card,
+            border: `1px solid ${tt.cardBorder}`,
+            boxShadow: isLight
+              ? '0 10px 30px -16px rgba(15, 7, 3, 0.10)'
+              : '0 10px 30px rgba(0, 0, 0, 0.25)',
+          }}
         >
-          {/* Mobile Header */}
-          <div className="lg:hidden text-center mb-8">
-            <motion.div
-              className="w-14 h-14 rounded-2xl flex items-center justify-center mx-auto mb-4"
-              style={{ background: gradients.primary }}
-            >
-              <Lock size={28} className="text-white" />
-            </motion.div>
-            <h1 className="text-2xl font-bold text-white">
-              {isFirstTime ? 'Set Your Password' : 'Change Password'}
-            </h1>
-            <p className="text-sm mt-1" style={{ color: colors.textSecondary }}>
-              {isFirstTime ? 'Replace the default password' : 'Update your security'}
-            </p>
-          </div>
-
-          {/* Card */}
-          <div
-            className="backdrop-blur-xl rounded-3xl p-6 sm:p-8 border"
-            style={{
-              background: 'rgba(15, 7, 3, 0.6)',
-              borderColor: `${colors.primary}30`,
-              boxShadow: `0 20px 50px -12px rgba(0,0,0,0.8), inset 0 1px 0 0 rgba(255,255,255,0.05)`,
-            }}
-          >
-            {isFirstTime && (
+          <AnimatePresence>
+            {error && (
               <motion.div
-                className="flex items-start gap-3 p-4 rounded-xl mb-6"
-                style={{ background: `${colors.warning}10`, border: `1px solid ${colors.warning}25` }}
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
+                initial={{ opacity: 0, y: -4 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -4 }}
+                className="flex items-start gap-2.5 p-3 rounded-xl"
+                style={{
+                  background: `${tt.danger}12`,
+                  border: `1px solid ${tt.danger}40`,
+                  color: tt.danger,
+                }}
               >
-                <Info size={16} style={{ color: colors.warning, marginTop: 2, flexShrink: 0 }} />
-                <p className="text-xs leading-relaxed" style={{ color: colors.warning }}>
-                  You&apos;re using a default password. Please create a personal one before continuing.
-                </p>
+                <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
+                <p className="text-xs leading-relaxed">{error}</p>
               </motion.div>
             )}
+          </AnimatePresence>
 
-            {/* Error */}
-            <AnimatePresence>
-              {error && (
-                <motion.div
-                  className="flex items-start gap-3 p-4 rounded-xl mb-6"
-                  style={{ background: `${colors.error}10`, border: `1px solid ${colors.error}30` }}
-                  initial={{ opacity: 0, scale: 0.95 }}
-                  animate={{ opacity: 1, scale: 1 }}
-                  exit={{ opacity: 0, scale: 0.95 }}
-                >
-                  <AlertCircle size={18} style={{ color: colors.error, marginTop: 1, flexShrink: 0 }} />
-                  <p className="text-sm" style={{ color: colors.error }}>{error}</p>
-                </motion.div>
-              )}
-            </AnimatePresence>
+          <PasswordField
+            tt={tt} isLight={isLight}
+            label={isFirstTime ? 'Invite code' : 'Current password'}
+            hint={isFirstTime ? 'The temporary code you were given' : undefined}
+            value={currentPassword}
+            onChange={setCurrentPassword}
+            visible={showCurrent}
+            onToggleVisible={() => setShowCurrent(v => !v)}
+            autoComplete={isFirstTime ? 'one-time-code' : 'current-password'}
+          />
 
-            <form onSubmit={handleSubmit} className="space-y-5">
-              {/* Current Password */}
-              <div>
-                <label className="block text-sm font-medium text-white mb-1.5">
-                  {isFirstTime ? 'Default Password' : 'Current Password'}
-                </label>
-                <div className="relative">
-                  <div className="absolute left-3 top-1/2 -translate-y-1/2" style={{ color: colors.textTertiary }}>
-                    <Lock size={18} />
-                  </div>
-                  <input
-                    type={showCurrent ? 'text' : 'password'}
-                    value={currentPassword}
-                    onChange={e => { setCurrentPassword(e.target.value); setError(''); }}
-                    placeholder={isFirstTime ? 'Enter the password you were given' : 'Enter current password'}
-                    className="w-full pl-10 pr-10 py-3 rounded-xl bg-white/5 border border-white/10 text-white placeholder-gray-500 outline-none focus:border-[#FF6803] transition-colors"
-                  />
-                  <button
-                    type="button"
-                    onClick={() => setShowCurrent(!showCurrent)}
-                    className="absolute right-3 top-1/2 -translate-y-1/2"
-                    style={{ color: colors.textTertiary }}
-                  >
-                    {showCurrent ? <EyeOff size={18} /> : <Eye size={18} />}
-                  </button>
-                </div>
-              </div>
+          <PasswordField
+            tt={tt} isLight={isLight}
+            label="New password"
+            value={newPassword}
+            onChange={setNewPassword}
+            visible={showNew}
+            onToggleVisible={() => setShowNew(v => !v)}
+            autoComplete="new-password"
+          />
 
-              {/* New Password */}
-              <div>
-                <label className="block text-sm font-medium text-white mb-1.5">New Password</label>
-                <div className="relative">
-                  <div className="absolute left-3 top-1/2 -translate-y-1/2" style={{ color: colors.textTertiary }}>
-                    <Lock size={18} />
-                  </div>
-                  <input
-                    type={showNew ? 'text' : 'password'}
-                    value={newPassword}
-                    onChange={e => { setNewPassword(e.target.value); setError(''); }}
-                    placeholder="Create a strong password"
-                    className="w-full pl-10 pr-10 py-3 rounded-xl bg-white/5 border border-white/10 text-white placeholder-gray-500 outline-none focus:border-[#FF6803] transition-colors"
-                  />
-                  <button
-                    type="button"
-                    onClick={() => setShowNew(!showNew)}
-                    className="absolute right-3 top-1/2 -translate-y-1/2"
-                    style={{ color: colors.textTertiary }}
-                  >
-                    {showNew ? <EyeOff size={18} /> : <Eye size={18} />}
-                  </button>
-                </div>
-
-                {/* Strength bar */}
-                {newPassword.length > 0 && (
-                  <motion.div className="mt-3 space-y-2" initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
-                    <div className="h-1.5 rounded-full bg-white/10 overflow-hidden">
-                      <motion.div
-                        className="h-full rounded-full"
-                        style={{
-                          background: strength < 50 ? colors.error : strength < 80 ? colors.warning : colors.success,
-                        }}
-                        initial={{ width: 0 }}
-                        animate={{ width: `${strength}%` }}
-                        transition={{ duration: 0.3 }}
-                      />
-                    </div>
-                    <div className="space-y-1">
-                      {PASSWORD_RULES.map((rule, i) => (
-                        <div key={i} className="flex items-center gap-2">
-                          <CheckCircle
-                            size={12}
-                            style={{ color: rule.test(newPassword) ? colors.success : colors.textDisabled }}
-                          />
-                          <span className="text-xs" style={{ color: rule.test(newPassword) ? colors.success : colors.textDisabled }}>
-                            {rule.label}
-                          </span>
-                        </div>
-                      ))}
-                    </div>
-                  </motion.div>
-                )}
-              </div>
-
-              {/* Confirm */}
-              <div>
-                <label className="block text-sm font-medium text-white mb-1.5">Confirm Password</label>
-                <div className="relative">
-                  <div className="absolute left-3 top-1/2 -translate-y-1/2" style={{ color: colors.textTertiary }}>
-                    <Lock size={18} />
-                  </div>
-                  <input
-                    type="password"
-                    value={confirmPassword}
-                    onChange={e => { setConfirmPassword(e.target.value); setError(''); }}
-                    placeholder="Repeat your new password"
-                    className="w-full pl-10 pr-4 py-3 rounded-xl bg-white/5 border border-white/10 text-white placeholder-gray-500 outline-none focus:border-[#FF6803] transition-colors"
-                  />
-                  {confirmPassword && (
-                    <div className="absolute right-3 top-1/2 -translate-y-1/2">
-                      {newPassword === confirmPassword ? (
-                        <CheckCircle size={18} style={{ color: colors.success }} />
-                      ) : (
-                        <AlertCircle size={18} style={{ color: colors.error }} />
-                      )}
-                    </div>
-                  )}
-                </div>
-              </div>
-
-              <Button
-                type="submit"
-                variant="primary"
-                fullWidth
-                loading={loading}
-                disabled={loading}
-                className="py-4 text-base font-semibold mt-4"
+          {/* Strength bar + rule checklist — gives the user a
+              visible confidence cue as they type. The bar colour
+              matches the rule-pass state so green = all rules met. */}
+          {newPassword && (
+            <div className="space-y-2">
+              <div
+                className="h-1.5 rounded-full overflow-hidden"
+                style={{ background: isLight ? 'rgba(15,7,3,0.06)' : 'rgba(255,255,255,0.06)' }}
               >
-                {loading ? 'Updating...' : (
-                  <span className="flex items-center justify-center gap-2">
-                    <Shield size={18} />
-                    {isFirstTime ? 'Set Password & Continue' : 'Update Password'}
-                  </span>
-                )}
-              </Button>
-            </form>
+                <motion.div
+                  className="h-full rounded-full"
+                  animate={{ width: `${strength}%`, backgroundColor: strengthColor }}
+                  transition={{ duration: 0.25 }}
+                />
+              </div>
+              <ul className="space-y-1">
+                {PASSWORD_RULES.map((rule) => {
+                  const passed = rule.test(newPassword);
+                  return (
+                    <li key={rule.label} className="flex items-center gap-2 text-[11px]">
+                      <span
+                        className="w-3.5 h-3.5 rounded-full flex items-center justify-center"
+                        style={{
+                          background: passed ? `${tt.mint}25` : (isLight ? 'rgba(15,7,3,0.06)' : 'rgba(255,255,255,0.06)'),
+                          color: passed ? tt.mint : tt.textTer,
+                        }}
+                      >
+                        {passed ? <CheckCircle2 className="w-2.5 h-2.5" /> : <span className="w-1 h-1 rounded-full" style={{ background: tt.textTer }} />}
+                      </span>
+                      <span style={{ color: passed ? tt.text : tt.textTer }}>{rule.label}</span>
+                    </li>
+                  );
+                })}
+              </ul>
+            </div>
+          )}
+
+          <PasswordField
+            tt={tt} isLight={isLight}
+            label="Confirm new password"
+            value={confirmPassword}
+            onChange={setConfirmPassword}
+            visible={showNew}
+            onToggleVisible={() => setShowNew(v => !v)}
+            autoComplete="new-password"
+            mismatch={Boolean(confirmPassword) && confirmPassword !== newPassword}
+          />
+
+          {/* Reassurance */}
+          <div
+            className="flex items-start gap-2 px-3 py-2.5 rounded-xl"
+            style={{
+              background: `${tt.mint}14`,
+              border: `1px solid ${tt.mint}30`,
+            }}
+          >
+            <ShieldCheck className="w-4 h-4 shrink-0 mt-0.5" style={{ color: tt.mint }} />
+            <p className="text-[11px] leading-relaxed" style={{ color: tt.text }}>
+              <span className="font-bold">End-to-end encrypted.</span>{' '}
+              Even {organization?.short_name || 'your organisation'} admins can't read your password.
+            </p>
           </div>
-        </motion.div>
+
+          <button
+            type="submit"
+            disabled={loading}
+            className="w-full inline-flex items-center justify-center gap-2 px-4 py-3 rounded-xl text-sm font-extrabold transition-all hover:-translate-y-0.5 active:scale-[0.98] disabled:opacity-60 disabled:cursor-not-allowed"
+            style={{
+              background: tt.primary,
+              color: '#FFFFFF',
+              border: `1px solid ${tt.primary}`,
+              boxShadow: `0 8px 22px -10px ${tt.primary}`,
+            }}
+          >
+            {loading ? 'Saving…' : (isFirstTime ? 'Continue' : 'Change password')}
+          </button>
+        </form>
       </motion.div>
-    </PageWrapper>
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────
+// Helpers
+// ─────────────────────────────────────────────────────────────────
+
+function StepDot({
+  active, complete, tt,
+}: { active?: boolean; complete?: boolean; tt: ReturnType<typeof getDashboardTokens> }) {
+  if (complete) {
+    return (
+      <span
+        className="w-5 h-5 rounded-full flex items-center justify-center"
+        style={{ background: tt.mint, color: '#0F0703' }}
+      >
+        <CheckCircle2 className="w-3 h-3" />
+      </span>
+    );
+  }
+  return (
+    <span
+      className="w-2 h-2 rounded-full"
+      style={{
+        background: active ? tt.primary : tt.cardBorder,
+        boxShadow: active ? `0 0 10px ${tt.primary}` : 'none',
+      }}
+    />
+  );
+}
+
+function PasswordField({
+  label, hint, value, onChange, visible, onToggleVisible,
+  autoComplete, mismatch, tt, isLight,
+}: {
+  label: string;
+  hint?: string;
+  value: string;
+  onChange: (v: string) => void;
+  visible: boolean;
+  onToggleVisible: () => void;
+  autoComplete?: string;
+  mismatch?: boolean;
+  tt: ReturnType<typeof getDashboardTokens>;
+  isLight: boolean;
+}) {
+  return (
+    <div className="space-y-1.5">
+      <div className="flex items-center justify-between">
+        <label className="text-[11px] font-bold uppercase tracking-wider" style={{ color: tt.textTer }}>
+          {label}
+        </label>
+        {mismatch ? (
+          <span className="text-[11px] font-semibold" style={{ color: tt.danger }}>
+            Doesn't match
+          </span>
+        ) : hint ? (
+          <span className="text-[11px]" style={{ color: tt.textTer }}>
+            {hint}
+          </span>
+        ) : null}
+      </div>
+      <div
+        className="flex items-center gap-2.5 px-3 py-2.5 rounded-xl transition-colors"
+        style={{
+          background: isLight ? 'rgba(15,7,3,0.03)' : 'rgba(255,255,255,0.04)',
+          border: `1px solid ${mismatch ? tt.danger + '60' : tt.cardBorder}`,
+        }}
+      >
+        <Lock className="w-4 h-4 shrink-0" style={{ color: tt.textTer }} />
+        <input
+          type={visible ? 'text' : 'password'}
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          autoComplete={autoComplete}
+          className="flex-1 bg-transparent outline-none text-sm font-medium"
+          style={{ color: tt.text }}
+        />
+        <button
+          type="button"
+          onClick={onToggleVisible}
+          aria-label={visible ? 'Hide password' : 'Show password'}
+          className="w-7 h-7 rounded-lg flex items-center justify-center transition-colors"
+          style={{ color: tt.textTer }}
+        >
+          {visible ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+        </button>
+      </div>
+    </div>
   );
 }

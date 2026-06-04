@@ -261,17 +261,24 @@ export default function AuditPage() {
     // from the union of its children — done at render time so a
     // single payment isn't double-counted in the aggregate map.
     for (const p of payments) {
+      // Audit is for CONFIRMED money only. Pending payments aren't
+      // money yet — they're a queue waiting for an exec to look at
+      // (which is what /admin/review is for). Counting them here
+      // misled admins into thinking "we've collected X" when the
+      // actual figure was much smaller. Skip pending entirely.
+      // Waivers are excluded the same way they were before — they
+      // approve the row without bringing in real money.
+      if (p.status !== 'approved') continue;
+      if ((p.transaction_ref as string)?.startsWith('WAIVED-')) continue;
+
       // If payment has no group_id (org-wide due), try to attribute it
       // to the paying member's group so it shows in the tree.
       const groupKey = p.group_id as string | null;
       if (!groupKey) continue;
       const a = map.get(groupKey);
       if (!a) continue;
-      if (p.status === 'pending') a.pendingCount++;
-      if (p.status === 'approved' && !(p.transaction_ref as string)?.startsWith('WAIVED-')) {
-        a.paidCount++;
-        a.paidTotal += Number(p.amount || 0);
-      }
+      a.paidCount++;
+      a.paidTotal += Number(p.amount || 0);
     }
     return map;
   }, [groups, payments]);
@@ -344,20 +351,27 @@ return groups.filter(g => g.id === own.id);
   // parse. Filename includes the scope name + today's date so multiple
   // downloads don't overwrite each other in the user's downloads dir.
   const exportCsv = useCallback((rows: PaymentRow[], scopeLabel: string) => {
-    if (rows.length === 0) return;
+    // Audit exports = confirmed money only. Pending rows belong on
+    // /admin/review (the queue); waiver rows we drop too because
+    // they don't represent real money in. This filter matches the
+    // PDF + the on-screen rollup so all three reads tell the same
+    // story.
+    const auditRows = rows.filter(
+      p => p.status === 'approved' && !p.transaction_ref?.startsWith('WAIVED-'),
+    );
+    if (auditRows.length === 0) return;
     const groupNameById = new Map(groups.map(g => [g.id, g.name]));
     const escape = (v: unknown): string => {
       const s = v == null ? '' : String(v);
       return `"${s.replace(/"/g, '""')}"`;
     };
-    const header = ['Member name', 'Member ID', 'Group', 'Payment type', 'Amount', 'Status', 'Approved at', 'Transaction ref'];
-    const body = rows.map((p) => [
+    const header = ['Member name', 'Member ID', 'Group', 'Payment type', 'Amount', 'Approved at', 'Transaction ref'];
+    const body = auditRows.map((p) => [
       escape(firstOf(p.member)?.full_name || ''),
       escape(firstOf(p.member)?.member_id || ''),
       escape(p.group_id ? (groupNameById.get(p.group_id) || '') : ''),
       escape(firstOf(p.payment_type)?.title || ''),
       escape(p.amount || 0),
-      escape(p.status),
       escape(p.approved_at ? new Date(p.approved_at).toISOString().slice(0, 10) : ''),
       escape(p.transaction_ref || ''),
     ].join(','));
@@ -371,7 +385,7 @@ return groups.filter(g => g.id === own.id);
     const date = new Date().toISOString().slice(0, 10);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `payments-${safeScope}-${date}.csv`;
+    a.download = `audit-${safeScope}-${date}.csv`;
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
@@ -394,11 +408,17 @@ return groups.filter(g => g.id === own.id);
     const groupNameById = new Map(groups.map(g => [g.id, g.name]));
     const currency = organization.currency_symbol || '₦';
     const fmtAmount = (n: number) => `${currency}${n.toLocaleString('en-NG')}`;
-    const totalApproved = rows
-      .filter(p => p.status === 'approved' && !p.transaction_ref?.startsWith('WAIVED-'))
-      .reduce((s, p) => s + Number(p.amount || 0), 0);
-    const approvedCount = rows.filter(p => p.status === 'approved').length;
-    const pendingCount = rows.filter(p => p.status === 'pending').length;
+    // Audit PDF mirrors the on-screen filter: confirmed money only.
+    // Pending rows are excluded both from the table and the summary
+    // — they belong on /admin/review, not in an archive document.
+    const auditRows = rows.filter(
+      p => p.status === 'approved' && !p.transaction_ref?.startsWith('WAIVED-'),
+    );
+    const totalApproved = auditRows.reduce((s, p) => s + Number(p.amount || 0), 0);
+    const approvedCount = auditRows.length;
+    const waivedCount = rows.filter(
+      p => p.status === 'approved' && p.transaction_ref?.startsWith('WAIVED-'),
+    ).length;
 
     const date = new Date().toLocaleDateString('en-NG', {
       year: 'numeric', month: 'short', day: 'numeric',
@@ -438,14 +458,13 @@ return groups.filter(g => g.id === own.id);
           format: (v) => v ? new Date(String(v)).toISOString().slice(0, 10) : '—'
         },
       ],
-      rows,
+      rows: auditRows,
       summary: [
-        { label: 'Total payments listed', value: String(rows.length) },
-        { label: 'Approved', value: `${approvedCount} of ${rows.length}` },
-        { label: 'Pending', value: String(pendingCount) },
+        { label: 'Confirmed payments', value: String(approvedCount) },
+        ...(waivedCount > 0 ? [{ label: 'Waived (not collected)', value: String(waivedCount) }] : []),
         { label: 'Total collected', value: fmtAmount(totalApproved) },
       ],
-      filenameSlug: `payments-${scopeLabel.replace(/[^a-z0-9_-]+/gi, '-').toLowerCase()}`,
+      filenameSlug: `audit-${scopeLabel.replace(/[^a-z0-9_-]+/gi, '-').toLowerCase()}`,
     });
   }, [groups, organization]);
 
@@ -870,15 +889,9 @@ function AuditTreeNode({
                 <Receipt className="w-2.5 h-2.5" />
                 {totals.paidCount} paid
               </span>
-              {totals.pending > 0 && (
-                <span
-                  className="inline-flex items-center gap-1 text-[10px] font-bold uppercase tracking-wider"
-                  style={{ color: tt.amber }}
-                >
-                  <AlertCircle className="w-2.5 h-2.5" />
-                  {totals.pending} pending
-                </span>
-              )}
+              {/* Pending count chip removed — audit is for confirmed
+                  money only. Pending rows belong on /admin/review
+                  where the exec can actually approve or reject them. */}
             </div>
           </div>
 

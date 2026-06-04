@@ -1,66 +1,71 @@
 /**
- * OrgCompleteProfilePage - Multi-tenant profile completion
- * Uses useMultiTenantAuth instead of legacy useAuth
+ * OrgCompleteProfilePage — invite-flow step.
+ *
+ * The page the new member sees right after their first sign-in
+ * (force_password_change cleared on the previous screen). Asks
+ * for email + phone so receipts, reminders, and dues notifications
+ * have somewhere to land. Theme-aware, soft brand-blob backdrop,
+ * stacked layout that reads identically on phone and desktop.
+ *
+ * Sister page: OrgChangePasswordPage — same chrome, same step
+ * indicator, different field set. Together they form the
+ * "set up your account" sequence after accepting an invite.
  */
 
 import { useState } from 'react';
-import { User, Mail, Phone, AlertCircle, UserCheck, Info, CheckCircle } from 'lucide-react';
-import { colors, gradients } from '@/config/colors';
-import Input from '@/components/ui/Input';
-import Button from '@/components/ui/CustomButton';
-import { useMultiTenantAuth } from '@/hooks/useMultiTenantAuth';
-import { useNavigate, useParams } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-import PageWrapper from '@/components/ui/PageWrapper';
+import {
+  Mail, Phone, AlertCircle, CheckCircle2, ShieldCheck,
+} from 'lucide-react';
+import { useNavigate, useParams } from 'react-router-dom';
+import { useMultiTenantAuth } from '@/hooks/useMultiTenantAuth';
+import { useTheme, getDashboardTokens } from '@/hooks/useTheme';
 
 export default function OrgCompleteProfilePage() {
   const { orgSlug } = useParams<{ orgSlug: string }>();
   const { user, organization, updateProfile } = useMultiTenantAuth();
   const navigate = useNavigate();
+  const { theme } = useTheme();
+  const tt = getDashboardTokens(theme);
+  const isLight = theme === 'light';
 
   const [formData, setFormData] = useState({
     email: user?.email || '',
     phone: user?.phone || '',
   });
-
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
   const memberLabel = organization?.member_label || 'Member';
+  const orgInitial = organization?.short_name?.charAt(0) || 'P';
+  const accent = organization?.primary_color || tt.primary;
 
   const handleChange = (field: string, value: string) => {
     setFormData(prev => ({ ...prev, [field]: value }));
-    if (errors[field]) {
-      setErrors(prev => ({ ...prev, [field]: '' }));
-    }
+    if (errors[field]) setErrors(prev => ({ ...prev, [field]: '' }));
   };
 
   const validate = (): boolean => {
-    const newErrors: Record<string, string> = {};
-
+    const next: Record<string, string> = {};
     if (!formData.email.trim()) {
-      newErrors.email = 'Email is required';
+      next.email = 'Email is required';
     } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.email)) {
-      newErrors.email = 'Please enter a valid email address';
+      next.email = 'That doesn\'t look like a valid email';
     }
-
     if (!formData.phone.trim()) {
-      newErrors.phone = 'Phone number is required';
+      next.phone = 'Phone number is required';
     } else if (formData.phone.replace(/\D/g, '').length < 10) {
-      newErrors.phone = 'Please enter a valid phone number';
+      next.phone = 'Phone number is too short';
     }
-
-    setErrors(newErrors);
-    return Object.keys(newErrors).length === 0;
+    setErrors(next);
+    return Object.keys(next).length === 0;
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
-
     if (!validate()) return;
-
     setLoading(true);
     try {
       await updateProfile({
@@ -69,232 +74,279 @@ export default function OrgCompleteProfilePage() {
       });
       navigate(`/${orgSlug}/dashboard`, { replace: true });
     } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : 'Failed to update profile. Please try again.');
+      setError(err instanceof Error ? err.message : 'Could not save. Please try again.');
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <PageWrapper centered noPadding className="p-4 sm:p-6 lg:p-8">
+    <div
+      className="min-h-screen relative overflow-hidden flex items-center justify-center px-4 py-8"
+      style={{ background: tt.bgWash, color: tt.text }}
+    >
+      {/* Soft brand blobs — same chrome as the exec dashboards so
+          the invite-onboarding sequence feels like part of the app,
+          not a stranded login form. */}
+      <div
+        aria-hidden
+        className="pointer-events-none absolute -top-32 -right-24 w-[520px] h-[520px] rounded-full"
+        style={{ background: tt.blob1, filter: 'blur(120px)' }}
+      />
+      <div
+        aria-hidden
+        className="pointer-events-none absolute -bottom-40 -left-32 w-[420px] h-[420px] rounded-full"
+        style={{ background: tt.blob2, filter: 'blur(110px)' }}
+      />
+
       <motion.div
-        className="relative w-full max-w-5xl grid lg:grid-cols-2 gap-10 items-center"
-        initial={{ opacity: 0, y: 20 }}
+        initial={{ opacity: 0, y: 12 }}
         animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.6 }}
+        transition={{ duration: 0.4 }}
+        className="relative z-10 w-full max-w-md space-y-5"
       >
-        {/* Left Side - Illustration */}
-        <motion.div
-          className="hidden lg:flex flex-col space-y-8"
-          initial={{ opacity: 0, x: -40 }}
-          animate={{ opacity: 1, x: 0 }}
-          transition={{ delay: 0.2, duration: 0.6 }}
+        {/* Step indicator — places this in the "set up" sequence so
+            the user understands what's left. They've just cleared
+            password (step 1); this is step 2. */}
+        <div className="flex items-center justify-center gap-2">
+          <StepDot complete tt={tt} />
+          <span className="text-[10px] font-bold uppercase tracking-[0.18em]" style={{ color: tt.textTer }}>
+            Step 2 of 2
+          </span>
+          <StepDot active tt={tt} />
+        </div>
+
+        {/* Org identity card — the "you've landed at the right
+            organisation" reassurance. Member ID + role chip up top
+            so the user can verify before they type anything. */}
+        <div
+          className="rounded-2xl p-4 flex items-center gap-3"
+          style={{
+            background: tt.card,
+            border: `1px solid ${tt.cardBorder}`,
+            boxShadow: isLight
+              ? '0 10px 30px -16px rgba(15, 7, 3, 0.10)'
+              : '0 10px 30px rgba(0, 0, 0, 0.25)',
+          }}
         >
-          <div className="space-y-4">
-            <motion.div
-              className="w-16 h-16 rounded-2xl flex items-center justify-center"
-              style={{ background: gradients.primary, boxShadow: `0 0 40px ${colors.primary}60` }}
-              whileHover={{ scale: 1.05, rotate: 5 }}
+          {organization?.logo_url ? (
+            <img
+              src={organization.logo_url}
+              alt={organization.short_name}
+              className="w-11 h-11 rounded-xl object-cover shrink-0"
+              style={{ boxShadow: `0 0 0 1px ${tt.cardBorder}` }}
+            />
+          ) : (
+            <div
+              className="w-11 h-11 rounded-xl flex items-center justify-center text-base font-extrabold shrink-0"
+              style={{
+                background: `linear-gradient(135deg, ${accent} 0%, ${accent}cc 100%)`,
+                color: '#FFFFFF',
+                boxShadow: `0 6px 16px -6px ${accent}66, inset 0 1px 0 rgba(255,255,255,0.30)`,
+              }}
             >
-              <UserCheck size={32} className="text-white" />
-            </motion.div>
+              {orgInitial}
+            </div>
+          )}
+          <div className="flex-1 min-w-0">
+            <p className="text-sm font-extrabold truncate" style={{ color: tt.text }}>
+              {organization?.name || organization?.short_name}
+            </p>
+            <p className="text-[11px] font-bold uppercase tracking-wider truncate" style={{ color: tt.textTer }}>
+              {memberLabel} · {user?.member_id}
+            </p>
+          </div>
+        </div>
 
-            <h2 className="text-3xl sm:text-4xl font-bold leading-tight">
-              Complete Your<br />
-              <span style={{ color: colors.primary }}>Profile</span>
-            </h2>
+        {/* Hero copy */}
+        <div className="text-center space-y-1.5">
+          <h1 className="text-2xl sm:text-[28px] font-extrabold tracking-tight" style={{ color: tt.text }}>
+            Welcome, {user?.full_name?.split(' ')[0] || 'there'}
+          </h1>
+          <p className="text-sm" style={{ color: tt.textSec }}>
+            One last step — how should we reach you?
+          </p>
+        </div>
 
-            <p className="text-lg" style={{ color: colors.textSecondary }}>
-              Just a few more details so {organization?.short_name || 'your organization'} can keep you updated.
+        {/* Form card */}
+        <form
+          onSubmit={handleSubmit}
+          className="rounded-2xl p-5 space-y-4"
+          style={{
+            background: tt.card,
+            border: `1px solid ${tt.cardBorder}`,
+            boxShadow: isLight
+              ? '0 10px 30px -16px rgba(15, 7, 3, 0.10)'
+              : '0 10px 30px rgba(0, 0, 0, 0.25)',
+          }}
+        >
+          <AnimatePresence>
+            {error && (
+              <motion.div
+                initial={{ opacity: 0, y: -4 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -4 }}
+                className="flex items-start gap-2.5 p-3 rounded-xl"
+                style={{
+                  background: `${tt.danger}12`,
+                  border: `1px solid ${tt.danger}40`,
+                  color: tt.danger,
+                }}
+              >
+                <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
+                <p className="text-xs leading-relaxed">{error}</p>
+              </motion.div>
+            )}
+          </AnimatePresence>
+
+          <FieldRow
+            tt={tt}
+            isLight={isLight}
+            icon={<Mail className="w-4 h-4" />}
+            label="Email address"
+            hint="Where receipts and reminders land."
+            error={errors.email}
+          >
+            <input
+              type="email"
+              autoComplete="email"
+              value={formData.email}
+              onChange={(e) => handleChange('email', e.target.value)}
+              placeholder="your.email@example.com"
+              className="w-full bg-transparent outline-none text-sm font-medium"
+              style={{ color: tt.text }}
+            />
+          </FieldRow>
+
+          <FieldRow
+            tt={tt}
+            isLight={isLight}
+            icon={<Phone className="w-4 h-4" />}
+            label="Phone number"
+            hint="For SMS reminders + emergency updates."
+            error={errors.phone}
+          >
+            <input
+              type="tel"
+              inputMode="tel"
+              autoComplete="tel"
+              value={formData.phone}
+              onChange={(e) => handleChange('phone', e.target.value)}
+              placeholder="08012345678"
+              className="w-full bg-transparent outline-none text-sm font-medium"
+              style={{ color: tt.text }}
+            />
+          </FieldRow>
+
+          {/* Privacy reassurance — sits below the inputs so it's the
+              last thing they read before tapping continue. */}
+          <div
+            className="flex items-start gap-2 px-3 py-2.5 rounded-xl"
+            style={{
+              background: `${tt.mint}14`,
+              border: `1px solid ${tt.mint}30`,
+            }}
+          >
+            <ShieldCheck className="w-4 h-4 shrink-0 mt-0.5" style={{ color: tt.mint }} />
+            <p className="text-[11px] leading-relaxed" style={{ color: tt.text }}>
+              <span className="font-bold">Private to {organization?.short_name || 'your org'}.</span>{' '}
+              Only verified admins in this organisation see your contact details.
             </p>
           </div>
 
-          <div className="space-y-4">
-            <h3 className="font-semibold text-xs uppercase tracking-wider" style={{ color: colors.textTertiary }}>
-              Why we need this
-            </h3>
-            {[
-              { icon: <Mail size={16} />, label: 'Email', desc: 'Payment receipts & important notices' },
-              { icon: <Phone size={16} />, label: 'Phone', desc: 'Emergency updates & reminders' },
-            ].map((item, i) => (
-              <motion.div
-                key={item.label}
-                className="flex items-center gap-4 p-3 rounded-xl"
-                style={{ background: 'rgba(255,255,255,0.03)', border: `1px solid ${colors.borderLight}` }}
-                initial={{ opacity: 0, x: -20 }}
-                animate={{ opacity: 1, x: 0 }}
-                transition={{ delay: 0.5 + i * 0.1 }}
-              >
-                <div className="w-8 h-8 rounded-lg flex items-center justify-center" style={{ background: `${colors.primary}15`, color: colors.primary }}>
-                  {item.icon}
-                </div>
-                <div>
-                  <p className="font-medium text-sm text-white">{item.label}</p>
-                  <p className="text-xs" style={{ color: colors.textTertiary }}>{item.desc}</p>
-                </div>
-              </motion.div>
-            ))}
-          </div>
-
-          {/* Org badge */}
-          <div className="flex items-center gap-3 p-3 rounded-xl" style={{ background: `${colors.primary}08`, border: `1px solid ${colors.borderPrimary}` }}>
-            <div className="w-10 h-10 rounded-lg flex items-center justify-center text-white font-bold" style={{ background: organization?.primary_color || colors.primary }}>
-              {organization?.short_name?.charAt(0) || 'P'}
-            </div>
-            <div>
-              <p className="text-sm font-medium text-white">{organization?.name}</p>
-              <p className="text-xs" style={{ color: colors.textTertiary }}>{memberLabel} Profile Setup</p>
-            </div>
-          </div>
-        </motion.div>
-
-        {/* Right Side - Form */}
-        <motion.div
-          className="w-full"
-          initial={{ opacity: 0, x: 40 }}
-          animate={{ opacity: 1, x: 0 }}
-          transition={{ delay: 0.3, duration: 0.6 }}
-        >
-          {/* Mobile Header */}
-          <div className="lg:hidden text-center mb-8">
-            <motion.div
-              className="w-16 h-16 rounded-2xl flex items-center justify-center mx-auto mb-4"
-              style={{ background: gradients.primary, boxShadow: `0 0 40px ${colors.primary}60` }}
-            >
-              <User size={32} className="text-white" />
-            </motion.div>
-            <h1 className="text-2xl font-bold text-white">Complete Profile</h1>
-            <p className="text-sm mt-1" style={{ color: colors.textSecondary }}>Just a few more details</p>
-          </div>
-
-          {/* Card */}
-          <div
-            className="backdrop-blur-xl rounded-3xl p-6 sm:p-8 border"
+          <button
+            type="submit"
+            disabled={loading}
+            className="w-full inline-flex items-center justify-center gap-2 px-4 py-3 rounded-xl text-sm font-extrabold transition-all hover:-translate-y-0.5 active:scale-[0.98] disabled:opacity-60 disabled:cursor-not-allowed"
             style={{
-              background: 'rgba(15, 7, 3, 0.6)',
-              borderColor: `${colors.primary}30`,
-              boxShadow: `0 20px 50px -12px rgba(0,0,0,0.8), inset 0 1px 0 0 rgba(255,255,255,0.05)`,
+              background: tt.primary,
+              color: '#FFFFFF',
+              border: `1px solid ${tt.primary}`,
+              boxShadow: `0 8px 22px -10px ${tt.primary}`,
             }}
           >
-            {/* Greeting */}
-            <div className="mb-6">
-              <h2 className="text-xl font-bold text-white">
-                Welcome, {user?.full_name?.split(' ')[0]} 👋
-              </h2>
-              <p className="text-sm mt-1" style={{ color: colors.textTertiary }}>
-                Complete your profile to access all features
-              </p>
-            </div>
-
-            {/* Info Banner */}
-            <motion.div
-              className="flex items-start gap-3 p-4 rounded-xl mb-6"
-              style={{ background: `${colors.accentMint}08`, border: `1px solid ${colors.accentMint}20` }}
-              initial={{ opacity: 0, y: -10 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 0.4 }}
-            >
-              <Info size={16} style={{ color: colors.accentMint, marginTop: 2, flexShrink: 0 }} />
-              <p className="text-xs leading-relaxed" style={{ color: colors.accentMint }}>
-                This information is used only for {organization?.short_name || 'organization'} communications and payment verification.
-              </p>
-            </motion.div>
-
-            {/* Error */}
-            <AnimatePresence>
-              {error && (
-                <motion.div
-                  className="flex items-start gap-3 p-4 rounded-xl mb-6"
-                  style={{ background: `${colors.error}10`, border: `1px solid ${colors.error}30` }}
-                  initial={{ opacity: 0, scale: 0.95 }}
-                  animate={{ opacity: 1, scale: 1 }}
-                  exit={{ opacity: 0, scale: 0.95 }}
-                >
-                  <AlertCircle size={18} style={{ color: colors.error, marginTop: 1, flexShrink: 0 }} />
-                  <p className="text-sm" style={{ color: colors.error }}>{error}</p>
-                </motion.div>
-              )}
-            </AnimatePresence>
-
-            {/* Form */}
-            <form onSubmit={handleSubmit} className="space-y-5">
-              <motion.div initial={{ opacity: 0, y: 15 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.5 }}>
-                <Input
-                  label="Email Address"
-                  type="email"
-                  value={formData.email}
-                  onChange={(e) => handleChange('email', e.target.value)}
-                  placeholder="your.email@example.com"
-                  required
-                  icon={<Mail size={18} />}
-                  fullWidth
-                  error={errors.email}
-                />
-              </motion.div>
-
-              <motion.div initial={{ opacity: 0, y: 15 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.6 }}>
-                <Input
-                  label="Phone Number"
-                  type="tel"
-                  value={formData.phone}
-                  onChange={(e) => handleChange('phone', e.target.value)}
-                  placeholder="08012345678"
-                  required
-                  icon={<Phone size={18} />}
-                  fullWidth
-                  error={errors.phone}
-                />
-              </motion.div>
-
-              {/* Already filled info */}
-              <motion.div
-                className="p-4 rounded-xl space-y-2"
-                style={{ background: 'rgba(255,255,255,0.03)', border: `1px solid ${colors.borderLight}` }}
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                transition={{ delay: 0.7 }}
-              >
-                <p className="text-xs font-medium uppercase tracking-wider" style={{ color: colors.textTertiary }}>Your Info</p>
-                <div className="grid grid-cols-2 gap-2 text-sm">
-                  <div>
-                    <span style={{ color: colors.textTertiary }}>Name:</span>
-                    <span className="ml-2 text-white">{user?.full_name}</span>
-                  </div>
-                  <div>
-                    <span style={{ color: colors.textTertiary }}>ID:</span>
-                    <span className="ml-2 text-white">{user?.member_id}</span>
-                  </div>
-                </div>
-              </motion.div>
-
-              <motion.div initial={{ opacity: 0, y: 15 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.8 }}>
-                <Button
-                  type="submit"
-                  variant="primary"
-                  fullWidth
-                  loading={loading}
-                  disabled={loading}
-                  className="py-4 text-base font-semibold mt-4"
-                >
-                  {loading ? 'Saving...' : (
-                    <span className="flex items-center justify-center gap-2">
-                      <CheckCircle size={18} />
-                      Continue to Dashboard
-                    </span>
-                  )}
-                </Button>
-              </motion.div>
-            </form>
-
-            {/* Privacy */}
-            <div className="mt-6 p-3 rounded-xl" style={{ background: 'rgba(255,255,255,0.02)' }}>
-              <p className="text-xs leading-relaxed" style={{ color: colors.textDisabled }}>
-                <strong>Privacy:</strong> Your data is encrypted and only visible to {organization?.short_name || 'your organization'} administrators.
-              </p>
-            </div>
-          </div>
-        </motion.div>
+            {loading ? (
+              'Saving…'
+            ) : (
+              <>
+                <CheckCircle2 className="w-4 h-4" />
+                Continue to dashboard
+              </>
+            )}
+          </button>
+        </form>
       </motion.div>
-    </PageWrapper>
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────
+// Helpers
+// ─────────────────────────────────────────────────────────────────
+
+function StepDot({
+  active, complete, tt,
+}: { active?: boolean; complete?: boolean; tt: ReturnType<typeof getDashboardTokens> }) {
+  if (complete) {
+    return (
+      <span
+        className="w-5 h-5 rounded-full flex items-center justify-center"
+        style={{ background: tt.mint, color: '#0F0703' }}
+        aria-label="step complete"
+      >
+        <CheckCircle2 className="w-3 h-3" />
+      </span>
+    );
+  }
+  return (
+    <span
+      className="w-2 h-2 rounded-full"
+      style={{
+        background: active ? tt.primary : tt.cardBorder,
+        boxShadow: active ? `0 0 10px ${tt.primary}` : 'none',
+      }}
+      aria-label={active ? 'current step' : 'pending step'}
+    />
+  );
+}
+
+function FieldRow({
+  icon, label, hint, error, children, tt, isLight,
+}: {
+  icon: React.ReactNode;
+  label: string;
+  hint?: string;
+  error?: string;
+  children: React.ReactNode;
+  tt: ReturnType<typeof getDashboardTokens>;
+  isLight: boolean;
+}) {
+  return (
+    <div className="space-y-1.5">
+      <div className="flex items-center justify-between">
+        <label className="text-[11px] font-bold uppercase tracking-wider" style={{ color: tt.textTer }}>
+          {label}
+        </label>
+        {error ? (
+          <span className="text-[11px] font-semibold" style={{ color: tt.danger }}>
+            {error}
+          </span>
+        ) : hint ? (
+          <span className="text-[11px]" style={{ color: tt.textTer }}>
+            {hint}
+          </span>
+        ) : null}
+      </div>
+      <div
+        className="flex items-center gap-2.5 px-3 py-2.5 rounded-xl transition-colors"
+        style={{
+          background: isLight ? 'rgba(15,7,3,0.03)' : 'rgba(255,255,255,0.04)',
+          border: `1px solid ${error ? tt.danger + '60' : tt.cardBorder}`,
+        }}
+      >
+        <span className="shrink-0" style={{ color: tt.textTer }}>{icon}</span>
+        {children}
+      </div>
+    </div>
   );
 }

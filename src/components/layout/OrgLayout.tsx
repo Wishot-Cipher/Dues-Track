@@ -596,7 +596,7 @@ export default function OrgLayout() {
                   fits on a 320px viewport. */}
               {(group?.short_name || group?.name || parentName) && (
                 <p
-                  className="text-[10.5px] font-bold uppercase tracking-wider leading-tight truncate mt-0.5 max-[399px]:hidden"
+                  className="text-[10.5px] font-bold uppercase tracking-wider leading-tight truncate mt-0.5"
                   style={{ color: tk.textTer }}
                 >
                   {parentName ? `${parentName} · ` : ''}{group?.short_name || group?.name}
