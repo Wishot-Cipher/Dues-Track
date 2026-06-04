@@ -1,4 +1,5 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+import { lazy, Suspense } from 'react';
 import { MultiTenantAuthProvider } from '@/hooks/useMultiTenantAuth';
 import { AuthProvider } from '@/hooks/useAuth';
 import { ToastProvider } from '@/components/ui/ToastProvider';
@@ -9,18 +10,18 @@ import OrgLayout from '@/components/layout/OrgLayout';
 import OfflineIndicator from '@/components/OfflineIndicator';
 import InstallPWA from '@/components/InstallPWA';
 import UpdateNotification from '@/components/UpdateNotification';
+import LoadingSpinner from '@/components/ui/LoadingSpinner';
 import { useTheme } from '@/hooks/useTheme';
 
-// Pages
-// NOTE: src/pages/DashboardPage.tsx is the legacy student dashboard. It is
-// intentionally NOT imported here so it stays as a safe-to-revert backup on
-// disk. The active student route now uses StudentDashboardPage.
+// ── Eagerly imported pages ─────────────────────────────────────────
+// Member-facing routes (StudentDashboardPage, MyDues, profile, etc.)
+// stay eager so the most common first-load shows data immediately
+// instead of an extra suspense flash. Onboarding + login pages stay
+// eager too — they're the entry points for unauthenticated visitors
+// and a loader on those would feel broken.
 import StudentDashboardPage from '@/pages/StudentDashboardPage';
 import ProfilePage from '@/pages/ProfilePage';
 import SettingsPage from '@/pages/student/SettingsPage';
-// NOTE: src/pages/student/PaymentHistoryPage.tsx is the legacy 916-line
-// dues hub. It stays on disk as a safe-to-revert backup but is no longer
-// routed. The active /payments route uses the new mockup-faithful MyDuesPage.
 import PaymentDetailPage from '@/pages/PaymentDetailPage';
 import MakePaymentPage from '@/pages/MakePaymentPage';
 import MyDuesPage from '@/pages/MyDuesPage';
@@ -28,35 +29,11 @@ import MyGroupsPage from '@/pages/MyGroupsPage';
 import MyTicketsPage from '@/pages/MyTicketsPage';
 import TicketPage from '@/pages/TicketPage';
 import UpcomingEventsPage from '@/pages/UpcomingEventsPage';
-import TicketCheckInPage from '@/pages/admin/TicketCheckInPage';
 import PaymentVerifyPage from '@/pages/PaymentVerifyPage';
-import ReceiptPage from '@/pages/ReceiptPage';
-import AdminDashboardPage from '@/pages/admin/AdminDashboardPage';
-import DepartmentExecDashboardPage from '@/pages/admin/DepartmentExecDashboardPage';
-import FacultyExecDashboardPage from '@/pages/admin/FacultyExecDashboardPage';
-// NOTE: src/pages/admin/CreatePaymentTypePage.tsx is the legacy create-due page.
-// It stays on disk as a safe-revert backup but is no longer routed.
-import CreateDuePage from '@/pages/admin/CreateDuePage';
-import ManageDuesPage from '@/pages/admin/ManageDuesPage';
-import AdminReviewPage from '@/pages/admin/AdminReviewPage';
-import WaivePaymentPage from '@/pages/admin/WaivePaymentPage';
-import ScanQRCodePage from '@/pages/admin/ScanQRCodePageNew';
-import OrgMembersPage from '@/pages/admin/OrgMembersPage';
-import AdminCollectedPage from '@/pages/admin/AdminCollectedPage';
-import ExpensesPage from '@/pages/admin/ExpensesPage';
-import PublicContributionsPage from '@/pages/admin/PublicContributionsPage';
-import DonationSettingsPage from '@/pages/admin/DonationSettingsPage';
-import BillingPage from '@/pages/admin/BillingPage';
-import PayoutSetupPage from '@/pages/admin/PayoutSetupPage';
-import OrgGroupsPage from '@/pages/admin/OrgGroupsPage';
-import OrgAcademicCalendarPage from '@/pages/admin/OrgAcademicCalendarPage';
-import ContributePage from '@/pages/ContributePage';
-import PublicEventCheckoutPage from '@/pages/PublicEventCheckoutPage';
 import NotFoundPage from '@/pages/NotFoundPage';
 
-// Multi-Tenant Pages (public / onboarding)
+// Multi-Tenant Pages (public / onboarding) — eager. Entry-point UX.
 import LandingPage from '@/pages/LandingPage';
-import BringMySchoolPage from '@/pages/BringMySchoolPage';
 import OrgLoginPage from '@/pages/OrgLoginPage';
 import OrgCompleteProfilePage from '@/pages/OrgCompleteProfilePage';
 import OrgChangePasswordPage from '@/pages/OrgChangePasswordPage';
@@ -66,14 +43,44 @@ import OrgOverviewPage from '@/pages/OrgOverviewPage';
 import FacultyDetailPage from '@/pages/FacultyDetailPage';
 import DepartmentDetailPage from '@/pages/DepartmentDetailPage';
 import GroupWelcomePage from '@/pages/GroupWelcomePage';
-import AddDepartmentPage from '@/pages/AddDepartmentPage';
-import AddFacultyPage from '@/pages/AddFacultyPage';
-import ClaimSubmitPage from '@/pages/ClaimSubmitPage';
-import ClaimDecisionPage from '@/pages/ClaimDecisionPage';
-// Legacy console kept on disk as a backup; the active console is the new command-room build.
-import PlatformConsole from '@/pages/PlatformConsole';
 import ForgotPasswordPage from '@/pages/student/ForgotPasswordPage';
 import ResetPasswordPage from '@/pages/student/ResetPasswordPage';
+
+// ── Lazily imported pages ──────────────────────────────────────────
+// Admin surface, platform console, heavy public pages (receipt PDF,
+// bring-school wizard, contribute / event checkout). These ship in
+// their own chunks; a member who never opens /admin/* downloads
+// nothing for that surface. Cuts the initial JS by an estimated
+// 30-50% for the most common user.
+const ReceiptPage             = lazy(() => import('@/pages/ReceiptPage'));
+const BringMySchoolPage       = lazy(() => import('@/pages/BringMySchoolPage'));
+const ContributePage          = lazy(() => import('@/pages/ContributePage'));
+const PublicEventCheckoutPage = lazy(() => import('@/pages/PublicEventCheckoutPage'));
+const AddDepartmentPage       = lazy(() => import('@/pages/AddDepartmentPage'));
+const AddFacultyPage          = lazy(() => import('@/pages/AddFacultyPage'));
+const ClaimSubmitPage         = lazy(() => import('@/pages/ClaimSubmitPage'));
+const ClaimDecisionPage       = lazy(() => import('@/pages/ClaimDecisionPage'));
+const PlatformConsole         = lazy(() => import('@/pages/PlatformConsole'));
+
+const AdminDashboardPage          = lazy(() => import('@/pages/admin/AdminDashboardPage'));
+const DepartmentExecDashboardPage = lazy(() => import('@/pages/admin/DepartmentExecDashboardPage'));
+const FacultyExecDashboardPage    = lazy(() => import('@/pages/admin/FacultyExecDashboardPage'));
+const CreateDuePage               = lazy(() => import('@/pages/admin/CreateDuePage'));
+const ManageDuesPage              = lazy(() => import('@/pages/admin/ManageDuesPage'));
+const AdminReviewPage             = lazy(() => import('@/pages/admin/AdminReviewPage'));
+const WaivePaymentPage            = lazy(() => import('@/pages/admin/WaivePaymentPage'));
+const ScanQRCodePage              = lazy(() => import('@/pages/admin/ScanQRCodePageNew'));
+const OrgMembersPage              = lazy(() => import('@/pages/admin/OrgMembersPage'));
+const AdminCollectedPage          = lazy(() => import('@/pages/admin/AdminCollectedPage'));
+const ExpensesPage                = lazy(() => import('@/pages/admin/ExpensesPage'));
+const PublicContributionsPage     = lazy(() => import('@/pages/admin/PublicContributionsPage'));
+const DonationSettingsPage        = lazy(() => import('@/pages/admin/DonationSettingsPage'));
+const BillingPage                 = lazy(() => import('@/pages/admin/BillingPage'));
+const PayoutSetupPage             = lazy(() => import('@/pages/admin/PayoutSetupPage'));
+const OrgGroupsPage               = lazy(() => import('@/pages/admin/OrgGroupsPage'));
+const OrgAcademicCalendarPage     = lazy(() => import('@/pages/admin/OrgAcademicCalendarPage'));
+const TicketCheckInPage           = lazy(() => import('@/pages/admin/TicketCheckInPage'));
+const AuditPage                   = lazy(() => import('@/pages/admin/AuditPage'));
 
 function App() {
   // Ensure html[data-theme] is applied on every route, not only theme-aware pages.
@@ -88,6 +95,7 @@ function App() {
             <OfflineIndicator />
             <InstallPWA />
             <UpdateNotification />
+            <Suspense fallback={<LoadingSpinner fullScreen size="lg" />}>
             <Routes>
               {/* ============================================ */}
               {/* PUBLIC ROUTES                                */}
@@ -193,6 +201,12 @@ function App() {
                 <Route path="admin/dues/:id/edit" element={<OrgProtectedRoute requiredPermission="can_create_payments" requireVerified><CreateDuePage /></OrgProtectedRoute>} />
                 <Route path="admin/manage-dues" element={<OrgProtectedRoute requiredPermission="can_create_payments" requireVerified><ManageDuesPage /></OrgProtectedRoute>} />
                 <Route path="admin/review" element={<OrgProtectedRoute requiredPermission="can_approve_payments" requireVerified><AdminReviewPage /></OrgProtectedRoute>} />
+                {/* Audit — payments grouped per dept/class for execs
+                    above the class tier. allowedScopes pins it to
+                    unit (faculty/dept) + org. A class rep doesn't
+                    get a separate audit view — they already see
+                    their class on ManageDues. */}
+                <Route path="admin/audit" element={<OrgProtectedRoute requiredPermission="can_approve_payments" requireVerified allowedScopes={['unit', 'org']}><AuditPage /></OrgProtectedRoute>} />
                 <Route path="admin/expenses" element={<OrgProtectedRoute requiredPermission="can_manage_expenses" requireVerified><ExpensesPage /></OrgProtectedRoute>} />
                 <Route path="admin/collected" element={<OrgProtectedRoute requireAdmin requireVerified><AdminCollectedPage /></OrgProtectedRoute>} />
                 <Route path="admin/waive-payment" element={<OrgProtectedRoute requireAdmin requireVerified><WaivePaymentPage /></OrgProtectedRoute>} />
@@ -214,6 +228,7 @@ function App() {
               {/* Catch-all */}
               <Route path="*" element={<NotFoundPage />} />
             </Routes>
+            </Suspense>
             </AuthProvider>
             </MultiTenantAuthProvider>
           </OrganizationProvider>

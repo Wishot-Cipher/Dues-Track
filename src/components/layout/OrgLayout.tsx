@@ -39,6 +39,7 @@ import {
   Banknote,
   CalendarDays,
   LayoutGrid,
+  Layers,
   Ticket as TicketIcon,
   ScanLine,
   X as XIcon,
@@ -363,6 +364,10 @@ export default function OrgLayout() {
     // tightens the query to the active role's subtree so a faculty
     // exec doesn't accidentally see another faculty's payments.
     { path: '/admin/review', label: 'Review', icon: <ClipboardCheck size={20} />, section: 'admin', hideOnMobile: true, permission: 'can_approve_payments', adminGroup: 'money' },
+    // Audit — only useful at unit (faculty/dept) or org tier, where
+    // you have a subtree to roll up. A class rep already sees their
+    // class's payments on Review, so they don't get this entry.
+    { path: '/admin/audit', label: 'Audit', icon: <Layers size={20} />, section: 'admin', hideOnMobile: true, permission: 'can_approve_payments', minScope: 'unit', adminGroup: 'money' },
     { path: '/admin/expenses', label: 'Expenses', icon: <HandCoins size={20} />, section: 'admin', hideOnMobile: true, permission: 'can_manage_expenses', maxScope: 'group', adminGroup: 'money' },
     { path: '/admin/scan-qr', label: 'Scan QR', icon: <QrCode size={20} />, section: 'admin', hideOnMobile: true, permission: 'can_approve_payments', maxScope: 'group', adminGroup: 'money' },
     { path: '/admin/check-in', label: 'Event Check-in', icon: <ScanLine size={20} />, section: 'admin', hideOnMobile: true, permission: 'can_approve_payments', maxScope: 'group', adminGroup: 'money' },

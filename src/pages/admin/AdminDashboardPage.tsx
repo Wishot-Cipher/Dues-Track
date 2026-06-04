@@ -359,47 +359,54 @@ export default function AdminDashboardPage() {
         d.setHours(0, 0, 0, 0);
         return d.toISOString();
       })();
+      const orgId = scope?.orgId;
+      const groupId = scope?.groupId;
 
-      const scoped = <
-        Q extends { eq: (col: string, val: unknown) => Q },
-      >(q: Q) => {
-        if (!scope) return q;
-        return q.eq('organization_id', scope.orgId).eq('group_id', scope.groupId);
-      };
+      // Six independent stat counts in parallel. Each query starts
+      // bare and then conditionally applies the org+group filter.
+      // The previous version used a generic scoped() helper but its
+      // signature triggered "Type instantiation is excessively deep"
+      // on the Supabase chained builder. Inlining the if-scope check
+      // is uglier but the types stay shallow.
+      let qMembers = supabase
+        .from('organization_members')
+        .select('*', { count: 'exact', head: true })
+        .eq('is_active', true);
+      if (orgId) qMembers = qMembers.eq('organization_id', orgId).eq('group_id', groupId);
 
-      const [
-        memberRes,
-        ptRes,
-        pendRes,
-        apprRes,
-        todayRes,
-        rejRes,
-      ] = await Promise.all([
-        scoped(supabase
-          .from('organization_members')
-          .select('*', { count: 'exact', head: true })
-          .eq('is_active', true)),
-        scoped(supabase
-          .from('payment_types')
-          .select('*', { count: 'exact', head: true })
-          .eq('is_active', true)),
-        scoped(supabase
-          .from('payments')
-          .select('*', { count: 'exact', head: true })
-          .eq('status', 'pending')),
-        scoped(supabase
-          .from('payments')
-          .select('amount, transaction_ref')
-          .eq('status', 'approved')),
-        scoped(supabase
-          .from('payments')
-          .select('transaction_ref')
-          .eq('status', 'approved')
-          .gte('approved_at', todayStart)),
-        scoped(supabase
-          .from('payments')
-          .select('*', { count: 'exact', head: true })
-          .eq('status', 'rejected')),
+      let qPaymentTypes = supabase
+        .from('payment_types')
+        .select('*', { count: 'exact', head: true })
+        .eq('is_active', true);
+      if (orgId) qPaymentTypes = qPaymentTypes.eq('organization_id', orgId).eq('group_id', groupId);
+
+      let qPending = supabase
+        .from('payments')
+        .select('*', { count: 'exact', head: true })
+        .eq('status', 'pending');
+      if (orgId) qPending = qPending.eq('organization_id', orgId).eq('group_id', groupId);
+
+      let qApproved = supabase
+        .from('payments')
+        .select('amount, transaction_ref')
+        .eq('status', 'approved');
+      if (orgId) qApproved = qApproved.eq('organization_id', orgId).eq('group_id', groupId);
+
+      let qApprovedToday = supabase
+        .from('payments')
+        .select('transaction_ref')
+        .eq('status', 'approved')
+        .gte('approved_at', todayStart);
+      if (orgId) qApprovedToday = qApprovedToday.eq('organization_id', orgId).eq('group_id', groupId);
+
+      let qRejected = supabase
+        .from('payments')
+        .select('*', { count: 'exact', head: true })
+        .eq('status', 'rejected');
+      if (orgId) qRejected = qRejected.eq('organization_id', orgId).eq('group_id', groupId);
+
+      const [memberRes, ptRes, pendRes, apprRes, todayRes, rejRes] = await Promise.all([
+        qMembers, qPaymentTypes, qPending, qApproved, qApprovedToday, qRejected,
       ]);
 
       const approvedPayments = (apprRes.data || []) as Array<{ amount: number | string; transaction_ref: string | null }>;
