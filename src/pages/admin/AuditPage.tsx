@@ -71,7 +71,7 @@ interface PaymentRow extends Record<string, unknown> {
   status: 'pending' | 'approved' | 'rejected';
   transaction_ref: string | null;
   approved_at: string | null;
-  member?: { full_name: string; member_id: string } | { full_name: string; member_id: string }[] | null;
+  member?: { full_name: string; member_id: string; group_id?: string } | { full_name: string; member_id: string; group_id?: string }[] | null;
   payment_type?: { title: string } | { title: string }[] | null;
 }
 
@@ -103,7 +103,7 @@ function kindIcon(kind?: string) {
 }
 
 export default function AuditPage() {
-  const { go: navigate} = useAppNav();
+  const { go: navigate } = useAppNav();
   const { organization, user } = useMultiTenantAuth();
   const { theme } = useTheme();
   const tt = useMemo(() => getDashboardTokens(theme), [theme]);
@@ -175,12 +175,15 @@ export default function AuditPage() {
           .from('payments')
           .select(`
             id, member_id, group_id, payment_type_id, amount, status, transaction_ref, approved_at,
-            member:organization_members!payments_member_id_fkey ( full_name, member_id ),
+           member:organization_members!payments_member_id_fkey ( full_name, member_id, group_id ),
             payment_type:payment_types ( title )
           `)
           .eq('organization_id', organization.id)
           .order('created_at', { ascending: false });
-        if (scopedIds) pQuery = pQuery.in('group_id', Array.from(scopedIds));
+        if (scopedIds) {
+          const idList = Array.from(scopedIds).join(',');
+          pQuery = pQuery.or(`group_id.in.(${idList}),group_id.is.null`);
+        }
 
         const [gRes, mRes, pRes] = await Promise.all([gQuery, mQuery, pQuery]);
         if (cancelled) return;
@@ -258,11 +261,14 @@ export default function AuditPage() {
     // from the union of its children — done at render time so a
     // single payment isn't double-counted in the aggregate map.
     for (const p of payments) {
-      if (!p.group_id) continue;
-      const a = map.get(p.group_id);
+      // If payment has no group_id (org-wide due), try to attribute it
+      // to the paying member's group so it shows in the tree.
+      const groupKey = p.group_id as string | null;
+      if (!groupKey) continue;
+      const a = map.get(groupKey);
       if (!a) continue;
       if (p.status === 'pending') a.pendingCount++;
-      if (p.status === 'approved' && !p.transaction_ref?.startsWith('WAIVED-')) {
+      if (p.status === 'approved' && !(p.transaction_ref as string)?.startsWith('WAIVED-')) {
         a.paidCount++;
         a.paidTotal += Number(p.amount || 0);
       }
@@ -282,7 +288,8 @@ export default function AuditPage() {
       return groups.filter(g => !g.parent_group_id);
     }
     // Unit-scope (faculty / dept) — show the direct children of own.
-    return groups.filter(g => g.parent_group_id === own.id);
+   // Unit-scope (faculty / dept) — show own group + its direct children.
+return groups.filter(g => g.id === own.id);
   }, [activeRole, groups]);
 
   // Recursive totals — sum the subtree under a group.
@@ -373,7 +380,7 @@ export default function AuditPage() {
 
   const exportAll = useCallback(() => {
     const label = activeRole?.scopeLevel === 'org' ? (organization?.short_name || 'all') :
-                  (groups.find(g => g.id === activeRole?.groupId)?.short_name || 'scope');
+      (groups.find(g => g.id === activeRole?.groupId)?.short_name || 'scope');
     exportCsv(payments, label);
   }, [exportCsv, payments, activeRole, groups, organization]);
 
@@ -402,27 +409,41 @@ export default function AuditPage() {
       orgName: organization.name || organization.short_name || 'Organisation',
       accentColor: (organization.primary_color as string) || '#FF6803',
       columns: [
-        { key: 'member',         label: 'Member',         align: 'left',
-          format: (_v, p) => firstOf(p.member)?.full_name || '—' },
-        { key: 'member_id',      label: 'Member ID',      align: 'left',
-          format: (_v, p) => firstOf(p.member)?.member_id || '—' },
-        { key: 'group_id',       label: 'Group',          align: 'left',
-          format: (_v, p) => p.group_id ? (groupNameById.get(p.group_id) || '—') : '—' },
-        { key: 'payment_type',   label: 'Payment type',   align: 'left',
-          format: (_v, p) => firstOf(p.payment_type)?.title || '—' },
-        { key: 'amount',         label: 'Amount',         align: 'right',
-          format: (_v, p) => fmtAmount(Number(p.amount || 0)) },
-        { key: 'status',         label: 'Status',         align: 'center',
-          format: (v) => String(v || '—').toUpperCase() },
-        { key: 'approved_at',    label: 'Approved',       align: 'right',
-          format: (v) => v ? new Date(String(v)).toISOString().slice(0, 10) : '—' },
+        {
+          key: 'member', label: 'Member', align: 'left',
+          format: (_v, p) => firstOf(p.member)?.full_name || '—'
+        },
+        {
+          key: 'member_id', label: 'Member ID', align: 'left',
+          format: (_v, p) => firstOf(p.member)?.member_id || '—'
+        },
+        {
+          key: 'group_id', label: 'Group', align: 'left',
+          format: (_v, p) => p.group_id ? (groupNameById.get(p.group_id) || '—') : '—'
+        },
+        {
+          key: 'payment_type', label: 'Payment type', align: 'left',
+          format: (_v, p) => firstOf(p.payment_type)?.title || '—'
+        },
+        {
+          key: 'amount', label: 'Amount', align: 'right',
+          format: (_v, p) => fmtAmount(Number(p.amount || 0))
+        },
+        {
+          key: 'status', label: 'Status', align: 'center',
+          format: (v) => String(v || '—').toUpperCase()
+        },
+        {
+          key: 'approved_at', label: 'Approved', align: 'right',
+          format: (v) => v ? new Date(String(v)).toISOString().slice(0, 10) : '—'
+        },
       ],
       rows,
       summary: [
         { label: 'Total payments listed', value: String(rows.length) },
-        { label: 'Approved',              value: `${approvedCount} of ${rows.length}` },
-        { label: 'Pending',               value: String(pendingCount) },
-        { label: 'Total collected',       value: fmtAmount(totalApproved) },
+        { label: 'Approved', value: `${approvedCount} of ${rows.length}` },
+        { label: 'Pending', value: String(pendingCount) },
+        { label: 'Total collected', value: fmtAmount(totalApproved) },
       ],
       filenameSlug: `payments-${scopeLabel.replace(/[^a-z0-9_-]+/gi, '-').toLowerCase()}`,
     });
@@ -430,7 +451,7 @@ export default function AuditPage() {
 
   const exportAllPdf = useCallback(() => {
     const label = activeRole?.scopeLevel === 'org' ? (organization?.short_name || 'all') :
-                  (groups.find(g => g.id === activeRole?.groupId)?.short_name || 'scope');
+      (groups.find(g => g.id === activeRole?.groupId)?.short_name || 'scope');
     exportPdf(payments, label);
   }, [exportPdf, payments, activeRole, groups, organization]);
 
@@ -741,8 +762,8 @@ export default function AuditPage() {
                             style={{
                               color:
                                 p.status === 'approved' ? tt.mint
-                                : p.status === 'pending' ? tt.amber
-                                : tt.danger,
+                                  : p.status === 'pending' ? tt.amber
+                                    : tt.danger,
                             }}
                           >
                             {p.status}
