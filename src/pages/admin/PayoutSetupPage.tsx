@@ -21,24 +21,33 @@ import { useToast } from '@/hooks/useToast';
 import { paystackService, type PaystackBank } from '@/services/paystackService';
 import { supabase } from '@/config/supabase';
 import ProfessionalDropdown from '@/components/ui/ProfessionalDropdown';
+import { useTheme, getDashboardTokens } from '@/hooks/useTheme';
 
-const tk = {
-  bg:       '#0F0703',
-  panel:    'rgba(255,255,255,0.03)',
-  border:   'rgba(255,255,255,0.08)',
-  text:     '#FFFFFF',
-  textSec:  'rgba(255,255,255,0.65)',
-  textTer:  'rgba(255,255,255,0.40)',
-  primary:  '#FF6803',
-  mint:     '#30FFAC',
-  danger:   '#ef4444',
-  inputBg:  'rgba(0,0,0,0.25)',
-};
+// Theme-aware token builder. Replaces the module-level dark-only
+// constant so the page paints correctly in light mode too.
+function buildPayoutTokens(theme: 'light' | 'dark') {
+  const dt = getDashboardTokens(theme);
+  const isLight = theme === 'light';
+  return {
+    bg:      dt.bg,
+    panel:   dt.card,
+    border:  dt.cardBorder,
+    text:    dt.text,
+    textSec: dt.textSec,
+    textTer: dt.textTer,
+    primary: dt.primary,
+    mint:    dt.mint,
+    danger:  dt.danger,
+    inputBg: isLight ? '#FFFFFF' : 'rgba(0,0,0,0.25)',
+  };
+}
 
 export default function PayoutSetupPage() {
   const { go } = useAppNav();
   const { user, organization, refreshSession } = useMultiTenantAuth();
   const toast = useToast();
+  const { theme } = useTheme();
+  const tk = useMemo(() => buildPayoutTokens(theme), [theme]);
 
   // Tier-aware: when ?groupId is on the URL, this page configures
   // THAT group's subaccount instead of the org's. Used by the

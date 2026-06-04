@@ -15,7 +15,8 @@
  *   - Error messages are deliberately non-specific for the verify step.
  */
 
-import { useState, useEffect } from 'react';
+import { createContext, useContext, useEffect, useMemo, useState } from 'react';
+import { useTheme, getDashboardTokens } from '@/hooks/useTheme';
 import {
   Lock,
   CheckCircle,
@@ -36,26 +37,52 @@ import { motion, AnimatePresence } from 'framer-motion';
 import PageWrapper from '@/components/ui/PageWrapper';
 
 // ── Design tokens ─────────────────────────────────────────────────────────────
-const tk = {
-  bg:            '#080401',
-  surface:       'rgba(255,255,255,0.03)',
-  surfaceHover:  'rgba(255,255,255,0.055)',
-  border:        'rgba(255,255,255,0.07)',
-  borderFocus:   'rgba(255,104,3,0.55)',
-  primary:       '#FF6803',
-  primaryGlow:   'rgba(255,104,3,0.22)',
-  mint:          '#30FFAC',
-  mintBg:        'rgba(48,255,172,0.07)',
-  mintBorder:    'rgba(48,255,172,0.2)',
-  danger:        '#FF4444',
-  dangerBg:      'rgba(255,68,68,0.08)',
-  dangerBorder:  'rgba(255,68,68,0.28)',
-  warn:          '#F59E0B',
-  textPrimary:   '#FFFFFF',
-  textSecondary: 'rgba(255,255,255,0.55)',
-  textTertiary:  'rgba(255,255,255,0.3)',
-  textMuted:     'rgba(255,255,255,0.18)',
+// Theme-aware. The module-level constant this replaced was dark-only
+// (`#080401` ember bg, `#FFFFFF` text), so the page painted wrong in
+// light mode regardless of system theme. Now the shape is built from
+// getDashboardTokens(theme) and broadcast via TokensContext so the
+// seven helper components (VaultGeometry, SecureInput, PlainInput,
+// StrengthMeter, StepDots, Banner, SubmitButton) can read it without
+// prop drilling.
+type PwTokens = {
+  bg: string; surface: string; surfaceHover: string;
+  border: string; borderFocus: string;
+  primary: string; primaryGlow: string;
+  mint: string; mintBg: string; mintBorder: string;
+  danger: string; dangerBg: string; dangerBorder: string;
+  warn: string;
+  textPrimary: string; textSecondary: string; textTertiary: string; textMuted: string;
 };
+function buildPwTokens(theme: 'light' | 'dark'): PwTokens {
+  const dt = getDashboardTokens(theme);
+  const isLight = theme === 'light';
+  return {
+    bg:            dt.bg,
+    surface:       isLight ? '#FFFFFF' : 'rgba(255,255,255,0.03)',
+    surfaceHover:  isLight ? '#FFF6EE' : 'rgba(255,255,255,0.055)',
+    border:        dt.cardBorder,
+    borderFocus:   dt.primaryRing,
+    primary:       dt.primary,
+    primaryGlow:   isLight ? 'rgba(255,104,3,0.14)' : 'rgba(255,104,3,0.22)',
+    mint:          dt.mint,
+    mintBg:        isLight ? 'rgba(0,194,119,0.10)' : 'rgba(48,255,172,0.07)',
+    mintBorder:    isLight ? 'rgba(0,194,119,0.28)' : 'rgba(48,255,172,0.2)',
+    danger:        dt.danger,
+    dangerBg:      isLight ? 'rgba(239,68,68,0.08)' : 'rgba(255,68,68,0.08)',
+    dangerBorder:  isLight ? 'rgba(239,68,68,0.28)' : 'rgba(255,68,68,0.28)',
+    warn:          dt.amber,
+    textPrimary:   dt.text,
+    textSecondary: dt.textSec,
+    textTertiary:  dt.textTer,
+    textMuted:     isLight ? 'rgba(15,7,3,0.18)' : 'rgba(255,255,255,0.18)',
+  };
+}
+const TokensContext = createContext<PwTokens | null>(null);
+function useTokens(): PwTokens {
+  const tk = useContext(TokensContext);
+  if (!tk) throw new Error('useTokens called outside TokensContext.Provider');
+  return tk;
+}
 
 // ── Strength config ───────────────────────────────────────────────────────────
 const STRENGTH_CONFIG = [
@@ -79,6 +106,7 @@ function calcStrength(pw: string): number {
 
 // ── Animated background geometry ──────────────────────────────────────────────
 function VaultGeometry() {
+  const tk = useTokens();
   return (
     <div className="absolute inset-0 overflow-hidden pointer-events-none select-none">
       {/* Concentric rings */}
@@ -145,6 +173,7 @@ function SecureInput({
 }) {
   const [show, setShow] = useState(false);
   const [focused, setFocused] = useState(false);
+  const tk = useTokens();
 
   return (
     <div className="space-y-2">
@@ -211,6 +240,7 @@ function PlainInput({
   autoComplete?: string;
 }) {
   const [focused, setFocused] = useState(false);
+  const tk = useTokens();
 
   return (
     <div className="space-y-2">
@@ -252,6 +282,7 @@ function PlainInput({
 
 // ── Strength meter ────────────────────────────────────────────────────────────
 function StrengthMeter({ password }: { password: string }) {
+  const tk = useTokens();
   const strength = calcStrength(password);
   if (strength < 0) return null;
 
@@ -323,6 +354,7 @@ function StrengthMeter({ password }: { password: string }) {
 
 // ── Step indicator ────────────────────────────────────────────────────────────
 function StepDots({ step, total }: { step: number; total: number }) {
+  const tk = useTokens();
   return (
     <div className="flex items-center gap-2">
       {Array.from({ length: total }).map((_, i) => (
@@ -352,6 +384,7 @@ function Banner({
   icon: React.ReactNode;
   children: React.ReactNode;
 }) {
+  const tk = useTokens();
   const styles = {
     info:    { bg: tk.mintBg,    border: tk.mintBorder,    color: tk.mint    },
     error:   { bg: tk.dangerBg,  border: tk.dangerBorder,  color: tk.danger  },
@@ -384,6 +417,7 @@ function SubmitButton({
   disabled?: boolean;
   children: React.ReactNode;
 }) {
+  const tk = useTokens();
   const isDisabled = loading || disabled;
 
   return (
@@ -443,6 +477,11 @@ export default function ChangePasswordPage() {
   const { user, changePassword } = useAuth();
   const { go: navigate } = useAppNav();
   const { orgSlug } = useParams<{ orgSlug: string }>();
+  // Theme-aware tokens. The whole vault/strength/banner/button kit
+  // below reads `tk` via useTokens(); we provide it once here at
+  // the top of the page.
+  const { theme } = useTheme();
+  const tk = useMemo(() => buildPwTokens(theme), [theme]);
 
   // Determine flow: if user is logged in with force_password_change → "force" flow
   const flow: Flow = user?.force_password_change ? 'force' : 'forgot';
@@ -555,13 +594,21 @@ export default function ChangePasswordPage() {
   const currentDot = flow === 'forgot' ? (step === 'verify' ? 0 : 1) : 0;
 
   return (
+    <TokensContext.Provider value={tk}>
     <PageWrapper centered noPadding className="min-h-screen p-4 sm:p-8">
       <div
         className="relative w-full max-w-5xl min-h-screen sm:min-h-0 sm:rounded-[40px] overflow-hidden"
         style={{
-          background: `linear-gradient(145deg, #0b0502 0%, #0f0603 100%)`,
-          border: `1px solid rgba(255,104,3,0.1)`,
-          boxShadow: '0 40px 120px rgba(0,0,0,0.9)',
+          // Vault gradient + border now derive from the theme tokens.
+          // Dark theme keeps the ember "vault" feel; light theme
+          // becomes a creamy off-white card with a soft brand border.
+          background: theme === 'light'
+            ? `linear-gradient(145deg, ${tk.surface} 0%, ${tk.bg} 100%)`
+            : `linear-gradient(145deg, #0b0502 0%, #0f0603 100%)`,
+          border: `1px solid ${tk.border}`,
+          boxShadow: theme === 'light'
+            ? '0 20px 60px rgba(15,7,3,0.12)'
+            : '0 40px 120px rgba(0,0,0,0.9)',
         }}
       >
         <VaultGeometry />
@@ -936,5 +983,6 @@ export default function ChangePasswordPage() {
         </div>
       </div>
     </PageWrapper>
+    </TokensContext.Provider>
   );
 }

@@ -11,26 +11,37 @@ import { useState } from 'react';
 import { motion } from 'framer-motion';
 import { ArrowLeft, MailCheck, Loader2, ShieldCheck, KeyRound, RefreshCw } from 'lucide-react';
 import { useAppNav } from '@/hooks/useAppNav';
+import { useMemo } from 'react';
 import { useMultiTenantAuth } from '@/hooks/useMultiTenantAuth';
 import { useToast } from '@/hooks/useToast';
+import { useTheme, getDashboardTokens } from '@/hooks/useTheme';
 import { multiTenantAuthService } from '@/services/multiTenantAuthService';
 
-const tk = {
-  bg:      '#0F0703',
-  panel:   'rgba(255,255,255,0.03)',
-  border:  'rgba(255,255,255,0.08)',
-  text:    '#FFFFFF',
-  textSec: 'rgba(255,255,255,0.65)',
-  textTer: 'rgba(255,255,255,0.40)',
-  primary: '#FF6803',
-  mint:    '#30FFAC',
-  inputBg: 'rgba(0,0,0,0.25)',
-};
+// Theme-aware token builder. The previous module-level constant was
+// dark-only (#0F0703 ember bg, #FFFFFF text), so the page painted
+// wrong in light mode. Lifted into the component below via useMemo.
+function buildVerifyTokens(theme: 'light' | 'dark') {
+  const dt = getDashboardTokens(theme);
+  const isLight = theme === 'light';
+  return {
+    bg:      dt.bg,
+    panel:   dt.card,
+    border:  dt.cardBorder,
+    text:    dt.text,
+    textSec: dt.textSec,
+    textTer: dt.textTer,
+    primary: dt.primary,
+    mint:    dt.mint,
+    inputBg: isLight ? '#FFFFFF' : 'rgba(0,0,0,0.25)',
+  };
+}
 
 export default function VerifyEmailPage() {
   const { go } = useAppNav();
   const { user, organization, refreshSession } = useMultiTenantAuth();
   const toast = useToast();
+  const { theme } = useTheme();
+  const tk = useMemo(() => buildVerifyTokens(theme), [theme]);
 
   const [step, setStep] = useState<'email' | 'code'>('email');
   const [email, setEmail] = useState(user?.email || '');

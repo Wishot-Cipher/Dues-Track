@@ -28,7 +28,8 @@
  * row; in the next migration we'll fan out notifications.
  */
 
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { createContext, useContext, useEffect, useMemo, useRef, useState } from 'react';
+import { useTheme, getDashboardTokens } from '@/hooks/useTheme';
 import { useNavigate, useSearchParams, useParams } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
@@ -63,49 +64,78 @@ import ProfessionalDropdown from '@/components/ui/ProfessionalDropdown';
 import ProfessionalDateTimePicker from '@/components/ui/ProfessionalDateTimePicker';
 
 // ────────────────────────────────────────────────────────────────────────────
-// Tokens
+// Tokens — theme-aware. The previous module-level constant was dark
+// only, so the form painted as ember-on-white in light mode.
 // ────────────────────────────────────────────────────────────────────────────
-const tk = {
-  bg: '#0F0703',
-  panel: 'rgba(255,255,255,0.025)',
-  panelHov: 'rgba(255,255,255,0.045)',
-  border: 'rgba(255,255,255,0.08)',
-  borderHov: 'rgba(255,104,3,0.32)',
-  text: '#FFFFFF',
-  textSec: 'rgba(255,255,255,0.65)',
-  textTer: 'rgba(255,255,255,0.40)',
-  textQuat: 'rgba(255,255,255,0.22)',
-  primary: '#FF6803',
-  primaryHi: '#FFAC5F',
-  mint: '#30FFAC',
-  blue: '#5B9BFF',
-  purple: '#8b5cf6',
-  pink: '#ec4899',
-  amber: '#F59E0B',
-  danger: '#ef4444',
+type CreateDueTokens = {
+  bg: string; panel: string; panelHov: string; border: string; borderHov: string;
+  text: string; textSec: string; textTer: string; textQuat: string;
+  primary: string; primaryHi: string; mint: string; blue: string; purple: string;
+  pink: string; amber: string; danger: string;
+};
+function buildCreateDueTokens(theme: 'light' | 'dark'): CreateDueTokens {
+  const dt = getDashboardTokens(theme);
+  const isLight = theme === 'light';
+  return {
+    bg:        dt.bg,
+    panel:     dt.card,
+    panelHov:  dt.cardHover,
+    border:    dt.cardBorder,
+    borderHov: dt.primaryRing,
+    text:      dt.text,
+    textSec:   dt.textSec,
+    textTer:   dt.textTer,
+    textQuat:  isLight ? 'rgba(15,7,3,0.22)' : 'rgba(255,255,255,0.22)',
+    primary:   dt.primary,
+    primaryHi: dt.primaryHi,
+    mint:      dt.mint,
+    blue:      dt.blue,
+    purple:    dt.purple,
+    pink:      '#ec4899',
+    amber:     dt.amber,
+    danger:    dt.danger,
+  };
+}
+const TokensContext = createContext<CreateDueTokens | null>(null);
+function useTokens(): CreateDueTokens {
+  const tk = useContext(TokensContext);
+  if (!tk) throw new Error('useTokens called outside TokensContext.Provider');
+  return tk;
+}
+// Static brand-color palette for module-scope refs (e.g. CATEGORIES).
+// These specific colors don't change per theme — the brand orange is
+// the same hex in light + dark. Component code uses `useTokens()`.
+const BRAND = {
+  primary: '#FF6803', mint: '#30FFAC', blue: '#5B9BFF',
+  purple: '#8b5cf6', pink: '#ec4899', amber: '#F59E0B', danger: '#ef4444',
 };
 
 // ────────────────────────────────────────────────────────────────────────────
 // Static config
 // ────────────────────────────────────────────────────────────────────────────
+// CATEGORIES/COLOR_PALETTE/DEFAULT_FORM use the static BRAND palette
+// at module scope. The brand colors are the same hex in light + dark
+// (orange is orange, mint is mint) so theme switching doesn't need
+// to rebuild this list. Component-level chrome still derives from
+// the theme-aware `tk` via useTokens().
 const CATEGORIES = [
-  { value: 'dues', label: 'Dues', icon: '🎓', color: tk.primary },
-  { value: 'fees', label: 'Fees', icon: '📚', color: tk.blue },
-  { value: 'levy', label: 'Levy', icon: '📋', color: tk.amber },
-  { value: 'event', label: 'Event ticket', icon: '🎟️', color: tk.purple },
-  { value: 'contribution', label: 'Contribution', icon: '🤝', color: tk.mint },
-  { value: 'welfare', label: 'Welfare', icon: '❤️', color: tk.pink },
-  { value: 'project', label: 'Project', icon: '📘', color: tk.blue },
-  { value: 'donation', label: 'Donation', icon: '💝', color: tk.pink },
-  { value: 'subscription', label: 'Subscription', icon: '🔄', color: tk.amber },
-  { value: 'savings', label: 'Savings', icon: '💰', color: tk.mint },
-  { value: 'custom', label: 'Custom', icon: '📦', color: tk.primary },
+  { value: 'dues', label: 'Dues', icon: '🎓', color: BRAND.primary },
+  { value: 'fees', label: 'Fees', icon: '📚', color: BRAND.blue },
+  { value: 'levy', label: 'Levy', icon: '📋', color: BRAND.amber },
+  { value: 'event', label: 'Event ticket', icon: '🎟️', color: BRAND.purple },
+  { value: 'contribution', label: 'Contribution', icon: '🤝', color: BRAND.mint },
+  { value: 'welfare', label: 'Welfare', icon: '❤️', color: BRAND.pink },
+  { value: 'project', label: 'Project', icon: '📘', color: BRAND.blue },
+  { value: 'donation', label: 'Donation', icon: '💝', color: BRAND.pink },
+  { value: 'subscription', label: 'Subscription', icon: '🔄', color: BRAND.amber },
+  { value: 'savings', label: 'Savings', icon: '💰', color: BRAND.mint },
+  { value: 'custom', label: 'Custom', icon: '📦', color: BRAND.primary },
 ] as const;
 
 const ICONS = ['🎓', '📚', '🎉', '📘', '❤️', '📦', '💰', '🏆', '⚽', '🎨', '🎟️', '🎵', '🍕'];
 const COLOR_PALETTE = [
-  tk.primary, tk.blue, tk.mint, tk.amber,
-  tk.danger, tk.purple, tk.pink, '#06B6D4',
+  BRAND.primary, BRAND.blue, BRAND.mint, BRAND.amber,
+  BRAND.danger, BRAND.purple, BRAND.pink, '#06B6D4',
 ];
 
 const NIGERIAN_BANKS = [
@@ -169,7 +199,7 @@ interface TierInput {
 }
 
 const EMPTY: FormState = {
-  title: '', description: '', category: 'dues', icon: '🎓', color: tk.primary,
+  title: '', description: '', category: 'dues', icon: '🎓', color: BRAND.primary,
   amount: '',
   deadline: '', late_fee_per_day: '',
   is_mandatory: true, allow_partial: false, minimum_partial_amount: '', is_public: false,
@@ -190,6 +220,13 @@ export default function CreateDuePage() {
   const { go } = useAppNav();
   const navigate = useNavigate();
   const toast = useToast();
+  // Theme-aware tokens. Build once per render from the resolved
+  // theme so the form paints correctly in both modes (this used to
+  // be a module-level dark-only constant). Provided via
+  // TokensContext so the seven helper components in this file can
+  // read it without prop drilling.
+  const { theme } = useTheme();
+  const tk = useMemo(() => buildCreateDueTokens(theme), [theme]);
 
   // Edit mode: when the route is /admin/dues/:id/edit, useParams gives
   // us the payment_type id. We fetch the existing row, map it to
@@ -866,6 +903,7 @@ export default function CreateDuePage() {
   };
 
   return (
+    <TokensContext.Provider value={tk}>
     <div className="min-h-screen relative overflow-x-hidden" style={{ minHeight: '100dvh', background: tk.bg }}>
       {/* Ambient glow */}
       <div className="fixed inset-0 pointer-events-none overflow-hidden">
@@ -1586,6 +1624,7 @@ export default function CreateDuePage() {
         )}
       </AnimatePresence>
     </div>
+    </TokensContext.Provider>
   );
 }
 
@@ -1608,6 +1647,7 @@ function ScopeTab({
   sublabel: string;
   color: string;
 }) {
+  const tk = useTokens();
   return (
     <button
       type="button"
@@ -1627,13 +1667,14 @@ function ScopeTab({
 }
 
 function Panel({
-  title, icon, accent = tk.primary, children,
+  title, icon, accent = BRAND.primary, children,
 }: {
   title: string;
   icon?: React.ReactNode;
   accent?: string;
   children: React.ReactNode;
 }) {
+  const tk = useTokens();
   return (
     <motion.section
       initial={{ opacity: 0, y: 12 }}
@@ -1673,6 +1714,7 @@ function Field({
   icon?: React.ReactNode;
   children: React.ReactNode;
 }) {
+  const tk = useTokens();
   return (
     <label className="block">
       <div className="flex items-center justify-between mb-1.5">
@@ -1700,6 +1742,7 @@ function Input({
   inputMode?: 'text' | 'numeric' | 'decimal' | 'email' | 'tel' | 'url';
   required?: boolean;
 }) {
+  const tk = useTokens();
   return (
     <input
       type={type}
@@ -1710,10 +1753,11 @@ function Input({
       placeholder={placeholder}
       className="w-full rounded-xl px-3.5 py-2.5 text-sm outline-none transition-colors"
       style={{
-        background: 'rgba(26,14,9,0.85)',
+        // Background derives from the theme's panel so the input
+        // sits cleanly on top of the panel in both light + dark.
+        background: tk.panel,
         border: `1px solid ${tk.border}`,
         color: tk.text,
-        colorScheme: 'dark',
       }}
       onFocus={(e) => { e.currentTarget.style.borderColor = tk.borderHov; }}
       onBlur={(e) => { e.currentTarget.style.borderColor = tk.border; }}
@@ -1724,6 +1768,7 @@ function Input({
 function Textarea({
   value, onChange, placeholder,
 }: { value: string; onChange: (v: string) => void; placeholder?: string }) {
+  const tk = useTokens();
   return (
     <textarea
       value={value}
@@ -1743,7 +1788,7 @@ function Textarea({
 }
 
 function ToggleCard({
-  label, description, checked, onChange, accent = tk.primary,
+  label, description, checked, onChange, accent = BRAND.primary,
 }: {
   label: string;
   description: string;
@@ -1751,13 +1796,14 @@ function ToggleCard({
   onChange: (v: boolean) => void;
   accent?: string;
 }) {
+  const tk = useTokens();
   return (
     <button
       type="button"
       onClick={() => onChange(!checked)}
       className="text-left rounded-xl p-3 flex items-start gap-3 transition-all"
       style={{
-        background: checked ? `${accent}12` : 'rgba(255,255,255,0.03)',
+        background: checked ? `${accent}12` : tk.panel,
         border: `1px solid ${checked ? `${accent}40` : tk.border}`,
       }}
     >
@@ -1782,6 +1828,7 @@ function ToggleCard({
 // Preview — what students see on their dashboard
 // ════════════════════════════════════════════════════════════════════════════
 function StudentCardPreview({ form }: { form: FormState }) {
+  const tk = useTokens();
   const amount = Number(form.amount || 0);
   const isEvent = form.category === 'event';
   return (
@@ -1884,6 +1931,7 @@ function StudentCardPreview({ form }: { form: FormState }) {
 }
 
 function BankPreview({ form }: { form: FormState }) {
+  const tk = useTokens();
   return (
     <motion.div
       initial={{ opacity: 0, y: 4 }}
