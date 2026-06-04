@@ -14,12 +14,62 @@ import { organizationService } from '@/services/organizationService';
  * scoped to the current organization and group via organization_id + group_id filters.
  */
 
+/**
+ * Per-session in-memory cache for slow, stable lookups.
+ *
+ * Member level + billing-group IDs almost never change during a
+ * session, but the dashboard used to refetch them on every page
+ * load AND every service call in the same page (the dashboard's
+ * `Promise.all` fired three independent service calls that each
+ * resolved the same member + group set). On 4G mobile that's
+ * ~600ms of pure round-trip waste per dashboard mount.
+ *
+ * The TTL is short (~30s) so a freshly-promoted exec or a new
+ * group membership shows up without a hard reload — and the
+ * cache is keyed on memberId so switching accounts always
+ * starts fresh.
+ */
+const MEMBER_CACHE_TTL_MS = 30_000;
+const memberLevelCache = new Map<string, { value: { level: string; department: string; group_id?: string } | null; at: number }>();
+const memberGroupIdsCache = new Map<string, { value: string[]; at: number }>();
+
+function readCache<T>(map: Map<string, { value: T; at: number }>, key: string): T | null {
+  const hit = map.get(key);
+  if (!hit) return null;
+  if (Date.now() - hit.at > MEMBER_CACHE_TTL_MS) {
+    map.delete(key);
+    return null;
+  }
+  return hit.value;
+}
+
+function writeCache<T>(map: Map<string, { value: T; at: number }>, key: string, value: T): void {
+  map.set(key, { value, at: Date.now() });
+}
+
+/**
+ * Clear the in-memory member caches. Call from mutations that change
+ * a member's membership (joining a group, promotion to exec, etc.)
+ * so the next read sees the fresh state instead of the cached value.
+ */
+export function invalidateMemberCaches(memberId?: string): void {
+  if (memberId) {
+    memberLevelCache.delete(memberId);
+    memberGroupIdsCache.delete(memberId);
+    return;
+  }
+  memberLevelCache.clear();
+  memberGroupIdsCache.clear();
+}
+
 class PaymentService {
   /**
    * Get the current member's level info.
    * In multi-tenant mode queries organization_members; in legacy mode queries students.
    */
   private async getMemberLevel(memberId: string): Promise<{ level: string; department: string; group_id?: string } | null> {
+    const cached = readCache(memberLevelCache, memberId);
+    if (cached !== null) return cached;
     const scope = getOrgScope();
     if (scope) {
       const { data } = await supabase
@@ -28,15 +78,22 @@ class PaymentService {
         .eq('id', memberId)
         .eq('organization_id', scope.orgId)
         .single();
-      if (!data) return null;
-      return { level: data.level || '', department: data.section || '', group_id: data.group_id };
+      if (!data) {
+        writeCache(memberLevelCache, memberId, null);
+        return null;
+      }
+      const value = { level: data.level || '', department: data.section || '', group_id: data.group_id };
+      writeCache(memberLevelCache, memberId, value);
+      return value;
     }
     const { data } = await supabase
       .from('organization_members')
       .select('level, section, group_id')
       .eq('id', memberId)
       .single();
-    return data ? { level: data.level || '', department: data.section || '', group_id: data.group_id } : null;
+    const value = data ? { level: data.level || '', department: data.section || '', group_id: data.group_id } : null;
+    writeCache(memberLevelCache, memberId, value);
+    return value;
   }
 
   /**
@@ -45,6 +102,8 @@ class PaymentService {
    * group when the group_memberships RPC isn't available yet.
    */
   private async getMemberGroupIds(memberId: string): Promise<string[]> {
+    const cached = readCache(memberGroupIdsCache, memberId);
+    if (cached !== null) return cached;
     const scope = getOrgScope();
     // Preferred: every group the member belongs to PLUS all ancestor groups, so
     // a due placed on a parent unit (department/faculty) still matches a member
@@ -52,7 +111,11 @@ class PaymentService {
     try {
       const { data } = await supabase.rpc('get_my_billing_group_ids', { p_member_id: memberId });
       const ids = data && (data as { ok?: boolean }).ok ? (data as { group_ids?: string[] }).group_ids : null;
-      if (Array.isArray(ids) && ids.length) return ids.filter(Boolean);
+      if (Array.isArray(ids) && ids.length) {
+        const value = ids.filter(Boolean);
+        writeCache(memberGroupIdsCache, memberId, value);
+        return value;
+      }
     } catch {
       // RPC not deployed yet — fall through.
     }
@@ -60,12 +123,16 @@ class PaymentService {
       const { data } = await supabase.rpc('get_my_groups', { p_member_id: memberId });
       const groups = data && (data as { ok?: boolean }).ok ? (data as { groups?: Array<{ group_id: string }> }).groups : null;
       if (Array.isArray(groups) && groups.length) {
-        return groups.map((g) => g.group_id).filter(Boolean);
+        const value = groups.map((g) => g.group_id).filter(Boolean);
+        writeCache(memberGroupIdsCache, memberId, value);
+        return value;
       }
     } catch {
       // RPC not deployed yet — fall through to the primary group.
     }
-    return scope?.groupId ? [scope.groupId] : [];
+    const fallback = scope?.groupId ? [scope.groupId] : [];
+    writeCache(memberGroupIdsCache, memberId, fallback);
+    return fallback;
   }
   /**
    * Get payment statistics for a student/member
@@ -663,6 +730,133 @@ class PaymentService {
     } catch (error) {
       console.error('Error fetching active payment types:', error);
       return [];
+    }
+  }
+
+  /**
+   * One-shot fetch for the student dashboard.
+   *
+   * Previously the dashboard ran a `Promise.all` of three independent
+   * service calls — getStudentPaymentStats + getActivePaymentTypesForStudent
+   * + getStudentPayments. Each call resolved the SAME member info,
+   * billing-group set, and payment_types list, so the dashboard
+   * issued ~8 round-trips per mount with 6 of them duplicates. The
+   * in-memory caches above paper over the member + group fetches,
+   * but the payment_types query still fired twice (one with a
+   * projection, one with `*`) and the payments query fired in two
+   * different shapes (with and without the joined types).
+   *
+   * This combined fetcher resolves member + groups in parallel (the
+   * only real network step that doesn't depend on anything else),
+   * then runs the types + payments queries together. Returns the
+   * pre-computed stats so the dashboard doesn't have to rewalk the
+   * arrays. ~3 round-trips total instead of 8.
+   */
+  async getStudentDashboardPayload(studentId: string): Promise<{
+    stats: PaymentStats;
+    paymentTypes: PaymentType[];
+    payments: Payment[];
+  }> {
+    const empty = {
+      stats: { totalPaid: 0, totalDue: 0, paymentsMade: 0, pendingPayments: 0 },
+      paymentTypes: [] as PaymentType[],
+      payments: [] as Payment[],
+    };
+
+    try {
+      const scope = getOrgScope();
+      // Member + billing groups in parallel — the caches above mean
+      // these hit the network at most once per 30s per memberId.
+      const [member, billingGroupIdsArr] = await Promise.all([
+        this.getMemberLevel(studentId),
+        this.getMemberGroupIds(studentId),
+      ]);
+      if (!member) return empty;
+
+      const billingGroupIds = new Set(billingGroupIdsArr);
+      const memberLevel = organizationService.canonicalizeLevel(member.level || '');
+
+      // payment_types + payments in parallel. Single `select *` on
+      // payment_types — used to also drive the stats projection.
+      let ptQuery = supabase
+        .from('payment_types')
+        .select('*')
+        .eq('is_active', true)
+        .order('deadline', { ascending: true });
+      let payQuery = supabase
+        .from('payments')
+        .select(`
+          *,
+          payment_types (
+            title,
+            category,
+            icon,
+            color,
+            amount
+          )
+        `)
+        .eq('member_id', studentId)
+        .order('created_at', { ascending: false });
+
+      if (scope) {
+        ptQuery = ptQuery.eq('organization_id', scope.orgId);
+        payQuery = payQuery.eq('organization_id', scope.orgId);
+      }
+
+      const [{ data: ptRows, error: ptErr }, { data: payRows }] = await Promise.all([ptQuery, payQuery]);
+      if (ptErr) throw ptErr;
+
+      const allPaymentTypes = ptRows || [];
+      const allPayments = (payRows || []) as Payment[];
+
+      const matchesLevel = (pt: any): boolean => {
+        const targets: string[] = pt.target_levels || [];
+        if (!targets || targets.length === 0) return true;
+        return targets.map((l: string) => organizationService.canonicalizeLevel(l)).includes(memberLevel);
+      };
+
+      // Active payment types the member can see — same cascade rule
+      // used by getActivePaymentTypesForStudent and getStudentPaymentStats
+      // (org-wide always shows; targeted ones gated on the member's
+      // billing group + level).
+      const visibleTypes = allPaymentTypes.filter((pt: any) => {
+        if (pt.group_id) return billingGroupIds.has(pt.group_id) && matchesLevel(pt);
+        return matchesLevel(pt);
+      });
+
+      // Roll up the stats from the same arrays — no extra queries.
+      let totalPaid = 0;
+      let totalDue = 0;
+      let paymentsMade = 0;
+      let pendingPayments = 0;
+
+      for (const pt of visibleTypes) {
+        const own = allPayments.filter((p) => p.payment_type_id === pt.id);
+        const isWaived = own.some(
+          (p) => p.status === 'approved' && p.transaction_ref?.startsWith('WAIVED-'),
+        );
+        const paidForType = own
+          .filter((p) => p.status === 'approved' && !p.transaction_ref?.startsWith('WAIVED-'))
+          .reduce((sum, p) => sum + Number(p.amount || 0), 0);
+        if (paidForType > 0) {
+          paymentsMade++;
+          totalPaid += paidForType;
+        }
+        if (own.some((p) => p.status === 'pending')) pendingPayments++;
+        if (!isWaived) {
+          const owed = Math.max(0, Number(pt.amount || 0) - paidForType);
+          totalDue += owed;
+        }
+      }
+
+      return {
+        stats: { totalPaid, totalDue, paymentsMade, pendingPayments },
+        paymentTypes: visibleTypes as PaymentType[],
+        payments: allPayments,
+      };
+    } catch (error) {
+      console.error('Error fetching student dashboard payload:', error);
+      return empty;
     }
   }
 

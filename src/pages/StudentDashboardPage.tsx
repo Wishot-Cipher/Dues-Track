@@ -142,14 +142,17 @@ export default function StudentDashboardPage() {
     if (!user?.id) return;
     setLoading(true);
     try {
-      const [statsData, ptData, payData] = await Promise.all([
-        paymentService.getStudentPaymentStats(user.id),
-        paymentService.getActivePaymentTypesForStudent(user.id),
-        paymentService.getStudentPayments(user.id),
-      ]);
-      setStats(statsData);
-      setPaymentTypes(ptData);
-      setPayments(payData);
+      // ONE coordinated fetch instead of three independent service
+      // calls. The previous Promise.all hit member info, billing
+      // groups, and payment_types twice each — ~8 round-trips per
+      // mount on 4G. The combined payload resolves member + groups
+      // in parallel (in-memory cached after the first hit), then
+      // types + payments in parallel, and rolls up the stats from
+      // the same arrays. ~3 round-trips end-to-end.
+      const payload = await paymentService.getStudentDashboardPayload(user.id);
+      setStats(payload.stats);
+      setPaymentTypes(payload.paymentTypes);
+      setPayments(payload.payments);
     } finally {
       setLoading(false);
     }
