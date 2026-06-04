@@ -286,7 +286,7 @@ export default function OrgLayout() {
     };
     void fetchLevel();
     return () => { mounted = false; };
-  }, [user, group?.id]);
+  }, [user?.id, group?.id]);
 
   if (loading) return <LoadingSpinner fullScreen size="lg" />;
   if (!user || !organization) return null;

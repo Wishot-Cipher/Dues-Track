@@ -91,7 +91,7 @@ function kindIcon(kind?: string) {
 }
 
 export default function AuditPage() {
-  const { go: navigate, orgSlug } = useAppNav();
+  const { go: navigate} = useAppNav();
   const { organization, user } = useMultiTenantAuth();
   const { theme } = useTheme();
   const tt = useMemo(() => getDashboardTokens(theme), [theme]);
@@ -199,7 +199,7 @@ export default function AuditPage() {
         }));
 
         setGroups(gRows);
-        setPayments((pRes.data || []) as PaymentRow[]);
+        setPayments((pRes.data || []) as unknown as PaymentRow[]);
       } catch (err) {
         if (cancelled) return;
         // Detailed log so the next "Audit load error: Object" tells

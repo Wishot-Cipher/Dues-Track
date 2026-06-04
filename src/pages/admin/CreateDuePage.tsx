@@ -56,7 +56,7 @@ import { useAuth } from '@/hooks/useAppAuth';
 import { useAppNav } from '@/hooks/useAppNav';
 import { useToast } from '@/hooks/useToast';
 import { organizationService, type DueCreationContext } from '@/services/organizationService';
-import { STORAGE_BUCKETS, supabase } from '@/config/supabase';
+import { STORAGE_BUCKETS, supabase, getStoredAccessToken } from '@/config/supabase';
 import ProfessionalDropdown from '@/components/ui/ProfessionalDropdown';
 import ProfessionalDateTimePicker from '@/components/ui/ProfessionalDateTimePicker';
 
@@ -465,16 +465,6 @@ export default function CreateDuePage() {
   const setField = <K extends keyof FormState>(k: K, v: FormState[K]) =>
     setForm((f) => ({ ...f, [k]: v }));
 
-  const readFileAsDataUrl = (file: File): Promise<string> =>
-    new Promise((resolve, reject) => {
-      const reader = new FileReader();
-      reader.onload = () => {
-        if (typeof reader.result === 'string') resolve(reader.result);
-        else reject(new Error('Failed to read image file.'));
-      };
-      reader.onerror = () => reject(new Error('Failed to read image file.'));
-      reader.readAsDataURL(file);
-    });
 
   const getImageDimensions = (file: File): Promise<{ width: number; height: number }> =>
     new Promise((resolve, reject) => {
@@ -544,10 +534,9 @@ export default function CreateDuePage() {
 
         setField('event_cover_url', urlData.publicUrl);
         setCoverFileName(file.name);
-      } catch {
-        const dataUrl = await readFileAsDataUrl(file);
-        setField('event_cover_url', dataUrl);
-        setCoverFileName(`${file.name} (local preview)`);
+      } catch (uploadErr) {
+        setError('Image upload failed. Please try again or paste a URL instead.');
+        setCoverFileName(null);
       }
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Failed to upload cover image.';
@@ -676,153 +665,57 @@ export default function CreateDuePage() {
     // event_tickets FK references).
     if (isEditMode && editId) {
       try {
-        const { error: updateErr } = await supabase
-          .from('payment_types')
-          .update({
-            title: form.title.trim(),
-            description: form.description.trim() || null,
-            category: form.category,
-            amount: eventBaseAmount,
-            icon: form.icon,
-            color: form.color,
-            deadline: form.deadline || null,
-            late_fee_per_day: isEvent ? null : (form.late_fee_per_day || null),
-            is_mandatory: isEvent ? false : form.is_mandatory,
-            allow_partial: isEvent ? false : form.allow_partial,
-            minimum_partial_amount: !isEvent && form.allow_partial ? Number(form.minimum_partial_amount || 0) : null,
-            is_public: form.is_public,
-            target_levels: form.target_levels.length ? form.target_levels : null,
-            target_sections: form.target_sections.length ? form.target_sections : null,
-            bank_name: !isEvent && form.accepts_manual ? form.bank_name.trim() : null,
-            account_name: !isEvent && form.accepts_manual ? form.account_name.trim() : null,
-            account_number: !isEvent && form.accepts_manual ? form.account_number.trim() : null,
-            accepts_paystack: isEvent ? true : form.accepts_paystack,
-            accepts_manual: isEvent ? false : form.accepts_manual,
-            event_date: isEvent ? (form.event_date || null) : null,
-            event_venue: isEvent ? (form.event_venue || null) : null,
-            event_cover_url: isEvent ? (form.event_cover_url || null) : null,
-            event_max_attendees: isEvent && form.event_max_attendees ? Number(form.event_max_attendees) : null,
-            updated_at: new Date().toISOString(),
-          })
-          .eq('id', editId);
-        if (updateErr) throw updateErr;
-
-        // ── Tier sync (events only) ──────────────────────────────
-        // 1) Read existing tier rows for this event so we know which
-        //    ids to UPDATE vs which to leave behind.
-        // 2) For each row in validTiers (in order), either UPDATE
-        //    the row at the matching sort_order or INSERT a new one.
-        // 3) Any excess existing rows get is_active=false rather
-        //    than DELETE — a sold ticket may still reference them.
-        if (isEvent) {
-          const orgScope = getOrgScope();
-          if (!orgScope?.orgId) {
-            throw new Error('Missing organisation context for tier sync.');
-          }
-
-          const { data: existingRows, error: tierFetchErr } = await supabase
-            .from('event_ticket_tiers')
-            .select('id, sort_order')
-            .eq('payment_type_id', editId)
-            .order('sort_order', { ascending: true });
-          if (tierFetchErr) throw tierFetchErr;
-          const existing = (existingRows || []) as Array<{ id: string; sort_order: number }>;
-
-          const newTiers = validTiers.map((t, i) => ({
-            name: t.name.trim(),
-            description: null as string | null,
-            price: Number(t.price),
-            quantity: t.quantity === '' ? null : Number(t.quantity),
-            sort_order: i,
-          }));
-
-          // Position-by-position upsert. UPDATE when an existing
-          // row sits at that ordinal, INSERT otherwise. Pairing by
-          // index is what the user sees in the form — the first
-          // row in the UI maps to sort_order=0.
-          const toInsert: Array<{
-            payment_type_id: string;
-            organization_id: string;
-            name: string;
-            description: string | null;
-            price: number;
-            quantity: number | null;
-            sort_order: number;
-            is_active: boolean;
-          }> = [];
-
-          for (let i = 0; i < newTiers.length; i++) {
-            const t = newTiers[i];
-            const slot = existing[i];
-            if (slot) {
-              const { error: tUpdErr } = await supabase
-                .from('event_ticket_tiers')
-                .update({
-                  name: t.name,
-                  description: t.description,
-                  price: t.price,
-                  quantity: t.quantity,
-                  sort_order: t.sort_order,
-                  is_active: true,
-                  updated_at: new Date().toISOString(),
-                })
-                .eq('id', slot.id);
-              if (tUpdErr) throw tUpdErr;
-            } else {
-              toInsert.push({
-                payment_type_id: editId,
-                organization_id: orgScope.orgId,
-                name: t.name,
-                description: t.description,
-                price: t.price,
-                quantity: t.quantity,
-                sort_order: t.sort_order,
-                is_active: true,
-              });
-            }
-          }
-
-          if (toInsert.length > 0) {
-            const { error: tInsErr } = await supabase
-              .from('event_ticket_tiers')
-              .insert(toInsert);
-            if (tInsErr) throw tInsErr;
-          }
-
-          // Excess existing rows beyond the new tier list — flip
-          // is_active=false rather than DELETE so any sold ticket
-          // that already points at the tier stays valid.
-          if (existing.length > newTiers.length) {
-            const excessIds = existing.slice(newTiers.length).map((r) => r.id);
-            const { error: tDeacErr } = await supabase
-              .from('event_ticket_tiers')
-              .update({ is_active: false, updated_at: new Date().toISOString() })
-              .in('id', excessIds);
-            if (tDeacErr) throw tDeacErr;
-          }
-        }
-
+        const scope = getOrgScope();
+        const editRes = await fetch('/api/billing/verify-payment', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${getStoredAccessToken()}`,
+          },
+          body: JSON.stringify({
+            action: 'update-payment-type',
+            id: editId,
+            callerId: scope?.memberId,
+            payload: {
+              title: form.title.trim(),
+              description: form.description.trim() || null,
+              category: form.category,
+              amount: eventBaseAmount,
+              icon: form.icon,
+              color: form.color,
+              deadline: form.deadline || null,
+              late_fee_per_day: isEvent ? null : (form.late_fee_per_day || null),
+              is_mandatory: isEvent ? false : form.is_mandatory,
+              allow_partial: isEvent ? false : form.allow_partial,
+              minimum_partial_amount: !isEvent && form.allow_partial ? Number(form.minimum_partial_amount || 0) : null,
+              is_public: form.is_public,
+              target_levels: form.target_levels.length ? form.target_levels : null,
+              target_sections: form.target_sections.length ? form.target_sections : null,
+              bank_name: !isEvent && form.accepts_manual ? form.bank_name.trim() : null,
+              account_name: !isEvent && form.accepts_manual ? form.account_name.trim() : null,
+              account_number: !isEvent && form.accepts_manual ? form.account_number.trim() : null,
+              accepts_paystack: isEvent ? true : form.accepts_paystack,
+              accepts_manual: isEvent ? false : form.accepts_manual,
+              event_date: isEvent ? (form.event_date || null) : null,
+              event_venue: isEvent ? (form.event_venue || null) : null,
+              event_cover_url: isEvent ? (form.event_cover_url || null) : null,
+              event_max_attendees: isEvent && form.event_max_attendees ? Number(form.event_max_attendees) : null,
+              tiers: isEvent ? validTiers.map((t, i) => ({
+                name: t.name.trim(),
+                price: Number(t.price),
+                quantity: t.quantity === '' ? null : Number(t.quantity),
+                sort_order: i,
+              })) : undefined,
+            },
+          }),
+        });
+        const data = await editRes.json();
+        if (!editRes.ok) throw new Error(data.error || 'Could not save changes.');
         toast?.success?.(isEvent ? 'Event updated.' : 'Due updated.');
         go(`/admin/manage-dues?updated=${editId}`);
         return;
       } catch (err) {
-        // Surface the real cause. The "PATCH ... net::ERR_FAILED"
-        // we kept seeing was getting swallowed by a generic message.
-        // Console.error gives the network tab + stack; the inline
-        // setError shows the user what to do next.
-        console.error('Edit due save failed:', err);
-        const errObj = err as { message?: string; code?: string; details?: string; hint?: string };
-        let msg = 'Could not save changes.';
-        if (errObj?.message) {
-          if (/fetch|network|err_failed|failed to fetch/i.test(errObj.message)) {
-            msg = 'Network failed mid-save. Check your connection and try again.';
-          } else if (errObj.code === '42501' || errObj.code === '42503' || /denied|forbidden|permission/i.test(errObj.message)) {
-            msg = 'You don\'t have permission to edit this due. Contact a higher-tier exec.';
-          } else {
-            msg = errObj.message;
-          }
-        }
-        setError(msg);
+        setError(err instanceof Error ? err.message : 'Could not save changes.');
         setSubmitting(false);
         return;
       }
@@ -856,19 +749,39 @@ export default function CreateDuePage() {
       payload.event_venue = form.event_venue || null;
       payload.event_cover_url = form.event_cover_url || null;
       payload.event_max_attendees = form.event_max_attendees || null;
-      payload.tiers = validTiers.map((t) => ({
-        name: t.name.trim(),
-        price: Number(t.price),
-        quantity: t.quantity === '' ? null : Number(t.quantity),
-      }));
+      // NOTE: tiers are NOT added to payload here — the RPC inserts
+      // payment_types only. Tiers are inserted separately after the RPC
+      // returns the new payment_type_id.
     }
-
     const res = await organizationService.createDueWithScope({
       callerMemberId: scope.memberId,
       targetScope,
       targetGroupId: targetScope === 'org' ? null : targetGroupId,
       payload,
     });
+
+    // Insert ticket tiers for events after the payment type is created
+    if (res.ok && res.payment_type_id && isEvent && validTiers.length > 0) {
+      const tierRows = validTiers.map((tier, i) => ({
+        payment_type_id: res.payment_type_id,
+        organization_id: scope.orgId,
+        name: tier.name.trim(),
+        price: Number(tier.price),
+        quantity: tier.quantity === '' ? null : Number(tier.quantity),
+        sold_count: 0,
+        sort_order: i,
+        is_active: true,
+      }));
+
+      const { error: tierErr } = await supabase
+        .from('event_ticket_tiers')
+        .insert(tierRows);
+
+      if (tierErr) {
+        console.error('Tier insert failed:', tierErr);
+        toast?.error?.('Event created but ticket tiers failed to save. Edit the event to add them.');
+      }
+    }
 
     // Special-case: the target tier has no payout account on file
     // (mig 093 returns code='no_payout'). Show the dedicated "set up

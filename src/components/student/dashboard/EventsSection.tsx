@@ -7,17 +7,7 @@ import EventCard, { type EventCardItem, type EventTier } from '@/components/stud
 export interface EventsSectionProps {
   theme: ResolvedTheme;
   orgId: string;
-  /**
-   * The member viewing the dashboard. Used to resolve their billing
-   * group chain (groups they belong to + every ancestor) so events
-   * a faculty/dept exec published cascade down to class members
-   * below — same model as dues.
-   */
   memberId?: string | null;
-  /**
-   * Deprecated. Kept so older call sites still compile, but a single
-   * groupId no longer matches faculty/dept events. Use memberId.
-   */
   groupId?: string | null;
   currencySymbol?: string;
   onGetTicket?: (id: string) => void;
@@ -25,14 +15,6 @@ export interface EventsSectionProps {
   showAllHref?: string | null;
 }
 
-/**
- * Resolve the set of group IDs whose events this member should see —
- * their direct memberships PLUS every ancestor (class → dept → faculty).
- *
- * Returns null when we have no signal (no memberId, RPC unavailable
- * AND no primary group), which the caller treats as "no group filter,
- * show every event in the org".
- */
 export async function resolveBillingGroupIds(memberId: string | null | undefined): Promise<string[] | null> {
   if (!memberId) return null;
   try {
@@ -47,16 +29,6 @@ export async function resolveBillingGroupIds(memberId: string | null | undefined
   return null;
 }
 
-/**
- * Load active, upcoming events for a member.
- *
- * `billingGroupIds`:
- *   - array → match events whose group_id is in this list OR is null
- *     (org-wide). This is what we want for class/dept/faculty members:
- *     they see every event published at their tier OR above.
- *   - null  → no group filter. Use this for org-scope viewers (org
- *     owners) and as a fallback when we couldn't resolve the chain.
- */
 export async function loadEvents(
   orgId: string,
   billingGroupIds: string[] | null,
@@ -79,7 +51,6 @@ export async function loadEvents(
       event_ticket_tiers (
         id,
         name,
-        description,
         price,
         quantity,
         sold_count,
@@ -89,14 +60,16 @@ export async function loadEvents(
     .eq('organization_id', orgId)
     .eq('category', 'event')
     .eq('is_active', true)
-    .limit(24);
+    .gte('event_date', new Date().toISOString())
+    .order('event_date', { ascending: true })
+    .limit(12);
 
   if (error || !data) return [];
 
   const allowedGroupIds = billingGroupIds && billingGroupIds.length > 0
     ? new Set(billingGroupIds)
     : null;
-  const now = new Date().toISOString();
+
   const deduped = new Map<string, {
     id: string;
     title: string;
@@ -111,7 +84,6 @@ export async function loadEvents(
     event_ticket_tiers: Array<{
       id: string;
       name: string;
-      description: string | null;
       price: number;
       quantity: number | null;
       sold_count: number | null;
@@ -133,7 +105,6 @@ export async function loadEvents(
     event_ticket_tiers: Array<{
       id: string;
       name: string;
-      description: string | null;
       price: number;
       quantity: number | null;
       sold_count: number | null;
@@ -141,21 +112,10 @@ export async function loadEvents(
     }> | null;
   }>)
     .filter((event) => {
-      const isUpcoming = !event.event_date || event.event_date >= now;
-      // Org-wide events (group_id === null) are visible to everyone.
-      // Targeted events are visible when their group_id is in the
-      // viewer's billing chain — class members see their class's,
-      // their dept's, and their faculty's events. If we couldn't
-      // resolve the chain (allowedGroupIds === null) we don't filter.
       const isInScope = !allowedGroupIds
         || event.group_id === null
         || allowedGroupIds.has(event.group_id);
-      return isUpcoming && isInScope;
-    })
-    .sort((a, b) => {
-      const ad = a.event_date ? new Date(a.event_date).getTime() : Number.MAX_SAFE_INTEGER;
-      const bd = b.event_date ? new Date(b.event_date).getTime() : Number.MAX_SAFE_INTEGER;
-      return ad - bd;
+      return isInScope;
     })
     .slice(0, 12)
     .forEach((event) => {
@@ -166,7 +126,6 @@ export async function loadEvents(
         String(event.amount ?? 0),
         event.event_cover_url ?? '',
       ].join('|');
-
       if (!deduped.has(signature)) deduped.set(signature, event);
     });
 
@@ -196,7 +155,7 @@ export async function loadEvents(
       amount: Number(event.amount || 0),
       tiers: tiers.length > 0 ? tiers : undefined,
       isSoldOut,
-      isEnded: event.event_date ? new Date(event.event_date).getTime() < Date.now() : false,
+      isEnded: false,
       color: event.color,
     } satisfies EventCardItem;
   });
@@ -223,9 +182,6 @@ export default function EventsSection({
     setLoading(true);
 
     (async () => {
-      // Prefer memberId (resolves the full ancestor chain via RPC).
-      // Fall back to a single-group filter when only groupId is passed
-      // (legacy callers); fall back to null (no filter) otherwise.
       const billingGroupIds = memberId
         ? await resolveBillingGroupIds(memberId)
         : (groupId ? [groupId] : null);
@@ -236,9 +192,7 @@ export default function EventsSection({
       }
     })();
 
-    return () => {
-      mounted = false;
-    };
+    return () => { mounted = false; };
   }, [orgId, memberId, groupId]);
 
   if (!loading && events.length === 0) return null;
@@ -309,8 +263,6 @@ export default function EventsSection({
         <div
           className="grid gap-4"
           style={{
-            // Single event = comfortable centred panel.
-            // 2+ events = responsive 2-up that collapses to 1 on narrow viewports.
             gridTemplateColumns: hasMultiple ? 'repeat(auto-fit, minmax(320px, 1fr))' : 'minmax(0, 760px)',
             justifyContent: hasMultiple ? 'stretch' : 'center',
           }}
@@ -328,7 +280,7 @@ export default function EventsSection({
         </div>
       )}
 
-      <style>{`\n        @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.55} }\n      `}</style>
+      <style>{`@keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.55} }`}</style>
     </section>
   );
 }
