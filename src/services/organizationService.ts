@@ -33,11 +33,11 @@ function getCurrentMemberId(): string | null {
  * count wins, then alphabetical by name.
  */
 const TRUST_ORDER: Record<TrustLevel, number> = {
-  official:   0,
-  verified:   1,
+  official: 0,
+  verified: 1,
   recognized: 2,
-  community:  3,
-  seed:       4,
+  community: 3,
+  seed: 4,
 };
 
 function sortByTrust(results: SearchResult[]): SearchResult[] {
@@ -360,8 +360,8 @@ export const organizationService = {
     faculty_short?: string;
   }> {
     const { data, error } = await supabase.rpc('add_faculty_to_org', {
-      p_org_slug:           input.orgSlug,
-      p_faculty_name:       input.facultyName,
+      p_org_slug: input.orgSlug,
+      p_faculty_name: input.facultyName,
       p_faculty_short_name: input.facultyShortName ?? null,
     });
     if (error) {
@@ -408,16 +408,16 @@ export const organizationService = {
     contested_count?: number;
   }> {
     const { data, error } = await supabase.rpc('submit_claim_v2', {
-      p_caller_member_id:    input.callerMemberId,
-      p_claimed_role:        input.claimedRole,
-      p_claimed_scope:       input.claimedScope,
-      p_claimed_group_id:    input.claimedGroupId,
-      p_position_title:      input.positionTitle,
-      p_phone:               input.phone ?? null,
-      p_personal_email:      input.personalEmail ?? null,
+      p_caller_member_id: input.callerMemberId,
+      p_claimed_role: input.claimedRole,
+      p_claimed_scope: input.claimedScope,
+      p_claimed_group_id: input.claimedGroupId,
+      p_position_title: input.positionTitle,
+      p_phone: input.phone ?? null,
+      p_personal_email: input.personalEmail ?? null,
       p_institutional_email: input.institutionalEmail ?? null,
-      p_document_urls:       input.documentUrls ?? null,
-      p_method:              input.method ?? 'member_vote',
+      p_document_urls: input.documentUrls ?? null,
+      p_method: input.method ?? 'member_vote',
     });
     if (error) {
       console.error('submitClaim RPC error', error);
@@ -477,10 +477,10 @@ export const organizationService = {
     };
   }> {
     const { data, error } = await supabase.rpc('cast_claim_vote', {
-      p_claim_id:        input.claimId,
+      p_claim_id: input.claimId,
       p_voter_member_id: input.voterMemberId,
-      p_vote:            input.vote,
-      p_comment:         input.comment ?? null,
+      p_vote: input.vote,
+      p_comment: input.comment ?? null,
     });
     if (error) {
       console.error('castClaimVote RPC error', error);
@@ -768,17 +768,17 @@ export const organizationService = {
     member_login_id?: string;
   }> {
     const { data, error } = await supabase.rpc('add_subgroup_to_parent', {
-      p_org_slug:            input.orgSlug,
-      p_parent_short_name:   input.parentShortName,
-      p_subgroup_name:       input.subgroupName,
+      p_org_slug: input.orgSlug,
+      p_parent_short_name: input.parentShortName,
+      p_subgroup_name: input.subgroupName,
       p_subgroup_short_name: input.subgroupShortName ?? null,
-      p_subgroup_kind:       input.subgroupKind ?? null,
-      p_full_name:           input.fullName,
-      p_email:               input.email,
-      p_phone:               input.phone ?? null,
-      p_member_number:       input.memberNumber,
-      p_password:            input.password,
-      p_user_level:          input.userLevel ?? null,
+      p_subgroup_kind: input.subgroupKind ?? null,
+      p_full_name: input.fullName,
+      p_email: input.email,
+      p_phone: input.phone ?? null,
+      p_member_number: input.memberNumber,
+      p_password: input.password,
+      p_user_level: input.userLevel ?? null,
     });
     if (error) {
       console.error('addSubgroupToParent RPC error', error);
@@ -862,9 +862,9 @@ export const organizationService = {
   }> {
     const { data, error } = await supabase.rpc('create_due_with_scope_check', {
       p_caller_member_id: input.callerMemberId,
-      p_target_scope:     input.targetScope,
-      p_target_group_id:  input.targetGroupId,
-      p_payload:          input.payload,
+      p_target_scope: input.targetScope,
+      p_target_group_id: input.targetGroupId,
+      p_payload: input.payload,
     });
     if (error) {
       console.error('createDueWithScope RPC error', error);
@@ -927,17 +927,17 @@ export const organizationService = {
     member_login_id?: string;
   }> {
     const { data, error } = await supabase.rpc('add_department_to_faculty', {
-      p_org_slug:              input.orgSlug,
-      p_faculty_short_name:    input.facultyShortName,
-      p_department_name:       input.departmentName,
+      p_org_slug: input.orgSlug,
+      p_faculty_short_name: input.facultyShortName,
+      p_department_name: input.departmentName,
       p_department_short_name: input.departmentShortName ?? null,
-      p_department_kind:       input.departmentKind ?? 'department',
-      p_full_name:             input.fullName,
-      p_email:                 input.email,
-      p_phone:                 input.phone ?? null,
-      p_member_number:         input.memberNumber,
-      p_password:              input.password,
-      p_user_level:            input.userLevel ?? null,
+      p_department_kind: input.departmentKind ?? 'department',
+      p_full_name: input.fullName,
+      p_email: input.email,
+      p_phone: input.phone ?? null,
+      p_member_number: input.memberNumber,
+      p_password: input.password,
+      p_user_level: input.userLevel ?? null,
     });
 
     if (error) {
@@ -991,14 +991,14 @@ export const organizationService = {
     requires_approval?: boolean;
   }> {
     const { data, error } = await supabase.rpc('signup_member_for_group', {
-      p_org_slug:         input.orgSlug,
+      p_org_slug: input.orgSlug,
       p_group_short_name: input.groupShortName,
-      p_full_name:        input.fullName,
-      p_email:            input.email,
-      p_phone:            input.phone ?? null,
-      p_member_number:    input.memberNumber,
-      p_password:         input.password,
-      p_level:            input.level ?? null,
+      p_full_name: input.fullName,
+      p_email: input.email,
+      p_phone: input.phone ?? null,
+      p_member_number: input.memberNumber,
+      p_password: input.password,
+      p_level: input.level ?? null,
     });
 
     if (error) {
@@ -1063,6 +1063,8 @@ export const organizationService = {
     groupShort?: string;
     groupKind?: string;
     userLevel?: string;
+    departmentName?: string;   // ← add
+    departmentShort?: string;  // ← add
   }): Promise<{
     ok: boolean;
     error?: string;
@@ -1074,25 +1076,27 @@ export const organizationService = {
     member_login_id?: string;
   }> {
     const { data, error } = await supabase.rpc('bring_school_online', {
-      p_full_name:      input.fullName,
-      p_email:          input.email,
-      p_phone:          input.phone ?? null,
-      p_member_number:  input.memberNumber,
-      p_password:       input.password,
-      p_org_name:       input.orgName,
+      p_full_name: input.fullName,
+      p_email: input.email,
+      p_phone: input.phone ?? null,
+      p_member_number: input.memberNumber,
+      p_password: input.password,
+      p_org_name: input.orgName,
       p_org_short_name: input.orgShortName ?? null,
-      p_org_type:       input.orgType,
-      p_country_code:   input.countryCode ?? 'NG',
-      p_state:          input.state ?? null,
-      p_city:           input.city ?? null,
-      p_website:        input.website ?? null,
-      p_seed_id:        input.seedId ?? null,
-      p_faculty_name:   input.facultyName ?? null,
-      p_faculty_short:  input.facultyShort ?? null,
-      p_group_name:     input.groupName,
-      p_group_short:    input.groupShort ?? null,
-      p_group_kind:     input.groupKind ?? 'class',
-      p_user_level:     input.userLevel ?? null,
+      p_org_type: input.orgType,
+      p_country_code: input.countryCode ?? 'NG',
+      p_state: input.state ?? null,
+      p_city: input.city ?? null,
+      p_website: input.website ?? null,
+      p_seed_id: input.seedId ?? null,
+      p_faculty_name: input.facultyName ?? null,
+      p_faculty_short: input.facultyShort ?? null,
+      p_group_name: input.groupName,
+      p_group_short: input.groupShort ?? null,
+      p_group_kind: input.groupKind ?? 'class',
+      p_user_level: input.userLevel ?? null,
+      p_department_name: input.departmentName ?? null,
+      p_department_short: input.departmentShort ?? null,
     });
 
     if (error) {
@@ -1189,7 +1193,7 @@ export const organizationService = {
         // Update org with additional fields (terminology, branding, etc.)
         const defaults = ORG_TYPE_DEFAULTS[orgData.organization_type];
         const resultData = data as { organization_id: string; slug: string; group_id: string; member_id: string };
-        
+
         await supabase
           .from('organizations')
           .update({

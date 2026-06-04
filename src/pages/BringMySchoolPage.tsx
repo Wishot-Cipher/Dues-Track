@@ -81,33 +81,33 @@ function buildBringTokens(theme: 'light' | 'dark'): BringTokens {
 }
 
 const ORG_TYPES: { value: string; label: string }[] = [
-  { value: 'university',           label: 'University' },
-  { value: 'polytechnic',          label: 'Polytechnic' },
+  { value: 'university', label: 'University' },
+  { value: 'polytechnic', label: 'Polytechnic' },
   { value: 'college_of_education', label: 'College of Education' },
-  { value: 'monotechnic',          label: 'Monotechnic' },
-  { value: 'seminary',             label: 'Seminary' },
-  { value: 'church',               label: 'Church' },
-  { value: 'club',                 label: 'Club' },
-  { value: 'association',          label: 'Association' },
-  { value: 'company',              label: 'Company' },
-  { value: 'other',                label: 'Other' },
+  { value: 'monotechnic', label: 'Monotechnic' },
+  { value: 'seminary', label: 'Seminary' },
+  { value: 'church', label: 'Church' },
+  { value: 'club', label: 'Club' },
+  { value: 'association', label: 'Association' },
+  { value: 'company', label: 'Company' },
+  { value: 'other', label: 'Other' },
 ];
 
 const GROUP_KINDS = [
-  { value: 'class',       label: 'Class / Level (e.g. ECE 300L)' },
-  { value: 'department',  label: 'Department (e.g. Computer Science)' },
-  { value: 'fellowship',  label: 'Fellowship / Ministry' },
-  { value: 'chapter',     label: 'Chapter / Branch' },
-  { value: 'general',     label: 'General group' },
+  { value: 'class', label: 'Class / Level (e.g. ECE 300L)' },
+  { value: 'department', label: 'Department (e.g. Computer Science)' },
+  { value: 'fellowship', label: 'Fellowship / Ministry' },
+  { value: 'chapter', label: 'Chapter / Branch' },
+  { value: 'general', label: 'General group' },
 ];
 
 // Session keys — must match what existing services read on auth.
 const SESSION_KEYS = {
-  AUTH:      'pvx_auth',
-  ORG_ID:    'pvx_org_id',
-  ORG_SLUG:  'pvx_org_slug',
+  AUTH: 'pvx_auth',
+  ORG_ID: 'pvx_org_id',
+  ORG_SLUG: 'pvx_org_slug',
   MEMBER_ID: 'pvx_member_id',
-  GROUP_ID:  'pvx_group_id',
+  GROUP_ID: 'pvx_group_id',
 } as const;
 
 interface FormState {
@@ -135,6 +135,8 @@ interface FormState {
   groupShort: string;
   groupKind: string;
   userLevel: string;
+  departmentName: string;
+  departmentShort: string;
 }
 
 const EMPTY_FORM: FormState = {
@@ -157,6 +159,8 @@ const EMPTY_FORM: FormState = {
   groupShort: '',
   groupKind: 'class',
   userLevel: '',
+  departmentName: '',
+  departmentShort: '',
 };
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -308,13 +312,13 @@ export default function BringMySchoolPage() {
       setSeed(s);
       setForm((f) => ({
         ...f,
-        orgName:      s.name,
+        orgName: s.name,
         orgShortName: s.short_name ?? f.orgShortName,
-        orgType:      s.type ?? f.orgType,
-        countryCode:  s.country_code ?? f.countryCode,
-        state:        s.state ?? '',
-        city:         s.city ?? '',
-        website:      s.website ?? '',
+        orgType: s.type ?? f.orgType,
+        countryCode: s.country_code ?? f.countryCode,
+        state: s.state ?? '',
+        city: s.city ?? '',
+        website: s.website ?? '',
       }));
       setSeedLoading(false);
     })();
@@ -323,7 +327,7 @@ export default function BringMySchoolPage() {
 
   // ── Derived ──
   const pwMismatch = form.password.length >= 6 && form.passwordConfirm.length >= 6 && form.password !== form.passwordConfirm;
-  const canSubmit  = useMemo(() => {
+  const canSubmit = useMemo(() => {
     return (
       form.fullName.trim().length > 1 &&
       form.email.includes('@') &&
@@ -366,8 +370,8 @@ export default function BringMySchoolPage() {
       if (form.groupName.trim().length < 2) {
         const what = isAcademicType ? 'class / department'
           : form.orgType === 'church' ? 'ministry'
-          : form.orgType === 'club' || form.orgType === 'association' ? 'chapter'
-          : 'group';
+            : form.orgType === 'club' || form.orgType === 'association' ? 'chapter'
+              : 'group';
         return `Tell us the ${what} you belong to.`;
       }
       // Level is now required for academic orgs — the class carries
@@ -439,30 +443,32 @@ export default function BringMySchoolPage() {
     setError(null);
 
     const res = await organizationService.bringSchoolOnline({
-      fullName:     form.fullName,
-      email:        form.email,
-      phone:        form.phone,
+      fullName: form.fullName,
+      email: form.email,
+      phone: form.phone,
       memberNumber: form.memberNumber,
-      password:     form.password,
-      orgName:      form.orgName,
+      password: form.password,
+      orgName: form.orgName,
       orgShortName: form.orgShortName || undefined,
-      orgType:      form.orgType,
-      countryCode:  form.countryCode,
-      state:        form.state,
-      city:         form.city,
-      website:      form.website,
-      seedId:       seedId || null,
-      facultyName:  form.facultyName || undefined,
+      orgType: form.orgType,
+      countryCode: form.countryCode,
+      state: form.state,
+      city: form.city,
+      website: form.website,
+      seedId: seedId || null,
+      facultyName: form.facultyName || undefined,
       facultyShort: form.facultyShort || undefined,
-      groupName:    form.groupName,
-      groupShort:   form.groupShort || undefined,
+      groupName: form.groupName,
+      groupShort: form.groupShort || undefined,
       // Force 'class' for academic orgs regardless of the form
       // state — the picker is hidden there in G5c, so a stale
       // value from a flow that started non-academic shouldn't
       // sneak through. Non-academic flows keep whatever the user
       // picked.
-      groupKind:    isAcademicType ? 'class' : form.groupKind,
-      userLevel:    form.userLevel || undefined,
+      departmentName: form.departmentName || undefined,
+      departmentShort: form.departmentShort || undefined,
+      groupKind: isAcademicType ? 'class' : form.groupKind,
+      userLevel: form.userLevel || undefined,
     });
 
     if (!res.ok || !res.slug || !res.member_id || !res.group_id || !res.org_id) {
@@ -473,11 +479,11 @@ export default function BringMySchoolPage() {
 
     // Persist session for the new founder so they land logged in.
     try {
-      localStorage.setItem(SESSION_KEYS.AUTH,      'active');
-      localStorage.setItem(SESSION_KEYS.ORG_ID,    res.org_id);
-      localStorage.setItem(SESSION_KEYS.ORG_SLUG,  res.slug);
+      localStorage.setItem(SESSION_KEYS.AUTH, 'active');
+      localStorage.setItem(SESSION_KEYS.ORG_ID, res.org_id);
+      localStorage.setItem(SESSION_KEYS.ORG_SLUG, res.slug);
       localStorage.setItem(SESSION_KEYS.MEMBER_ID, res.member_id);
-      localStorage.setItem(SESSION_KEYS.GROUP_ID,  res.group_id);
+      localStorage.setItem(SESSION_KEYS.GROUP_ID, res.group_id);
     } catch {
       // ignore — session keys are best-effort; user can still log in manually
     }
@@ -628,30 +634,30 @@ export default function BringMySchoolPage() {
       >
         {/* ── Step 1: Your school ── */}
         {step === 1 && (
-        <Panel tk={tk} title="Your school" subtitle="The organization you're bringing online." icon={<Building2 className="w-4 h-4" />}>
-          <Field tk={tk} label="Organization name" required>
-            <TextInput tk={tk} value={form.orgName} onChange={(v) => setField('orgName', v)} placeholder="University of Nigeria, Nsukka" required />
-          </Field>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <Field tk={tk} label="Short name" hint="e.g. UNN">
-              <TextInput tk={tk} value={form.orgShortName} onChange={(v) => setField('orgShortName', v.toUpperCase())} placeholder="UNN" />
+          <Panel tk={tk} title="Your school" subtitle="The organization you're bringing online." icon={<Building2 className="w-4 h-4" />}>
+            <Field tk={tk} label="Organization name" required>
+              <TextInput tk={tk} value={form.orgName} onChange={(v) => setField('orgName', v)} placeholder="University of Nigeria, Nsukka" required />
             </Field>
-            <Field tk={tk} label="Type" required>
-              <SelectInput tk={tk} value={form.orgType} onChange={(v) => setField('orgType', v)} options={ORG_TYPES} />
-            </Field>
-          </div>
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-            <Field tk={tk} label="State" icon={<MapPin className="w-3 h-3" />}>
-              <TextInput tk={tk} value={form.state} onChange={(v) => setField('state', v)} placeholder="Enugu" />
-            </Field>
-            <Field tk={tk} label="City">
-              <TextInput tk={tk} value={form.city} onChange={(v) => setField('city', v)} placeholder="Nsukka" />
-            </Field>
-            <Field tk={tk} label="Website" hint="optional">
-              <TextInput tk={tk} value={form.website} onChange={(v) => setField('website', v)} placeholder="https://example.edu.ng" />
-            </Field>
-          </div>
-        </Panel>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <Field tk={tk} label="Short name" hint="e.g. UNN">
+                <TextInput tk={tk} value={form.orgShortName} onChange={(v) => setField('orgShortName', v.toUpperCase())} placeholder="UNN" />
+              </Field>
+              <Field tk={tk} label="Type" required>
+                <SelectInput tk={tk} value={form.orgType} onChange={(v) => setField('orgType', v)} options={ORG_TYPES} />
+              </Field>
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+              <Field tk={tk} label="State" icon={<MapPin className="w-3 h-3" />}>
+                <TextInput tk={tk} value={form.state} onChange={(v) => setField('state', v)} placeholder="Enugu" />
+              </Field>
+              <Field tk={tk} label="City">
+                <TextInput tk={tk} value={form.city} onChange={(v) => setField('city', v)} placeholder="Nsukka" />
+              </Field>
+              <Field tk={tk} label="Website" hint="optional">
+                <TextInput tk={tk} value={form.website} onChange={(v) => setField('website', v)} placeholder="https://example.edu.ng" />
+              </Field>
+            </div>
+          </Panel>
         )}
 
         {/* ── Step 2: Your faculty + class / first group ──
@@ -710,16 +716,29 @@ export default function BringMySchoolPage() {
                 </div>
               )}
 
+                {isAcademic && form.facultyName && (
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <Field tk={tk} label="Department name" required hint="e.g. Computer Science">
+                      <TextInput tk={tk} value={form.departmentName} onChange={(v) => setField('departmentName', v)} placeholder="Computer Science" />
+                    </Field>
+                    <Field tk={tk} label="Department short name" hint="e.g. CSC">
+                      <TextInput tk={tk} value={form.departmentShort} onChange={(v) => setField('departmentShort', v.toUpperCase())} placeholder="CSC" />
+                    </Field>
+                  </div>
+                )}
+
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <Field tk={tk} label={leafLabel} required icon={<Layers className="w-3 h-3" />}>
                   <TextInput tk={tk} value={form.groupName} onChange={(v) => setField('groupName', v)} placeholder={leafPlaceholder} required />
                 </Field>
-                <Field tk={tk} label="Short name" hint="e.g. EEE">
-                  <TextInput tk={tk} value={form.groupShort} onChange={(v) => setField('groupShort', v.toUpperCase())} placeholder="EEE" />
+                <Field tk={tk} label="Short name" hint="e.g. EEE 0'27">
+                  <TextInput tk={tk} value={form.groupShort} onChange={(v) => setField('groupShort', v.toUpperCase())} placeholder="EEE 0'27" />
                 </Field>
               </div>
 
               <div className={`grid grid-cols-1 ${isAcademic ? '' : 'sm:grid-cols-2'} gap-4`}>
+
+              
                 {/* Group kind picker hidden for academic orgs in
                     Chunk G5c — every founder there is in a class,
                     and the picker just made people second-guess
@@ -748,45 +767,45 @@ export default function BringMySchoolPage() {
 
         {/* ── Step 3: Your account ── */}
         {step === 3 && (
-        <Panel
-          tk={tk}
-          title="Your account"
-          subtitle="You'll log in with this. Your member ID + password get you back to your dashboard."
-          icon={<User className="w-4 h-4" />}
-        >
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <Field tk={tk} label="Full name" required>
-              <TextInput tk={tk} value={form.fullName} onChange={(v) => setField('fullName', v)} placeholder="John Doe" required autoComplete="name" />
-            </Field>
-            <Field tk={tk} label="Member ID" required hint="matric / staff / member number">
-              <TextInput tk={tk} value={form.memberNumber} onChange={(v) => setField('memberNumber', v)} placeholder="2018/1/12345" required />
-            </Field>
-          </div>
+          <Panel
+            tk={tk}
+            title="Your account"
+            subtitle="You'll log in with this. Your member ID + password get you back to your dashboard."
+            icon={<User className="w-4 h-4" />}
+          >
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <Field tk={tk} label="Full name" required>
+                <TextInput tk={tk} value={form.fullName} onChange={(v) => setField('fullName', v)} placeholder="John Doe" required autoComplete="name" />
+              </Field>
+              <Field tk={tk} label="Member ID" required hint="matric / staff / member number">
+                <TextInput tk={tk} value={form.memberNumber} onChange={(v) => setField('memberNumber', v)} placeholder="2018/1/12345" required />
+              </Field>
+            </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <Field tk={tk} label="Email" required icon={<Mail className="w-3 h-3" />}>
-              <TextInput tk={tk} value={form.email} onChange={(v) => setField('email', v)} placeholder="you@example.com" type="email" required autoComplete="email" />
-            </Field>
-            <Field tk={tk} label="Phone" icon={<Phone className="w-3 h-3" />}>
-              <TextInput tk={tk} value={form.phone} onChange={(v) => setField('phone', v)} placeholder="+234 800 000 0000" autoComplete="tel" />
-            </Field>
-          </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <Field tk={tk} label="Email" required icon={<Mail className="w-3 h-3" />}>
+                <TextInput tk={tk} value={form.email} onChange={(v) => setField('email', v)} placeholder="you@example.com" type="email" required autoComplete="email" />
+              </Field>
+              <Field tk={tk} label="Phone" icon={<Phone className="w-3 h-3" />}>
+                <TextInput tk={tk} value={form.phone} onChange={(v) => setField('phone', v)} placeholder="+234 800 000 0000" autoComplete="tel" />
+              </Field>
+            </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <Field tk={tk} label="Password" required icon={<Lock className="w-3 h-3" />} hint="at least 6 chars">
-              <TextInput tk={tk} value={form.password} onChange={(v) => setField('password', v)} placeholder="••••••••" type="password" required autoComplete="new-password" />
-            </Field>
-            <Field tk={tk} label="Confirm password" required>
-              <TextInput tk={tk} value={form.passwordConfirm} onChange={(v) => setField('passwordConfirm', v)} placeholder="••••••••" type="password" required autoComplete="new-password" />
-            </Field>
-          </div>
-          {pwMismatch && (
-            <p className="text-xs flex items-center gap-1.5" style={{ color: tk.danger }}>
-              <AlertCircle className="w-3.5 h-3.5" />
-              Passwords do not match.
-            </p>
-          )}
-        </Panel>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <Field tk={tk} label="Password" required icon={<Lock className="w-3 h-3" />} hint="at least 6 chars">
+                <TextInput tk={tk} value={form.password} onChange={(v) => setField('password', v)} placeholder="••••••••" type="password" required autoComplete="new-password" />
+              </Field>
+              <Field tk={tk} label="Confirm password" required>
+                <TextInput tk={tk} value={form.passwordConfirm} onChange={(v) => setField('passwordConfirm', v)} placeholder="••••••••" type="password" required autoComplete="new-password" />
+              </Field>
+            </div>
+            {pwMismatch && (
+              <p className="text-xs flex items-center gap-1.5" style={{ color: tk.danger }}>
+                <AlertCircle className="w-3.5 h-3.5" />
+                Passwords do not match.
+              </p>
+            )}
+          </Panel>
         )}
 
         {/* ── Step 4: Review and confirm ──
@@ -803,11 +822,11 @@ export default function BringMySchoolPage() {
             icon={<Check className="w-4 h-4" />}
           >
             <ReviewSection tk={tk} heading="Your school">
-              <ReviewRow tk={tk} label="Name"        value={form.orgName} />
-              <ReviewRow tk={tk} label="Short name"  value={form.orgShortName} />
-              <ReviewRow tk={tk} label="Type"        value={form.orgType} />
+              <ReviewRow tk={tk} label="Name" value={form.orgName} />
+              <ReviewRow tk={tk} label="Short name" value={form.orgShortName} />
+              <ReviewRow tk={tk} label="Type" value={form.orgType} />
               {(form.state || form.city) && (
-                <ReviewRow tk={tk} label="Location"   value={[form.city, form.state].filter(Boolean).join(', ')} />
+                <ReviewRow tk={tk} label="Location" value={[form.city, form.state].filter(Boolean).join(', ')} />
               )}
               {form.website && <ReviewRow tk={tk} label="Website" value={form.website} mono />}
             </ReviewSection>
@@ -816,15 +835,18 @@ export default function BringMySchoolPage() {
               {isAcademicType && form.facultyName && (
                 <ReviewRow tk={tk} label="Faculty" value={`${form.facultyName}${form.facultyShort ? ` (${form.facultyShort})` : ''}`} />
               )}
-              <ReviewRow tk={tk} label="Group"     value={`${form.groupName}${form.groupShort ? ` (${form.groupShort})` : ''}`} />
-              <ReviewRow tk={tk} label="Kind"      value={form.groupKind} />
+              {isAcademicType && form.facultyName && form.departmentName && (
+                <ReviewRow tk={tk} label="Department" value={`${form.departmentName}${form.departmentShort ? ` (${form.departmentShort})` : ''}`} />
+              )}
+              <ReviewRow tk={tk} label="Group" value={`${form.groupName}${form.groupShort ? ` (${form.groupShort})` : ''}`} />
+              <ReviewRow tk={tk} label="Kind" value={form.groupKind} />
               {form.userLevel && <ReviewRow tk={tk} label="Your level" value={form.userLevel} />}
             </ReviewSection>
 
             <ReviewSection tk={tk} heading="Your account">
               <ReviewRow tk={tk} label="Full name" value={form.fullName} />
               <ReviewRow tk={tk} label="Member ID" value={form.memberNumber} mono />
-              <ReviewRow tk={tk} label="Email"     value={form.email} mono />
+              <ReviewRow tk={tk} label="Email" value={form.email} mono />
               {form.phone && <ReviewRow tk={tk} label="Phone" value={form.phone} mono />}
             </ReviewSection>
 
