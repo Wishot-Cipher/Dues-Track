@@ -62,6 +62,7 @@ import { organizationService } from '@/services/organizationService';
 import { multiTenantAuthService, type MembershipSummary } from '@/services/multiTenantAuthService';
 import RoleSwitcher from '@/components/RoleSwitcher';
 import RoleSwitcherSheet from '@/components/RoleSwitcherSheet';
+import OfficeClassGate from '@/components/layout/OfficeClassGate';
 
 /* ─────────────────────── types ─────────────────────── */
 interface NavItem {
@@ -423,7 +424,13 @@ export default function OrgLayout() {
     // "More" sheet too.
     { path: '/admin/expenses', label: 'Expenses', icon: <HandCoins size={20} />, section: 'admin', permission: 'can_manage_expenses', adminGroup: 'money' },
     { path: '/admin/scan-qr', label: 'Scan QR', icon: <QrCode size={20} />, section: 'admin', hideOnMobile: true, permission: 'can_approve_payments', maxScope: 'group', adminGroup: 'money' },
-    { path: '/admin/check-in', label: 'Event Check-in', icon: <ScanLine size={20} />, section: 'admin', hideOnMobile: true, permission: 'can_approve_payments', maxScope: 'group', adminGroup: 'money' },
+    // Event Check-in: visible to every exec tier (mig 102 makes the
+    // RPC tier-scoped, so a class rep can only validate her own
+    // class's tickets while a dept exec covers dept + every class
+    // under it, etc). The legacy maxScope:'group' hid this from
+    // dept/faculty/org execs entirely, which contradicted the user's
+    // "each tier verifies their own thing" rule.
+    { path: '/admin/check-in', label: 'Event Check-in', icon: <ScanLine size={20} />, section: 'admin', hideOnMobile: true, permission: 'can_approve_payments', adminGroup: 'money' },
     // Public donations are org-wide (a class doesn't have its own
     // donation page).
     { path: '/admin/contributions', label: 'Contributions', icon: <Heart size={20} />, section: 'admin', hideOnMobile: true, permission: 'can_approve_payments', minScope: 'org', adminGroup: 'money' },
@@ -511,8 +518,17 @@ export default function OrgLayout() {
 
   const handleLogout = async () => {
     setShowLogoutModal(false);
+    // Snapshot the group BEFORE logout — useMultiTenantAuth.logout()
+    // clears `group` synchronously via clearState(), so reading
+    // group?.id after `await logout()` would always return undefined.
+    // We preserve `?group=` so the re-login chip keeps the context
+    // the user was in (UX continuity; not a security boundary).
+    const preservedGroupId = group?.id ?? null;
     await logout();
-    navigate(`/${orgSlug}/login`, { replace: true });
+    const target = preservedGroupId
+      ? `/${orgSlug}/login?group=${preservedGroupId}`
+      : `/${orgSlug}/login`;
+    navigate(target, { replace: true });
   };
 
   const userInitial = user.full_name?.charAt(0)?.toUpperCase() || 'U';
@@ -523,6 +539,11 @@ export default function OrgLayout() {
       className="min-h-screen flex flex-col"
       style={{ background: isLight ? '#FFFBF7' : colors.secondary, color: tk.text }}
     >
+      {/* One-time gate for legacy Office members. Renders a blocking
+          modal when the user's primary group is flagged is_staff_office
+          (mig 099). Self-closes after move_member_to_class (mig 100). */}
+      <OfficeClassGate />
+
       {/* ═══════════ TOP BAR ═══════════ */}
       <header
         className="sticky top-0 z-50"

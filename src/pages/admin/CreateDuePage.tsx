@@ -54,6 +54,8 @@ import { getOrgScope } from '@/utils/orgScope';
 import { formatCurrency, formatDate } from '@/utils/formatters';
 import { useAuth } from '@/hooks/useAppAuth';
 import { useAppNav } from '@/hooks/useAppNav';
+import { useActiveRole } from '@/hooks/useActiveRole';
+import { useMultiTenantAuth } from '@/hooks/useMultiTenantAuth';
 import { useToast } from '@/hooks/useToast';
 import { organizationService, type DueCreationContext } from '@/services/organizationService';
 import { STORAGE_BUCKETS, supabase, getStoredAccessToken } from '@/config/supabase';
@@ -184,6 +186,7 @@ const EMPTY: FormState = {
 
 export default function CreateDuePage() {
   const { user, hasPermission } = useAuth();
+  const { user: mtUser, organization } = useMultiTenantAuth();
   const { go } = useAppNav();
   const navigate = useNavigate();
   const toast = useToast();
@@ -382,13 +385,22 @@ export default function CreateDuePage() {
           setTargetGroupId(qpGroupId);
         }
       } else if (!isEditMode && data.ok && data.caller?.scope) {
-        const cscope = data.caller.scope;
+        // Default the form to the *active* role's scope, not the
+        // max scope across all roles. The active-role gating lives
+        // in effectiveScope above; this just makes the auto-fill
+        // match (so a class rep doesn't see "faculty-tier" pre-selected
+        // just because they happen to also hold a dept role).
+        const activeScope = activeRole?.kind === 'exec' ? activeRole.scopeLevel : null;
+        const cscope = activeScope ?? data.caller.scope;
+        const fallbackGroup = activeRole?.kind === 'exec'
+          ? activeRole.groupId ?? data.caller.group_id
+          : data.caller.group_id;
         if (cscope === 'group') {
           setTargetScope('group');
-          setTargetGroupId(data.caller.group_id);
+          setTargetGroupId(fallbackGroup);
         } else if (cscope === 'unit') {
           setTargetScope('faculty');
-          setTargetGroupId(data.caller.group_id);
+          setTargetGroupId(fallbackGroup);
         } else {
           setTargetScope('org');
           setTargetGroupId(null);
@@ -418,9 +430,31 @@ export default function CreateDuePage() {
     [targetGroups]
   );
 
-  const callerScope = ctx?.caller?.scope;
-  const canChooseOrgScope = callerScope === 'org';
-  const canChooseFacultyScope = callerScope === 'org' || callerScope === 'unit';
+  // The scope picker has TWO inputs:
+  //   • callerScope — the MAX scope the user holds anywhere (from
+  //     getDueCreationContext). For a dept-pres-who-is-also-a-class-
+  //     rep this is 'unit' (the higher of the two roles).
+  //   • activeRole.scopeLevel — the role the user is CURRENTLY
+  //     operating as via the role switcher. If they switched to
+  //     "Class Rep of ECE 300L", scopeLevel is 'group'.
+  //
+  // Previously the page used only callerScope, so a class rep who
+  // ALSO holds a dept role saw "Faculty / Dept" + "Whole org"
+  // checkboxes while on the class-rep dashboard. Confusing and
+  // wrong — exec capabilities should be gated by the *active* role,
+  // not the union of all roles. We now derive the effective scope:
+  //   active exec role → use its scopeLevel
+  //   no active exec role (member view) → fall back to callerScope
+  //                                       so the page still works
+  //                                       for non-role-switcher orgs.
+  const { activeRole } = useActiveRole({
+    orgId: organization?.id,
+    memberId: mtUser?.id,
+  });
+  const effectiveScope: 'org' | 'unit' | 'group' | null | undefined =
+    activeRole?.kind === 'exec' ? activeRole.scopeLevel : ctx?.caller?.scope;
+  const canChooseOrgScope = effectiveScope === 'org';
+  const canChooseFacultyScope = effectiveScope === 'org' || effectiveScope === 'unit';
 
   useEffect(() => {
     if (isEditMode) return;
@@ -760,25 +794,43 @@ export default function CreateDuePage() {
       payload,
     });
 
-    // Insert ticket tiers for events after the payment type is created
+    // Insert ticket tiers for events after the payment type is created.
+    //
+    // RLS gotcha (mig 057): event_ticket_tiers grants INSERT to
+    // service_role ONLY — a direct supabase.from('event_ticket_tiers')
+    // .insert() call from an authenticated client fails silently
+    // (no error toast, just no rows). The EDIT path already routes
+    // through /api/billing/verify-payment to use service_role; the
+    // CREATE path now does the same via the 'insert-event-tiers'
+    // action. The endpoint re-verifies the caller is an admin in
+    // the payment_type's org before inserting.
     if (res.ok && res.payment_type_id && isEvent && validTiers.length > 0) {
-      const tierRows = validTiers.map((tier, i) => ({
-        payment_type_id: res.payment_type_id,
-        organization_id: scope.orgId,
-        name: tier.name.trim(),
-        price: Number(tier.price),
-        quantity: tier.quantity === '' ? null : Number(tier.quantity),
-        sold_count: 0,
-        sort_order: i,
-        is_active: true,
-      }));
-
-      const { error: tierErr } = await supabase
-        .from('event_ticket_tiers')
-        .insert(tierRows);
-
-      if (tierErr) {
-        console.error('Tier insert failed:', tierErr);
+      try {
+        const tierRes = await fetch('/api/billing/verify-payment', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${getStoredAccessToken()}`,
+          },
+          body: JSON.stringify({
+            action: 'insert-event-tiers',
+            callerId: scope.memberId,
+            paymentTypeId: res.payment_type_id,
+            tiers: validTiers.map((tier, i) => ({
+              name: tier.name.trim(),
+              price: Number(tier.price),
+              quantity: tier.quantity === '' ? null : Number(tier.quantity),
+              sort_order: i,
+            })),
+          }),
+        });
+        const tierData = await tierRes.json();
+        if (!tierRes.ok || !tierData?.ok) {
+          console.error('Tier insert failed:', tierData);
+          toast?.error?.('Event created but ticket tiers failed to save. Edit the event to add them.');
+        }
+      } catch (err) {
+        console.error('Tier insert request failed:', err);
         toast?.error?.('Event created but ticket tiers failed to save. Edit the event to add them.');
       }
     }

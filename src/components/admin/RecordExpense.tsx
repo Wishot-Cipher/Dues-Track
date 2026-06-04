@@ -176,7 +176,20 @@ export default function RecordExpense() {
   useEffect(() => {
     async function loadData() {
       try {
-        const [cats, types] = await Promise.all([fetchExpenseCategories(), fetchPaymentTypes()])
+        // Resolve the active-role subtree once so fetchPaymentTypes
+        // pulls the right slice. A dept exec sees dept-tier + every
+        // class under; class rep sees just her class; org owner sees
+        // everything (null = no filter).
+        const scope = getOrgScope()
+        const scopedIds = scope ? await getScopedGroupIds({
+          orgId: scope.orgId,
+          activeGroupId: activeRole?.groupId ?? null,
+          activeScopeLevel: activeRole?.scopeLevel ?? null,
+        }) : undefined
+        const [cats, types] = await Promise.all([
+          fetchExpenseCategories(),
+          fetchPaymentTypes(scopedIds),
+        ])
         setCategories(cats)
         setPaymentTypes(types)
         await fetchAvailableBalance()
@@ -188,7 +201,8 @@ export default function RecordExpense() {
       }
     }
     loadData()
-  }, [showError])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [showError, activeRole?.groupId, activeRole?.scopeLevel])
 
   async function fetchAvailableBalance() {
     try {
@@ -759,13 +773,27 @@ export default function RecordExpense() {
 }
 
 // ── Payment types fetcher ──────────────────────────────────────────────────
-async function fetchPaymentTypes() {
+// Tier-aware. Accepts an optional `scopedIds` set so a dept/faculty
+// exec sees every payment type in their subtree (not just their
+// primary class). Caller passes `null` to skip the group filter
+// entirely (org-tier scanner). When `scopedIds` is undefined we fall
+// back to the legacy "current class only" behavior so old call sites
+// keep working — but in this file the new in-component caller always
+// supplies the set.
+async function fetchPaymentTypes(scopedIds?: Set<string> | null) {
   const { supabase } = await import('@/config/supabase')
   const scope = getOrgScope()
   let q = supabase.from('payment_types').select('id, title, amount').order('title')
   if (scope) {
     q = q.eq('organization_id', scope.orgId)
-    q = q.eq('group_id', scope.groupId)
+    if (scopedIds === undefined) {
+      // Legacy path — pin to caller's primary class.
+      q = q.eq('group_id', scope.groupId)
+    } else if (scopedIds && scopedIds.size > 0) {
+      // Tier-aware path — every group in the active role's subtree.
+      q = q.in('group_id', Array.from(scopedIds))
+    }
+    // scopedIds === null → no group filter (org-tier exec).
   }
   const { data, error } = await q
   if (error) throw error

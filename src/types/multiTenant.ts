@@ -199,6 +199,13 @@ export interface OrganizationGroup {
   // Status
   is_active: boolean;
   member_count?: number;
+  // Transitional flag from mig 099 / 100. TRUE for legacy auto-Office
+  // classes that were spawned by the staff-bootstrap path before the
+  // Office concept was retired. The dashboard uses this to surface a
+  // one-time "pick your real class" gate so the member can move out.
+  // New bootstraps never set this; once all legacy rows are cleared
+  // the column will be dropped in a follow-up migration.
+  is_staff_office?: boolean;
 
   // Audit
   created_at: string;

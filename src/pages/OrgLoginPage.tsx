@@ -408,11 +408,18 @@ export default function OrgLoginPage() {
   }, [orgSlug]);
 
   // ── Resolve group from URL ──
+  // Only set selectedGroup when the URL explicitly names one
+  // (`?group=<id>`). The previous fallback to `groups[0]` meant a
+  // logout-then-login flow landed on the FIRST group in the org
+  // (alphabetical or insertion order) and tripped the server's
+  // wrong-group check for everyone whose actual class wasn't first.
+  // No URL group → leave undefined; login resolves the person.
   useEffect(() => {
     if (!groups.length) return;
     const gid   = searchParams.get('group');
-    const match = gid ? groups.find(g => g.id === gid) : undefined;
-    setSelectedGroup(match ?? groups[0]);
+    if (!gid) { setSelectedGroup(undefined); return; }
+    const match = groups.find(g => g.id === gid);
+    setSelectedGroup(match);
   }, [groups, searchParams]);
 
   // ── Redirect if already authenticated ──

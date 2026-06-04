@@ -161,25 +161,24 @@ export default async function handler(req: any, res: any) {
       return res.status(401).json({ ok: false, error: 'Invalid credentials. Please check your ID and password.' });
     }
 
+    // Note (identity rework, Chunk A): we used to reject the login when
+    // selectedGroupId didn't match member.group_id. That made sense when
+    // a member was tied to exactly one group with no exec layering — but
+    // now a dept/faculty exec legitimately lands on a group-scoped login
+    // URL whose group differs from their primary class. The server now
+    // authenticates the *person*; the URL's group is treated as UI hint
+    // only. Cross-org guard (group must belong to org) stays.
     if (selectedGroupId) {
-      const { data: selectedGroup, error: groupError } = await supabase
+      const { data: selectedGroup } = await supabase
         .from('organization_groups')
-        .select('id, name, short_name')
+        .select('id, organization_id')
         .eq('id', selectedGroupId)
         .eq('organization_id', org.id)
         .single();
-
-      if (groupError || !selectedGroup) {
+      if (!selectedGroup) {
         return res.status(404).json({
           ok: false,
           error: `The selected ${org.group_label || 'department'} could not be found for this organization.`,
-        });
-      }
-
-      if (member.group_id !== selectedGroup.id) {
-        return res.status(403).json({
-          ok: false,
-          error: `This account belongs to a different ${org.group_label || 'department'}. Please choose the correct one for this login.`,
         });
       }
     }

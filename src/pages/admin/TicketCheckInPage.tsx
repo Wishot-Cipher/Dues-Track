@@ -19,12 +19,16 @@ import { useToast } from '@/hooks/useToast';
 
 function resultMeta(t: ThemeTokens) {
   return {
-    checked_in:   { color: t.mint,   icon: <CheckCircle2 className="w-6 h-6" />, label: 'Checked in' },
-    already_used: { color: t.amber,  icon: <AlertTriangle className="w-6 h-6" />, label: 'Already used' },
-    invalid:      { color: t.danger, icon: <XCircle className="w-6 h-6" />, label: 'Invalid ticket' },
-    unauthorized: { color: t.danger, icon: <XCircle className="w-6 h-6" />, label: 'Not authorized' },
-    cancelled:    { color: t.danger, icon: <XCircle className="w-6 h-6" />, label: 'Cancelled ticket' },
-    refunded:     { color: t.danger, icon: <XCircle className="w-6 h-6" />, label: 'Refunded ticket' },
+    checked_in:     { color: t.mint,   icon: <CheckCircle2 className="w-6 h-6" />, label: 'Checked in' },
+    already_used:   { color: t.amber,  icon: <AlertTriangle className="w-6 h-6" />, label: 'Already used' },
+    invalid:        { color: t.danger, icon: <XCircle className="w-6 h-6" />, label: 'Invalid ticket' },
+    unauthorized:   { color: t.danger, icon: <XCircle className="w-6 h-6" />, label: 'Not authorized' },
+    // Mig 102 result: the ticket belongs to a tier this scanner
+    // doesn't cover. Different from "unauthorized" — they ARE an
+    // exec, just at the wrong level for this event.
+    scope_mismatch: { color: t.amber,  icon: <AlertTriangle className="w-6 h-6" />, label: 'Wrong tier' },
+    cancelled:      { color: t.danger, icon: <XCircle className="w-6 h-6" />, label: 'Cancelled ticket' },
+    refunded:       { color: t.danger, icon: <XCircle className="w-6 h-6" />, label: 'Refunded ticket' },
   } as Record<string, { color: string; icon: React.ReactNode; label: string }>;
 }
 

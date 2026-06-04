@@ -31,6 +31,7 @@ import {
   Filter,
 } from 'lucide-react';
 import PageWrapper from '@/components/ui/PageWrapper';
+import CopyInviteLink from '@/components/ui/CopyInviteLink';
 import { APP_NAME } from '@/config/constants';
 import { organizationService } from '@/services/organizationService';
 import { useMultiTenantAuth } from '@/hooks/useMultiTenantAuth';
@@ -649,6 +650,19 @@ export default function OrgOverviewPage() {
                   <span style={{ fontSize: 14, lineHeight: 1 }}>+</span>
                   Add faculty
                 </motion.button>
+
+                {/* Org founder shortcut: copy the add-faculty URL so
+                    they can hand the next faculty exec a direct link
+                    without bootstrapping every faculty themselves. */}
+                {orgSlug && (
+                  <CopyInviteLink
+                    url={`/${orgSlug}/add-faculty`}
+                    label="Invite a faculty founder"
+                    successText="Faculty-founder invite link copied"
+                    hint="Anyone with this link can register a faculty in this org. They still need peer votes / parent confirm before exec powers unlock."
+                    t={tk}
+                  />
+                )}
 
                 <div className="rounded-xl px-4 py-2.5 text-center relative overflow-hidden"
                   style={{ background: tk.cardBg, border: `1px solid ${tk.cardBorder}`, minWidth: 72 }}>

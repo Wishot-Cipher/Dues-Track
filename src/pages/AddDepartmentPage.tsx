@@ -72,22 +72,23 @@ const SESSION_KEYS = {
 
 interface Form {
   // Who is doing this? Drives which slides show + whether claim is offered.
+  // Two intents only — student vs helping. The "staff (no class)"
+  // intent was removed when Office was retired (Chunk H).
   // 'student'  — they belong to a class inside this structure
-  // 'staff'    — staff/faculty; no class, claim possible
   // 'helping'  — just populating the directory; class skipped, NO claim offered
-  intent: 'student' | 'staff' | 'helping' | '';
+  intent: 'student' | 'helping' | '';
 
   // Department / class being created (semantic depends on the route)
   departmentName: string;
   departmentShortName: string;
   departmentKind: 'department' | 'class' | 'general';
 
-  // Founder's own class — used on /f/:short/new when intent === 'student'.
+  // Founder's own class — always required when adding a dept under
+  // a faculty. The legacy "staff (no class)" path was removed in
+  // Chunk H (Office concept retired). Every founder now picks a real
+  // class — exec capabilities layer on top via member_admins.
   className: string;
   classShortName: string;
-  // Kept for backwards compat with earlier flow; intent='staff' has the same
-  // effect (no class created).
-  isStaff: boolean;
 
   // OPT-IN claim. wantsClaim=false → empty positionTitle goes to the RPC
   // and no claim is filed. The founder is just a class member.
@@ -111,7 +112,6 @@ const EMPTY: Form = {
   departmentKind: 'department',
   className: '',
   classShortName: '',
-  isStaff: false,
   wantsClaim: false,    // safe default — wrong person who's just adding the structure isn't prompted
   positionTitle: '',
   fullName: '',
@@ -152,13 +152,18 @@ export default function AddDepartmentPage() {
 
   // The slide path is computed from the route + the picked intent:
   //   • dept flow + student → intent · details · class · account · claim? · recap
-  //   • dept flow + staff   → intent · details · account · claim? · recap
-  //   • dept flow + helping → intent · details · account · recap        (NO claim)
-  //   • class flow + student/staff → intent · details · account · claim? · recap
-  //   • class flow + helping       → intent · details · account · recap
+  //   • dept flow + student → intent · details · class · account · claim? · recap
+  //   • dept flow + helping → intent · details · class · account · recap (NO claim)
+  //   • class flow + student/helping → intent · details · account · claim?/no · recap
+  //
+  // The class step is now required for both intents on the dept flow
+  // because mig 100 (Office removal) makes class info mandatory on
+  // bootstrap. A "helper" still creates a class — they can name it
+  // anything sensible since they're seeding the structure for the
+  // real students who'll join later.
   const steps: WizardStep[] = useMemo(() => {
     const out: WizardStep[] = ['intent', 'details'];
-    if (!isAddingClass && form.intent === 'student') out.push('class');
+    if (!isAddingClass && form.intent !== '') out.push('class');
     out.push('account');
     if (form.intent !== 'helping' && form.intent !== '') out.push('claim');
     out.push('recap');
@@ -217,7 +222,12 @@ export default function AddDepartmentPage() {
       case 'details':
         return form.departmentName.trim().length > 1 && form.departmentShortName.trim().length >= 2;
       case 'class':
-        return form.className.trim().length > 1;
+        // Level is now required at class creation. The class shares
+        // one level; new members inherit it instead of typing one,
+        // which collapses the "wrong level on someone's profile"
+        // class of bug. Class rep can bump it later when the
+        // cohort moves up a year.
+        return form.className.trim().length > 1 && form.userLevel.trim().length > 0;
       case 'account':
         return form.fullName.trim().length > 1 &&
                form.memberNumber.trim().length > 1 &&
@@ -250,8 +260,6 @@ export default function AddDepartmentPage() {
     setSubmitting(true);
     setError(null);
 
-    // Resolve final flags from intent + opt-in toggle.
-    const effectiveIsStaff = form.intent === 'staff';
     const positionToSend =
       form.wantsClaim && form.intent !== 'helping' && form.positionTitle.trim().length > 1
         ? form.positionTitle.trim()
@@ -293,15 +301,14 @@ export default function AddDepartmentPage() {
           p_parent_faculty_short: faculty.short_name,
           p_dept_name:            form.departmentName,
           p_dept_short:           form.departmentShortName,
-          p_class_name:           effectiveIsStaff ? null : form.className,
-          p_class_short:          effectiveIsStaff ? null : (form.classShortName || null),
+          p_class_name:           form.className,
+          p_class_short:          form.classShortName || null,
           p_class_level:          form.userLevel || null,
           p_founder_full_name:    form.fullName,
           p_founder_email:        form.email,
           p_founder_member_id:    form.memberNumber,
           p_founder_password:     form.password,
           p_position_title:       positionToSend,
-          p_is_staff:             effectiveIsStaff,
         });
         res = (data ?? { ok: false }) as BootstrapResult;
       }
@@ -497,14 +504,12 @@ export default function AddDepartmentPage() {
             >
               <div className="grid gap-3">
                 {([
-                  // Tightened labels — a dept president is a STUDENT
-                  // in their own class, not staff. The previous
-                  // "staff / faculty" label could be misread by an
-                  // HOD or course rep; "admin staff" makes the
-                  // separation unambiguous and the description spells
-                  // out who that path is actually for.
-                  ['student', isAddingClass ? 'I belong to this class' : 'I’m a student in this department', 'You\'ll be added to your own class. Even if you\'re a dept president or rep, pick this — exec powers are added on top of your class membership.'],
-                  ['staff',   'I\'m admin staff (no class)',                                                   'Pick this ONLY if you\'re a registrar / secretariat / non-academic staff. You\'ll be parked in a small Office bucket since you don\'t belong to a student class.'],
+                  // Two intents only — student vs helping. The "staff"
+                  // intent that parked founders into an Office bucket
+                  // was removed in Chunk H. Every founder is a real
+                  // member of a real class; exec powers (dept pres,
+                  // HOD, course rep) layer on top via member_admins.
+                  ['student', isAddingClass ? 'I belong to this class' : 'I’m a student in this department', 'You\'ll be added to your own class. Even if you\'re a dept president, HOD, or rep, pick this — exec powers are added on top of your class membership.'],
                   ['helping', 'I\'m just helping (this is missing from the directory)',                       'No claim, no role — you just add the structure so others can join.'],
                 ] as const).map(([value, label, desc]) => {
                   const active = form.intent === value;
@@ -584,8 +589,10 @@ export default function AddDepartmentPage() {
         </motion.div>
         )}
 
-        {/* ── Slide: Your class (only when adding a dept AND intent='student') ── */}
-        {step === 'class' && !isAddingClass && form.intent === 'student' && (
+        {/* ── Slide: Your class (always shown on dept flow now that
+            Office is gone — class info is required for every founder
+            regardless of intent). ── */}
+        {step === 'class' && !isAddingClass && form.intent !== '' && (
         <motion.div
           key="class"
           initial={{ opacity: 0, x: 20 }}
@@ -618,11 +625,16 @@ export default function AddDepartmentPage() {
               />
             </Field>
           </Row>
-          <Field label="Level / Year" hint="e.g. 300L, SS2, Year 1">
+          <Field
+            label="Class level / year"
+            required
+            hint="The class shares ONE level (e.g. 300L). Every member who joins this class inherits it automatically. The class rep can bump it when the year ends."
+          >
             <Input
               value={form.userLevel}
               onChange={(v) => setF('userLevel', v)}
               placeholder="300L"
+              required
             />
           </Field>
         </Panel>
@@ -743,13 +755,13 @@ export default function AddDepartmentPage() {
           <div className="space-y-2.5">
             <RecapRow tk={tk} label={isAddingClass ? 'New class' : 'New department'} value={`${form.departmentName} (${form.departmentShortName || '—'})`} />
             <RecapRow tk={tk} label="Inside" value={faculty?.name ?? '—'} />
-            {!isAddingClass && form.intent === 'student' && (
-              <RecapRow tk={tk} label="Your class" value={`${form.className} (${form.classShortName || form.userLevel || 'auto'})`} />
+            {!isAddingClass && form.intent !== '' && (
+              <RecapRow tk={tk} label={form.intent === 'student' ? 'Your class' : 'Class you\'re creating'} value={`${form.className} (${form.classShortName || form.userLevel || 'auto'})`} />
             )}
             <RecapRow tk={tk} label="Your role here" value={
-              form.intent === 'student' ? 'Student' :
-              form.intent === 'staff'   ? 'Staff / faculty' :
-                                          'Just helping populate the directory'
+              form.intent === 'student'
+                ? 'Student in this class'
+                : 'Just helping populate the directory'
             } />
             <RecapRow tk={tk} label="Account" value={`${form.fullName} · ${form.email}`} />
             <RecapRow tk={tk} label="Login ID" value={form.memberNumber} />

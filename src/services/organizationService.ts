@@ -404,6 +404,8 @@ export const organizationService = {
     vote_deadline?: string;
     bootstrap_path?: boolean;
     required_layer?: number;
+    contested?: boolean;
+    contested_count?: number;
   }> {
     const { data, error } = await supabase.rpc('submit_claim_v2', {
       p_caller_member_id:    input.callerMemberId,
@@ -425,6 +427,7 @@ export const organizationService = {
       ok: boolean; error?: string; claim_id?: string;
       votes_required?: number; vote_deadline?: string;
       bootstrap_path?: boolean; required_layer?: number;
+      contested?: boolean; contested_count?: number;
     };
   },
 

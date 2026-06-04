@@ -31,6 +31,7 @@ import {
   Users,
 } from 'lucide-react';
 import PageWrapper from '@/components/ui/PageWrapper';
+import CopyInviteLink from '@/components/ui/CopyInviteLink';
 import { organizationService } from '@/services/organizationService';
 import TrustBadge from '@/components/trust/TrustBadge';
 import { useThemeTokens, type ThemeTokens } from '@/hooks/useThemeTokens';
@@ -280,22 +281,33 @@ export default function FacultyDetailPage() {
               </p>
             </div>
 
-            <motion.button
-              onClick={() =>
-                navigate(`/${org.slug}/f/${encodeURIComponent(faculty.short_name)}/new`)
-              }
-              className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-semibold whitespace-nowrap"
-              style={{
-                background: `${t.primary}14`,
-                color: t.primary,
-                border: `1px solid ${t.primary}30`,
-              }}
-              whileHover={{ scale: 1.03 }}
-              whileTap={{ scale: 0.97 }}
-            >
-              <span style={{ fontSize: 14, lineHeight: 1 }}>+</span>
-              Add {org.group_label?.toLowerCase() ?? 'department'}
-            </motion.button>
+            <div className="flex items-center gap-2 flex-wrap">
+              <motion.button
+                onClick={() =>
+                  navigate(`/${org.slug}/f/${encodeURIComponent(faculty.short_name)}/new`)
+                }
+                className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-semibold whitespace-nowrap"
+                style={{
+                  background: `${t.primary}14`,
+                  color: t.primary,
+                  border: `1px solid ${t.primary}30`,
+                }}
+                whileHover={{ scale: 1.03 }}
+                whileTap={{ scale: 0.97 }}
+              >
+                <span style={{ fontSize: 14, lineHeight: 1 }}>+</span>
+                Add {org.group_label?.toLowerCase() ?? 'department'}
+              </motion.button>
+              {/* Founder shortcut so the faculty exec hands off the
+                  "create dept" URL instead of bootstrapping it. */}
+              <CopyInviteLink
+                url={`/${org.slug}/f/${encodeURIComponent(faculty.short_name)}/new`}
+                label={`Invite a ${org.group_label?.toLowerCase() ?? 'dept'} founder`}
+                successText="Founder invite link copied"
+                hint={`Anyone with this link can register a ${org.group_label?.toLowerCase() ?? 'department'} under this faculty. Their exec role still goes through peer voting + parent confirm.`}
+                t={t}
+              />
+            </div>
 
             <div className="relative flex-1 sm:max-w-64">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5" style={{ color: t.textTer }} />

@@ -3,7 +3,7 @@ import { useState, useEffect, useCallback } from "react";
 import { motion } from "framer-motion";
 import {  } from "react-router-dom";
 import { useAppNav } from '@/hooks/useAppNav';
-import { supabase } from "@/config/supabase";
+import { supabase, getStoredAccessToken } from "@/config/supabase";
 import { getOrgScope } from '@/utils/orgScope';
 import { getScopedGroupIds } from '@/utils/scopedGroups';
 import { useActiveRole } from '@/hooks/useActiveRole';
@@ -30,6 +30,7 @@ import {
   BadgePercent,
   RefreshCw,
   HelpCircle,
+  Check,
 } from "lucide-react";
 import LoadingSpinner from '@/components/ui/LoadingSpinner';
 import Footer from "@/components/Footer";
@@ -54,6 +55,16 @@ interface PaymentType {
   deadline: string;
   late_fee_per_day?: number;
   group_id?: string;
+  // Mig 057 added category='event' for ticketed events. The waiver
+  // path branches on this — events grant a free ticket of a specific
+  // tier instead of just zeroing the fee.
+  category?: string;
+}
+
+interface EventTier {
+  id: string;
+  name: string;
+  price: number;
 }
 
 export default function WaivePaymentPage() {
@@ -77,6 +88,12 @@ export default function WaivePaymentPage() {
   const [selectedStudent, setSelectedStudent] = useState<Student | null>(null);
   const [paymentTypes, setPaymentTypes] = useState<PaymentType[]>([]);
   const [selectedPaymentType, setSelectedPaymentType] = useState<string>("");
+  // Event-waiver state. When the picked due is category='event' we
+  // load its tier list and force the admin to pick a tier — the
+  // recipient gets a free ticket of THAT tier, not just a zeroed fee.
+  const [eventTiers, setEventTiers] = useState<EventTier[]>([]);
+  const [selectedTierId, setSelectedTierId] = useState<string>('');
+  const [tiersLoading, setTiersLoading] = useState(false);
   const [waiverReason, setWaiverReason] = useState("");
   const [customNotes, setCustomNotes] = useState("");
   const [notifyStudent, setNotifyStudent] = useState(true);
@@ -91,6 +108,44 @@ export default function WaivePaymentPage() {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedStudent]);
+
+  // When the admin picks an event, load its ticket tiers so they can
+  // pick which one to grant. Non-event selections clear the tier
+  // state. We skip the network call entirely for non-events to keep
+  // the picker step snappy.
+  useEffect(() => {
+    setSelectedTierId('');
+    setEventTiers([]);
+    if (!selectedPaymentType) return;
+    const pt = paymentTypes.find((p) => p.id === selectedPaymentType);
+    if (!pt || pt.category !== 'event') return;
+    let cancelled = false;
+    setTiersLoading(true);
+    (async () => {
+      const { data, error } = await supabase
+        .from('event_ticket_tiers')
+        .select('id, name, price')
+        .eq('payment_type_id', pt.id)
+        .eq('is_active', true)
+        .order('sort_order');
+      if (cancelled) return;
+      if (error) {
+        showError(`Could not load ticket tiers: ${error.message}`);
+        setTiersLoading(false);
+        return;
+      }
+      const tiers = (data || []) as EventTier[];
+      setEventTiers(tiers);
+      // Auto-pick the cheapest tier as default — the most common
+      // "free ticket" use case is the entry-level pass.
+      if (tiers.length > 0) {
+        const cheapest = tiers.reduce((min, t) => (t.price < min.price ? t : min), tiers[0]);
+        setSelectedTierId(cheapest.id);
+      }
+      setTiersLoading(false);
+    })();
+    return () => { cancelled = true; };
+  }, [selectedPaymentType, paymentTypes, showError]);
 
   const loadPaymentTypesAndStudentPayments = async (showRefreshIndicator = false) => {
     if (!selectedStudent) return;
@@ -114,7 +169,7 @@ export default function WaivePaymentPage() {
       }) : null;
       let ptQ = supabase
         .from("payment_types")
-        .select("id, title, amount, description, deadline, target_levels, group_id")
+        .select("id, title, amount, description, deadline, target_levels, group_id, category")
         .eq("is_active", true);
       if (scope) {
         ptQ = ptQ.eq('organization_id', scope.orgId);
@@ -273,16 +328,67 @@ export default function WaivePaymentPage() {
 
       const reasonLabel = reasonLabels[waiverReason] || waiverReason;
 
+      // ── EVENT BRANCH: grant a free ticket via the server endpoint.
+      //    The endpoint inserts the payment row + mints the
+      //    event_tickets row in one shot (RLS gates event_tickets to
+      //    service_role). The recipient gets a real QR — same shape
+      //    as a paying buyer.
+      if (paymentType.category === 'event') {
+        if (!selectedTierId) {
+          showError('Pick which ticket tier this person should receive.');
+          setLoading(false);
+          return;
+        }
+        const reasonForRecord = customNotes
+          ? `${reasonLabel}. ${customNotes}`
+          : reasonLabel;
+        const issueRes = await fetch('/api/billing/verify-payment', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${getStoredAccessToken()}`,
+          },
+          body: JSON.stringify({
+            action: 'issue-free-ticket',
+            callerId: user?.id,
+            paymentTypeId: paymentType.id,
+            tierId: selectedTierId,
+            recipientMemberId: selectedStudent.id,
+            reason: reasonForRecord,
+          }),
+        });
+        const issueData = await issueRes.json();
+        if (!issueRes.ok || !issueData?.ok) {
+          throw new Error(issueData?.error || 'Could not grant the free ticket.');
+        }
+        if (notifyStudent) {
+          await notificationService.sendPaymentWaivedNotification(
+            selectedStudent.id,
+            selectedStudent.full_name,
+            paymentType.title,
+            paymentType.amount,
+            reasonForRecord,
+          );
+        }
+        success(`Free ticket granted to ${selectedStudent.full_name}`);
+        setShowSuccess(true);
+        setTimeout(() => navigate('/admin/dashboard'), 2000);
+        return;
+      }
+
       // Create a waived payment record
       const scope = getOrgScope();
+      // Note: payments.approved_by was dropped in mig 020 (legacy FK
+      // to the old `admins` table). The audit trail now lives in the
+      // notes field \u2014 "WAIVED BY ADMIN" + reason \u2014 and the JWT
+      // identifies who triggered the write. Don't reintroduce
+      // approved_by here; it will fail PostgREST schema lookup.
       const waiveInsert: Record<string, unknown> = {
           member_id: selectedStudent.id,
           payment_type_id: selectedPaymentType,
           amount: paymentType.amount,
           payment_method: "cash",
           status: "approved",
-          approved_by: user?.id,
-          approved_at: new Date().toISOString(),
           notes: `\u2705 WAIVED BY ADMIN\n\nReason: ${reasonLabel}\n${
             customNotes ? `Additional Notes: ${customNotes}` : ""
           }\n\nThis payment has been waived and you are not required to pay.`,
@@ -300,21 +406,35 @@ export default function WaivePaymentPage() {
       if (scope) {
         waiveInsert.organization_id = scope.orgId;
       }
-      // Ensure the current user is an admin and get the admin record id
+      // Resolve the admin record. A dept-pres-AND-class-rep has TWO
+      // active member_admins rows in the same org (one per scope), so
+      // .single() throws PGRST116 ("Cannot coerce the result to a
+      // single JSON object"). We pick the highest-layer row instead —
+      // any active row is enough to attribute approved_by, and the
+      // higher-layer one is the most authoritative identity for the
+      // audit log.
       const { data: adminRec, error: adminErr } = await supabase
         .from('member_admins')
-        .select('id')
+        .select('id, verification_layer')
         .eq('member_id', user?.id || '')
         .eq('organization_id', scope?.orgId || '')
-        .single();
+        .eq('is_active', true)
+        .order('verification_layer', { ascending: false })
+        .limit(1)
+        .maybeSingle();
 
       if (adminErr || !adminRec) {
-        showError('You are not registered as an admin for this organization');
+        showError(adminErr?.message
+          ? `Admin lookup failed: ${adminErr.message}`
+          : 'You are not registered as an admin for this organization');
         setLoading(false);
         return;
       }
 
-      waiveInsert.approved_by = adminRec.id;
+      // adminRec.id resolution kept around for future use (event
+      // path uses it). Not assigned to waiveInsert.approved_by —
+      // the column was dropped in mig 020.
+      void adminRec;
 
       const { error: paymentError } = await supabase
         .from("payments")
@@ -348,7 +468,14 @@ export default function WaivePaymentPage() {
       }, 2000);
     } catch (error) {
       console.error("Error waiving payment:", error);
-      showError("Failed to waive payment. Please try again.");
+      // Surface the actual error message so the user (and we) can
+      // see WHY a waive failed — generic "try again" hid RLS
+      // rejections, missing columns, and the multi-admin .single()
+      // crash. Truncated to keep the toast short.
+      const msg = error instanceof Error
+        ? error.message.slice(0, 220)
+        : 'Failed to waive payment. Please try again.';
+      showError(`Waive failed: ${msg}`);
     } finally {
       setLoading(false);
     }
@@ -812,6 +939,63 @@ export default function WaivePaymentPage() {
           </motion.section>
         )}
 
+        {/* ── Step 2b: Event tier picker ────────────────────────
+            Only renders for events. The selected tier becomes the
+            free ticket the recipient gets minted. Cheapest tier
+            auto-selected so the simple case is one less click. */}
+        {selectedStudent && selectedPaymentType && (() => {
+          const pt = paymentTypes.find((p) => p.id === selectedPaymentType);
+          if (!pt || pt.category !== 'event') return null;
+          return (
+            <motion.section
+              initial={{ opacity: 0, y: 16 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="rounded-2xl p-5 sm:p-6 space-y-4"
+              style={{ background: tk.card, border: `1px solid ${tk.cardBorder}` }}
+            >
+              <header className="flex items-center gap-3">
+                <span
+                  className="w-9 h-9 rounded-xl flex items-center justify-center shrink-0"
+                  style={{ background: `${tk.mint}18`, color: tk.mint, border: `1px solid ${tk.mint}40` }}
+                >
+                  <Check size={16} />
+                </span>
+                <div className="flex-1 min-w-0">
+                  <p className="text-[10px] font-bold uppercase tracking-[0.18em]" style={{ color: tk.mint }}>
+                    Step 2b
+                  </p>
+                  <h2 className="text-base font-extrabold tracking-tight" style={{ color: tk.text }}>
+                    Pick the ticket tier to grant
+                  </h2>
+                  <p className="text-[12px] mt-0.5" style={{ color: tk.textSec }}>
+                    {selectedStudent.full_name} will get a real ticket of this tier — same QR + check-in flow as a paying buyer.
+                  </p>
+                </div>
+              </header>
+
+              {tiersLoading ? (
+                <p className="text-[12px]" style={{ color: tk.textSec }}>Loading tiers…</p>
+              ) : eventTiers.length === 0 ? (
+                <p className="text-[12px]" style={{ color: tk.danger }}>
+                  This event has no active tiers. Add one in the event editor before granting free tickets.
+                </p>
+              ) : (
+                <ProfessionalDropdown
+                  label="Ticket tier *"
+                  placeholder="Pick a tier…"
+                  value={selectedTierId}
+                  onChange={(v) => setSelectedTierId(Array.isArray(v) ? v[0] : v)}
+                  options={eventTiers.map((tier) => ({
+                    value: tier.id,
+                    label: tier.name,
+                    description: formatCurrency(tier.price),
+                  }))}
+                />
+              )}
+            </motion.section>
+          );
+        })()}
+
         {/* ── Step 3: Reason + notes + notify ─────────────────── */}
         {selectedStudent && selectedPaymentType && (
           <motion.section
@@ -921,16 +1105,40 @@ export default function WaivePaymentPage() {
                   Preview
                 </p>
                 <p className="text-xs leading-relaxed" style={{ color: tk.text }}>
-                  This payment row will be marked <span className="font-mono font-bold" style={{ color: tk.mint }}>WAIVED</span> in
-                  the member's history, with the reason shown next to it.
+                  {(() => {
+                    const pt = paymentTypes.find((p) => p.id === selectedPaymentType);
+                    if (pt?.category === 'event') {
+                      const tier = eventTiers.find((tier) => tier.id === selectedTierId);
+                      return (
+                        <>
+                          A <span className="font-mono font-bold" style={{ color: tk.mint }}>FREE TICKET</span>
+                          {tier ? <> for <strong>{tier.name}</strong></> : null} will be issued to {selectedStudent.full_name} —
+                          they'll see it in their tickets list and can be checked in at the door.
+                        </>
+                      );
+                    }
+                    return (
+                      <>
+                        This payment row will be marked <span className="font-mono font-bold" style={{ color: tk.mint }}>WAIVED</span> in
+                        the member's history, with the reason shown next to it.
+                      </>
+                    );
+                  })()}
                 </p>
               </div>
             )}
           </motion.section>
         )}
 
-        {/* ── Actions ─────────────────────────────────────────── */}
-        {selectedStudent && selectedPaymentType && waiverReason && (
+        {/* ── Actions ───────────────────────────────────────────
+            For event waivers we also require a tier pick — without
+            it the issue-free-ticket endpoint can't mint the ticket. */}
+        {(() => {
+          if (!(selectedStudent && selectedPaymentType && waiverReason)) return false;
+          const pt = paymentTypes.find((p) => p.id === selectedPaymentType);
+          if (pt?.category === 'event' && !selectedTierId) return false;
+          return true;
+        })() && (
           <motion.div
             className="flex gap-2 flex-wrap justify-end"
             initial={{ opacity: 0, y: 12 }}

@@ -332,7 +332,17 @@ export default function BringMySchoolPage() {
       form.password === form.passwordConfirm &&
       form.orgName.trim().length > 2 &&
       form.orgType &&
-      form.groupName.trim().length > 1
+      form.groupName.trim().length > 1 &&
+      // Academic orgs must commit to a class level — every member
+      // who joins this class will inherit it (mig 103). Inlined
+      // because `isAcademicType` is declared a few lines below
+      // (const TDZ), so referring to it here errors at runtime.
+      (
+        !(form.orgType === 'university' || form.orgType === 'polytechnic'
+          || form.orgType === 'college_of_education' || form.orgType === 'monotechnic'
+          || form.orgType === 'seminary')
+        || form.userLevel.trim().length > 0
+      )
     );
   }, [form]);
 
@@ -359,6 +369,13 @@ export default function BringMySchoolPage() {
           : form.orgType === 'club' || form.orgType === 'association' ? 'chapter'
           : 'group';
         return `Tell us the ${what} you belong to.`;
+      }
+      // Level is now required for academic orgs — the class carries
+      // ONE level and every joiner inherits it (mig 103). Without
+      // this, the founder lands in a class with no level set, and
+      // every subsequent invite has no level to inherit.
+      if (isAcademicType && form.userLevel.trim().length === 0) {
+        return 'Tell us your class level (e.g. 200L). Members joining your class will inherit it automatically.';
       }
     }
     if (n === 3) {
@@ -679,7 +696,7 @@ export default function BringMySchoolPage() {
             >
               {isAcademic && (
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  <Field tk={tk} label="Faculty name" hint="optional">
+                  <Field tk={tk} label="Faculty name" hint="optional — leave blank and we'll nest your class directly under the org">
                     <TextInput tk={tk} value={form.facultyName} onChange={(v) => setField('facultyName', v)} placeholder="School of Engineering" />
                   </Field>
                   <Field tk={tk} label="Faculty short name" hint="e.g. SOE">
@@ -701,8 +718,15 @@ export default function BringMySchoolPage() {
                 <Field tk={tk} label="Group kind" required>
                   <SelectInput tk={tk} value={form.groupKind} onChange={(v) => setField('groupKind', v)} options={GROUP_KINDS} />
                 </Field>
-                <Field tk={tk} label={levelLabel} hint={isAcademic ? 'e.g. 200L, SS2, Member' : undefined}>
-                  <TextInput tk={tk} value={form.userLevel} onChange={(v) => setField('userLevel', v)} placeholder={levelPlaceholder} />
+                <Field
+                  tk={tk}
+                  label={levelLabel}
+                  required={isAcademic}
+                  hint={isAcademic
+                    ? 'e.g. 200L. Members who join this class inherit it; the class rep can bump it once a year.'
+                    : 'e.g. Member, Worker'}
+                >
+                  <TextInput tk={tk} value={form.userLevel} onChange={(v) => setField('userLevel', v)} placeholder={levelPlaceholder} required={isAcademic} />
                 </Field>
               </div>
             </Panel>

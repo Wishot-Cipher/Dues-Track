@@ -150,6 +150,52 @@ export function getClaimRoleOptions(type: OrganizationType | string | null | und
 }
 
 /**
+ * Tier the claim is for. The DB only sees three scope_levels
+ * ('org' | 'unit' | 'group'), but the UI distinguishes Department vs
+ * Faculty (both ride 'unit'). We keep the four tiers here so the role
+ * dropdown can filter out roles that make no sense for the picked
+ * tier — e.g. "Class Rep" disappears for dept/faculty/org claims,
+ * "HOD" disappears for faculty/org. Without this, an academic org's
+ * dept-tier picker still surfaced "Class Rep" and confused users.
+ */
+export type ClaimTier = 'class' | 'dept' | 'faculty' | 'org';
+
+/**
+ * Roles that only make sense at specific tiers. Anything not in this
+ * map is allowed at every tier (the per-org-type list above is the
+ * outer filter; this is the inner tier filter).
+ */
+const TIER_ROLE_RESTRICTIONS: Record<string, ClaimTier[]> = {
+  class_rep:    ['class'],
+  hod:          ['dept'],
+  director:     ['dept', 'faculty', 'org'],
+  pastor:       ['dept', 'faculty', 'org'],
+  assistant_pastor: ['dept', 'faculty'],
+  choir_director:   ['dept', 'faculty'],
+  usher_head:       ['class', 'dept'],
+};
+
+/**
+ * Tier-aware role list. Pulls the per-org-type set and strips any
+ * roles whose restricted-tier set doesn't include the picked tier.
+ * 'custom' always rides through so the user can type a free-text
+ * role at any tier.
+ */
+export function getRolesForTier(
+  type: OrganizationType | string | null | undefined,
+  tier: ClaimTier,
+): ClaimRoleOption[] {
+  if (tier === 'org') return getOrgScopeRoleOptions(type);
+  const base = getClaimRoleOptions(type);
+  return base.filter((opt) => {
+    if (opt.value === 'custom') return true;
+    const allowedTiers = TIER_ROLE_RESTRICTIONS[opt.value];
+    if (!allowedTiers) return true; // unrestricted role
+    return allowedTiers.includes(tier);
+  });
+}
+
+/**
  * Org-scope roles are restricted to the highest executive role.
  * This keeps org-wide voting reserved for the SUG/lead exec level.
  */

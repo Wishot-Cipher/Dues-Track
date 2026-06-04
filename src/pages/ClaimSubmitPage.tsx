@@ -24,7 +24,8 @@ import { useMultiTenantAuth } from '@/hooks/useMultiTenantAuth';
 import { useTheme, getDashboardTokens } from '@/hooks/useTheme';
 import PayvexoBackground from '@/components/student/dashboard/PayvexoBackground';
 import ProfessionalDropdown from '@/components/ui/ProfessionalDropdown';
-import { APP_NAME, getClaimRoleOptions, getOrgScopeRoleOptions } from '@/config/constants';
+import { APP_NAME, getRolesForTier, type ClaimTier } from '@/config/constants';
+import { supabase } from '@/config/supabase';
 import type { OrganizationGroup } from '@/types/multiTenant';
 
 type ClaimTheme = {
@@ -71,23 +72,34 @@ export default function ClaimSubmitPage() {
     inputBorderHov: t.primaryRing,
   };
 
-  // Defaults from URL + current context
-  const initialScope = (params.get('scope') as 'org' | 'unit' | 'group' | null) ?? 'group';
+  // Defaults from URL + current context. The four UI tiers map onto
+  // three DB scope levels:
+  //   'class'   → scope_level='group' (claimant's primary class)
+  //   'dept'    → scope_level='unit'  (filter targets: kind='department')
+  //   'faculty' → scope_level='unit'  (filter targets: kind in faculty/college)
+  //   'org'     → scope_level='org'   (no target)
+  // The picker UX wants 4 buttons; the RPC wants 3 levels. We keep
+  // tierChoice as the source of truth and derive claimedScope from it.
+  const initialScopeRaw = (params.get('scope') as 'org' | 'unit' | 'group' | null) ?? 'group';
+  const initialTier: ClaimTier =
+    initialScopeRaw === 'org' ? 'org'
+    : initialScopeRaw === 'group' ? 'class'
+    : 'dept'; // legacy 'unit' default to dept; user can flip to faculty
   const initialGroupId = params.get('group') ?? group?.id ?? null;
 
-  const [claimedScope, setClaimedScope] = useState<'org' | 'unit' | 'group'>(initialScope);
+  const [tierChoice, setTierChoice] = useState<ClaimTier>(initialTier);
+  const claimedScope: 'org' | 'unit' | 'group' =
+    tierChoice === 'org' ? 'org'
+    : tierChoice === 'class' ? 'group'
+    : 'unit';
 
-  // When the claimant flips scope, reset the target group so we don't
-  // carry a stale id over. unit → wait for the picker effect below to
-  // pick the closest ancestor; group → snap back to the user's primary
-  // class; org → null (no group needed).
+  // Reset target group on tier flip so we don't carry stale ids.
   useEffect(() => {
-    if (claimedScope === 'org') setClaimedGroupId(null);
-    else if (claimedScope === 'group') setClaimedGroupId(initialGroupId);
-    // unit: handled by the unitTargets loader below (defaults to the
-    // claimant's nearest ancestor unit-tier group).
+    if (tierChoice === 'org') setClaimedGroupId(null);
+    else if (tierChoice === 'class') setClaimedGroupId(initialGroupId);
+    // dept/faculty: handled by the unitTargets loader below.
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [claimedScope]);
+  }, [tierChoice]);
   // Group id is mutable: claimers picking a unit-scope role (dept / faculty)
   // need to select WHICH faculty or department they're claiming for. The
   // class id from the URL/session only makes sense for group-scope ("class
@@ -103,28 +115,25 @@ export default function ClaimSubmitPage() {
   const [unitTargets, setUnitTargets] = useState<OrganizationGroup[]>([]);
   const [unitTargetsLoading, setUnitTargetsLoading] = useState(false);
   useEffect(() => {
-    if (claimedScope !== 'unit' || !organization?.id) return;
+    if ((tierChoice !== 'dept' && tierChoice !== 'faculty') || !organization?.id) return;
     let cancelled = false;
     setUnitTargetsLoading(true);
     (async () => {
       try {
         const all = await organizationService.getGroups(organization.id);
         if (cancelled) return;
-        // Unit tier = faculty / college / department / "unit". Sort by
-        // kind first (faculties on top, depts below) then by name so
-        // a long list stays scannable.
-        const kindRank: Record<string, number> = {
-          faculty: 0, college: 0, unit: 1, department: 2,
-        };
+        // Filter by the SPECIFIC tier the claimant picked. Previously
+        // we showed faculties + depts in one mixed dropdown labelled
+        // "My faculty" — confusing because a dept president picking
+        // "My faculty" then had to scroll past every faculty to find
+        // their dept. Splitting the picker means each dropdown shows
+        // only the tier in question.
         const filtered = (all || []).filter((g) => {
           const k = (g.kind || '').toLowerCase();
-          return k === 'faculty' || k === 'college' || k === 'department' || k === 'unit';
-        }).sort((a, b) => {
-          const ra = kindRank[(a.kind || '').toLowerCase()] ?? 9;
-          const rb = kindRank[(b.kind || '').toLowerCase()] ?? 9;
-          if (ra !== rb) return ra - rb;
-          return (a.name || '').localeCompare(b.name || '');
-        });
+          if (tierChoice === 'faculty') return k === 'faculty' || k === 'college';
+          if (tierChoice === 'dept')    return k === 'department' || k === 'unit';
+          return false;
+        }).sort((a, b) => (a.name || '').localeCompare(b.name || ''));
         setUnitTargets(filtered);
 
         // First time the user picks "unit" scope, default the target
@@ -148,18 +157,88 @@ export default function ClaimSubmitPage() {
     })();
     return () => { cancelled = true; };
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [claimedScope, organization?.id]);
+  }, [tierChoice, organization?.id]);
 
-  // Org-type-aware list of exec roles (academic vs church vs club vs ...)
+  // Tier-aware role list. Drops roles that don't fit the picked tier
+  // (e.g. "Class Rep" disappears on dept/faculty/org; "HOD" only
+  // shows on dept). For non-academic orgs the per-type list already
+  // excludes academic roles outright.
   const ROLE_OPTIONS = useMemo(
-    () => (claimedScope === 'org'
-      ? getOrgScopeRoleOptions(organization?.organization_type)
-      : getClaimRoleOptions(organization?.organization_type)),
-    [claimedScope, organization?.organization_type]
+    () => getRolesForTier(organization?.organization_type, tierChoice),
+    [tierChoice, organization?.organization_type]
   );
+
+  // Org-type-aware UI bits for the picker. The button labels track
+  // the org's group_label setting where useful (e.g. a church might
+  // have "Ministry" as its dept label).
+  const tierButtons = useMemo<{ value: ClaimTier; label: string }[]>(() => {
+    const isAcademic = (organization?.organization_type === 'university' ||
+                        organization?.organization_type === 'school');
+    const classLabel = isAcademic ? 'My class' : (organization?.group_label || 'My group');
+    const deptLabel  = isAcademic ? 'Department' : 'Sub-unit';
+    const facultyLabel = isAcademic ? 'Faculty' : 'Branch';
+    return [
+      { value: 'class',   label: classLabel },
+      { value: 'dept',    label: deptLabel },
+      { value: 'faculty', label: facultyLabel },
+      { value: 'org',     label: 'Whole org' },
+    ];
+  }, [organization?.organization_type, organization?.group_label]);
+
+  const tierHint = useMemo(() => {
+    switch (tierChoice) {
+      case 'class':   return `Class-tier roles. Members of your ${(organization?.group_label || 'group').toLowerCase()} vote.`;
+      case 'dept':    return 'Department-tier roles. Members of the department vote.';
+      case 'faculty': return 'Faculty-tier roles. Members of the faculty vote.';
+      case 'org':     return `Org-wide roles. Whole ${organization?.name || 'org'} votes — top exec only.`;
+    }
+  }, [tierChoice, organization?.group_label, organization?.name]);
+
+  const positionPlaceholder = useMemo(() => {
+    if (tierChoice === 'class') return 'e.g. Class Rep, Treasurer';
+    if (tierChoice === 'dept')  return 'e.g. Department President, HOD';
+    if (tierChoice === 'faculty') return 'e.g. Dean, Faculty Treasurer';
+    return 'e.g. SUG President';
+  }, [tierChoice]);
   // Default role is the first option for this org type (so churches don't
   // default to "class_rep" before the user has even picked one).
   const [role, setRole] = useState<string>(() => ROLE_OPTIONS[0]?.value ?? 'custom');
+
+  // Contested-role detection. Queries pending claims for the same
+  // group + role. If another claimant is already in the queue, we
+  // surface a banner before submit so the claimant knows they're
+  // walking into a vote war. The user (UNN founder) flagged this:
+  // the dispute existed silently — both sides voted blind.
+  const [contestedCount, setContestedCount] = useState(0);
+  const contested = contestedCount > 0;
+  useEffect(() => {
+    if (!organization?.id) { setContestedCount(0); return; }
+    // Org-scope contests check organization_id alone (no group).
+    // Group/unit scope checks the specific group + role.
+    let cancelled = false;
+    (async () => {
+      let query = supabase
+        .from('claim_requests')
+        .select('id, claimant_user_id', { count: 'exact', head: false })
+        .eq('organization_id', organization.id)
+        .in('status', ['submitted', 'awaiting_votes', 'email_sent', 'under_review'])
+        .eq('claimed_role', role)
+        .neq('claimant_user_id', user?.id || '');
+      if (tierChoice === 'org') {
+        query = query.eq('claimed_scope', 'org');
+      } else if (claimedGroupId) {
+        query = query.eq('claimed_group_id', claimedGroupId);
+      } else {
+        setContestedCount(0);
+        return;
+      }
+      const { data, error } = await query;
+      if (cancelled) return;
+      if (error) { setContestedCount(0); return; }
+      setContestedCount((data || []).length);
+    })();
+    return () => { cancelled = true; };
+  }, [organization?.id, role, tierChoice, claimedGroupId, user?.id]);
   const [positionTitle, setPositionTitle] = useState('');
   const [phone, setPhone] = useState(user?.phone ?? '');
   const [personalEmail, setPersonalEmail] = useState(user?.email ?? '');
@@ -342,30 +421,38 @@ export default function ClaimSubmitPage() {
       <form onSubmit={handleSubmit} className="relative z-10 max-w-2xl mx-auto px-5 sm:px-6 pb-24 space-y-5">
         <Panel title="Your role" icon={<ShieldCheck className="w-4 h-4" />} tk={tk}>
           <Field label="Role" required tk={tk}>
-            <select
+            <ProfessionalDropdown
               value={role}
-              onChange={(e) => { setRole(e.target.value); setPositionTitle(''); }}
-              className="w-full rounded-xl px-3.5 py-2.5 text-sm outline-none"
-              style={{ background: tk.inputBg, border: `1px solid ${tk.inputBorder}`, color: tk.text }}
-            >
-              {ROLE_OPTIONS.map((r) => (
-                <option key={r.value} value={r.value} style={{ background: tk.bg, color: tk.text }}>{r.label}</option>
-              ))}
-            </select>
+              onChange={(v) => {
+                setRole(Array.isArray(v) ? v[0] : v);
+                setPositionTitle('');
+              }}
+              placeholder="Pick a role"
+              options={ROLE_OPTIONS.map((r) => ({ value: r.value, label: r.label }))}
+            />
           </Field>
           <Field label="Position title (what members will see)" required tk={tk}>
-            <Input value={positionTitle} onChange={setPositionTitle} placeholder="e.g. ECE 300L Class Rep" required tk={tk} />
+            <Input value={positionTitle} onChange={setPositionTitle} placeholder={positionPlaceholder} required tk={tk} />
           </Field>
+
+          {/* Four-tier picker. Splits the legacy "Unit" button into
+              Department + Faculty so the claimant can't accidentally
+              file a faculty-tier claim under their dept (or vice
+              versa). Each tier maps onto a DB scope_level under the
+              hood (see claimedScope derivation above). The non-
+              academic orgs still see all four — a church's "class"
+              is its cell/small group, "department" is the ministry,
+              "faculty" is the district, "org" is the church-wide
+              top exec. */}
           <Field label="Scope" required tk={tk}>
-            <div className="grid grid-cols-3 gap-2">
-              {(['group', 'unit', 'org'] as const).map((s) => {
-                const active = claimedScope === s;
-                const labels = { group: 'My class', unit: 'My faculty', org: 'Whole org' };
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+              {tierButtons.map(({ value, label }) => {
+                const active = tierChoice === value;
                 return (
                   <button
-                    key={s}
+                    key={value}
                     type="button"
-                    onClick={() => setClaimedScope(s)}
+                    onClick={() => setTierChoice(value)}
                     className="rounded-xl px-3 py-2 text-xs font-semibold transition-all"
                     style={{
                       background: active ? `${tk.primary}18` : 'rgba(255,255,255,0.04)',
@@ -373,60 +460,73 @@ export default function ClaimSubmitPage() {
                       border: `1px solid ${active ? `${tk.primary}40` : tk.border}`,
                     }}
                   >
-                    {labels[s]}
+                    {label}
                   </button>
                 );
               })}
             </div>
             <p className="text-[10px] mt-2" style={{ color: tk.textTer }}>
-              Group scope = your class/department. Unit = your faculty. Org = the entire {organization.name} (top exec only).
+              {tierHint}
             </p>
           </Field>
 
-          {/* Unit target picker — only when scope=unit. Forces the
-              claimant to choose WHICH faculty/department they're
-              claiming for. Without this, the claim's group_id silently
-              defaults to the claimant's own class, which makes the
-              resulting admin row look like a class-level admin even
-              though they picked unit scope. */}
-          {claimedScope === 'unit' && (
+          {/* Tier-specific target picker — only when scope=dept or faculty. */}
+          {(tierChoice === 'dept' || tierChoice === 'faculty') && (
             <Field
-              label="Which faculty / department?"
+              label={tierChoice === 'dept' ? 'Which department?' : 'Which faculty?'}
               required
               tk={tk}
               hint={
                 unitTargetsLoading
                   ? 'Loading…'
-                  : 'Pick the tier you\'re claiming for. Members of that tier are the ones who vote.'
+                  : tierChoice === 'dept'
+                    ? 'Pick the department you\'re claiming for. Members of that department vote.'
+                    : 'Pick the faculty you\'re claiming for. Members of that faculty vote.'
               }
             >
               <ProfessionalDropdown
                 value={claimedGroupId ?? ''}
                 onChange={(v) => setClaimedGroupId((Array.isArray(v) ? v[0] : v) || null)}
-                placeholder={unitTargetsLoading ? 'Loading faculties & departments…' : 'Select a faculty or department'}
+                placeholder={unitTargetsLoading
+                  ? `Loading ${tierChoice === 'dept' ? 'departments' : 'faculties'}…`
+                  : `Select a ${tierChoice === 'dept' ? 'department' : 'faculty'}`}
                 searchable
                 disabled={unitTargetsLoading || unitTargets.length === 0}
-                options={unitTargets.map((g) => {
-                  const k = (g.kind || 'unit').toLowerCase();
-                  const tierLabel = k === 'faculty' || k === 'college'
-                    ? 'Faculty'
-                    : k === 'department'
-                      ? 'Department'
-                      : 'Unit';
-                  return {
-                    value: g.id,
-                    label: g.name,
-                    description: `${tierLabel}${g.short_name ? ' · ' + g.short_name : ''}`,
-                  };
-                })}
+                options={unitTargets.map((g) => ({
+                  value: g.id,
+                  label: g.name,
+                  description: g.short_name || '',
+                }))}
               />
               {unitTargets.length === 0 && !unitTargetsLoading && (
                 <p className="text-[11px] mt-2" style={{ color: tk.danger }}>
-                  No faculties or departments exist in this organization yet. Ask
-                  the platform admin to add the hierarchy first.
+                  No {tierChoice === 'dept' ? 'departments' : 'faculties'} exist in this organization yet.
                 </p>
               )}
             </Field>
+          )}
+
+          {/* Contested-role banner. Surfaces ONLY when there's already
+              a pending claim for this exact group+role from another
+              claimant. Mig 042's anti-double-submit blocks the SAME
+              person from re-claiming; it doesn't block a SECOND
+              person from contesting. The banner gives the claimant a
+              heads-up before they file an unwinnable peer-vote war. */}
+          {contested && (
+            <div
+              className="rounded-xl px-3 py-2.5 flex items-start gap-2"
+              style={{ background: `${tk.danger}10`, border: `1px solid ${tk.danger}30` }}
+            >
+              <AlertCircle className="w-4 h-4 mt-0.5 shrink-0" style={{ color: tk.danger }} />
+              <div>
+                <p className="text-[12px] font-semibold" style={{ color: tk.text }}>
+                  Someone else already claimed this role
+                </p>
+                <p className="text-[11px] mt-0.5" style={{ color: tk.textSec }}>
+                  {contestedCount} pending claim{contestedCount === 1 ? '' : 's'} for the same position. Both go to peer vote — submit yours if you're the real holder; the side with more confirmations wins.
+                </p>
+              </div>
+            </div>
           )}
         </Panel>
 

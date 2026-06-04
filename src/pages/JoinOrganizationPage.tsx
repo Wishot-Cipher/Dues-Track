@@ -321,6 +321,11 @@ export default function JoinOrganizationPage() {
         p_password:        password,
         p_email:           form.email.trim() || null,
         p_phone:           form.phone.trim() || null,
+        // Mig 103 makes p_level optional — the backend auto-fills
+        // it from the target class's levels[1]. We still pass any
+        // value form.level holds (legacy callers that still surface
+        // the input) so we don't silently drop it, but `null` is
+        // the expected value going forward.
         p_level:           form.level.trim() || null,
         p_target_group_id: invite.group_id ?? selectedGroupId ?? null,
       });
@@ -706,9 +711,12 @@ export default function JoinOrganizationPage() {
                     </Field>
                   </Row>
 
-                  <Field tk={tk} label="Level / Year / Position" hint="optional, e.g. 200L, SS2, Member">
-                    <Input tk={tk} value={form.level} onChange={(v) => setForm({ ...form, level: v })} placeholder="200L" />
-                  </Field>
+                  {/* Level removed: every class owns one level
+                      (e.g. 300L) set by the class rep on creation.
+                      Joiners inherit it automatically via mig 103
+                      (signup_member_via_invite reads the target
+                      group's levels[1]). One source of truth instead
+                      of every member self-reporting. */}
 
                   {/* Password mode toggle */}
                   <div

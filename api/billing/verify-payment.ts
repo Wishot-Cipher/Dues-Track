@@ -11,6 +11,18 @@ interface VercelRequest {
     action?: string;
     id?: string;
     payload?: Record<string, unknown>;
+    // insert-event-tiers action (CREATE flow follow-up)
+    paymentTypeId?: string;
+    tiers?: Array<{
+      name: string;
+      price: number;
+      quantity: number | null;
+      sort_order?: number;
+    }>;
+    // issue-free-ticket action (event waiver)
+    recipientMemberId?: string;
+    tierId?: string;
+    reason?: string;
   };
 }
 
@@ -106,6 +118,186 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
 
     return res.status(200).json({ ok: true });
+  }
+
+  // ── INSERT EVENT TIERS ──────────────────────────────────────────
+  // Called by CreateDuePage right after create_due_with_scope_check
+  // returns a new payment_type_id. event_ticket_tiers RLS grants
+  // INSERT to service_role only (mig 057) — a direct client insert
+  // fails silently and the event renders without tiers. Routing
+  // through this service-role endpoint mirrors what the EDIT path
+  // already does, with the same admin-verification guard.
+  if (action === 'insert-event-tiers') {
+    const { paymentTypeId, callerId, tiers } = req.body || {};
+
+    if (!paymentTypeId) return res.status(400).json({ error: 'Missing paymentTypeId' });
+    if (!callerId) return res.status(400).json({ error: 'Missing callerId' });
+
+    const auth = await verifyMember(supabase, callerId);
+    if (!auth.valid || !auth.data) {
+      return res.status(auth.status || 401).json({ error: auth.error || 'Unauthorized' });
+    }
+
+    // Confirm the payment_type belongs to the caller's org.
+    const { data: pt } = await supabase
+      .from('payment_types')
+      .select('id, organization_id')
+      .eq('id', paymentTypeId)
+      .eq('organization_id', auth.data.organization_id)
+      .maybeSingle();
+    if (!pt) return res.status(404).json({ error: 'Payment type not found or access denied' });
+
+    const tierList = tiers as Array<{
+      name: string;
+      price: number;
+      quantity: number | null;
+      sort_order?: number;
+    }> | undefined;
+    if (!tierList || !Array.isArray(tierList) || tierList.length === 0) {
+      // No tiers is a valid input (caller decided post-create to skip);
+      // succeed quietly so the FE doesn't show a false error.
+      return res.status(200).json({ ok: true, inserted: 0 });
+    }
+
+    const tierRows = tierList.map((t, i) => ({
+      payment_type_id: paymentTypeId,
+      organization_id: auth.data.organization_id,
+      name: t.name,
+      price: t.price,
+      quantity: t.quantity,
+      sold_count: 0,
+      sort_order: t.sort_order ?? i,
+      is_active: true,
+    }));
+
+    const { error: tierErr } = await supabase
+      .from('event_ticket_tiers')
+      .insert(tierRows);
+
+    if (tierErr) {
+      console.error('insert-event-tiers failed:', tierErr);
+      return res.status(500).json({ error: `Tiers failed to save: ${tierErr.message}` });
+    }
+
+    return res.status(200).json({ ok: true, inserted: tierRows.length });
+  }
+
+  // ── ISSUE FREE TICKET (event waiver) ────────────────────────────
+  // For events, a "waive" means GRANT A FREE TICKET — not just mark a
+  // payment as approved. The recipient needs a real ticket row with
+  // a QR code so they can be checked in at the door. We:
+  //   1. Insert a payments row marked approved + WAIVED with the
+  //      event_tier_id set, attributed to the recipient.
+  //   2. Call the existing issue_event_ticket(payment_id) RPC
+  //      (mig 058) which mints the event_tickets row.
+  //
+  // event_tickets RLS only lets service_role INSERT, hence this
+  // server endpoint. Same admin verification as the other actions.
+  if (action === 'issue-free-ticket') {
+    const { paymentTypeId, tierId, recipientMemberId, callerId, reason } = req.body || {};
+
+    if (!paymentTypeId) return res.status(400).json({ error: 'Missing paymentTypeId' });
+    if (!tierId) return res.status(400).json({ error: 'Missing tierId' });
+    if (!recipientMemberId) return res.status(400).json({ error: 'Missing recipientMemberId' });
+    if (!callerId) return res.status(400).json({ error: 'Missing callerId' });
+
+    const auth = await verifyMember(supabase, callerId);
+    if (!auth.valid || !auth.data) {
+      return res.status(auth.status || 401).json({ error: auth.error || 'Unauthorized' });
+    }
+    const orgId = auth.data.organization_id;
+
+    // Verify the payment_type exists, is an event, and is in caller's org.
+    const { data: pt } = await supabase
+      .from('payment_types')
+      .select('id, organization_id, category, title, group_id')
+      .eq('id', paymentTypeId)
+      .eq('organization_id', orgId)
+      .maybeSingle();
+    if (!pt) return res.status(404).json({ error: 'Event not found or access denied' });
+    if (pt.category !== 'event') {
+      return res.status(400).json({ error: 'This is not an event. Use the regular waive flow for dues.' });
+    }
+
+    // Verify the tier exists on THIS event.
+    const { data: tier } = await supabase
+      .from('event_ticket_tiers')
+      .select('id, name, price, payment_type_id, organization_id')
+      .eq('id', tierId)
+      .eq('payment_type_id', paymentTypeId)
+      .maybeSingle();
+    if (!tier) return res.status(404).json({ error: 'Ticket tier not found for this event' });
+
+    // Verify the recipient is a member in this org.
+    const { data: recipient } = await supabase
+      .from('organization_members')
+      .select('id, organization_id, full_name, email, group_id')
+      .eq('id', recipientMemberId)
+      .eq('organization_id', orgId)
+      .maybeSingle();
+    if (!recipient) return res.status(404).json({ error: 'Recipient is not a member of this org' });
+
+    // Resolve the admin record for audit attribution. A user with
+    // multiple admin rows (dept-pres + class-rep) picks the highest
+    // verification_layer.
+    const { data: adminRec } = await supabase
+      .from('member_admins')
+      .select('id, verification_layer')
+      .eq('member_id', auth.data.id)
+      .eq('organization_id', orgId)
+      .eq('is_active', true)
+      .order('verification_layer', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    if (!adminRec) return res.status(403).json({ error: 'Only an admin can grant free tickets' });
+
+    // Insert the payment row (waived, event_tier_id set).
+    //
+    // Note: payments.approved_by was dropped in mig 020 (legacy FK to
+    // the old `admins` table). Don't reintroduce it — PostgREST
+    // schema cache will reject the insert. The audit trail lives in
+    // the notes field; adminRec.id is the audit identity but isn't
+    // persisted as a column on payments.
+    const reasonText = (reason || 'Free ticket grant').slice(0, 500);
+    const { data: payment, error: payErr } = await supabase
+      .from('payments')
+      .insert({
+        member_id: recipient.id,
+        payment_type_id: paymentTypeId,
+        event_tier_id: tierId,
+        amount: tier.price,
+        payment_method: 'cash',
+        status: 'approved',
+        transaction_ref: `WAIVED-${Date.now()}`,
+        notes: `✅ FREE TICKET GRANTED BY ADMIN ${adminRec.id}\n\nReason: ${reasonText}\n\nTier: ${tier.name}`,
+        organization_id: orgId,
+        group_id: recipient.group_id ?? pt.group_id,
+        receipt_url: '',
+      })
+      .select('id')
+      .single();
+    if (payErr || !payment) {
+      return res.status(500).json({ error: payErr?.message || 'Could not record the waiver' });
+    }
+
+    // Mint the actual ticket via the existing RPC.
+    const { data: issueRes, error: issueErr } = await supabase.rpc('issue_event_ticket', {
+      p_payment_id: payment.id,
+    });
+    if (issueErr || !issueRes?.ok) {
+      // Roll back the payment so we don't leave an orphan row.
+      await supabase.from('payments').delete().eq('id', payment.id);
+      return res.status(500).json({
+        error: issueErr?.message || issueRes?.error || 'Could not mint the ticket',
+      });
+    }
+
+    return res.status(200).json({
+      ok: true,
+      payment_id: payment.id,
+      ticket_id: issueRes.ticket_id,
+      ticket_code: issueRes.ticket_code,
+    });
   }
 
   // ── VERIFY PAYMENT ──────────────────────────────────────────────
