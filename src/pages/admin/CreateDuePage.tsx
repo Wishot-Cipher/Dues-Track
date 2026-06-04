@@ -654,6 +654,16 @@ export default function CreateDuePage() {
     // submit shape). We don't move the due between scopes here —
     // re-targeting would re-fan notifications and is a separate
     // operation.
+    //
+    // Event ticket tiers live in a sibling table (event_ticket_tiers)
+    // and used to be UNTOUCHED here — meaning if the publisher added
+    // a "VIP" tier or changed prices on edit, the row update went
+    // through but the new tier silently disappeared. That was the
+    // "i tried update the ticket types and it didn't show" bug.
+    // The fix: after updating the payment_types row, sync the
+    // tier rows by position (UPDATE existing positions, INSERT
+    // new ones, soft-deactivate excess rows so we don't break
+    // event_tickets FK references).
     if (isEditMode && editId) {
       try {
         const { error: updateErr } = await supabase
@@ -686,6 +696,102 @@ export default function CreateDuePage() {
           })
           .eq('id', editId);
         if (updateErr) throw updateErr;
+
+        // ── Tier sync (events only) ──────────────────────────────
+        // 1) Read existing tier rows for this event so we know which
+        //    ids to UPDATE vs which to leave behind.
+        // 2) For each row in validTiers (in order), either UPDATE
+        //    the row at the matching sort_order or INSERT a new one.
+        // 3) Any excess existing rows get is_active=false rather
+        //    than DELETE — a sold ticket may still reference them.
+        if (isEvent) {
+          const orgScope = getOrgScope();
+          if (!orgScope?.orgId) {
+            throw new Error('Missing organisation context for tier sync.');
+          }
+
+          const { data: existingRows, error: tierFetchErr } = await supabase
+            .from('event_ticket_tiers')
+            .select('id, sort_order')
+            .eq('payment_type_id', editId)
+            .order('sort_order', { ascending: true });
+          if (tierFetchErr) throw tierFetchErr;
+          const existing = (existingRows || []) as Array<{ id: string; sort_order: number }>;
+
+          const newTiers = validTiers.map((t, i) => ({
+            name: t.name.trim(),
+            description: null as string | null,
+            price: Number(t.price),
+            quantity: t.quantity === '' ? null : Number(t.quantity),
+            sort_order: i,
+          }));
+
+          // Position-by-position upsert. UPDATE when an existing
+          // row sits at that ordinal, INSERT otherwise. Pairing by
+          // index is what the user sees in the form — the first
+          // row in the UI maps to sort_order=0.
+          const toInsert: Array<{
+            payment_type_id: string;
+            organization_id: string;
+            name: string;
+            description: string | null;
+            price: number;
+            quantity: number | null;
+            sort_order: number;
+            is_active: boolean;
+          }> = [];
+
+          for (let i = 0; i < newTiers.length; i++) {
+            const t = newTiers[i];
+            const slot = existing[i];
+            if (slot) {
+              const { error: tUpdErr } = await supabase
+                .from('event_ticket_tiers')
+                .update({
+                  name: t.name,
+                  description: t.description,
+                  price: t.price,
+                  quantity: t.quantity,
+                  sort_order: t.sort_order,
+                  is_active: true,
+                  updated_at: new Date().toISOString(),
+                })
+                .eq('id', slot.id);
+              if (tUpdErr) throw tUpdErr;
+            } else {
+              toInsert.push({
+                payment_type_id: editId,
+                organization_id: orgScope.orgId,
+                name: t.name,
+                description: t.description,
+                price: t.price,
+                quantity: t.quantity,
+                sort_order: t.sort_order,
+                is_active: true,
+              });
+            }
+          }
+
+          if (toInsert.length > 0) {
+            const { error: tInsErr } = await supabase
+              .from('event_ticket_tiers')
+              .insert(toInsert);
+            if (tInsErr) throw tInsErr;
+          }
+
+          // Excess existing rows beyond the new tier list — flip
+          // is_active=false rather than DELETE so any sold ticket
+          // that already points at the tier stays valid.
+          if (existing.length > newTiers.length) {
+            const excessIds = existing.slice(newTiers.length).map((r) => r.id);
+            const { error: tDeacErr } = await supabase
+              .from('event_ticket_tiers')
+              .update({ is_active: false, updated_at: new Date().toISOString() })
+              .in('id', excessIds);
+            if (tDeacErr) throw tDeacErr;
+          }
+        }
+
         toast?.success?.(isEvent ? 'Event updated.' : 'Due updated.');
         go(`/admin/manage-dues?updated=${editId}`);
         return;

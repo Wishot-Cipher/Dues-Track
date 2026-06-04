@@ -349,92 +349,76 @@ export default function AdminDashboardPage() {
   const fetchAdminStats = async () => {
     try {
       setLoading(true);
-
-      // Total members
+      // Six independent stat counts that used to fire serially —
+      // ~6 round-trips end-to-end before the hero strip painted.
+      // None of them depend on each other; Promise.all gets us
+      // ~1 round-trip wall-clock (the slowest of the bunch).
       const scope = getOrgScope();
-      let memberQ = supabase
-        .from('organization_members')
-        .select('*', { count: 'exact', head: true })
-        .eq('is_active', true);
-      if (scope) {
-        memberQ = memberQ.eq('organization_id', scope.orgId);
-        memberQ = memberQ.eq('group_id', scope.groupId);
-      }
-      const { count: studentCount } = await memberQ;
+      const todayStart = (() => {
+        const d = new Date();
+        d.setHours(0, 0, 0, 0);
+        return d.toISOString();
+      })();
 
-      // Total payment types
-      let ptQ = supabase
-        .from('payment_types')
-        .select('*', { count: 'exact', head: true })
-        .eq('is_active', true);
-      if (scope) {
-        ptQ = ptQ.eq('organization_id', scope.orgId);
-        ptQ = ptQ.eq('group_id', scope.groupId);
-      }
-      const { count: paymentTypeCount } = await ptQ;
+      const scoped = <
+        Q extends { eq: (col: string, val: unknown) => Q },
+      >(q: Q) => {
+        if (!scope) return q;
+        return q.eq('organization_id', scope.orgId).eq('group_id', scope.groupId);
+      };
 
-      // Pending review
-      let pendQ = supabase
-        .from('payments')
-        .select('*', { count: 'exact', head: true })
-        .eq('status', 'pending');
-      if (scope) {
-        pendQ = pendQ.eq('organization_id', scope.orgId);
-        pendQ = pendQ.eq('group_id', scope.groupId);
-      }
-      const { count: pendingCount } = await pendQ;
+      const [
+        memberRes,
+        ptRes,
+        pendRes,
+        apprRes,
+        todayRes,
+        rejRes,
+      ] = await Promise.all([
+        scoped(supabase
+          .from('organization_members')
+          .select('*', { count: 'exact', head: true })
+          .eq('is_active', true)),
+        scoped(supabase
+          .from('payment_types')
+          .select('*', { count: 'exact', head: true })
+          .eq('is_active', true)),
+        scoped(supabase
+          .from('payments')
+          .select('*', { count: 'exact', head: true })
+          .eq('status', 'pending')),
+        scoped(supabase
+          .from('payments')
+          .select('amount, transaction_ref')
+          .eq('status', 'approved')),
+        scoped(supabase
+          .from('payments')
+          .select('transaction_ref')
+          .eq('status', 'approved')
+          .gte('approved_at', todayStart)),
+        scoped(supabase
+          .from('payments')
+          .select('*', { count: 'exact', head: true })
+          .eq('status', 'rejected')),
+      ]);
 
-      // Total collected (approved payments excluding waived)
-      let apprQ = supabase
-        .from('payments')
-        .select('amount, transaction_ref')
-        .eq('status', 'approved');
-      if (scope) {
-        apprQ = apprQ.eq('organization_id', scope.orgId);
-        apprQ = apprQ.eq('group_id', scope.groupId);
-      }
-      const { data: approvedPayments } = await apprQ;
-
+      const approvedPayments = (apprRes.data || []) as Array<{ amount: number | string; transaction_ref: string | null }>;
       const totalCollected = approvedPayments
-        ?.filter(p => !p.transaction_ref?.startsWith('WAIVED-'))
-        .reduce((sum, p) => sum + Number(p.amount || 0), 0) || 0;
+        .filter(p => !p.transaction_ref?.startsWith('WAIVED-'))
+        .reduce((sum, p) => sum + Number(p.amount || 0), 0);
 
-      // Approved today (excluding waived)
-      const today = new Date();
-      today.setHours(0, 0, 0, 0);
-      let todayQ = supabase
-        .from('payments')
-        .select('transaction_ref')
-        .eq('status', 'approved')
-        .gte('approved_at', today.toISOString());
-      if (scope) {
-        todayQ = todayQ.eq('organization_id', scope.orgId);
-        todayQ = todayQ.eq('group_id', scope.groupId);
-      }
-      const { data: approvedTodayPayments } = await todayQ;
-
+      const approvedTodayPayments = (todayRes.data || []) as Array<{ transaction_ref: string | null }>;
       const approvedTodayCount = approvedTodayPayments
-        ?.filter(p => !p.transaction_ref?.startsWith('WAIVED-'))
-        .length || 0;
-
-      // Rejected payments
-      let rejQ = supabase
-        .from('payments')
-        .select('*', { count: 'exact', head: true })
-        .eq('status', 'rejected');
-      if (scope) {
-        rejQ = rejQ.eq('organization_id', scope.orgId);
-        rejQ = rejQ.eq('group_id', scope.groupId);
-      }
-      const { count: rejectedCount } = await rejQ;
+        .filter(p => !p.transaction_ref?.startsWith('WAIVED-'))
+        .length;
 
       setStats({
-        totalStudents: studentCount || 0,
-        totalPaymentTypes: paymentTypeCount || 0,
-        pendingReview: pendingCount || 0,
+        totalStudents: memberRes.count || 0,
+        totalPaymentTypes: ptRes.count || 0,
+        pendingReview: pendRes.count || 0,
         totalCollected,
-        approvedToday: approvedTodayCount || 0,
-        rejectedPayments: rejectedCount || 0,
+        approvedToday: approvedTodayCount,
+        rejectedPayments: rejRes.count || 0,
       });
     } catch (error) {
       console.error('Error fetching admin stats:', error);

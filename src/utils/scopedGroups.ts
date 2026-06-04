@@ -40,6 +40,42 @@ export interface ScopedGroupsInput {
 }
 
 /**
+ * In-memory cache for the per-org organization_groups list. Used to
+ * be refetched on every admin page mount that calls getScopedGroupIds
+ * (ManageDuesPage, AdminReviewPage, WaivePaymentPage, OrgGroupsPage…
+ * — every one of them spent a round-trip on the same handful of rows
+ * before they could even start their real query). Group hierarchy is
+ * stable per session; a 60-second TTL keeps the cache fresh enough
+ * for the occasional add-a-class edit while saving 99% of the
+ * repeated reads.
+ */
+const ORG_GROUPS_TTL_MS = 60_000;
+type GroupRow = { id: string; parent_group_id: string | null };
+const orgGroupsCache = new Map<string, { rows: GroupRow[]; at: number }>();
+
+export function invalidateOrgGroupsCache(orgId?: string): void {
+  if (orgId) {
+    orgGroupsCache.delete(orgId);
+    return;
+  }
+  orgGroupsCache.clear();
+}
+
+async function loadOrgGroups(orgId: string): Promise<GroupRow[] | null> {
+  const hit = orgGroupsCache.get(orgId);
+  if (hit && Date.now() - hit.at < ORG_GROUPS_TTL_MS) return hit.rows;
+
+  const { data, error } = await supabase
+    .from('organization_groups')
+    .select('id, parent_group_id')
+    .eq('organization_id', orgId);
+  if (error || !data) return null;
+  const rows = data as GroupRow[];
+  orgGroupsCache.set(orgId, { rows, at: Date.now() });
+  return rows;
+}
+
+/**
  * Returns a Set of organization_groups.id the caller's active role
  * covers. Returns null when no filter should apply (org-scope or
  * missing role context).
@@ -53,17 +89,12 @@ export async function getScopedGroupIds(
   if (!activeScopeLevel || activeScopeLevel === 'org') return null;
   if (!activeGroupId) return null;
 
-  // Pull the org's groups in one query (cheaper than recursive RPC
-  // calls and the result is small — every group fits in memory).
-  const { data, error } = await supabase
-    .from('organization_groups')
-    .select('id, parent_group_id')
-    .eq('organization_id', orgId);
-  if (error || !data) return null;
+  const rows = await loadOrgGroups(orgId);
+  if (!rows) return null;
 
   // BFS down from activeGroupId so we collect every descendant.
   const childrenByParent = new Map<string, string[]>();
-  for (const g of data as Array<{ id: string; parent_group_id: string | null }>) {
+  for (const g of rows) {
     if (!g.parent_group_id) continue;
     const list = childrenByParent.get(g.parent_group_id) || [];
     list.push(g.id);
