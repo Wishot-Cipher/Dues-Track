@@ -327,26 +327,34 @@ export const NotificationCenter = () => {
               onWheel={(e) => e.stopPropagation()}
             />
             
-            {/* Panel */}
+            {/* Panel — theme-aware. Was hardcoded #0D0907 dark with
+                a brand-orange ring; bled into the light theme as a
+                near-black tile floating over a peach page. Surface
+                + border + shadow now come from getDashboardTokens
+                so the panel sits naturally on whichever theme is
+                active. The internal header strip uses a translucent
+                neutral so it works on either surface. */}
             <motion.div
               initial={{ opacity: 0, y: -10, scale: 0.95 }}
               animate={{ opacity: 1, y: 0, scale: 1 }}
               exit={{ opacity: 0, y: -10, scale: 0.95 }}
               transition={{ type: 'spring', damping: 25, stiffness: 300 }}
               className="fixed top-16 left-3 right-3 sm:left-auto sm:right-4 sm:w-[380px] rounded-2xl overflow-hidden z-50"
-              style={{ 
-                background: '#0D0907',
-                border: `1px solid rgba(255, 107, 53, 0.15)`,
-                boxShadow: `0 25px 80px rgba(0, 0, 0, 0.7), 0 0 0 1px rgba(255, 107, 53, 0.1), inset 0 1px 0 rgba(255, 255, 255, 0.05)`,
+              style={{
+                background: theme === 'light' ? '#FFFFFF' : '#100A07',
+                border: `1px solid ${tk.cardBorder}`,
+                boxShadow: theme === 'light'
+                  ? '0 24px 60px rgba(15, 7, 3, 0.18), 0 4px 16px rgba(15, 7, 3, 0.06)'
+                  : '0 25px 80px rgba(0, 0, 0, 0.7), 0 0 0 1px rgba(255, 104, 3, 0.10), inset 0 1px 0 rgba(255, 255, 255, 0.05)',
               }}
               onWheel={(e) => e.stopPropagation()}
             >
               {/* Header */}
-              <div 
+              <div
                 className="px-5 py-4 border-b"
-                style={{ 
-                  borderColor: 'rgba(255, 255, 255, 0.08)',
-                  background: 'rgba(255, 255, 255, 0.02)'
+                style={{
+                  borderColor: tk.cardBorder,
+                  background: theme === 'light' ? 'rgba(15, 7, 3, 0.025)' : 'rgba(255, 255, 255, 0.02)',
                 }}
               >
                 <div className="flex items-center justify-between">
@@ -448,12 +456,12 @@ export const NotificationCenter = () => {
                         transition={{ delay: index * 0.05 }}
                         className="mx-2 mb-2 rounded-xl cursor-pointer transition-all duration-200"
                         style={{
-                          background: notification.is_read 
-                            ? 'rgba(255, 255, 255, 0.02)' 
-                            : `${getNotificationColor(notification.type)}08`,
-                          border: notification.is_read 
-                            ? '1px solid transparent' 
-                            : `1px solid ${getNotificationColor(notification.type)}20`,
+                          background: notification.is_read
+                            ? (theme === 'light' ? 'rgba(15, 7, 3, 0.025)' : 'rgba(255, 255, 255, 0.02)')
+                            : `${getNotificationColor(notification.type)}${theme === 'light' ? '14' : '08'}`,
+                          border: notification.is_read
+                            ? '1px solid transparent'
+                            : `1px solid ${getNotificationColor(notification.type)}${theme === 'light' ? '30' : '20'}`,
                         }}
                           onClick={async () => {
                           try {
@@ -590,11 +598,11 @@ export const NotificationCenter = () => {
 
               {/* Footer */}
               {notifications.length > 0 && (
-                <div 
+                <div
                   className="px-4 py-3 border-t text-center"
-                  style={{ 
-                    borderColor: 'rgba(255, 255, 255, 0.08)',
-                    background: 'rgba(255, 255, 255, 0.02)'
+                  style={{
+                    borderColor: tk.cardBorder,
+                    background: theme === 'light' ? 'rgba(15, 7, 3, 0.025)' : 'rgba(255, 255, 255, 0.02)',
                   }}
                 >
                   <motion.button

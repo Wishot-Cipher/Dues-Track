@@ -254,8 +254,28 @@ export default function AdminReviewPage() {
 
       if (error) throw error;
 
+      // Drop abandoned / failed Paystack attempts. The Paystack flow
+      // INSERTs a `pending` row when the user clicks pay; if they
+      // close the modal or the gateway rejects, no webhook ever flips
+      // it to approved or rejected and the row sits in the review
+      // queue forever, masquerading as a real "manual receipt
+      // awaiting approval." Distinguishing trait: manual payments
+      // carry a receipt_url (the screenshot they uploaded); abandoned
+      // Paystack pendings have neither receipt_url NOR transaction_ref.
+      // FAILED ones carry transaction_ref but no receipt — also drop.
+      //
+      // The cleanest rule for the review queue: only surface payments
+      // that have something for the exec to actually approve — i.e.
+      // a receipt image. Approved/rejected rows still show for audit
+      // even without a receipt (they were processed at some point).
+      const filtered = (data || []).filter((p) => {
+        if (p.status !== 'pending') return true; // approved/rejected stay
+        const hasReceipt = Boolean((p as { receipt_url?: string | null }).receipt_url);
+        return hasReceipt;
+      });
+
       // Sort: pending first, then approved/rejected
-      const sorted = (data || []).sort((a, b) => {
+      const sorted = filtered.sort((a, b) => {
         if (a.status === "pending" && b.status !== "pending") return -1;
         if (a.status !== "pending" && b.status === "pending") return 1;
         return (
