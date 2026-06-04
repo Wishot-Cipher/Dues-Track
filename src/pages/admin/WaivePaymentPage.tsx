@@ -366,157 +366,114 @@ export default function WaivePaymentPage() {
     setNotifyStudent(true);
   };
 
+  // Tier-aware copy. The waive flow used to greet every exec with
+  // "Waive payment fees for students with special circumstances" —
+  // which is true for a class rep but read flat for a dept/faculty
+  // exec who's waiving across a much bigger scope. Phrasing now
+  // adapts to the active role so the page tells the user what
+  // scope they're acting at.
+  const scopeCopy = (() => {
+    if (!activeRole || activeRole.kind !== 'exec') {
+      return {
+        chip: 'Waive a due',
+        title: 'Waive a payment',
+        subtitle: 'Excuse a member from a specific due. The audit log records who, what, and why.',
+      };
+    }
+    if (activeRole.scopeLevel === 'org') {
+      return {
+        chip: 'Org-wide waiver',
+        title: 'Waive a payment',
+        subtitle: 'You can waive any due across every group in this organisation. Every action is audited.',
+      };
+    }
+    if (activeRole.scopeLevel === 'unit') {
+      return {
+        chip: 'Faculty / dept waiver',
+        title: 'Waive a payment in your subtree',
+        subtitle: 'Excuse a member from any due published in your faculty or department, or in a class below.',
+      };
+    }
+    return {
+      chip: 'Class waiver',
+      title: 'Waive a class member\'s due',
+      subtitle: 'Excuse one of your class members from a due you or your dept exec published.',
+    };
+  })();
+
   return (
     <div
-      className="min-h-screen pb-20 relative overflow-hidden"
-      style={{
-        background: tk.bgWash,
-      }}
+      className="min-h-screen py-6 px-4 pb-20 relative overflow-hidden"
+      style={{ background: tk.bgWash, color: tk.text }}
     >
-      {/* Background Grid Pattern */}
+      {/* Soft brand blobs — matches the exec-dashboard chrome. The
+          legacy hero layered a 50px brand-tinted grid + two pulsing
+          radial orbs + a single-tenant ECE photo. All of that is
+          gone — same wash, no animation churn, light + dark
+          friendly. */}
       <div
-        className="absolute inset-0 opacity-20 pointer-events-none"
-        style={{
-          backgroundImage: `
-            linear-gradient(${colors.primary}40 1px, transparent 1px),
-            linear-gradient(90deg, ${colors.primary}40 1px, transparent 1px)
-          `,
-          backgroundSize: "50px 50px",
-        }}
+        aria-hidden
+        className="pointer-events-none absolute -top-32 -right-24 w-[520px] h-[520px] rounded-full"
+        style={{ background: tk.blob1, filter: 'blur(120px)' }}
+      />
+      <div
+        aria-hidden
+        className="pointer-events-none absolute -bottom-40 -left-32 w-[420px] h-[420px] rounded-full"
+        style={{ background: tk.blob2, filter: 'blur(110px)' }}
       />
 
-      {/* Animated Gradient Orbs */}
-      <div className="fixed inset-0 overflow-hidden pointer-events-none">
-        <div
-          className="absolute w-[500px] h-[500px] rounded-full blur-[120px] opacity-30 animate-pulse"
-          style={{
-            background: `radial-gradient(circle, ${colors.primary} 0%, transparent 70%)`,
-            top: "-10%",
-            right: "-5%",
-            animationDuration: "4s",
-          }}
-        />
-        <div
-          className="absolute w-[400px] h-[400px] rounded-full blur-[100px] opacity-20"
-          style={{
-            background: `radial-gradient(circle, ${colors.accentMint} 0%, transparent 70%)`,
-            bottom: "-5%",
-            left: "-5%",
-            animation: "pulse 6s ease-in-out infinite",
-          }}
-        />
+      <div className="relative z-10 max-w-3xl mx-auto space-y-5">
+        {/* ── Header (chip → H1 → subtitle, matches exec dashboards) ── */}
+        <motion.header
+          initial={{ opacity: 0, y: 12 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="space-y-3"
+        >
+          {/* Back link as a quiet text chip — not an orange button */}
+          <button
+            type="button"
+            onClick={() => navigate('/admin/dashboard')}
+            className="inline-flex items-center gap-1 text-[11px] font-semibold uppercase tracking-wider transition-opacity hover:opacity-80"
+            style={{ color: tk.textTer }}
+          >
+            <ArrowLeft className="w-3 h-3" />
+            Back to dashboard
+          </button>
 
-        {/* ECE Logo Background - Creative Element */}
-        <div className="hidden lg:block absolute right-0 top-1/2 -translate-y-1/2 w-[600px] h-[600px] opacity-[0.08] pointer-events-none">
-          <img
-            src="/Ece picture.jpg"
-            alt="ECE Background"
-            className="w-full h-full object-contain"
-            style={{
-              filter: "grayscale(0.5) brightness(0.8)",
-              mixBlendMode: "soft-light",
-            }}
-          />
-        </div>
-      </div>
-      {/* Enhanced Header */}
-      <motion.div
-        className="relative max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 pt-8 mb-6"
-        initial={{ opacity: 0, y: -20 }}
-        animate={{ opacity: 1, y: 0 }}
-      >
-        <GlassCard className="relative overflow-hidden">
-          {/* Decorative Elements */}
-          <div className="absolute top-0 right-0 w-48 h-48 opacity-5 pointer-events-none">
-            <Heart className="w-full h-full" style={{ color: colors.accentMint }} />
-          </div>
-          <div 
-            className="absolute top-0 left-0 w-full h-1"
-            style={{ background: `linear-gradient(90deg, ${colors.accentMint}, ${colors.primary}, transparent)` }}
-          />
-
-          <div className="relative z-10">
-            <motion.button
-              whileHover={{ x: -4 }}
-              onClick={() => navigate("/admin/dashboard")}
-              className="flex items-center gap-2 mb-4 px-4 py-2 rounded-xl transition-all"
-              style={{ 
-                background: `${colors.primary}15`,
-                border: `1px solid ${colors.primary}30`,
-                color: colors.primary 
+          <div className="flex items-center gap-2 flex-wrap">
+            <span
+              className="inline-flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-[0.18em] px-2 py-1 rounded-full"
+              style={{
+                background: `${tk.mint}18`,
+                color: tk.mint,
+                border: `1px solid ${tk.mint}40`,
               }}
             >
-              <ArrowLeft size={16} />
-              <span className="font-medium">Back to Dashboard</span>
-            </motion.button>
-
-            <div className="flex flex-col sm:flex-row items-center gap-4">
-              <motion.div
-                initial={{ scale: 0.9 }}
-                animate={{ scale: 1 }}
-                className="w-16 h-16 rounded-2xl flex items-center justify-center relative shrink-0"
-                style={{ 
-                  background: `linear-gradient(135deg, ${colors.accentMint}30, ${colors.accentMint}10)`,
-                  border: `1px solid ${colors.accentMint}40`,
-                  boxShadow: `0 4px 20px ${colors.accentMint}30`
-                }}
-              >
-                <BadgePercent className="w-8 h-8" style={{ color: colors.accentMint }} />
-                <Sparkles className="w-4 h-4 absolute -top-1 -right-1" style={{ color: colors.primary }} />
-              </motion.div>
-              <div className="text-center sm:text-left">
-                <motion.div 
-                  initial={{ opacity: 0, scale: 0.9 }}
-                  animate={{ opacity: 1, scale: 1 }}
-                  transition={{ delay: 0.1 }}
-                  className="inline-flex items-center gap-2 px-3 py-1 rounded-full text-xs font-semibold mb-2"
-                  style={{ 
-                    background: `linear-gradient(135deg, ${colors.accentMint}30, ${colors.accentMint}10)`,
-                    border: `1px solid ${colors.accentMint}40`,
-                    color: colors.accentMint,
-                  }}
-                >
-                  <Heart className="w-3 h-3" />
-                  PAYMENT WAIVER
-                </motion.div>
-                <h1 className="text-2xl sm:text-3xl font-bold text-white">
-                  Waive Payment Fee
-                </h1>
-                <p
-                  className="text-sm sm:text-base"
-                  style={{ color: colors.textSecondary }}
-                >
-                  Waive payment fees for students with special circumstances
-                </p>
-              </div>
-            </div>
-
-            {/* Quick Steps */}
-            <div className="flex flex-wrap items-center justify-center gap-3 mt-6">
-              <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg"
-                   style={{ background: selectedStudent ? `${colors.statusPaid}15` : `${colors.primary}15`, border: `1px solid ${selectedStudent ? colors.statusPaid : colors.primary}30` }}>
-                <div className="w-5 h-5 rounded-full flex items-center justify-center text-xs font-bold"
-                     style={{ background: selectedStudent ? colors.statusPaid : colors.primary, color: 'white' }}>1</div>
-                <span className="text-xs font-medium" style={{ color: selectedStudent ? colors.statusPaid : colors.textSecondary }}>Select Student</span>
-              </div>
-              <div className="w-4 h-0.5" style={{ background: 'rgba(255,255,255,0.1)' }} />
-              <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg"
-                   style={{ background: selectedPaymentType ? `${colors.statusPaid}15` : 'rgba(255,255,255,0.03)', border: `1px solid ${selectedPaymentType ? colors.statusPaid : 'rgba(255,255,255,0.1)'}` }}>
-                <div className="w-5 h-5 rounded-full flex items-center justify-center text-xs font-bold"
-                     style={{ background: selectedPaymentType ? colors.statusPaid : 'rgba(255,255,255,0.1)', color: selectedPaymentType ? 'white' : colors.textSecondary }}>2</div>
-                <span className="text-xs font-medium" style={{ color: selectedPaymentType ? colors.statusPaid : colors.textSecondary }}>Select Payment</span>
-              </div>
-              <div className="w-4 h-0.5" style={{ background: 'rgba(255,255,255,0.1)' }} />
-              <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg"
-                   style={{ background: waiverReason ? `${colors.statusPaid}15` : 'rgba(255,255,255,0.03)', border: `1px solid ${waiverReason ? colors.statusPaid : 'rgba(255,255,255,0.1)'}` }}>
-                <div className="w-5 h-5 rounded-full flex items-center justify-center text-xs font-bold"
-                     style={{ background: waiverReason ? colors.statusPaid : 'rgba(255,255,255,0.1)', color: waiverReason ? 'white' : colors.textSecondary }}>3</div>
-                <span className="text-xs font-medium" style={{ color: waiverReason ? colors.statusPaid : colors.textSecondary }}>Add Details</span>
-              </div>
-            </div>
+              <BadgePercent className="w-3 h-3" />
+              {scopeCopy.chip}
+            </span>
           </div>
-        </GlassCard>
-      </motion.div>
+
+          <h1 className="text-2xl sm:text-[28px] font-extrabold tracking-tight" style={{ color: tk.text }}>
+            {scopeCopy.title}
+          </h1>
+          <p className="text-sm" style={{ color: tk.textSec }}>
+            {scopeCopy.subtitle}
+          </p>
+
+          {/* Three-step progress strip — same flow as before, but
+              theme-aware and tighter. Each step's chip turns mint
+              once that piece is locked in. Connecting lines fill
+              in as the user advances. */}
+          <div className="flex items-center gap-2 pt-1 flex-wrap">
+            <WaiveStep n={1} label="Pick member"  done={Boolean(selectedStudent)}     tk={tk} theme={theme} />
+            <span className="flex-1 h-0.5 min-w-[12px] rounded-full" style={{ background: selectedStudent ? tk.mint : tk.cardBorder }} />
+            <WaiveStep n={2} label="Pick due"     done={Boolean(selectedPaymentType)} tk={tk} theme={theme} />
+            <span className="flex-1 h-0.5 min-w-[12px] rounded-full" style={{ background: selectedPaymentType ? tk.mint : tk.cardBorder }} />
+            <WaiveStep n={3} label="Add reason"   done={Boolean(waiverReason)}        tk={tk} theme={theme} />
+          </div>
+        </motion.header>
+      </div>
 
       {/* Success Modal */}
       {showSuccess && (
@@ -994,6 +951,47 @@ export default function WaivePaymentPage() {
         </motion.div>
       </div>
       <Footer />
+    </div>
+  );
+}
+
+/**
+ * WaiveStep — single step chip in the waive flow's progress strip.
+ * Renders as a mint-tinted "done" chip once the step is complete;
+ * a brand-coloured "current" chip otherwise. Compact enough that
+ * three of them + connecting lines fit on a 320px phone.
+ */
+function WaiveStep({
+  n, label, done, tk, theme,
+}: {
+  n: number;
+  label: string;
+  done: boolean;
+  tk: ReturnType<typeof getDashboardTokens>;
+  theme: 'light' | 'dark';
+}) {
+  const isLight = theme === 'light';
+  return (
+    <div
+      className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-full text-[10.5px] font-bold uppercase tracking-wider"
+      style={{
+        background: done
+          ? `${tk.mint}18`
+          : (isLight ? 'rgba(15,7,3,0.04)' : 'rgba(255,255,255,0.04)'),
+        color: done ? tk.mint : tk.textSec,
+        border: `1px solid ${done ? tk.mint + '40' : tk.cardBorder}`,
+      }}
+    >
+      <span
+        className="w-4 h-4 rounded-full flex items-center justify-center text-[9px] font-extrabold"
+        style={{
+          background: done ? tk.mint : tk.cardBorder,
+          color: done ? '#FFFFFF' : tk.textTer,
+        }}
+      >
+        {n}
+      </span>
+      {label}
     </div>
   );
 }
