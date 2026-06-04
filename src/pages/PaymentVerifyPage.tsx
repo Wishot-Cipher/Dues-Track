@@ -12,10 +12,10 @@
  *   5. On pending, poll every 3s up to 8 times (most Paystack
  *      callbacks are already final, but USSD can lag)
  *
- * Visual: matches the rest of the app (dark canvas, brand orange,
- * mint for success, soft red for failure, big celebratory check
- * for approved). No tables, no jargon — a confident receipt-ish
- * summary the student can screenshot.
+ * Visual: matches the rest of the app. Theme-aware — reads the
+ * user's current light/dark preference via useTheme() and derives
+ * all surface colours from getDashboardTokens(), the same helper
+ * used by CreateDuePage, MakePaymentPage, and the dashboard.
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
@@ -34,93 +34,96 @@ import {
 } from 'lucide-react';
 import paystackService, { type PaystackVerifyResult } from '@/services/paystackService';
 import { APP_NAME } from '@/config/constants';
+import { useTheme, getDashboardTokens } from '@/hooks/useTheme';
 
-const tk = {
-  bg:      '#0F0703',
-  panel:   'rgba(255,255,255,0.03)',
-  border:  'rgba(255,255,255,0.08)',
-  text:    '#FFFFFF',
-  textSec: 'rgba(255,255,255,0.65)',
-  textTer: 'rgba(255,255,255,0.40)',
-  primary: '#FF6803',
-  mint:    '#30FFAC',
-  amber:   '#FFAC5F',
-  danger:  '#ef4444',
-};
-
+// ─────────────────────────────────────────────────────────────────
+// Types
+// ─────────────────────────────────────────────────────────────────
 type UiState = 'verifying' | 'approved' | 'pending' | 'failed' | 'abandoned' | 'error';
 
+// ─────────────────────────────────────────────────────────────────
+// Helpers
+// ─────────────────────────────────────────────────────────────────
 function naira(kobo?: number | null): string {
   if (!kobo && kobo !== 0) return '—';
   const n = kobo / 100;
   return `₦${n.toLocaleString('en-NG', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 }
 
-const STATE_META: Record<UiState, {
-  color: string;
-  bg: string;
-  border: string;
-  title: string;
-  subtitle: string;
-  Icon: React.ElementType;
-}> = {
-  verifying: {
-    color: tk.primary,
-    bg: 'rgba(255,104,3,0.08)',
-    border: 'rgba(255,104,3,0.25)',
-    title: 'Confirming your payment…',
-    subtitle: 'Hold tight — we\'re double-checking with Paystack.',
-    Icon: Loader2,
-  },
-  approved: {
-    color: tk.mint,
-    bg: 'rgba(48,255,172,0.08)',
-    border: 'rgba(48,255,172,0.28)',
-    title: 'Payment confirmed.',
-    subtitle: 'Your receipt is on the way to your inbox.',
-    Icon: CheckCircle2,
-  },
-  pending: {
-    color: tk.amber,
-    bg: 'rgba(255,172,95,0.10)',
-    border: 'rgba(255,172,95,0.28)',
-    title: 'Still processing…',
-    subtitle: 'Bank transfers and USSD can take a minute. We\'ll keep checking.',
-    Icon: Loader2,
-  },
-  failed: {
-    color: tk.danger,
-    bg: 'rgba(239,68,68,0.10)',
-    border: 'rgba(239,68,68,0.30)',
-    title: 'Payment failed.',
-    subtitle: 'Nothing was charged. You can try again.',
-    Icon: XCircle,
-  },
-  abandoned: {
-    color: tk.textSec,
-    bg: 'rgba(255,255,255,0.04)',
-    border: 'rgba(255,255,255,0.12)',
-    title: 'You backed out.',
-    subtitle: 'No worries — nothing was charged. You can try again.',
-    Icon: AlertCircle,
-  },
-  error: {
-    color: tk.danger,
-    bg: 'rgba(239,68,68,0.10)',
-    border: 'rgba(239,68,68,0.30)',
-    title: 'We hit a snag.',
-    subtitle: 'Something went wrong on our end while verifying.',
-    Icon: AlertCircle,
-  },
-};
+// STATE_META needs the live theme tokens, so we build it as a
+// function rather than a module-level constant — same pattern as
+// the page's own derived colours.
+function buildStateMeta(tk: ReturnType<typeof getDashboardTokens>) {
+  return {
+    verifying: {
+      color:    tk.primary,
+      bg:       `${tk.primary}14`,
+      border:   `${tk.primary}40`,
+      title:    'Confirming your payment…',
+      subtitle: "Hold tight — we're double-checking with Paystack.",
+      Icon:     Loader2,
+    },
+    approved: {
+      color:    tk.mint,
+      bg:       `${tk.mint}14`,
+      border:   `${tk.mint}48`,
+      title:    'Payment confirmed.',
+      subtitle: 'Your receipt is on the way to your inbox.',
+      Icon:     CheckCircle2,
+    },
+    pending: {
+      color:    tk.amber,
+      bg:       `${tk.amber}18`,
+      border:   `${tk.amber}48`,
+      title:    'Still processing…',
+      subtitle: "Bank transfers and USSD can take a minute. We'll keep checking.",
+      Icon:     Loader2,
+    },
+    failed: {
+      color:    tk.danger,
+      bg:       `${tk.danger}18`,
+      border:   `${tk.danger}50`,
+      title:    'Payment failed.',
+      subtitle: 'Nothing was charged. You can try again.',
+      Icon:     XCircle,
+    },
+    abandoned: {
+      color:    tk.textSec,
+      bg:       tk.card,
+      border:   tk.cardBorder,
+      title:    'You backed out.',
+      subtitle: 'No worries — nothing was charged. You can try again.',
+      Icon:     AlertCircle,
+    },
+    error: {
+      color:    tk.danger,
+      bg:       `${tk.danger}18`,
+      border:   `${tk.danger}50`,
+      title:    'We hit a snag.',
+      subtitle: 'Something went wrong on our end while verifying.',
+      Icon:     AlertCircle,
+    },
+  } satisfies Record<UiState, {
+    color: string; bg: string; border: string;
+    title: string; subtitle: string; Icon: React.ElementType;
+  }>;
+}
 
 const MAX_POLLS = 8;
 const POLL_MS   = 3000;
 
+// ─────────────────────────────────────────────────────────────────
+// Page
+// ─────────────────────────────────────────────────────────────────
 export default function PaymentVerifyPage() {
   const { orgSlug } = useParams<{ orgSlug: string }>();
-  const [params] = useSearchParams();
-  const navigate = useNavigate();
+  const [params]    = useSearchParams();
+  const navigate    = useNavigate();
+
+  // ── Theme tokens ── same two-liner as CreateDuePage / MakePaymentPage
+  const { theme } = useTheme();
+  const tk = getDashboardTokens(theme);
+  const isLight = theme === 'light';
 
   const reference = params.get('reference') || params.get('trxref') || '';
 
@@ -140,12 +143,12 @@ export default function PaymentVerifyPage() {
     }
 
     switch (r.status) {
-      case 'approved': setUiState('approved'); break;
-      case 'failed':   setUiState('failed');   break;
-      case 'abandoned':setUiState('abandoned');break;
-      case 'reversed': setUiState('failed');   break;
-      case 'pending':  setUiState('pending');  break;
-      default:         setUiState('pending');
+      case 'approved':  setUiState('approved');  break;
+      case 'failed':    setUiState('failed');    break;
+      case 'abandoned': setUiState('abandoned'); break;
+      case 'reversed':  setUiState('failed');    break;
+      case 'pending':   setUiState('pending');   break;
+      default:          setUiState('pending');
     }
   }, [reference]);
 
@@ -158,7 +161,6 @@ export default function PaymentVerifyPage() {
   useEffect(() => {
     if (uiState !== 'pending') return;
     if (pollCount.current >= MAX_POLLS) return;
-
     const id = window.setTimeout(() => {
       pollCount.current += 1;
       void verifyOnce();
@@ -166,69 +168,74 @@ export default function PaymentVerifyPage() {
     return () => window.clearTimeout(id);
   }, [uiState, verifyOnce]);
 
-  // ── Auto-redirect to the receipt after approval ──
-  // We send the user to the dedicated ReceiptPage (not back to the
-  // payment detail) so they end the flow on a polished, share-able
-  // receipt screen — the classic fintech "Payment Successful → here
-  // is your receipt" handoff.
+  // ── Auto-redirect to receipt after approval ──
   useEffect(() => {
     if (uiState !== 'approved') return;
     const ticketCode = result?.ticket_code;
     const pid = result?.payment?.id;
     const id = window.setTimeout(() => {
-      if (ticketCode) {
-        navigate(`/${orgSlug}/ticket/${ticketCode}`);
-        return;
-      }
-      if (pid) {
-        navigate(`/${orgSlug}/receipt/${pid}`);
-      }
+      if (ticketCode) { navigate(`/${orgSlug}/ticket/${ticketCode}`); return; }
+      if (pid)        { navigate(`/${orgSlug}/receipt/${pid}`); }
     }, 3200);
     return () => window.clearTimeout(id);
   }, [uiState, result, navigate, orgSlug]);
 
-  const meta = STATE_META[uiState];
-  const { Icon } = meta;
-
-  const showAmount = useMemo(() => uiState === 'approved' || uiState === 'pending', [uiState]);
+  // ── Derived ──
+  const stateMeta  = useMemo(() => buildStateMeta(tk), [tk]);
+  const meta       = stateMeta[uiState];
+  const { Icon }   = meta;
+  const showAmount = uiState === 'approved' || uiState === 'pending';
 
   return (
-    <div className="min-h-screen relative overflow-x-hidden" style={{ minHeight: '100dvh', background: tk.bg }}>
-      {/* Background glow keyed to current state */}
+    <div
+      className="min-h-screen relative overflow-x-hidden"
+      style={{ minHeight: '100dvh', background: tk.bg }}
+    >
+      {/* Ambient glow — colour tracks current state */}
       <div className="fixed inset-0 pointer-events-none overflow-hidden">
         <motion.div
           className="absolute rounded-full blur-[180px]"
           style={{
             width: 620, height: 620,
             background: `radial-gradient(circle, ${meta.color} 0%, transparent 70%)`,
-            top: '-12%', right: '-10%', opacity: 0.18,
+            top: '-12%', right: '-10%',
+            opacity: isLight ? 0.10 : 0.18,
           }}
-          animate={{ opacity: [0.16, 0.22, 0.16] }}
+          animate={{ opacity: isLight ? [0.08, 0.13, 0.08] : [0.16, 0.22, 0.16] }}
           transition={{ duration: 4, repeat: Infinity, ease: 'easeInOut' }}
         />
       </div>
 
       {/* Top bar */}
-      <nav className="relative z-10 max-w-2xl mx-auto px-5 sm:px-6 py-5 flex items-center justify-between">
+      <nav
+        className="relative z-10 max-w-2xl mx-auto px-5 sm:px-6 py-5 flex items-center justify-between"
+      >
         <button
           onClick={() => navigate(orgSlug ? `/${orgSlug}/dashboard` : '/')}
-          className="flex items-center gap-2 text-sm font-medium"
+          className="flex items-center gap-2 text-sm font-medium transition-colors"
           style={{ color: tk.textSec }}
         >
           <ArrowLeft className="w-4 h-4" /> Dashboard
         </button>
-        <span className="text-base font-bold text-white">{APP_NAME}</span>
+        <span className="text-base font-bold" style={{ color: tk.text }}>{APP_NAME}</span>
       </nav>
 
-      {/* Main */}
+      {/* Main card */}
       <main className="relative z-10 max-w-2xl mx-auto px-5 sm:px-6 pt-6 pb-24">
         <motion.section
           initial={{ opacity: 0, y: 14 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.35 }}
           className="rounded-[28px] p-6 sm:p-8 text-center"
-          style={{ background: tk.panel, border: `1px solid ${tk.border}` }}
+          style={{
+            background: tk.card,
+            border: `1px solid ${tk.cardBorder}`,
+            boxShadow: isLight
+              ? '0 4px 24px -8px rgba(15,7,3,0.10)'
+              : 'none',
+          }}
         >
+          {/* State icon */}
           <motion.div
             initial={{ scale: 0, rotate: -180 }}
             animate={{ scale: 1, rotate: 0 }}
@@ -252,10 +259,17 @@ export default function PaymentVerifyPage() {
             )}
           </motion.div>
 
-          <h1 className="text-2xl sm:text-3xl font-extrabold text-white tracking-tight mb-2">
+          {/* Title + subtitle */}
+          <h1
+            className="text-2xl sm:text-3xl font-extrabold tracking-tight mb-2"
+            style={{ color: tk.text }}
+          >
             {meta.title}
           </h1>
-          <p className="text-sm leading-6 mb-6 max-w-md mx-auto" style={{ color: tk.textSec }}>
+          <p
+            className="text-sm leading-6 mb-6 max-w-md mx-auto"
+            style={{ color: tk.textSec }}
+          >
             {meta.subtitle}
           </p>
 
@@ -268,15 +282,20 @@ export default function PaymentVerifyPage() {
                 exit={{ opacity: 0, y: -8 }}
                 className="rounded-2xl p-5 mb-5 inline-block min-w-[260px]"
                 style={{
-                  background: 'rgba(255,255,255,0.03)',
-                  border: `1px solid ${tk.border}`,
+                  background: isLight ? 'rgba(15,7,3,0.04)' : 'rgba(255,255,255,0.03)',
+                  border: `1px solid ${tk.cardBorder}`,
                 }}
               >
-                <p className="text-[10px] uppercase tracking-[0.22em] font-bold mb-1"
-                  style={{ color: tk.textTer }}>
+                <p
+                  className="text-[10px] uppercase tracking-[0.22em] font-bold mb-1"
+                  style={{ color: tk.textTer }}
+                >
                   Amount
                 </p>
-                <p className="text-3xl font-extrabold text-white tracking-tight">
+                <p
+                  className="text-3xl font-extrabold tracking-tight"
+                  style={{ color: tk.text }}
+                >
                   {naira(result.payment.total_charged_kobo)}
                 </p>
                 {result.payment.platform_fee_kobo && result.payment.platform_fee_kobo > 0 ? (
@@ -288,12 +307,14 @@ export default function PaymentVerifyPage() {
             )}
           </AnimatePresence>
 
-          {/* Reference + error */}
+          {/* Reference */}
           {reference && (
             <p className="text-[11px] font-mono mb-1" style={{ color: tk.textTer }}>
               REF · {reference}
             </p>
           )}
+
+          {/* Error message */}
           {errMsg && uiState === 'error' && (
             <p className="text-xs mt-1" style={{ color: tk.danger }}>{errMsg}</p>
           )}
@@ -303,10 +324,10 @@ export default function PaymentVerifyPage() {
             {uiState === 'approved' && result?.payment?.id && (
               <motion.button
                 onClick={() => navigate(`/${orgSlug}/receipt/${result.payment!.id}`)}
-                className="px-5 py-3 rounded-2xl text-white font-bold text-sm flex items-center gap-2"
+                className="px-5 py-3 rounded-2xl font-bold text-sm flex items-center gap-2"
                 style={{
-                  background: 'linear-gradient(135deg, #30FFAC 0%, #00D88B 100%)',
-                  boxShadow: '0 8px 28px rgba(48,255,172,0.32)',
+                  background: `linear-gradient(135deg, ${tk.mint} 0%, #00D88B 100%)`,
+                  boxShadow: `0 8px 28px ${tk.mint}52`,
                   color: '#0F0703',
                 }}
                 whileHover={{ scale: 1.03 }}
@@ -322,7 +343,10 @@ export default function PaymentVerifyPage() {
               <motion.button
                 onClick={() => navigate(orgSlug ? `/${orgSlug}/payments` : '/')}
                 className="px-5 py-3 rounded-2xl text-white font-bold text-sm flex items-center gap-2"
-                style={{ background: 'linear-gradient(135deg, #FF6803 0%, #FFAC5F 100%)' }}
+                style={{
+                  background: `linear-gradient(135deg, ${tk.primary} 0%, ${tk.amber} 100%)`,
+                  boxShadow: `0 8px 28px ${tk.primary}40`,
+                }}
                 whileHover={{ scale: 1.03 }}
                 whileTap={{ scale: 0.97 }}
               >
@@ -337,9 +361,9 @@ export default function PaymentVerifyPage() {
                 onClick={() => { pollCount.current = 0; setUiState('verifying'); void verifyOnce(); }}
                 className="px-4 py-2.5 rounded-2xl text-sm font-semibold flex items-center gap-2"
                 style={{
-                  background: 'rgba(255,255,255,0.04)',
+                  background: isLight ? 'rgba(15,7,3,0.05)' : 'rgba(255,255,255,0.04)',
                   color: tk.textSec,
-                  border: `1px solid ${tk.border}`,
+                  border: `1px solid ${tk.cardBorder}`,
                 }}
                 whileHover={{ scale: 1.02 }}
                 whileTap={{ scale: 0.97 }}
@@ -350,6 +374,7 @@ export default function PaymentVerifyPage() {
             )}
           </div>
 
+          {/* Footer notes */}
           {uiState === 'approved' && (
             <p className="text-[11px] mt-5" style={{ color: tk.textTer }}>
               Redirecting to your receipt in a moment…
