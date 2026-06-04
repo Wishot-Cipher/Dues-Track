@@ -60,6 +60,14 @@ interface GroupRow {
   kind: string;
   parent_group_id: string | null;
   member_count: number;
+  /**
+   * Auto-created "Office" class for non-student dept staff (mig 099).
+   * These groups don't collect dues — they exist only so staff
+   * members have a class to belong to. Audit excludes them so the
+   * student-facing payment view doesn't get polluted with empty
+   * rows.
+   */
+  is_staff_office?: boolean;
 }
 
 interface PaymentRow extends Record<string, unknown> {
@@ -160,7 +168,7 @@ export default function AuditPage() {
         // rows we already have permission to read.
         let gQuery = supabase
           .from('organization_groups')
-          .select('id, name, short_name, kind, parent_group_id')
+          .select('id, name, short_name, kind, parent_group_id, is_staff_office')
           .eq('organization_id', organization.id);
         if (scopedIds) gQuery = gQuery.in('id', Array.from(scopedIds));
 
@@ -198,20 +206,28 @@ export default function AuditPage() {
           countsByGroup.set(m.group_id, (countsByGroup.get(m.group_id) || 0) + 1);
         }
 
+        // Filter out staff-office buckets here so they never enter
+        // the tree, the roll-up, or the download. Office classes
+        // don't collect dues and showing them as zero-row rows
+        // muddies the student-facing audit. is_staff_office=NULL
+        // (pre-mig-099 databases) is treated as FALSE.
         const gRows = ((gRes.data || []) as Array<{
           id: string;
           name: string;
           short_name: string;
           kind: string;
           parent_group_id: string | null;
-        }>).map((g) => ({
-          id: g.id,
-          name: g.name,
-          short_name: g.short_name,
-          kind: g.kind,
-          parent_group_id: g.parent_group_id,
-          member_count: countsByGroup.get(g.id) || 0,
-        }));
+          is_staff_office?: boolean | null;
+        }>)
+          .filter((g) => !g.is_staff_office)
+          .map((g) => ({
+            id: g.id,
+            name: g.name,
+            short_name: g.short_name,
+            kind: g.kind,
+            parent_group_id: g.parent_group_id,
+            member_count: countsByGroup.get(g.id) || 0,
+          }));
 
         setGroups(gRows);
         setPayments((pRes.data || []) as unknown as PaymentRow[]);
