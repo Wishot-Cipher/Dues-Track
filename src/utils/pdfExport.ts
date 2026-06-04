@@ -1619,6 +1619,232 @@ export function generatePaymentReceiptPDF(payment: {
   }
 }
 
+/* ────────────────────────────────────────────────────────────────
+ * GENERIC TABLE EXPORTER (new in 498b149 follow-up)
+ *
+ * The page-specific exporters above (exportPaymentsToPDF,
+ * exportExpensesToPDF, …) each hardcode their column layout for
+ * one screen. AuditPage and the upcoming Expenses redesign both
+ * need a "give me a clean, branded table PDF from arbitrary data"
+ * primitive — column descriptors, optional summary, repeatable
+ * header on page break.
+ *
+ * exportTableToPDF is that primitive. The page-specific exporters
+ * stay because they carry richer per-screen layout (stats grids,
+ * student info blocks). Use the generic one for ad-hoc lists.
+ * ──────────────────────────────────────────────────────────────── */
+
+/** A single column descriptor for the generic exporter. `key` indexes the row. */
+export interface PdfTableColumn<Row = Record<string, unknown>> {
+  key: keyof Row & string;
+  label: string;
+  align?: 'left' | 'center' | 'right';
+  /** Optional fixed cell width in pt (default: auto). */
+  width?: number;
+  /** Per-cell renderer. Returns the display string for the value. */
+  format?: (value: unknown, row: Row) => string;
+}
+
+export interface PdfTableExportInput<Row = Record<string, unknown>> {
+  title: string;
+  subtitle?: string;
+  /** Organisation name printed in the top-right header band. */
+  orgName: string;
+  /** Brand accent hex. Defaults to Payvexo orange. */
+  accentColor?: string;
+  /** App name printed in the footer. Defaults to "Payvexo". */
+  appName?: string;
+  columns: PdfTableColumn<Row>[];
+  rows: Row[];
+  /** Label / value pairs rendered as a totals block below the table. */
+  summary?: Array<{ label: string; value: string }>;
+  /** Filename slug (no extension, no date). Defaults to slugified title. */
+  filenameSlug?: string;
+}
+
+/**
+ * Build + download a branded tabular PDF. Returns the filename used.
+ *
+ * Layout: org-name header band with a brand stripe, title + subtitle,
+ * autotable with zebra stripes + brand-coloured header, optional
+ * summary block, branded footer with page count. The header band
+ * repeats on every page so multi-page exports stay branded.
+ */
+export function exportTableToPDF<Row extends Record<string, unknown>>(
+  input: PdfTableExportInput<Row>,
+): string {
+  const {
+    title,
+    subtitle,
+    orgName,
+    accentColor = '#FF6803',
+    appName = 'Payvexo',
+    columns,
+    rows,
+    summary,
+    filenameSlug,
+  } = input;
+
+  const doc = new jsPDF({ orientation: 'portrait', unit: 'pt', format: 'a4' });
+  const pageWidth = doc.internal.pageSize.getWidth();
+  const pageHeight = doc.internal.pageSize.getHeight();
+  const margin = 36;
+
+  const hexToRgb = (hex: string): [number, number, number] => {
+    const m = hex.replace('#', '');
+    if (m.length !== 6) return [255, 104, 3];
+    return [
+      parseInt(m.slice(0, 2), 16),
+      parseInt(m.slice(2, 4), 16),
+      parseInt(m.slice(4, 6), 16),
+    ];
+  };
+  const accent = hexToRgb(accentColor);
+  const muted: [number, number, number] = [110, 110, 110];
+
+  const drawHeader = () => {
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(11);
+    doc.setTextColor(20, 20, 20);
+    doc.text(orgName, margin, margin + 4);
+
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(9);
+    doc.setTextColor(...muted);
+    const generatedAt = new Date().toLocaleString('en-NG', {
+      year: 'numeric', month: 'short', day: 'numeric',
+      hour: '2-digit', minute: '2-digit',
+    });
+    doc.text(generatedAt, pageWidth - margin, margin + 4, { align: 'right' });
+
+    doc.setDrawColor(accent[0], accent[1], accent[2]);
+    doc.setLineWidth(1.5);
+    doc.line(margin, margin + 12, pageWidth - margin, margin + 12);
+  };
+
+  const drawFooter = (pageNo: number, pageCount: number) => {
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(8);
+    doc.setTextColor(...muted);
+    const footerY = pageHeight - margin / 2;
+    doc.text(
+      `${appName} · ${new Date().toISOString().slice(0, 10)}`,
+      margin, footerY,
+    );
+    doc.text(
+      `Page ${pageNo} of ${pageCount}`,
+      pageWidth - margin, footerY,
+      { align: 'right' },
+    );
+  };
+
+  // First-page title
+  drawHeader();
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(18);
+  doc.setTextColor(15, 7, 3);
+  doc.text(title, margin, margin + 38);
+  let cursorY = margin + 38;
+  if (subtitle) {
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(11);
+    doc.setTextColor(...muted);
+    doc.text(subtitle, margin, cursorY + 16);
+    cursorY += 16;
+  }
+
+  // Table data
+  const head: string[][] = [columns.map(c => c.label)];
+  const body: string[][] = rows.map(row =>
+    columns.map(col => {
+      const raw = row[col.key];
+      if (col.format) return col.format(raw, row);
+      return raw == null ? '' : String(raw);
+    }),
+  );
+
+  autoTable(doc, {
+    head,
+    body,
+    startY: cursorY + 16,
+    margin: { left: margin, right: margin },
+    theme: 'plain',
+    styles: {
+      font: 'helvetica',
+      fontSize: 9,
+      cellPadding: 6,
+      lineColor: [225, 225, 225],
+      lineWidth: 0.5,
+      textColor: [30, 30, 30],
+    },
+    headStyles: {
+      fillColor: [accent[0], accent[1], accent[2]],
+      textColor: [255, 255, 255],
+      fontStyle: 'bold',
+      halign: 'left',
+    },
+    alternateRowStyles: {
+      fillColor: [248, 248, 248],
+    },
+    columnStyles: columns.reduce<Record<number, { halign?: 'left' | 'center' | 'right'; cellWidth?: number }>>(
+      (acc, col, idx) => {
+        acc[idx] = {
+          halign: col.align || 'left',
+          ...(col.width ? { cellWidth: col.width } : {}),
+        };
+        return acc;
+      },
+      {},
+    ),
+    didDrawPage: (data) => {
+      // Re-draw the header band on every page so multi-page PDFs
+      // stay branded. The first page already drew it above.
+      if (data.pageNumber > 1) drawHeader();
+    },
+  });
+
+  const finalY = doc.lastAutoTable?.finalY ?? cursorY + 100;
+
+  if (summary && summary.length > 0) {
+    let y = finalY + 22;
+    const lineHeight = 18;
+    if (y + summary.length * lineHeight > pageHeight - margin - 30) {
+      doc.addPage();
+      drawHeader();
+      y = margin + 38;
+    }
+    doc.setDrawColor(225, 225, 225);
+    doc.setLineWidth(0.5);
+    doc.line(margin, y - 10, pageWidth - margin, y - 10);
+
+    for (const s of summary) {
+      doc.setFont('helvetica', 'normal');
+      doc.setFontSize(10);
+      doc.setTextColor(...muted);
+      doc.text(s.label, margin, y);
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(11);
+      doc.setTextColor(15, 7, 3);
+      doc.text(s.value, pageWidth - margin, y, { align: 'right' });
+      y += lineHeight;
+    }
+  }
+
+  // Footer on every page
+  const pageCount = doc.getNumberOfPages();
+  for (let i = 1; i <= pageCount; i++) {
+    doc.setPage(i);
+    drawFooter(i, pageCount);
+  }
+
+  const date = new Date().toISOString().slice(0, 10);
+  const slugify = (s: string) => s.toLowerCase().replace(/[^a-z0-9_-]+/g, '-').replace(/(^-|-$)+/g, '');
+  const slug = (filenameSlug || slugify(title) || 'export').slice(0, 60);
+  const filename = `${slug}-${date}.pdf`;
+  doc.save(filename);
+  return filename;
+}
+
 export default {
   exportStudentsToPDF,
   exportPaymentsToPDF,
@@ -1626,4 +1852,5 @@ export default {
   exportFinancialSummaryToPDF,
   exportCollectedPaymentsToPDF,
   generatePaymentReceiptPDF,
+  exportTableToPDF,
 };

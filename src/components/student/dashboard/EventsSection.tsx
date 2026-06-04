@@ -1,8 +1,9 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { getDashboardTokens, type ResolvedTheme } from '@/hooks/useTheme';
 import { supabase } from '@/config/supabase';
 import EventCard, { type EventCardItem, type EventTier } from '@/components/student/dashboard/EventCard';
+import ConfirmDialog from '@/components/ui/ConfirmDialog';
 
 export interface EventsSectionProps {
   theme: ResolvedTheme;
@@ -212,6 +213,16 @@ export default function EventsSection({
   // up tickets for friends without us removing the event from
   // their dashboard. Empty set when memberId isn't known yet.
   const [paidEventIds, setPaidEventIds] = useState<Set<string>>(new Set());
+  // When the member taps "Buy another" on an event they already
+  // hold a ticket for, we capture the id here and show a confirm
+  // dialog before navigating. Stops accidental double-buys from
+  // members who missed the "Ticket secured" badge.
+  const [confirmingId, setConfirmingId] = useState<string | null>(null);
+
+  const confirmingEvent = useMemo(
+    () => (confirmingId ? events.find(e => e.id === confirmingId) || null : null),
+    [confirmingId, events],
+  );
 
   useEffect(() => {
     let mounted = true;
@@ -310,19 +321,65 @@ export default function EventsSection({
             justifyContent: hasMultiple ? 'stretch' : 'center',
           }}
         >
-          {visibleEvents.map((event) => (
-            <div key={event.id} style={{ width: '100%' }}>
-              <EventCard
-                theme={theme}
-                item={event}
-                currencySymbol={currencySymbol}
-                onGetTicket={onGetTicket}
-                alreadyPurchased={paidEventIds.has(event.id)}
-              />
-            </div>
-          ))}
+          {visibleEvents.map((event) => {
+            const alreadyPurchased = paidEventIds.has(event.id);
+            // Intercept the CTA when the member already has a ticket
+            // for this event. Tap → open the duplicate-buy confirm
+            // dialog; ConfirmDialog's onConfirm then runs the
+            // original onGetTicket. Members who DO want a second
+            // ticket (for a friend) keep the same flow with one
+            // explicit acknowledgement in the middle.
+            const handleGetTicket = (id: string) => {
+              if (alreadyPurchased) {
+                setConfirmingId(id);
+              } else if (onGetTicket) {
+                onGetTicket(id);
+              }
+            };
+            return (
+              <div key={event.id} style={{ width: '100%' }}>
+                <EventCard
+                  theme={theme}
+                  item={event}
+                  currencySymbol={currencySymbol}
+                  onGetTicket={handleGetTicket}
+                  alreadyPurchased={alreadyPurchased}
+                />
+              </div>
+            );
+          })}
         </div>
       )}
+
+      {/* Duplicate-buy confirm. Renders only when confirmingId is
+          set (member tapped the CTA on a "Ticket secured" card).
+          Console-pattern modal with Action / Impact rows — same
+          shape as every other confirm in the app. */}
+      <ConfirmDialog
+        isOpen={Boolean(confirmingId && confirmingEvent)}
+        onClose={() => setConfirmingId(null)}
+        onConfirm={() => {
+          const id = confirmingId;
+          setConfirmingId(null);
+          if (id && onGetTicket) onGetTicket(id);
+        }}
+        title="Buy another ticket?"
+        subtitle="You already have one for this event."
+        type="warning"
+        confirmText="Yes, buy another"
+        cancelText="Not now"
+        rows={[
+          {
+            label: 'Event',
+            value: confirmingEvent?.title || 'This event',
+          },
+          {
+            label: 'Why this prompt',
+            value:
+              'A ticket has already been issued to your account for this event. If you missed the "Ticket secured" badge on the card, you can stop here. If you\'re buying an extra ticket for a friend, continue.',
+          },
+        ]}
+      />
 
       <style>{`@keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.55} }`}</style>
     </section>

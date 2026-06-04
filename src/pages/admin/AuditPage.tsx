@@ -50,6 +50,7 @@ import { useActiveRole } from '@/hooks/useActiveRole';
 import { useTheme, getDashboardTokens } from '@/hooks/useTheme';
 import { supabase } from '@/config/supabase';
 import { getScopedGroupIds } from '@/utils/scopedGroups';
+import { exportTableToPDF } from '@/utils/pdfExport';
 import LoadingSpinner from '@/components/ui/LoadingSpinner';
 
 interface GroupRow {
@@ -382,6 +383,63 @@ export default function AuditPage() {
     exportCsv(payments, label);
   }, [exportCsv, payments, activeRole, groups, organization]);
 
+  // PDF export — branded, archive-ready. CSV is for spreadsheets;
+  // PDF is what a treasurer attaches to a meeting minute or prints
+  // for a file. Same data, different reader. Shared formatter lives
+  // in src/utils/pdfExport so the upcoming Expenses redesign can
+  // call it with its own column list.
+  const exportPdf = useCallback((rows: PaymentRow[], scopeLabel: string) => {
+    if (rows.length === 0 || !organization) return;
+    const groupNameById = new Map(groups.map(g => [g.id, g.name]));
+    const currency = organization.currency_symbol || '₦';
+    const fmtAmount = (n: number) => `${currency}${n.toLocaleString('en-NG')}`;
+    const totalApproved = rows
+      .filter(p => p.status === 'approved' && !p.transaction_ref?.startsWith('WAIVED-'))
+      .reduce((s, p) => s + Number(p.amount || 0), 0);
+    const approvedCount = rows.filter(p => p.status === 'approved').length;
+    const pendingCount = rows.filter(p => p.status === 'pending').length;
+
+    const date = new Date().toLocaleDateString('en-NG', {
+      year: 'numeric', month: 'short', day: 'numeric',
+    });
+    exportTableToPDF<PaymentRow>({
+      title: `Payment audit — ${scopeLabel}`,
+      subtitle: `Generated ${date}`,
+      orgName: organization.name || organization.short_name || 'Organisation',
+      accentColor: (organization.primary_color as string) || '#FF6803',
+      columns: [
+        { key: 'member',         label: 'Member',         align: 'left',
+          format: (_v, p) => firstOf(p.member)?.full_name || '—' },
+        { key: 'member_id',      label: 'Member ID',      align: 'left',
+          format: (_v, p) => firstOf(p.member)?.member_id || '—' },
+        { key: 'group_id',       label: 'Group',          align: 'left',
+          format: (_v, p) => p.group_id ? (groupNameById.get(p.group_id) || '—') : '—' },
+        { key: 'payment_type',   label: 'Payment type',   align: 'left',
+          format: (_v, p) => firstOf(p.payment_type)?.title || '—' },
+        { key: 'amount',         label: 'Amount',         align: 'right',
+          format: (_v, p) => fmtAmount(Number(p.amount || 0)) },
+        { key: 'status',         label: 'Status',         align: 'center',
+          format: (v) => String(v || '—').toUpperCase() },
+        { key: 'approved_at',    label: 'Approved',       align: 'right',
+          format: (v) => v ? new Date(String(v)).toISOString().slice(0, 10) : '—' },
+      ],
+      rows,
+      summary: [
+        { label: 'Total payments listed', value: String(rows.length) },
+        { label: 'Approved',              value: `${approvedCount} of ${rows.length}` },
+        { label: 'Pending',               value: String(pendingCount) },
+        { label: 'Total collected',       value: fmtAmount(totalApproved) },
+      ],
+      filenameSlug: `payments-${scopeLabel.replace(/[^a-z0-9_-]+/gi, '-').toLowerCase()}`,
+    });
+  }, [groups, organization]);
+
+  const exportAllPdf = useCallback(() => {
+    const label = activeRole?.scopeLevel === 'org' ? (organization?.short_name || 'all') :
+                  (groups.find(g => g.id === activeRole?.groupId)?.short_name || 'scope');
+    exportPdf(payments, label);
+  }, [exportPdf, payments, activeRole, groups, organization]);
+
   if (!organization) return null;
 
   return (
@@ -435,25 +493,42 @@ export default function AuditPage() {
               )}
             </div>
 
-            {/* Download CSV — everything currently in scope. The
-                bursar / treasurer keeps a periodic spreadsheet
-                snapshot for the records ledger. Filename includes
+            {/* Two download formats side by side. CSV is for
+                spreadsheets (filter, pivot, mail-merge); PDF is
+                for archives + meeting attachments + printing —
+                same data, different reader. Both filenames carry
                 the scope + today's date so multiple downloads
                 stack neatly in the user's downloads dir. */}
-            <button
-              type="button"
-              onClick={exportAll}
-              disabled={payments.length === 0 || loading}
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold transition-all hover:-translate-y-0.5 active:scale-[0.98] disabled:opacity-40"
-              style={{
-                background: tt.primary,
-                color: '#FFFFFF',
-                border: `1px solid ${tt.primary}`,
-              }}
-            >
-              <Download className="w-3.5 h-3.5" />
-              Download CSV
-            </button>
+            <div className="flex items-center gap-2 shrink-0">
+              <button
+                type="button"
+                onClick={exportAll}
+                disabled={payments.length === 0 || loading}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold transition-all hover:-translate-y-0.5 active:scale-[0.98] disabled:opacity-40"
+                style={{
+                  background: tt.card,
+                  color: tt.text,
+                  border: `1px solid ${tt.cardBorder}`,
+                }}
+              >
+                <Download className="w-3.5 h-3.5" />
+                CSV
+              </button>
+              <button
+                type="button"
+                onClick={exportAllPdf}
+                disabled={payments.length === 0 || loading}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold transition-all hover:-translate-y-0.5 active:scale-[0.98] disabled:opacity-40"
+                style={{
+                  background: tt.primary,
+                  color: '#FFFFFF',
+                  border: `1px solid ${tt.primary}`,
+                }}
+              >
+                <Download className="w-3.5 h-3.5" />
+                PDF
+              </button>
+            </div>
           </div>
 
           <h1 className="text-2xl sm:text-[28px] font-extrabold tracking-tight">
@@ -596,19 +671,34 @@ export default function AuditPage() {
                     to import the whole faculty's into a spreadsheet
                     and filter manually. */}
                 {drilldownPayments.length > 0 && (
-                  <button
-                    type="button"
-                    onClick={() => exportCsv(drilldownPayments, drilldownGroup.short_name || drilldownGroup.name)}
-                    className="text-xs font-bold px-3 py-1.5 rounded-lg inline-flex items-center gap-1.5 shrink-0"
-                    style={{
-                      background: tt.primarySoft,
-                      color: tt.primary,
-                      border: `1px solid ${tt.primaryRing}`,
-                    }}
-                  >
-                    <Download className="w-3.5 h-3.5" />
-                    CSV
-                  </button>
+                  <>
+                    <button
+                      type="button"
+                      onClick={() => exportCsv(drilldownPayments, drilldownGroup.short_name || drilldownGroup.name)}
+                      className="text-xs font-bold px-3 py-1.5 rounded-lg inline-flex items-center gap-1.5 shrink-0"
+                      style={{
+                        background: tt.primarySoft,
+                        color: tt.primary,
+                        border: `1px solid ${tt.primaryRing}`,
+                      }}
+                    >
+                      <Download className="w-3.5 h-3.5" />
+                      CSV
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => exportPdf(drilldownPayments, drilldownGroup.short_name || drilldownGroup.name)}
+                      className="text-xs font-bold px-3 py-1.5 rounded-lg inline-flex items-center gap-1.5 shrink-0"
+                      style={{
+                        background: tt.primary,
+                        color: '#FFFFFF',
+                        border: `1px solid ${tt.primary}`,
+                      }}
+                    >
+                      <Download className="w-3.5 h-3.5" />
+                      PDF
+                    </button>
+                  </>
                 )}
                 <button
                   type="button"
