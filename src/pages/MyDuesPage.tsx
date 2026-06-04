@@ -555,8 +555,14 @@ function PaidRow({
         <p className="text-[11px] mt-0.5 font-semibold" style={{ color: t.textSec }}>
           {data.groupLabel}
         </p>
+        {/* Show what the MEMBER actually paid (approvedSum), not
+            pt.amount (which is the cheapest tier price for ticketed
+            events). A VIP ticket buyer who paid ₦25k saw the
+            Regular price ₦3k here until this fix. The base price
+            only matters for unpaid rows — paid/partial rows always
+            display the receipt amount. */}
         <p className="text-[14px] font-extrabold tabular-nums mt-0.5" style={{ color: t.text }}>
-          {formatNaira(Number(data.pt.amount || 0))}
+          {formatNaira(Number(data.approvedSum || 0))}
         </p>
         <p className="text-[11px] mt-1" style={{ color: t.textSec }}>
           Paid on {formatDate(data.paidAt)}

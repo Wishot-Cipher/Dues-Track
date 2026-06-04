@@ -169,7 +169,7 @@ class PaymentService {
       const billingGroupIds = new Set(await this.getMemberGroupIds(studentId));
       let ptQuery = supabase
         .from('payment_types')
-        .select('id, amount, deadline, late_fee_per_day, target_levels, group_id')
+        .select('id, amount, deadline, late_fee_per_day, target_levels, group_id, category, is_mandatory')
         .eq('is_active', true);
       if (scope) {
         ptQuery = ptQuery.eq('organization_id', scope.orgId);
@@ -179,6 +179,15 @@ class PaymentService {
       if (typesError) throw typesError;
 
       const activePaymentTypes = (allPaymentTypes || []).filter((pt: any) => {
+        // Events are tickets, not debt. They show on the dashboard
+        // via EventsSection (their own "Coming up" card surface) and
+        // must NOT count toward the Outstanding hero's totalDue —
+        // otherwise the hero would say a member "owes" ₦5k for an
+        // event they can simply skip. Same logic for non-mandatory
+        // dues: they're opt-in contributions, not arrears.
+        if (String(pt.category || '').toLowerCase() === 'event') return false;
+        if (pt.is_mandatory === false) return false;
+
         // Cascade rule: a due applies to this member if either
         //   (a) it's org-wide (group_id IS NULL), OR
         //   (b) its target group is the member's class OR any

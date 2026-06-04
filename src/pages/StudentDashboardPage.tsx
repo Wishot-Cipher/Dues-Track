@@ -248,9 +248,17 @@ export default function StudentDashboardPage() {
       }));
   }, [allDuesSorted]);
 
-  // Hero figures
+  // Hero figures. paymentService.totalDue excludes events + non-
+  // mandatory dues so the hero reflects ACTUAL debt only. We mirror
+  // that scope here for unpaidCount so the donut + total stay
+  // consistent — counting optional contributions there would say
+  // "3 pending" while showing ₦0 owed, which reads as a bug.
   const outstanding = Math.max(0, Number(stats.totalDue || 0));
-  const unpaidCount = unpaidActive.length;
+  const mandatoryUnpaid = useMemo(
+    () => unpaidActive.filter((e) => e.pt.is_mandatory),
+    [unpaidActive],
+  );
+  const unpaidCount = mandatoryUnpaid.length;
 
   // Receipts count (approved payments) — surfaced as the "History" tile hint
   const receiptsCount = useMemo(
