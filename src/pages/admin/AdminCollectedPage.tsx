@@ -2,6 +2,9 @@
 import { useEffect, useState, useCallback, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useAppNav } from '@/hooks/useAppNav';
+import { useActiveRole } from '@/hooks/useActiveRole';
+import { useMultiTenantAuth } from '@/hooks/useMultiTenantAuth';
+import { getScopedGroupIds } from '@/utils/scopedGroups';
 import GlassCard from '@/components/ui/GlassCard';
 import AnimatedCounter from '@/components/ui/AnimatedCounter';
 import FinancialChart from '@/components/admin/FinancialChart';
@@ -58,6 +61,15 @@ export default function AdminCollectedPage() {
   const { go: navigate } = useAppNav();
   const { success: showSuccess, error: showError } = useToast();
   const { group, settings } = useOrganization();
+  // Tier-aware. The page used to pin every query to the caller's
+  // primary class, so a dept/faculty exec saw their dept's collected
+  // total as ₦0 — exactly the rollup they need most. Resolve the
+  // active role's subtree once and pass to every query.
+  const { user: mtUser, organization } = useMultiTenantAuth();
+  const { activeRole } = useActiveRole({
+    orgId: organization?.id,
+    memberId: mtUser?.id,
+  });
   const { theme } = useTheme();
   const tk = getDashboardTokens(theme);
 
@@ -103,13 +115,18 @@ export default function AdminCollectedPage() {
       setLoading(true);
 
       const scope = getOrgScope();
+      const scopedIds = scope ? await getScopedGroupIds({
+        orgId: scope.orgId,
+        activeGroupId: activeRole?.groupId ?? null,
+        activeScopeLevel: activeRole?.scopeLevel ?? null,
+      }) : null;
       let membersQ = supabase
         .from('organization_members')
         .select('id, full_name, member_id, is_active, level, section')
         .order('full_name', { ascending: true });
       if (scope) {
         membersQ = membersQ.eq('organization_id', scope.orgId);
-        membersQ = membersQ.eq('group_id', scope.groupId);
+        if (scopedIds) membersQ = membersQ.in('group_id', Array.from(scopedIds));
       }
       const { data: studentsData, error: studentsError } = await membersQ;
       if (studentsError) throw studentsError;
@@ -128,7 +145,7 @@ export default function AdminCollectedPage() {
         .order('created_at', { ascending: false });
       if (scope) {
         paymentsQ = paymentsQ.eq('organization_id', scope.orgId);
-        paymentsQ = paymentsQ.eq('group_id', scope.groupId);
+        if (scopedIds) paymentsQ = paymentsQ.in('group_id', Array.from(scopedIds));
       }
       const { data: paymentsData, error } = await paymentsQ;
       if (error) throw error;
@@ -143,7 +160,7 @@ export default function AdminCollectedPage() {
         .eq('status', 'approved');
       if (scope) {
         expQ = expQ.eq('organization_id', scope.orgId);
-        expQ = expQ.eq('group_id', scope.groupId);
+        if (scopedIds) expQ = expQ.in('group_id', Array.from(scopedIds));
       }
       const { data: expensesData, error: expensesError } = await expQ;
       if (expensesError) console.warn('Error fetching expenses:', expensesError);
@@ -302,7 +319,9 @@ export default function AdminCollectedPage() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  // Re-fetch when the active role's subtree changes so the dept exec
+  // switching from class-rep mode immediately sees the wider rollup.
+  }, [activeRole?.groupId, activeRole?.scopeLevel]);
 
   useEffect(() => { fetchStudentPayments(); }, [fetchStudentPayments]);
 

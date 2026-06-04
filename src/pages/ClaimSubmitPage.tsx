@@ -242,7 +242,20 @@ export default function ClaimSubmitPage() {
   const [positionTitle, setPositionTitle] = useState('');
   const [phone, setPhone] = useState(user?.phone ?? '');
   const [personalEmail, setPersonalEmail] = useState(user?.email ?? '');
-  const [institutionalEmail, setInstitutionalEmail] = useState('');
+  // Default the institutional/affiliation email to the member's
+  // account email so a verified founder doesn't have to retype their
+  // school email on every claim. The bootstrap path (mig 042) still
+  // gates: if a parent exec already exists, the backend treats this
+  // as optional. If they DO need a different email, they can clear
+  // the field. Late-init via effect so it picks up user.email when
+  // the session loads after this component mounts.
+  const [institutionalEmail, setInstitutionalEmail] = useState(user?.email ?? '');
+  useEffect(() => {
+    if (!institutionalEmail && user?.email) {
+      setInstitutionalEmail(user.email);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user?.email]);
 
   useEffect(() => {
     if (!ROLE_OPTIONS.find((r) => r.value === role)) {
@@ -553,9 +566,16 @@ export default function ClaimSubmitPage() {
                 : isCorporate ? 'you@company.com'
                 : 'you@example.com';
 
+              const isAutofilled = Boolean(
+                user?.email && institutionalEmail.toLowerCase() === user.email.toLowerCase()
+              );
               const hint = isAcademic
-                ? 'optional — required for first claim (bootstrap)'
-                : 'optional — helps us verify your role faster';
+                ? isAutofilled
+                  ? 'using your account email — change if you have a different school email'
+                  : 'required for first claim (bootstrap); optional otherwise'
+                : isAutofilled
+                  ? 'using your account email — change if you prefer'
+                  : 'optional — helps us verify your role faster';
 
               return (
                 <Field label={label} hint={hint} tk={tk}>

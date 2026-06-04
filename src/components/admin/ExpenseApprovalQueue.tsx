@@ -6,7 +6,10 @@ import ConfirmDialog from '@/components/ui/ConfirmDialog'
 import ProfessionalDropdown from '@/components/ui/ProfessionalDropdown'
 import ProfessionalDateTimePicker from '@/components/ui/ProfessionalDateTimePicker'
 import { useAppAuth as useAuth } from '@/hooks/useAppAuth'
+import { useActiveRole } from '@/hooks/useActiveRole'
+import { useMultiTenantAuth } from '@/hooks/useMultiTenantAuth'
 import { useToast } from '@/hooks/useToast'
+import { getScopedGroupIds } from '@/utils/scopedGroups'
 import {
   fetchExpenses,
   approveExpense,
@@ -383,6 +386,17 @@ function TextArea({ value, onChange, placeholder, rows = 4 }: {
 // ── Main component ─────────────────────────────────────────────────────────
 export default function ExpenseApprovalQueue() {
   const { user } = useAuth()
+  // Tier-aware. The legacy loaders pinned every query to the
+  // caller's PRIMARY class, so a dept/faculty exec saw an empty
+  // queue + an empty balance rollup even when their subtree had
+  // pending expenses + approved revenue. Mirror the pattern
+  // ExpenseList uses — resolve the active role's subtree once and
+  // pass it into every query.
+  const { user: mtUser, organization } = useMultiTenantAuth()
+  const { activeRole } = useActiveRole({
+    orgId: organization?.id,
+    memberId: mtUser?.id,
+  })
   const { success, error: showError } = useToast()
 
   const [pendingExpenses, setPendingExpenses]   = useState<Expense[]>([])
@@ -407,20 +421,35 @@ export default function ExpenseApprovalQueue() {
     loadPendingExpenses()
     loadCategories()
     loadPaymentTypes()
+  // Re-run when the active-role subtree changes so a dept exec
+  // switching from class-rep mode immediately sees the wider queue.
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
+  }, [activeRole?.groupId, activeRole?.scopeLevel])
 
   async function loadCategories() {
-    try { setCategories(await fetchExpenseCategories(true)) } catch { /* */ }
+    try {
+      const scope = getOrgScope()
+      const scopedIds = scope ? await getScopedGroupIds({
+        orgId: scope.orgId,
+        activeGroupId: activeRole?.groupId ?? null,
+        activeScopeLevel: activeRole?.scopeLevel ?? null,
+      }) : null
+      setCategories(await fetchExpenseCategories(true, scopedIds))
+    } catch { /* */ }
   }
 
   async function loadPaymentTypes() {
     try {
       const scope = getOrgScope()
+      const scopedIds = scope ? await getScopedGroupIds({
+        orgId: scope.orgId,
+        activeGroupId: activeRole?.groupId ?? null,
+        activeScopeLevel: activeRole?.scopeLevel ?? null,
+      }) : null
       let q = supabase.from('payment_types').select('id, name').eq('is_active', true)
       if (scope) {
         q = q.eq('organization_id', scope.orgId)
-        q = q.eq('group_id', scope.groupId)
+        if (scopedIds) q = q.in('group_id', Array.from(scopedIds))
       }
       const { data } = await q
       setPaymentTypes(data || [])
@@ -430,7 +459,13 @@ export default function ExpenseApprovalQueue() {
   async function loadPendingExpenses() {
     try {
       setLoading(true)
-      const data = await fetchExpenses(100, 'pending')
+      const scope = getOrgScope()
+      const scopedIds = scope ? await getScopedGroupIds({
+        orgId: scope.orgId,
+        activeGroupId: activeRole?.groupId ?? null,
+        activeScopeLevel: activeRole?.scopeLevel ?? null,
+      }) : null
+      const data = await fetchExpenses(100, 'pending', scopedIds)
       setPendingExpenses(data || [])
       await fetchAvailableBalances()
     } catch { showError('Failed to load pending expenses') }
@@ -440,12 +475,17 @@ export default function ExpenseApprovalQueue() {
   async function fetchAvailableBalances() {
     try {
       const scope = getOrgScope()
+      const scopedIds = scope ? await getScopedGroupIds({
+        orgId: scope.orgId,
+        activeGroupId: activeRole?.groupId ?? null,
+        activeScopeLevel: activeRole?.scopeLevel ?? null,
+      }) : null
       let qPayments = supabase
         .from('payments').select('amount, payment_type_id, payment_types ( id, category )')
         .eq('status', 'approved').not('transaction_ref', 'like', 'WAIVED-%')
       if (scope) {
         qPayments = qPayments.eq('organization_id', scope.orgId)
-        qPayments = qPayments.eq('group_id', scope.groupId)
+        if (scopedIds) qPayments = qPayments.in('group_id', Array.from(scopedIds))
       }
       const { data: paymentsData } = await qPayments
 
@@ -454,7 +494,7 @@ export default function ExpenseApprovalQueue() {
         .eq('status', 'approved')
       if (scope) {
         qExpenses = qExpenses.eq('organization_id', scope.orgId)
-        qExpenses = qExpenses.eq('group_id', scope.groupId)
+        if (scopedIds) qExpenses = qExpenses.in('group_id', Array.from(scopedIds))
       }
       const { data: expensesData } = await qExpenses
 

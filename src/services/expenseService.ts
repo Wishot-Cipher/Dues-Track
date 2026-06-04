@@ -269,8 +269,18 @@ export async function createExpense(payload: CreateExpensePayload) {
   }
 }
 
-// Fetch expenses with optional status filter
-export async function fetchExpenses(limit = 50, status?: 'pending' | 'approved' | 'rejected') {
+// Fetch expenses with optional status filter.
+//
+// Tier-aware: pass `scopedIds` (the active role's subtree) and the
+// query filters with .in('group_id', ...) so a dept/faculty exec
+// sees every expense under their tier. Omit scopedIds (or pass
+// undefined) to keep the legacy "primary class only" behavior so
+// existing call sites don't change behavior accidentally.
+export async function fetchExpenses(
+  limit = 50,
+  status?: 'pending' | 'approved' | 'rejected',
+  scopedIds?: Set<string> | null,
+) {
   const scope = getOrgScope()
   let query = supabase
     .from('expenses')
@@ -283,7 +293,12 @@ export async function fetchExpenses(limit = 50, status?: 'pending' | 'approved' 
 
   if (scope) {
     query = query.eq('organization_id', scope.orgId)
-    query = query.eq('group_id', scope.groupId)
+    if (scopedIds === undefined) {
+      query = query.eq('group_id', scope.groupId)
+    } else if (scopedIds && scopedIds.size > 0) {
+      query = query.in('group_id', Array.from(scopedIds))
+    }
+    // scopedIds === null → no group filter (org-tier exec).
   }
   if (status) {
     query = query.eq('status', status)
@@ -294,8 +309,13 @@ export async function fetchExpenses(limit = 50, status?: 'pending' | 'approved' 
   return data
 }
 
-// Fetch expense categories
-export async function fetchExpenseCategories(includeInactive = false): Promise<ExpenseCategory[]> {
+// Fetch expense categories. Same tier-scope contract as fetchExpenses
+// — omit scopedIds for the legacy primary-class behavior, pass the
+// active role's subtree to widen.
+export async function fetchExpenseCategories(
+  includeInactive = false,
+  scopedIds?: Set<string> | null,
+): Promise<ExpenseCategory[]> {
   const scope = getOrgScope()
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   let query: any = supabase
@@ -308,7 +328,11 @@ export async function fetchExpenseCategories(includeInactive = false): Promise<E
   }
   if (scope) {
     query = query.eq('organization_id', scope.orgId)
-    query = query.eq('group_id', scope.groupId)
+    if (scopedIds === undefined) {
+      query = query.eq('group_id', scope.groupId)
+    } else if (scopedIds && scopedIds.size > 0) {
+      query = query.in('group_id', Array.from(scopedIds))
+    }
   }
 
   const { data, error } = await query
