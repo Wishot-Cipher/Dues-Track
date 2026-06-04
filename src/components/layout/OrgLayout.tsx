@@ -417,7 +417,11 @@ export default function OrgLayout() {
     // "More" sheet too. Approve permission gates it because the
     // server-side waiver insert requires the same right.
     { path: '/admin/waive-payment', label: 'Waive', icon: <BadgePercent size={20} />, section: 'admin', permission: 'can_approve_payments', adminGroup: 'money' },
-    { path: '/admin/expenses', label: 'Expenses', icon: <HandCoins size={20} />, section: 'admin', hideOnMobile: true, permission: 'can_manage_expenses', maxScope: 'group', adminGroup: 'money' },
+    // Expenses available at every tier — class rep records class
+    // expenses, dept exec records dept expenses, etc. hideOnMobile
+    // dropped (was true) so the entry surfaces in the bottom-FAB
+    // "More" sheet too.
+    { path: '/admin/expenses', label: 'Expenses', icon: <HandCoins size={20} />, section: 'admin', permission: 'can_manage_expenses', adminGroup: 'money' },
     { path: '/admin/scan-qr', label: 'Scan QR', icon: <QrCode size={20} />, section: 'admin', hideOnMobile: true, permission: 'can_approve_payments', maxScope: 'group', adminGroup: 'money' },
     { path: '/admin/check-in', label: 'Event Check-in', icon: <ScanLine size={20} />, section: 'admin', hideOnMobile: true, permission: 'can_approve_payments', maxScope: 'group', adminGroup: 'money' },
     // Public donations are org-wide (a class doesn't have its own

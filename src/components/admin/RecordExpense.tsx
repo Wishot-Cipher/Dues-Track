@@ -21,6 +21,9 @@ import {
   ShieldAlert,
 } from 'lucide-react'
 import { getOrgScope } from '@/utils/orgScope'
+import { getScopedGroupIds } from '@/utils/scopedGroups'
+import { useActiveRole } from '@/hooks/useActiveRole'
+import { useMultiTenantAuth } from '@/hooks/useMultiTenantAuth'
 import { motion, AnimatePresence } from 'framer-motion'
 
 // ── Design tokens ──────────────────────────────────────────────────────────
@@ -135,6 +138,17 @@ export default function RecordExpense() {
   const { addExpense, loading } = useExpenses()
   const { hasPermission, user } = useAuth()
   const { success, error: showError } = useToast()
+  // Tier-aware. The previous lookups for payments + expenses pinned
+  // group_id to the caller's PRIMARY class, which meant a dept /
+  // faculty exec saw zero numbers when funding an expense from a
+  // dept/faculty-level due. Resolves the active role's full subtree
+  // so the form's "available to fund" rollup matches what the exec
+  // can actually see + waive against elsewhere in the admin chrome.
+  const { user: mtUser, organization } = useMultiTenantAuth()
+  const { activeRole } = useActiveRole({
+    orgId: organization?.id,
+    memberId: mtUser?.id,
+  })
 
   const [title, setTitle]           = useState('')
   const [description, setDescription] = useState('')
@@ -180,6 +194,13 @@ export default function RecordExpense() {
     try {
       const { supabase } = await import('@/config/supabase')
       const scope = getOrgScope()
+      // Active-role scope: payments + expenses both restricted to the
+      // subtree this exec actually owns. Org owner → null (no filter).
+      const scopedIds = scope ? await getScopedGroupIds({
+        orgId: scope.orgId,
+        activeGroupId: activeRole?.groupId ?? null,
+        activeScopeLevel: activeRole?.scopeLevel ?? null,
+      }) : null
 
       let qPayments = supabase
         .from('payments')
@@ -188,7 +209,7 @@ export default function RecordExpense() {
         .not('transaction_ref', 'like', 'WAIVED-%')
       if (scope) {
         qPayments = qPayments.eq('organization_id', scope.orgId)
-        qPayments = qPayments.eq('group_id', scope.groupId)
+        if (scopedIds) qPayments = qPayments.in('group_id', Array.from(scopedIds))
       }
       const { data: paymentsData } = await qPayments
 
@@ -198,7 +219,7 @@ export default function RecordExpense() {
         .eq('status', 'approved')
       if (scope) {
         qExpenses = qExpenses.eq('organization_id', scope.orgId)
-        qExpenses = qExpenses.eq('group_id', scope.groupId)
+        if (scopedIds) qExpenses = qExpenses.in('group_id', Array.from(scopedIds))
       }
       const { data: expensesData } = await qExpenses
 
