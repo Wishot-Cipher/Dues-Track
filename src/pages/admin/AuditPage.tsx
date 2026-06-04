@@ -42,6 +42,7 @@ import {
   Network,
   BookOpen,
   Building2,
+  Download,
 } from 'lucide-react';
 import { useAppNav } from '@/hooks/useAppNav';
 import { useMultiTenantAuth } from '@/hooks/useMultiTenantAuth';
@@ -133,16 +134,31 @@ export default function AuditPage() {
           activeScopeLevel: activeRole?.scopeLevel ?? null,
         });
 
-        // Groups — restricted to the scope when one is set, else the
-        // full org tree. The select includes a count of active members.
+        // Groups — restricted to the scope when one is set. The
+        // previous attempt nested `organization_members(count)` as
+        // a sub-select, but that requires PostgREST to find a
+        // FK named exactly that AND for RLS on organization_members
+        // to permit the cross-table read for the active role. When
+        // either fails (e.g. dept-exec viewing audit), PostgREST
+        // returns an opaque object that printed as "Object" in the
+        // console with no useful message.
+        // Switched to three separate queries — group identity,
+        // member counts, and payments — all in parallel. The member
+        // count is computed by grouping the organization_members
+        // rows we already have permission to read.
         let gQuery = supabase
           .from('organization_groups')
-          .select('id, name, short_name, kind, parent_group_id, organization_members(count)')
+          .select('id, name, short_name, kind, parent_group_id')
           .eq('organization_id', organization.id);
         if (scopedIds) gQuery = gQuery.in('id', Array.from(scopedIds));
 
-        // Payments — same scoped set, status filter applied later so
-        // we can show both paid and pending in the aggregate.
+        let mQuery = supabase
+          .from('organization_members')
+          .select('group_id')
+          .eq('organization_id', organization.id)
+          .eq('is_active', true);
+        if (scopedIds) mQuery = mQuery.in('group_id', Array.from(scopedIds));
+
         let pQuery = supabase
           .from('payments')
           .select(`
@@ -154,10 +170,18 @@ export default function AuditPage() {
           .order('created_at', { ascending: false });
         if (scopedIds) pQuery = pQuery.in('group_id', Array.from(scopedIds));
 
-        const [gRes, pRes] = await Promise.all([gQuery, pQuery]);
+        const [gRes, mRes, pRes] = await Promise.all([gQuery, mQuery, pQuery]);
         if (cancelled) return;
         if (gRes.error) throw gRes.error;
+        if (mRes.error) throw mRes.error;
         if (pRes.error) throw pRes.error;
+
+        // Roll up member counts by group_id.
+        const countsByGroup = new Map<string, number>();
+        for (const m of (mRes.data || []) as Array<{ group_id: string | null }>) {
+          if (!m.group_id) continue;
+          countsByGroup.set(m.group_id, (countsByGroup.get(m.group_id) || 0) + 1);
+        }
 
         const gRows = ((gRes.data || []) as Array<{
           id: string;
@@ -165,28 +189,31 @@ export default function AuditPage() {
           short_name: string;
           kind: string;
           parent_group_id: string | null;
-          organization_members: { count: number }[] | { count: number };
-        }>).map((g) => {
-          const counts = Array.isArray(g.organization_members)
-            ? g.organization_members
-            : [g.organization_members].filter(Boolean);
-          const memberCount = counts.reduce((sum, c) => sum + (c?.count || 0), 0);
-          return {
-            id: g.id,
-            name: g.name,
-            short_name: g.short_name,
-            kind: g.kind,
-            parent_group_id: g.parent_group_id,
-            member_count: memberCount,
-          };
-        });
+        }>).map((g) => ({
+          id: g.id,
+          name: g.name,
+          short_name: g.short_name,
+          kind: g.kind,
+          parent_group_id: g.parent_group_id,
+          member_count: countsByGroup.get(g.id) || 0,
+        }));
 
         setGroups(gRows);
         setPayments((pRes.data || []) as PaymentRow[]);
       } catch (err) {
         if (cancelled) return;
-        console.error('Audit load error:', err);
-        setError(err instanceof Error ? err.message : 'Could not load audit data.');
+        // Detailed log so the next "Audit load error: Object" tells
+        // us exactly what failed. Supabase errors come as plain
+        // objects so JSON.stringify lifts them into readable text.
+        const errObj = err as { message?: string; code?: string; details?: string; hint?: string };
+        console.error('Audit load error:', {
+          message: errObj?.message,
+          code: errObj?.code,
+          details: errObj?.details,
+          hint: errObj?.hint,
+          raw: err,
+        });
+        setError(errObj?.message || errObj?.details || 'Could not load audit data.');
       } finally {
         if (!cancelled) setLoading(false);
       }
@@ -288,6 +315,56 @@ export default function AuditPage() {
   const fmt = (n: number) =>
     `${organization?.currency_symbol || '₦'}${n.toLocaleString('en-NG')}`;
 
+  // ── CSV export ───────────────────────────────────────────────────
+  // Build a CSV from a slice of payments. The header row matches what
+  // a bursar / treasurer typically wants to keep in spreadsheets:
+  //   Member name, Member ID, Group, Payment type, Amount, Status,
+  //   Approved at, Transaction ref.
+  // Each value is wrapped in double-quotes with embedded double-quotes
+  // doubled (RFC 4180) so commas and quotes in names don't break the
+  // parse. Filename includes the scope name + today's date so multiple
+  // downloads don't overwrite each other in the user's downloads dir.
+  const exportCsv = useCallback((rows: PaymentRow[], scopeLabel: string) => {
+    if (rows.length === 0) return;
+    const groupNameById = new Map(groups.map(g => [g.id, g.name]));
+    const escape = (v: unknown): string => {
+      const s = v == null ? '' : String(v);
+      return `"${s.replace(/"/g, '""')}"`;
+    };
+    const header = ['Member name', 'Member ID', 'Group', 'Payment type', 'Amount', 'Status', 'Approved at', 'Transaction ref'];
+    const body = rows.map((p) => [
+      escape(p.member?.full_name || ''),
+      escape(p.member?.member_id || ''),
+      escape(p.group_id ? (groupNameById.get(p.group_id) || '') : ''),
+      escape(p.payment_type?.title || ''),
+      escape(p.amount || 0),
+      escape(p.status),
+      escape(p.approved_at ? new Date(p.approved_at).toISOString().slice(0, 10) : ''),
+      escape(p.transaction_ref || ''),
+    ].join(','));
+    const csv = [header.map(escape).join(','), ...body].join('\r\n');
+
+    // ﻿ BOM so Excel auto-detects UTF-8 (Naira symbol + names
+    // with non-ASCII characters render correctly).
+    const blob = new Blob(['﻿', csv], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const safeScope = scopeLabel.replace(/[^a-z0-9_-]+/gi, '-').toLowerCase();
+    const date = new Date().toISOString().slice(0, 10);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `payments-${safeScope}-${date}.csv`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  }, [groups]);
+
+  const exportAll = useCallback(() => {
+    const label = activeRole?.scopeLevel === 'org' ? (organization?.short_name || 'all') :
+                  (groups.find(g => g.id === activeRole?.groupId)?.short_name || 'scope');
+    exportCsv(payments, label);
+  }, [exportCsv, payments, activeRole, groups, organization]);
+
   if (!organization) return null;
 
   return (
@@ -318,18 +395,48 @@ export default function AuditPage() {
             Back to dashboard
           </button>
 
-          <div className="flex items-center gap-2 flex-wrap">
-            <span
-              className="inline-flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-[0.18em] px-2 py-1 rounded-full"
+          <div className="flex items-start justify-between gap-3 flex-wrap">
+            <div className="flex items-center gap-2 flex-wrap">
+              <span
+                className="inline-flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-[0.18em] px-2 py-1 rounded-full"
+                style={{
+                  background: tt.primarySoft,
+                  color: tt.primary,
+                  border: `1px solid ${tt.primaryRing}`,
+                }}
+              >
+                <Layers className="w-3 h-3" />
+                Payment audit
+              </span>
+              {payments.length > 0 && (
+                <span
+                  className="inline-flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wider"
+                  style={{ color: tt.textTer }}
+                >
+                  {payments.length} {payments.length === 1 ? 'payment' : 'payments'} in scope
+                </span>
+              )}
+            </div>
+
+            {/* Download CSV — everything currently in scope. The
+                bursar / treasurer keeps a periodic spreadsheet
+                snapshot for the records ledger. Filename includes
+                the scope + today's date so multiple downloads
+                stack neatly in the user's downloads dir. */}
+            <button
+              type="button"
+              onClick={exportAll}
+              disabled={payments.length === 0 || loading}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold transition-all hover:-translate-y-0.5 active:scale-[0.98] disabled:opacity-40"
               style={{
-                background: tt.primarySoft,
-                color: tt.primary,
-                border: `1px solid ${tt.primaryRing}`,
+                background: tt.primary,
+                color: '#FFFFFF',
+                border: `1px solid ${tt.primary}`,
               }}
             >
-              <Layers className="w-3 h-3" />
-              Payment audit
-            </span>
+              <Download className="w-3.5 h-3.5" />
+              Download CSV
+            </button>
           </div>
 
           <h1 className="text-2xl sm:text-[28px] font-extrabold tracking-tight">
@@ -466,6 +573,26 @@ export default function AuditPage() {
                     {drilldownPayments.length} payment{drilldownPayments.length === 1 ? '' : 's'} in this group
                   </p>
                 </div>
+                {/* Per-group CSV — same shape as the header export
+                    but filtered to this drilldown. Lets a dept exec
+                    download just one class's ledger without having
+                    to import the whole faculty's into a spreadsheet
+                    and filter manually. */}
+                {drilldownPayments.length > 0 && (
+                  <button
+                    type="button"
+                    onClick={() => exportCsv(drilldownPayments, drilldownGroup.short_name || drilldownGroup.name)}
+                    className="text-xs font-bold px-3 py-1.5 rounded-lg inline-flex items-center gap-1.5 shrink-0"
+                    style={{
+                      background: tt.primarySoft,
+                      color: tt.primary,
+                      border: `1px solid ${tt.primaryRing}`,
+                    }}
+                  >
+                    <Download className="w-3.5 h-3.5" />
+                    CSV
+                  </button>
+                )}
                 <button
                   type="button"
                   onClick={() => setDrilldownGroupId(null)}
