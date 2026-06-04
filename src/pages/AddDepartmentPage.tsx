@@ -16,7 +16,7 @@
  * strict autonomy model from mig 022.
  */
 
-import { useEffect, useMemo, useState } from 'react';
+import { createContext, useContext, useEffect, useMemo, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
@@ -38,25 +38,53 @@ import { organizationService } from '@/services/organizationService';
 import { supabase } from '@/config/supabase';
 import TrustBadge from '@/components/trust/TrustBadge';
 import { APP_NAME } from '@/config/constants';
+import { useTheme, getDashboardTokens } from '@/hooks/useTheme';
 import type {
   Organization,
   OrganizationGroup,
   TrustLevel,
 } from '@/types/multiTenant';
 
-const tk = {
-  primary:   '#FF6803',
-  mint:      '#30FFAC',
-  blue:      '#3b82f6',
-  bg:        '#0F0703',
-  panel:     'rgba(255,255,255,0.025)',
-  border:    'rgba(255,255,255,0.08)',
-  borderHov: 'rgba(255,104,3,0.32)',
-  text:      '#FFFFFF',
-  textSec:   'rgba(255,255,255,0.65)',
-  textTer:   'rgba(255,255,255,0.40)',
-  danger:    '#ef4444',
+// Theme-aware wrapper that maps the page's expected `tk` shape onto
+// the platform-wide DashboardTokens. Built so the existing JSX
+// (Field, Panel, RecapRow, every inline style across this 800-line
+// file) doesn't have to change names — only the values flip per
+// theme. The original `const tk = { ... '#FFFFFF' ... }` at module
+// scope made this page dark-only regardless of theme.
+type AddPageTokens = {
+  primary: string; mint: string; blue: string;
+  bg: string; panel: string; border: string; borderHov: string;
+  text: string; textSec: string; textTer: string; danger: string;
 };
+function buildAddPageTokens(theme: 'light' | 'dark'): AddPageTokens {
+  const dt = getDashboardTokens(theme);
+  return {
+    primary:   dt.primary,
+    mint:      dt.mint,
+    blue:      dt.blue,
+    bg:        dt.bg,
+    panel:     dt.card,
+    border:    dt.cardBorder,
+    borderHov: dt.primaryRing,
+    text:      dt.text,
+    textSec:   dt.textSec,
+    textTer:   dt.textTer,
+    danger:    dt.danger,
+  };
+}
+
+// Token context — every helper component in this file pulls `tk`
+// from here instead of closing over a module-level constant. The
+// page wraps its return JSX in <TokensContext.Provider value={tk}>
+// and the helpers read via useTokens(). This is what makes the
+// whole flow theme-aware without prop-drilling tk through 38 call
+// sites.
+const TokensContext = createContext<AddPageTokens | null>(null);
+function useTokens(): AddPageTokens {
+  const tk = useContext(TokensContext);
+  if (!tk) throw new Error('useTokens called outside TokensContext.Provider');
+  return tk;
+}
 
 // Kind is now derived from the URL context (faculty page = adds dept; dept
 // page = adds class), so the legacy KIND_OPTIONS picker is gone. Migration 079
@@ -148,6 +176,12 @@ export default function AddDepartmentPage() {
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [step, setStep] = useState<WizardStep>('details');
+
+  // Theme-aware tokens. Build once per render from the resolved
+  // theme so the page paints correctly in both light + dark mode
+  // (this used to be a module-level dark-only constant).
+  const { theme } = useTheme();
+  const tk = useMemo(() => buildAddPageTokens(theme), [theme]);
 
   const isAddingClass = Boolean(departmentShort);
 
@@ -337,47 +371,52 @@ export default function AddDepartmentPage() {
   // ── Render guards ──
   if (loading) {
     return (
-      <Centered>
-        <motion.div
-          className="w-10 h-10 border-2 rounded-full"
-          style={{ borderColor: `${tk.primary}30`, borderTopColor: tk.primary }}
-          animate={{ rotate: 360 }}
-          transition={{ duration: 0.9, repeat: Infinity, ease: 'linear' }}
-        />
-        <p className="text-xs tracking-wider mt-3" style={{ color: tk.textTer }}>
-          Loading…
-        </p>
-      </Centered>
+      <TokensContext.Provider value={tk}>
+        <Centered>
+          <motion.div
+            className="w-10 h-10 border-2 rounded-full"
+            style={{ borderColor: `${tk.primary}30`, borderTopColor: tk.primary }}
+            animate={{ rotate: 360 }}
+            transition={{ duration: 0.9, repeat: Infinity, ease: 'linear' }}
+          />
+          <p className="text-xs tracking-wider mt-3" style={{ color: tk.textTer }}>
+            Loading…
+          </p>
+        </Centered>
+      </TokensContext.Provider>
     );
   }
 
   if (!org || !faculty) {
     return (
-      <Centered>
-        <div className="text-center max-w-md">
-          <div className="w-14 h-14 mx-auto mb-5 rounded-2xl flex items-center justify-center"
-            style={{ background: `${tk.primary}15` }}>
-            <Layers className="w-7 h-7" style={{ color: tk.primary }} />
+      <TokensContext.Provider value={tk}>
+        <Centered>
+          <div className="text-center max-w-md">
+            <div className="w-14 h-14 mx-auto mb-5 rounded-2xl flex items-center justify-center"
+              style={{ background: `${tk.primary}15` }}>
+              <Layers className="w-7 h-7" style={{ color: tk.primary }} />
+            </div>
+            <h1 className="text-2xl font-bold mb-3 tracking-tight" style={{ color: tk.text }}>Faculty not found</h1>
+            <p className="text-sm leading-6" style={{ color: tk.textSec }}>
+              We couldn't find <span className="font-semibold" style={{ color: tk.text }}>/{orgSlug}/f/{facultyShortName}</span>.
+            </p>
+            <motion.button
+              onClick={() => navigate(orgSlug ? `/${orgSlug}/overview` : '/')}
+              className="mt-6 px-6 py-3 rounded-xl font-semibold text-sm text-white"
+              style={{ background: 'linear-gradient(135deg, #FF6803, #FFAC5F)' }}
+              whileHover={{ scale: 1.02 }}
+              whileTap={{ scale: 0.97 }}
+            >
+              Back
+            </motion.button>
           </div>
-          <h1 className="text-2xl font-bold text-white mb-3 tracking-tight">Faculty not found</h1>
-          <p className="text-sm leading-6" style={{ color: tk.textSec }}>
-            We couldn't find <span className="text-white font-semibold">/{orgSlug}/f/{facultyShortName}</span>.
-          </p>
-          <motion.button
-            onClick={() => navigate(orgSlug ? `/${orgSlug}/overview` : '/')}
-            className="mt-6 px-6 py-3 rounded-xl font-semibold text-sm text-white"
-            style={{ background: 'linear-gradient(135deg, #FF6803, #FFAC5F)' }}
-            whileHover={{ scale: 1.02 }}
-            whileTap={{ scale: 0.97 }}
-          >
-            Back
-          </motion.button>
-        </div>
-      </Centered>
+        </Centered>
+      </TokensContext.Provider>
     );
   }
 
   return (
+    <TokensContext.Provider value={tk}>
     <div className="min-h-screen relative overflow-x-hidden" style={{ minHeight: '100dvh', background: tk.bg }}>
       {/* Background glow */}
       <div className="fixed inset-0 pointer-events-none overflow-hidden">
@@ -715,22 +754,19 @@ export default function AddDepartmentPage() {
         >
           <div className="space-y-2.5">
             <RecapRow
-              tk={tk}
               label={isAddingClass ? 'New class' : 'New department (structure only)'}
               value={`${form.departmentName} (${form.departmentShortName || '—'})`}
             />
-            <RecapRow tk={tk} label="Inside" value={faculty?.name ?? '—'} />
+            <RecapRow label="Inside" value={faculty?.name ?? '—'} />
             {!isAddingClass && (
               <RecapRow
-                tk={tk}
                 label="YOUR class (where you live)"
                 value={`${form.className} (${form.classShortName || form.userLevel || 'auto'})`}
               />
             )}
-            <RecapRow tk={tk} label="Account" value={`${form.fullName} · ${form.email}`} />
-            <RecapRow tk={tk} label="Login ID" value={form.memberNumber} />
+            <RecapRow label="Account" value={`${form.fullName} · ${form.email}`} />
+            <RecapRow label="Login ID" value={form.memberNumber} />
             <RecapRow
-              tk={tk}
               label="Claim a role"
               value={form.wantsClaim && form.positionTitle.trim()
                 ? `Yes — "${form.positionTitle.trim()}" (awaits verification)`
@@ -815,6 +851,7 @@ export default function AddDepartmentPage() {
         </div>
       </form>
     </div>
+    </TokensContext.Provider>
   );
 }
 
@@ -833,6 +870,7 @@ function Panel({
   icon?: React.ReactNode;
   children: React.ReactNode;
 }) {
+  const tk = useTokens();
   return (
     <motion.section
       initial={{ opacity: 0, y: 14 }}
@@ -842,7 +880,7 @@ function Panel({
       style={{ background: tk.panel, border: `1px solid ${tk.border}` }}
     >
       <header className="mb-5">
-        <h2 className="flex items-center gap-2 text-base font-bold text-white">
+        <h2 className="flex items-center gap-2 text-base font-bold" style={{ color: tk.text }}>
           {icon && (
             <span
               className="w-7 h-7 rounded-lg flex items-center justify-center"
@@ -868,12 +906,17 @@ function Row({ children }: { children: React.ReactNode }) {
   return <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">{children}</div>;
 }
 
-function RecapRow({ tk, label, value, highlight }: { tk: { textTer: string; text: string; primary: string; border: string }; label: string; value: string; highlight?: boolean }) {
+function RecapRow({ label, value, highlight }: { label: string; value: string; highlight?: boolean }) {
+  // RecapRow's tk prop dropped in the theme-awareness pass — the
+  // helper now reads from TokensContext like every other helper in
+  // this file. Callers that still pass `tk={tk}` are TS errors;
+  // remove the prop from the call site.
+  const tk = useTokens();
   return (
     <div
       className="flex items-start justify-between gap-3 px-3.5 py-2.5 rounded-xl"
       style={{
-        background: highlight ? `${tk.primary}10` : 'rgba(255,255,255,0.03)',
+        background: highlight ? `${tk.primary}10` : tk.panel,
         border: `1px solid ${highlight ? `${tk.primary}30` : tk.border}`,
       }}
     >
@@ -896,6 +939,7 @@ function Field({
   icon?: React.ReactNode;
   children: React.ReactNode;
 }) {
+  const tk = useTokens();
   return (
     <label className="block">
       <div className="flex items-center justify-between mb-1.5">
@@ -923,6 +967,10 @@ function Input({
   autoComplete?: string;
   required?: boolean;
 }) {
+  const tk = useTokens();
+  // Input background derives from the page's panel token so the
+  // field sits cleanly on top of the Panel in both themes. The
+  // previous hardcoded ember rgba was dark-only.
   return (
     <input
       type={type}
@@ -933,7 +981,7 @@ function Input({
       placeholder={placeholder}
       className="w-full rounded-xl px-3.5 py-2.5 text-sm outline-none transition-colors"
       style={{
-        background: 'rgba(26,14,9,0.85)',
+        background: tk.panel,
         border: `1px solid ${tk.border}`,
         color: tk.text,
       }}
@@ -944,6 +992,7 @@ function Input({
 }
 
 function Centered({ children }: { children: React.ReactNode }) {
+  const tk = useTokens();
   return (
     <div
       className="min-h-screen flex items-center justify-center px-5"

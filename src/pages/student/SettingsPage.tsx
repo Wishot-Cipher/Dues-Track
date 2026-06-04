@@ -1,5 +1,5 @@
-﻿import { useState, useEffect, useCallback, useRef } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
+﻿import { useState, useEffect, useRef } from 'react';
+import { motion } from 'framer-motion';
 import {
   ArrowLeft,
   Bell,
@@ -7,32 +7,22 @@ import {
   Key,
   Palette,
   ChevronRight,
-  ChevronDown,
   CheckCircle2,
   Zap,
   User,
   Volume2,
-  Eye,
-  Sliders,
-  Loader2,
-  ShieldCheck,
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useAppNav } from '@/hooks/useAppNav';
 import { gradients } from '@/config/colors';
 import { useThemeTokens, type ThemeTokens } from '@/hooks/useThemeTokens';
 import { useAuth } from '@/hooks/useAppAuth';
-import { useMultiTenantAuth } from '@/hooks/useMultiTenantAuth';
 import { useSettings } from '@/contexts/SettingsContext';
 import GlassCard from '@/components/ui/GlassCard';
 import PageWrapper from '@/components/ui/PageWrapper';
 import Skeleton from '@/components/ui/Skeleton';
 import ProfessionalDropdown from '@/components/ui/ProfessionalDropdown';
 import PushNotificationPrompt from '@/components/PushNotificationPrompt';
-import studentFeatureService from '@/services/studentFeatureService';
-import expenseVisibilityService from '@/services/expenseVisibilityService';
-import type { StudentFeatureSetting } from '@/services/studentFeatureService';
-import type { ExpenseVisibilitySetting } from '@/services/expenseVisibilityService';
 
 interface SettingSection {
   id: string;
@@ -367,70 +357,15 @@ function AppInfo() {
 export default function SettingsPage() {
   const t = useThemeTokens();
   const { user } = useAuth();
-  const { isAnyAdmin } = useMultiTenantAuth();
   const { settings, updateSetting, testNotificationSound } = useSettings();
   const { go: navigate } = useAppNav();
   const [loading, setLoading] = useState(true);
-  const admin = isAnyAdmin();
-
-  // Admin feature/visibility state
-  const [featureSettings, setFeatureSettings] = useState<StudentFeatureSetting[]>([]);
-  const [visibilitySettings, setVisibilitySettings] = useState<ExpenseVisibilitySetting[]>([]);
-  const [adminLoading, setAdminLoading] = useState(false);
-  const [togglingKeys, setTogglingKeys] = useState<Set<string>>(new Set());
-  const [adminOpen, setAdminOpen] = useState<{ features: boolean; visibility: boolean }>({ features: false, visibility: false });
-
-  const loadAdminSettings = useCallback(async () => {
-    if (!admin) return;
-    setAdminLoading(true);
-    try {
-      const [features, visibility] = await Promise.all([
-        studentFeatureService.getAllFeatureSettings(),
-        expenseVisibilityService.getAllSettings(),
-      ]);
-      setFeatureSettings(features);
-      setVisibilitySettings(visibility);
-    } catch (err) {
-      console.error('Error loading admin settings:', err);
-    } finally {
-      setAdminLoading(false);
-    }
-  }, [admin]);
 
   // Simulate loading for skeleton effect
   useEffect(() => {
     const timer = setTimeout(() => setLoading(false), 400);
     return () => clearTimeout(timer);
   }, []);
-
-  // Load admin settings if admin
-  useEffect(() => {
-    if (admin) loadAdminSettings();
-  }, [admin, loadAdminSettings]);
-
-  const handleToggleFeature = async (featureKey: string, enabled: boolean) => {
-    setTogglingKeys(prev => new Set(prev).add(featureKey));
-    // Optimistic update
-    setFeatureSettings(prev => prev.map(f => f.feature_key === featureKey ? { ...f, is_enabled: enabled } : f));
-    const ok = await studentFeatureService.toggleFeature(featureKey, enabled);
-    if (!ok) {
-      // Revert
-      setFeatureSettings(prev => prev.map(f => f.feature_key === featureKey ? { ...f, is_enabled: !enabled } : f));
-    }
-    setTogglingKeys(prev => { const s = new Set(prev); s.delete(featureKey); return s; });
-  };
-
-  const handleToggleVisibility = async (settingKey: string, visible: boolean) => {
-    setTogglingKeys(prev => new Set(prev).add(settingKey));
-    // Optimistic update
-    setVisibilitySettings(prev => prev.map(v => v.setting_key === settingKey ? { ...v, is_visible: visible } : v));
-    const ok = await expenseVisibilityService.toggleVisibility(settingKey, visible);
-    if (!ok) {
-      // Revert
-      setVisibilitySettings(prev => prev.map(v => v.setting_key === settingKey ? { ...v, is_visible: !visible } : v));
-    }
-    setTogglingKeys(prev => { const s = new Set(prev); s.delete(settingKey); return s; });
-  };
 
   // Handler for sound test
   const handleSoundTest = () => {
@@ -613,164 +548,6 @@ export default function SettingsPage() {
               <SettingSectionCard key={section.id} section={section} index={index} />
             ))}
 
-            {/* ═══════════ Admin Controls ═══════════ */}
-            {admin && (
-              <motion.div
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: 0.35 }}
-              >
-                <div
-                  className="rounded-2xl overflow-hidden"
-                  style={{
-                    background: t.overlay,
-                    backdropFilter: 'blur(12px)',
-                    border: `1px solid ${t.cardBorder}`,
-                  }}
-                >
-                  {/* Top accent gradient line */}
-                  <div className="h-0.5" style={{ background: 'linear-gradient(90deg, #FF6B35, #8B5CF6, #22C55E)' }} />
-
-                  {/* Header */}
-                  <div className="px-5 py-4 flex items-center gap-3">
-                    <div
-                      className="w-10 h-10 rounded-xl flex items-center justify-center"
-                      style={{ background: 'linear-gradient(135deg, rgba(255,107,53,0.12), rgba(139,92,246,0.08))' }}
-                    >
-                      <ShieldCheck size={18} style={{ color: t.primary }} />
-                    </div>
-                    <div className="flex-1">
-                      <h3 className="text-sm font-semibold">Admin Controls</h3>
-                      <p className="text-[11px] mt-0.5" style={{ color: t.textSec }}>
-                        Manage features & visibility for members
-                      </p>
-                    </div>
-                    {!adminLoading && (
-                      <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full" style={{ background: 'rgba(139,92,246,0.1)' }}>
-                        <div className="w-1.5 h-1.5 rounded-full" style={{ background: '#8B5CF6' }} />
-                        <span className="text-[11px] font-semibold" style={{ color: '#A78BFA' }}>Admin</span>
-                      </div>
-                    )}
-                  </div>
-
-                  {adminLoading ? (
-                    <div className="p-8 flex items-center justify-center">
-                      <Loader2 size={20} className="animate-spin" style={{ color: t.primary }} />
-                    </div>
-                  ) : (
-                    <div className="px-4 pb-4 flex flex-col gap-2">
-                      {/* ── Member Features (collapsible) ── */}
-                      <div
-                        className="rounded-xl overflow-hidden"
-                        style={{ background: t.overlay, border: `1px solid ${t.divider}` }}
-                      >
-                        <button
-                          type="button"
-                          onClick={() => setAdminOpen(p => ({ ...p, features: !p.features }))}
-                          className="w-full px-4 py-2.5 flex items-center gap-2 transition-colors hover:bg-white/2"
-                        >
-                          <div className="w-6 h-6 rounded-lg flex items-center justify-center" style={{ background: `${t.primary}12` }}>
-                            <Sliders size={12} style={{ color: t.primary }} />
-                          </div>
-                          <span className="text-xs font-semibold">Member Features</span>
-                          <span className="text-[10px] px-1.5 py-0.5 rounded-md ml-auto" style={{ background: 'rgba(255,107,53,0.08)', color: t.primary }}>
-                            {featureSettings.filter(f => f.is_enabled).length}/{featureSettings.length}
-                          </span>
-                          <ChevronDown
-                            size={14}
-                            className="transition-transform duration-200"
-                            style={{ color: t.textSec, transform: adminOpen.features ? 'rotate(180deg)' : 'rotate(0deg)' }}
-                          />
-                        </button>
-                        <AnimatePresence initial={false}>
-                          {adminOpen.features && (
-                            <motion.div
-                              initial={{ height: 0, opacity: 0 }}
-                              animate={{ height: 'auto', opacity: 1 }}
-                              exit={{ height: 0, opacity: 0 }}
-                              transition={{ duration: 0.2, ease: 'easeInOut' }}
-                              className="overflow-hidden"
-                            >
-                              <div style={{ borderTop: `1px solid ${t.divider}` }}>
-                                {featureSettings.map((feature) => (
-                                  <div key={feature.feature_key} className="px-4 py-2.5 flex items-center justify-between gap-3" style={{ borderBottom: `1px solid ${t.divider}` }}>
-                                    <div className="flex-1 min-w-0">
-                                      <p className="text-[13px] font-medium">{feature.display_name}</p>
-                                      {feature.description && (
-                                        <p className="text-[11px] mt-0.5" style={{ color: t.textTer }}>{feature.description}</p>
-                                      )}
-                                    </div>
-                                    <ToggleSwitch
-                                      enabled={feature.is_enabled}
-                                      onChange={(v) => handleToggleFeature(feature.feature_key, v)}
-                                      disabled={togglingKeys.has(feature.feature_key)}
-                                    />
-                                  </div>
-                                ))}
-                              </div>
-                            </motion.div>
-                          )}
-                        </AnimatePresence>
-                      </div>
-
-                      {/* ── Expense Visibility (collapsible) ── */}
-                      <div
-                        className="rounded-xl overflow-hidden"
-                        style={{ background: t.overlay, border: `1px solid ${t.divider}` }}
-                      >
-                        <button
-                          type="button"
-                          onClick={() => setAdminOpen(p => ({ ...p, visibility: !p.visibility }))}
-                          className="w-full px-4 py-2.5 flex items-center gap-2 transition-colors hover:bg-white/2"
-                        >
-                          <div className="w-6 h-6 rounded-lg flex items-center justify-center" style={{ background: `${t.mint}12` }}>
-                            <Eye size={12} style={{ color: t.mint }} />
-                          </div>
-                          <span className="text-xs font-semibold">Expense Visibility</span>
-                          <span className="text-[10px] px-1.5 py-0.5 rounded-md ml-auto" style={{ background: 'rgba(34,197,94,0.08)', color: t.mint }}>
-                            {visibilitySettings.filter(v => v.is_visible).length}/{visibilitySettings.length}
-                          </span>
-                          <ChevronDown
-                            size={14}
-                            className="transition-transform duration-200"
-                            style={{ color: t.textSec, transform: adminOpen.visibility ? 'rotate(180deg)' : 'rotate(0deg)' }}
-                          />
-                        </button>
-                        <AnimatePresence initial={false}>
-                          {adminOpen.visibility && (
-                            <motion.div
-                              initial={{ height: 0, opacity: 0 }}
-                              animate={{ height: 'auto', opacity: 1 }}
-                              exit={{ height: 0, opacity: 0 }}
-                              transition={{ duration: 0.2, ease: 'easeInOut' }}
-                              className="overflow-hidden"
-                            >
-                              <div style={{ borderTop: `1px solid ${t.divider}` }}>
-                                {visibilitySettings.map((setting) => (
-                                  <div key={setting.setting_key} className="px-4 py-2.5 flex items-center justify-between gap-3" style={{ borderBottom: `1px solid ${t.divider}` }}>
-                                    <div className="flex-1 min-w-0">
-                                      <p className="text-[13px] font-medium">{setting.display_name}</p>
-                                      {setting.description && (
-                                        <p className="text-[11px] mt-0.5" style={{ color: t.textTer }}>{setting.description}</p>
-                                      )}
-                                    </div>
-                                    <ToggleSwitch
-                                      enabled={setting.is_visible}
-                                      onChange={(v) => handleToggleVisibility(setting.setting_key, v)}
-                                      disabled={togglingKeys.has(setting.setting_key)}
-                                    />
-                                  </div>
-                                ))}
-                              </div>
-                            </motion.div>
-                          )}
-                        </AnimatePresence>
-                      </div>
-                    </div>
-                  )}
-                </div>
-              </motion.div>
-            )}
 
             {/* App Info */}
             <AppInfo />
