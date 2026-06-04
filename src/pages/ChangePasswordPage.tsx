@@ -86,13 +86,12 @@ function useTokens(): PwTokens {
 
 // ── Strength config ───────────────────────────────────────────────────────────
 const STRENGTH_CONFIG = [
-  { label: 'Too short',  color: tk.danger,  width: '15%'  },
+  { label: 'Too short',  color: '#EF4444',  width: '15%'  },
   { label: 'Weak',       color: '#FF6B35',  width: '30%'  },
-  { label: 'Fair',       color: tk.warn,    width: '55%'  },
+  { label: 'Fair',       color: '#F59E0B',  width: '55%'  },
   { label: 'Good',       color: '#84CC16',  width: '75%'  },
-  { label: 'Strong',     color: tk.mint,    width: '100%' },
+  { label: 'Strong',     color: '#30FFAC',  width: '100%' },
 ];
-
 function calcStrength(pw: string): number {
   if (pw.length === 0) return -1;
   if (pw.length < 6)   return 0;
@@ -106,7 +105,6 @@ function calcStrength(pw: string): number {
 
 // ── Animated background geometry ──────────────────────────────────────────────
 function VaultGeometry() {
-  const tk = useTokens();
   return (
     <div className="absolute inset-0 overflow-hidden pointer-events-none select-none">
       {/* Concentric rings */}
