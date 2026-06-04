@@ -254,24 +254,30 @@ export default function AdminReviewPage() {
 
       if (error) throw error;
 
-      // Drop abandoned / failed Paystack attempts. The Paystack flow
-      // INSERTs a `pending` row when the user clicks pay; if they
-      // close the modal or the gateway rejects, no webhook ever flips
-      // it to approved or rejected and the row sits in the review
-      // queue forever, masquerading as a real "manual receipt
-      // awaiting approval." Distinguishing trait: manual payments
-      // carry a receipt_url (the screenshot they uploaded); abandoned
-      // Paystack pendings have neither receipt_url NOR transaction_ref.
-      // FAILED ones carry transaction_ref but no receipt — also drop.
+      // Review is the EXEC'S DAILY QUEUE. Two filters layer on top:
       //
-      // The cleanest rule for the review queue: only surface payments
-      // that have something for the exec to actually approve — i.e.
-      // a receipt image. Approved/rejected rows still show for audit
-      // even without a receipt (they were processed at some point).
+      // 1. Pending rows must carry a receipt_url (manual payment with
+      //    an uploaded screenshot). Abandoned / failed Paystack
+      //    attempts INSERT a `pending` row with no receipt — they sit
+      //    in the queue forever pretending to be real submissions.
+      //
+      // 2. Rejected rows are dropped entirely. A failed/rejected
+      //    payment is HISTORICAL — it's been processed. Surfacing
+      //    them in the review queue alongside actual pending
+      //    submissions confused the user ("am I supposed to be
+      //    seeing failed payments?"). Approved rows STAY so a
+      //    treasurer can verify recent collections at a glance.
+      //
+      // If a future need surfaces for "see rejected payments" (audit,
+      // dispute review), that belongs on its own filter / page —
+      // not in the live queue.
       const filtered = (data || []).filter((p) => {
-        if (p.status !== 'pending') return true; // approved/rejected stay
-        const hasReceipt = Boolean((p as { receipt_url?: string | null }).receipt_url);
-        return hasReceipt;
+        if (p.status === 'rejected') return false;
+        if (p.status === 'pending') {
+          const hasReceipt = Boolean((p as { receipt_url?: string | null }).receipt_url);
+          return hasReceipt;
+        }
+        return true; // approved
       });
 
       // Sort: pending first, then approved/rejected

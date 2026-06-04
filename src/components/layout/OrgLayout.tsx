@@ -33,6 +33,7 @@ import {
   Receipt,
   UserCog,
   BadgeDollarSign,
+  BadgePercent,
   ClipboardCheck,
   QrCode,
   HandCoins,
@@ -409,6 +410,13 @@ export default function OrgLayout() {
     // you have a subtree to roll up. A class rep already sees their
     // class's payments on Review, so they don't get this entry.
     { path: '/admin/audit', label: 'Audit', icon: <Layers size={20} />, section: 'admin', hideOnMobile: true, permission: 'can_approve_payments', minScope: 'unit', adminGroup: 'money' },
+    // Waive — needed by EVERY tier of exec. A class rep waives a
+    // class due for one of their students; a dept exec waives a
+    // dept due for any member under them; same for faculty + org.
+    // hideOnMobile=false so the entry shows in the bottom-FAB
+    // "More" sheet too. Approve permission gates it because the
+    // server-side waiver insert requires the same right.
+    { path: '/admin/waive-payment', label: 'Waive', icon: <BadgePercent size={20} />, section: 'admin', permission: 'can_approve_payments', adminGroup: 'money' },
     { path: '/admin/expenses', label: 'Expenses', icon: <HandCoins size={20} />, section: 'admin', hideOnMobile: true, permission: 'can_manage_expenses', maxScope: 'group', adminGroup: 'money' },
     { path: '/admin/scan-qr', label: 'Scan QR', icon: <QrCode size={20} />, section: 'admin', hideOnMobile: true, permission: 'can_approve_payments', maxScope: 'group', adminGroup: 'money' },
     { path: '/admin/check-in', label: 'Event Check-in', icon: <ScanLine size={20} />, section: 'admin', hideOnMobile: true, permission: 'can_approve_payments', maxScope: 'group', adminGroup: 'money' },
