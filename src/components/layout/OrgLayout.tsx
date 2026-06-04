@@ -24,7 +24,9 @@ import {
   Settings,
   LogOut,
   ChevronDown,
+  ChevronRight,
   Shield,
+  ShieldCheck,
   Building2,
   CheckCircle2,
   PieChart,
@@ -955,6 +957,52 @@ export default function OrgLayout() {
                     isLight={isLight}
                   />
                 </div>
+
+                {/* ── CLAIM ANOTHER ROLE ───────────────────
+                    Quiet entry into /claim. Visible ONLY when
+                    the viewer is already a verified (Layer 4)
+                    admin in this org — i.e. they've already
+                    proven who they are at some tier. Unverified
+                    members never see this chip, so the claim flow
+                    stays off the public surface. Treasurers,
+                    HODs, deans etc. who hold positions in
+                    multiple groups (e.g. their own class + a
+                    sibling association) can submit a new claim
+                    from here without us linking to /claim from
+                    any marketing page. */}
+                {multiTenantAuthService.isVerifiedAdmin(user) && (
+                  <div className="px-3 pt-2">
+                    <Link
+                      to={`${basePath}/claim`}
+                      onClick={() => setShowProfileMenu(false)}
+                      className="w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl transition-all hover:-translate-y-0.5 active:scale-[0.98]"
+                      style={{
+                        background: `${colors.primary}10`,
+                        border: `1px solid ${colors.primary}30`,
+                      }}
+                    >
+                      <span
+                        className="w-7 h-7 rounded-lg flex items-center justify-center shrink-0"
+                        style={{
+                          background: `${colors.primary}1f`,
+                          color: colors.primary,
+                          border: `1px solid ${colors.primary}30`,
+                        }}
+                      >
+                        <ShieldCheck size={14} />
+                      </span>
+                      <div className="flex-1 min-w-0 text-left">
+                        <p className="text-[12.5px] font-extrabold leading-tight" style={{ color: isLight ? '#0F0703' : '#FFFFFF' }}>
+                          Hold another role here?
+                        </p>
+                        <p className="text-[10.5px] leading-tight mt-0.5" style={{ color: isLight ? 'rgba(15,7,3,0.55)' : 'rgba(255,255,255,0.55)' }}>
+                          Submit a verified claim
+                        </p>
+                      </div>
+                      <ChevronRight size={14} style={{ color: colors.primary }} />
+                    </Link>
+                  </div>
+                )}
 
                 {/* ── OTHER ORGS (global identity) ─────────
                     Only shows when the founder is in >1 org.
