@@ -62,7 +62,7 @@ interface GroupRow {
   member_count: number;
 }
 
-interface PaymentRow {
+interface PaymentRow extends Record<string, unknown> {
   id: string;
   member_id: string;
   group_id: string | null;
@@ -71,12 +71,6 @@ interface PaymentRow {
   status: 'pending' | 'approved' | 'rejected';
   transaction_ref: string | null;
   approved_at: string | null;
-  // Supabase resolves these joined relations as ARRAYS when the
-  // FK direction is many-to-one (the relevant relation could
-  // technically be many rows even when our schema's UNIQUE
-  // makes it always one). Accept both shapes so the strict TS
-  // 5.x typing doesn't fight us; readers normalise via
-  // `firstOf()` below.
   member?: { full_name: string; member_id: string } | { full_name: string; member_id: string }[] | null;
   payment_type?: { title: string } | { title: string }[] | null;
 }
