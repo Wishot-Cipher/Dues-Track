@@ -9,27 +9,25 @@ import { getScopedGroupIds } from '@/utils/scopedGroups';
 import { useActiveRole } from '@/hooks/useActiveRole';
 import { useMultiTenantAuth } from '@/hooks/useMultiTenantAuth';
 import { organizationService } from '@/services/organizationService';
-import { colors, gradients } from "@/config/colors";
-import GlassCard from "@/components/ui/GlassCard";
 import ProfessionalDropdown from "@/components/ui/ProfessionalDropdown";
 import { formatCurrency } from "@/utils/formatters";
 import { PrivacyMask } from '@/components/ui/PrivacyMask';
 import { useAuth } from '@/hooks/useAppAuth';
 import { useToast } from "@/hooks/useToast";
 import {
-  
   X,
   Search,
   FileText,
   AlertCircle,
   CheckCircle,
+  ChevronRight,
+  Clock,
+  Info,
   User as UserIcon,
   ArrowLeft,
   Bell,
   BellOff,
-  Sparkles,
   BadgePercent,
-  Heart,
   RefreshCw,
   HelpCircle,
 } from "lucide-react";
@@ -475,480 +473,499 @@ export default function WaivePaymentPage() {
         </motion.header>
       </div>
 
-      {/* Success Modal */}
+      {/* Success modal — theme-aware celebration. Drops the GlassCard
+          + hardcoded text-white. Spring-in checkmark, soft mint glow,
+          short copy. Same trigger + visibility logic as before. */}
       {showSuccess && (
         <motion.div
-          className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4"
+          className="fixed inset-0 z-[120] flex items-end sm:items-center justify-center p-4"
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
+          style={{
+            background: theme === 'light' ? 'rgba(15,7,3,0.30)' : 'rgba(3,7,18,0.68)',
+            backdropFilter: 'blur(10px)',
+            WebkitBackdropFilter: 'blur(10px)',
+          }}
         >
-          <motion.div initial={{ scale: 0.9 }} animate={{ scale: 1 }}>
-            <GlassCard className="max-w-md w-full p-8 text-center">
-              <motion.div
-                className="w-16 h-16 rounded-full mx-auto mb-4 flex items-center justify-center"
-                style={{ background: colors.statusPaid }}
-                initial={{ scale: 0 }}
-                animate={{ scale: 1 }}
-                transition={{ delay: 0.2 }}
-              >
-                <CheckCircle size={32} className="text-white" />
-              </motion.div>
-              <h3 className="text-xl font-bold text-white mb-2">
-                Payment Waived!
-              </h3>
-              <p style={{ color: colors.textSecondary }}>
-                The payment fee has been successfully waived for{" "}
+          <motion.div
+            initial={{ scale: 0.92, opacity: 0, y: 8 }}
+            animate={{ scale: 1, opacity: 1, y: 0 }}
+            transition={{ type: 'spring', damping: 22, stiffness: 320 }}
+            className="w-full max-w-md rounded-2xl p-6 sm:p-8 text-center"
+            style={{
+              background: theme === 'light' ? '#FFFFFF' : '#100A07',
+              border: `1px solid ${tk.mint}40`,
+              boxShadow: `0 24px 60px rgba(0,0,0,0.45), 0 0 0 4px ${tk.mint}10`,
+            }}
+          >
+            <motion.div
+              initial={{ scale: 0 }}
+              animate={{ scale: 1 }}
+              transition={{ delay: 0.1, type: 'spring', stiffness: 380, damping: 20 }}
+              className="w-16 h-16 rounded-2xl mx-auto mb-4 flex items-center justify-center"
+              style={{
+                background: tk.mint,
+                color: '#FFFFFF',
+                boxShadow: `0 12px 28px -8px ${tk.mint}, inset 0 1px 0 rgba(255,255,255,0.3)`,
+              }}
+            >
+              <CheckCircle size={32} />
+            </motion.div>
+            <h3 className="text-lg font-extrabold tracking-tight mb-1.5" style={{ color: tk.text }}>
+              Waived
+            </h3>
+            <p className="text-sm" style={{ color: tk.textSec }}>
+              The due was excused for{' '}
+              <span className="font-bold" style={{ color: tk.text }}>
                 {selectedStudent?.full_name}
-              </p>
-            </GlassCard>
+              </span>
+              . The audit log has it.
+            </p>
           </motion.div>
         </motion.div>
       )}
 
-      {/* Main Content */}
-      <div className="relative max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.2 }}
-        >
-          <GlassCard className="p-6 sm:p-8 relative overflow-hidden">
-            {/* Decorative gradient */}
-            <div 
-              className="absolute top-0 left-0 w-full h-1"
-              style={{ background: `linear-gradient(90deg, ${colors.accentMint}, ${colors.primary}, transparent)` }}
-            />
-            
-            {/* Step 1: Search and Select Student */}
-            <div className="mb-8">
-              <div className="flex items-center gap-3 mb-4">
-                <div 
-                  className="w-10 h-10 rounded-xl flex items-center justify-center"
-                  style={{ background: `${colors.primary}15`, border: `1px solid ${colors.primary}30` }}
-                >
-                  <UserIcon size={20} style={{ color: colors.primary }} />
-                </div>
-                <div>
-                  <h2 className="text-lg font-bold text-white">Step 1: Select Student</h2>
-                  <p className="text-xs" style={{ color: colors.textSecondary }}>Search for the student to waive payment</p>
-                </div>
-              </div>
+      {/* ── Body ───────────────────────────────────────────────
+          Three step-cards stacked, theme-aware throughout. Replaces
+          the previous "one fat GlassCard with three sections inside"
+          shape that was dark-only and read as the old era of the
+          app. Each step is its own card, only renders when the
+          previous step is satisfied. */}
+      <div className="relative max-w-3xl mx-auto px-4 sm:px-6 lg:px-8 space-y-4">
 
-            {!selectedStudent ? (
-              <>
-                <div className="mb-3">
-                  <div className="flex gap-2">
-                    <input
-                      value={searchQuery}
-                      onChange={(e) => {
-                        const v = e.target.value;
-                        setSearchQuery(v);
-                        if (!v.trim()) {
-                          setSearchResults([]);
-                        }
-                      }}
-                      placeholder="Search by name or reg. number"
-                      className="flex-1 px-4 py-2 rounded-lg bg-white/5 text-white placeholder-gray-400 outline-none focus:ring-2"
-                    />
-                    <button
-                      onClick={() => void handleSearch(searchQuery)}
-                      disabled={searching}
-                      className="px-3 py-2 rounded-lg bg-primary-600/10 flex items-center justify-center"
-                      title="Search"
-                    >
-                      {searching ? (
-                        <LoadingSpinner size="sm" color={colors.primary} />
-                      ) : (
-                        <Search size={16} />
-                      )}
-                    </button>
-                  </div>
-                {searchResults.length > 0 && (
-                  <div className="space-y-2">
-                    {searchResults.map((student) => (
-                      <motion.button
-                        key={student.id}
-                        onClick={() => {
-                          setSelectedStudent(student);
-                          setSearchResults([]);
-                          setSearchQuery("");
-                        }}
-                        className="w-full p-4 rounded-lg border text-left transition-colors"
-                        style={{
-                          background: "rgba(255, 255, 255, 0.03)",
-                          borderColor: "rgba(255, 104, 3, 0.2)",
-                        }}
-                        whileHover={{
-                          background: "rgba(255, 104, 3, 0.1)",
-                        }}
-                      >
-                        <div className="flex items-center justify-between">
-                          <div>
-                            <p className="font-medium text-white">
-                              {student.full_name}
-                            </p>
-                            <p
-                              className="text-sm"
-                              style={{ color: colors.textSecondary }}
-                            >
-                              {student.reg_number} • {student.level} •{" "}
-                              {student.department}
-                            </p>
-                          </div>
-                          <UserIcon
-                            size={20}
-                            style={{ color: colors.primary }}
-                          />
-                        </div>
-                      </motion.button>
-                    ))}
-                  </div>
-                )}
-                </div>
-              </>
-            ) : (
-              <div
-                className="p-4 rounded-lg border flex items-center justify-between"
-                style={{
-                  background: "rgba(255, 104, 3, 0.1)",
-                  borderColor: "rgba(255, 104, 3, 0.3)",
-                }}
-              >
-                <div>
-                  <p className="font-medium text-white">
-                    {selectedStudent?.full_name}
-                  </p>
-                  <p
-                    className="text-sm"
-                    style={{ color: colors.textSecondary }}
-                  >
-                    {selectedStudent?.reg_number} • {selectedStudent?.level} •{" "}
-                    {selectedStudent?.department}
-                  </p>
+        {/* ── Step 1: Pick the member ────────────────────────── */}
+        <motion.section
+          initial={{ opacity: 0, y: 16 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.1 }}
+          className="rounded-2xl p-5 sm:p-6 space-y-4"
+          style={{
+            background: tk.card,
+            border: `1px solid ${tk.cardBorder}`,
+          }}
+        >
+          <header className="flex items-center gap-3">
+            <span
+              className="w-9 h-9 rounded-xl flex items-center justify-center shrink-0"
+              style={{ background: tk.primarySoft, color: tk.primary, border: `1px solid ${tk.primaryRing}` }}
+            >
+              <UserIcon size={16} />
+            </span>
+            <div className="flex-1 min-w-0">
+              <p className="text-[10px] font-bold uppercase tracking-[0.18em]" style={{ color: tk.primary }}>
+                Step 1
+              </p>
+              <h2 className="text-base font-extrabold tracking-tight" style={{ color: tk.text }}>
+                Pick the member
+              </h2>
+            </div>
+          </header>
+
+          {!selectedStudent ? (
+            <div className="space-y-3">
+              <div className="flex gap-2">
+                <div
+                  className="flex-1 flex items-center gap-2 px-3 py-2 rounded-xl transition-colors"
+                  style={{
+                    background: theme === 'light' ? 'rgba(15,7,3,0.03)' : 'rgba(255,255,255,0.04)',
+                    border: `1px solid ${tk.cardBorder}`,
+                  }}
+                >
+                  <Search className="w-4 h-4 shrink-0" style={{ color: tk.textTer }} />
+                  <input
+                    value={searchQuery}
+                    onChange={(e) => {
+                      const v = e.target.value;
+                      setSearchQuery(v);
+                      if (!v.trim()) setSearchResults([]);
+                    }}
+                    onKeyDown={(e) => { if (e.key === 'Enter') void handleSearch(searchQuery); }}
+                    placeholder="Search by name or member ID"
+                    className="flex-1 bg-transparent text-sm font-medium outline-none"
+                    style={{ color: tk.text }}
+                  />
                 </div>
                 <button
-                  onClick={resetForm}
-                  className="p-2 rounded-lg transition-colors"
-                  style={{ background: "rgba(255, 255, 255, 0.1)" }}
+                  type="button"
+                  onClick={() => void handleSearch(searchQuery)}
+                  disabled={searching || !searchQuery.trim()}
+                  className="px-3.5 py-2 rounded-xl text-xs font-bold transition-all hover:-translate-y-0.5 active:scale-[0.98] disabled:opacity-40"
+                  style={{
+                    background: tk.primary,
+                    color: '#FFFFFF',
+                    border: `1px solid ${tk.primary}`,
+                  }}
                 >
-                  <X size={20} style={{ color: colors.textSecondary }} />
+                  {searching ? <LoadingSpinner size="sm" color="#FFFFFF" /> : 'Search'}
                 </button>
               </div>
-            )}
-          </div>
 
-          {/* Step 2: Select Payment Type */}
-          {selectedStudent && (
-            <motion.div
-              className="mb-8"
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
+              {searchResults.length > 0 && (
+                <div className="space-y-2">
+                  {searchResults.map((student) => (
+                    <motion.button
+                      key={student.id}
+                      type="button"
+                      onClick={() => {
+                        setSelectedStudent(student);
+                        setSearchResults([]);
+                        setSearchQuery("");
+                      }}
+                      className="w-full p-3 rounded-xl text-left transition-all hover:-translate-y-0.5 active:scale-[0.99]"
+                      style={{
+                        background: theme === 'light' ? 'rgba(15,7,3,0.03)' : 'rgba(255,255,255,0.03)',
+                        border: `1px solid ${tk.cardBorder}`,
+                      }}
+                      whileHover={{ borderColor: tk.primaryRing }}
+                    >
+                      <div className="flex items-center justify-between gap-3">
+                        <div className="min-w-0">
+                          <p className="text-sm font-bold truncate" style={{ color: tk.text }}>
+                            {student.full_name}
+                          </p>
+                          <p className="text-[11px] mt-0.5 truncate" style={{ color: tk.textTer }}>
+                            {student.reg_number}
+                            {student.level ? ` · L${student.level}` : ''}
+                            {student.department ? ` · ${student.department}` : ''}
+                          </p>
+                        </div>
+                        <ChevronRight className="w-4 h-4 shrink-0" style={{ color: tk.primary }} />
+                      </div>
+                    </motion.button>
+                  ))}
+                </div>
+              )}
+            </div>
+          ) : (
+            // Selected-student chip — clear callout, prominent reset.
+            <div
+              className="p-3 rounded-xl flex items-center gap-3"
+              style={{
+                background: tk.primarySoft,
+                border: `1px solid ${tk.primaryRing}`,
+              }}
             >
-              <div className="flex items-center justify-between mb-4">
-                <div className="flex items-center gap-3">
-                  <div 
-                    className="w-10 h-10 rounded-xl flex items-center justify-center"
-                    style={{ background: `${colors.accentMint}15`, border: `1px solid ${colors.accentMint}30` }}
-                  >
-                    <FileText size={20} style={{ color: colors.accentMint }} />
-                  </div>
-                  <div>
-                    <h2 className="text-lg font-bold text-white">Step 2: Select Payment to Waive</h2>
-                    <p className="text-xs" style={{ color: colors.textSecondary }}>Choose which payment to waive for this student</p>
-                  </div>
-                </div>
-                <motion.button
-                  whileHover={{ scale: 1.05 }}
-                  whileTap={{ scale: 0.95 }}
-                  onClick={() => loadPaymentTypesAndStudentPayments(true)}
-                  disabled={refreshingPayments}
-                  className="flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium transition-all disabled:opacity-50"
-                  style={{
-                    background: `${colors.accentMint}15`,
-                    border: `1px solid ${colors.accentMint}30`,
-                    color: colors.accentMint,
-                  }}
-                  title="Refresh payments"
-                >
-                  <RefreshCw 
-                    size={16} 
-                    className={refreshingPayments ? 'animate-spin' : ''}
-                  />
-                  <span className="hidden sm:inline">{refreshingPayments ? 'Refreshing...' : 'Refresh'}</span>
-                </motion.button>
+              <span
+                className="w-9 h-9 rounded-xl flex items-center justify-center shrink-0 text-sm font-extrabold"
+                style={{
+                  background: `linear-gradient(135deg, ${tk.primary}, ${tk.primary}cc)`,
+                  color: '#FFFFFF',
+                }}
+              >
+                {selectedStudent.full_name?.charAt(0)?.toUpperCase() || '?'}
+              </span>
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-extrabold truncate" style={{ color: tk.text }}>
+                  {selectedStudent.full_name}
+                </p>
+                <p className="text-[11px] truncate" style={{ color: tk.textTer }}>
+                  {selectedStudent.reg_number}
+                  {selectedStudent.level ? ` · L${selectedStudent.level}` : ''}
+                  {selectedStudent.department ? ` · ${selectedStudent.department}` : ''}
+                </p>
               </div>
+              <button
+                type="button"
+                onClick={resetForm}
+                className="w-8 h-8 rounded-lg flex items-center justify-center transition-colors"
+                style={{
+                  background: theme === 'light' ? 'rgba(15,7,3,0.06)' : 'rgba(255,255,255,0.06)',
+                  color: tk.textSec,
+                }}
+                aria-label="Change member"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+          )}
+        </motion.section>
 
-              {paymentTypes.length === 0 ? (
+        {/* ── Step 2: Pick the due ───────────────────────────── */}
+        {selectedStudent && (
+          <motion.section
+            initial={{ opacity: 0, y: 16 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="rounded-2xl p-5 sm:p-6 space-y-4"
+            style={{
+              background: tk.card,
+              border: `1px solid ${tk.cardBorder}`,
+            }}
+          >
+            <header className="flex items-center justify-between gap-3">
+              <div className="flex items-center gap-3 min-w-0">
+                <span
+                  className="w-9 h-9 rounded-xl flex items-center justify-center shrink-0"
+                  style={{ background: `${tk.mint}18`, color: tk.mint, border: `1px solid ${tk.mint}40` }}
+                >
+                  <FileText size={16} />
+                </span>
+                <div className="flex-1 min-w-0">
+                  <p className="text-[10px] font-bold uppercase tracking-[0.18em]" style={{ color: tk.mint }}>
+                    Step 2
+                  </p>
+                  <h2 className="text-base font-extrabold tracking-tight" style={{ color: tk.text }}>
+                    Pick the due to waive
+                  </h2>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => loadPaymentTypesAndStudentPayments(true)}
+                disabled={refreshingPayments}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold transition-all disabled:opacity-50"
+                style={{
+                  background: tk.card,
+                  color: tk.textSec,
+                  border: `1px solid ${tk.cardBorder}`,
+                }}
+              >
+                <RefreshCw size={12} className={refreshingPayments ? 'animate-spin' : ''} />
+                <span className="hidden sm:inline">{refreshingPayments ? 'Refreshing' : 'Refresh'}</span>
+              </button>
+            </header>
+
+            {paymentTypes.length === 0 ? (
+              <div
+                className="p-6 rounded-xl text-center"
+                style={{
+                  background: theme === 'light' ? 'rgba(15,7,3,0.03)' : 'rgba(255,255,255,0.03)',
+                  border: `1px solid ${tk.cardBorder}`,
+                }}
+              >
+                <span
+                  className="w-12 h-12 mx-auto mb-3 rounded-2xl flex items-center justify-center"
+                  style={{ background: `${tk.mint}18`, color: tk.mint, border: `1px solid ${tk.mint}40` }}
+                >
+                  <CheckCircle className="w-6 h-6" />
+                </span>
+                <p className="text-sm font-extrabold mb-1" style={{ color: tk.text }}>
+                  Nothing to waive
+                </p>
+                <p className="text-xs" style={{ color: tk.textSec }}>
+                  This member has no unpaid dues in your scope.
+                </p>
+              </div>
+            ) : (
+              <>
                 <div
-                  className="p-6 rounded-xl border text-center"
+                  className="p-3 rounded-xl flex items-start gap-2.5"
                   style={{
-                    background: "rgba(255, 255, 255, 0.03)",
-                    borderColor: "rgba(255, 104, 3, 0.2)",
+                    background: `${tk.mint}10`,
+                    border: `1px solid ${tk.mint}30`,
                   }}
                 >
-                  <CheckCircle
-                    size={48}
-                    className="mx-auto mb-3"
-                    style={{ color: colors.statusPaid }}
-                  />
-                  <p className="text-white font-medium mb-1">
-                    No Outstanding Payments
-                  </p>
-                  <p
-                    className="text-sm"
-                    style={{ color: colors.textSecondary }}
-                  >
-                    This student has no unpaid dues that can be waived
+                  <Info className="w-4 h-4 shrink-0 mt-0.5" style={{ color: tk.mint }} />
+                  <p className="text-[11px] leading-relaxed" style={{ color: tk.text }}>
+                    Showing <span className="font-bold">{paymentTypes.length}</span>{' '}
+                    {paymentTypes.length === 1 ? 'unpaid due' : 'unpaid dues'} for{' '}
+                    <span className="font-bold">{selectedStudent.full_name}</span>.
                   </p>
                 </div>
-              ) : (
-                <>
-                  <div
-                    className="mb-3 p-3 rounded-lg"
-                    style={{
-                      background: "rgba(6, 182, 212, 0.1)",
-                      border: "1px solid rgba(6, 182, 212, 0.3)",
-                    }}
-                  >
-                    <p className="text-sm" style={{ color: colors.accentMint }}>
-                      💡 Showing {paymentTypes.length} unpaid dues for{" "}
-                      {selectedStudent.full_name}
-                    </p>
-                  </div>
 
-                  <div className="space-y-2">
-                    {paymentTypes.map((paymentType) => (
+                <div className="space-y-2">
+                  {paymentTypes.map((paymentType) => {
+                    const isSelected = selectedPaymentType === paymentType.id;
+                    return (
                       <motion.button
                         key={paymentType.id}
+                        type="button"
                         onClick={() => setSelectedPaymentType(paymentType.id)}
-                        className="w-full p-4 rounded-lg border text-left transition-all"
+                        className="w-full p-3 sm:p-4 rounded-xl text-left transition-all hover:-translate-y-0.5 active:scale-[0.99]"
                         style={{
-                          background:
-                            selectedPaymentType === paymentType.id
-                              ? "rgba(255, 104, 3, 0.2)"
-                              : "rgba(255, 255, 255, 0.03)",
-                          borderColor:
-                            selectedPaymentType === paymentType.id
-                              ? colors.primary
-                              : "rgba(255, 104, 3, 0.2)",
-                          borderWidth:
-                            selectedPaymentType === paymentType.id
-                              ? "2px"
-                              : "1px",
-                        }}
-                        whileHover={{
-                          background: "rgba(255, 104, 3, 0.1)",
+                          background: isSelected ? tk.primarySoft : (theme === 'light' ? 'rgba(15,7,3,0.03)' : 'rgba(255,255,255,0.03)'),
+                          border: `${isSelected ? '2px' : '1px'} solid ${isSelected ? tk.primary : tk.cardBorder}`,
+                          boxShadow: isSelected ? `0 8px 22px -12px ${tk.primary}` : 'none',
                         }}
                       >
-                        <div className="flex items-start justify-between">
-                          <div className="flex-1">
-                            <p className="font-medium text-white mb-1">
+                        <div className="flex items-start justify-between gap-3">
+                          <div className="flex-1 min-w-0">
+                            <p className="text-sm font-extrabold truncate" style={{ color: tk.text }}>
                               {paymentType.title}
                             </p>
-                            <p
-                              className="text-sm mb-2"
-                              style={{ color: colors.textSecondary }}
-                            >
-                              {paymentType.description}
-                            </p>
+                            {paymentType.description && (
+                              <p className="text-[11px] mt-1 line-clamp-2" style={{ color: tk.textSec }}>
+                                {paymentType.description}
+                              </p>
+                            )}
                             {paymentType.deadline && (
-                              <p
-                                className="text-xs"
-                                style={{ color: colors.warning }}
-                              >
-                                ⏰ Due:{" "}
-                                {new Date(
-                                  paymentType.deadline
-                                ).toLocaleDateString()}
+                              <p className="text-[10px] font-bold uppercase tracking-wider mt-1.5 inline-flex items-center gap-1" style={{ color: tk.amber }}>
+                                <Clock className="w-2.5 h-2.5" />
+                                Due {new Date(paymentType.deadline).toLocaleDateString()}
                               </p>
                             )}
                           </div>
-                          <div className="ml-4 text-right">
-                            <p
-                              className="font-bold text-lg"
-                              style={{ color: colors.primary }}
-                            >
+                          <div className="text-right shrink-0">
+                            <p className="text-base sm:text-lg font-extrabold tabular-nums" style={{ color: tk.primary }}>
                               <PrivacyMask>{formatCurrency(paymentType.amount)}</PrivacyMask>
                             </p>
-                            <p
-                              className="text-xs mt-1"
-                              style={{ color: colors.textSecondary }}
-                            >
-                              Amount to waive
+                            <p className="text-[10px] font-bold uppercase tracking-wider mt-0.5" style={{ color: tk.textTer }}>
+                              To waive
                             </p>
                           </div>
                         </div>
                       </motion.button>
-                    ))}
-                  </div>
-                </>
-              )}
-            </motion.div>
-          )}
-
-          {/* Step 3: Waiver Details */}
-          {selectedStudent && selectedPaymentType && (
-            <motion.div
-              className="mb-8"
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-            >
-              <div className="flex items-center gap-3 mb-4">
-                <div 
-                  className="w-10 h-10 rounded-xl flex items-center justify-center"
-                  style={{ background: `${colors.warning}15`, border: `1px solid ${colors.warning}30` }}
-                >
-                  <AlertCircle size={20} style={{ color: colors.warning }} />
+                    );
+                  })}
                 </div>
-                <div>
-                  <h2 className="text-lg font-bold text-white">Step 3: Waiver Details</h2>
-                  <p className="text-xs" style={{ color: colors.textSecondary }}>Provide reason and notes for this waiver</p>
-                </div>
+              </>
+            )}
+          </motion.section>
+        )}
+
+        {/* ── Step 3: Reason + notes + notify ─────────────────── */}
+        {selectedStudent && selectedPaymentType && (
+          <motion.section
+            initial={{ opacity: 0, y: 16 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="rounded-2xl p-5 sm:p-6 space-y-4"
+            style={{
+              background: tk.card,
+              border: `1px solid ${tk.cardBorder}`,
+            }}
+          >
+            <header className="flex items-center gap-3">
+              <span
+                className="w-9 h-9 rounded-xl flex items-center justify-center shrink-0"
+                style={{ background: `${tk.amber}18`, color: tk.amber, border: `1px solid ${tk.amber}40` }}
+              >
+                <AlertCircle size={16} />
+              </span>
+              <div className="flex-1 min-w-0">
+                <p className="text-[10px] font-bold uppercase tracking-[0.18em]" style={{ color: tk.amber }}>
+                  Step 3
+                </p>
+                <h2 className="text-base font-extrabold tracking-tight" style={{ color: tk.text }}>
+                  Tell us why
+                </h2>
               </div>
+            </header>
 
-              {/* Waiver Reason */}
-              <div className="mb-4">
-                <ProfessionalDropdown
-                  label="Waiver Reason *"
-                  placeholder="Select reason..."
-                  icon={<HelpCircle className="w-5 h-5" />}
-                  value={waiverReason}
-                  onChange={(val) => setWaiverReason(val as string)}
-                  options={[
-                    { value: "financial_hardship", label: "Financial Hardship", icon: <span>💰</span> },
-                    { value: "medical_emergency", label: "Medical Emergency", icon: <span>🏥</span> },
-                    { value: "class_executive", label: "Class Executive Role", icon: <span>👔</span> },
-                    { value: "scholarship", label: "Scholarship/Sponsorship", icon: <span>🎓</span> },
-                    { value: "departmental_support", label: "Departmental Support", icon: <span>🏫</span> },
-                    { value: "other", label: "Other", icon: <span>📝</span> },
-                  ]}
-                />
-              </div>
+            <ProfessionalDropdown
+              label="Waiver reason *"
+              placeholder="Select reason…"
+              icon={<HelpCircle className="w-5 h-5" />}
+              value={waiverReason}
+              onChange={(val) => setWaiverReason(val as string)}
+              options={[
+                { value: "financial_hardship",   label: "Financial hardship",       icon: <span>💰</span> },
+                { value: "medical_emergency",    label: "Medical emergency",        icon: <span>🏥</span> },
+                { value: "class_executive",      label: "Class executive role",     icon: <span>👔</span> },
+                { value: "scholarship",          label: "Scholarship / sponsorship",icon: <span>🎓</span> },
+                { value: "departmental_support", label: "Departmental support",     icon: <span>🏫</span> },
+                { value: "other",                label: "Other",                    icon: <span>📝</span> },
+              ]}
+            />
 
-              {/* Custom Notes */}
-              <div className="mb-4">
-                <label className="block text-sm font-medium text-white mb-2">
-                  Additional Notes (Optional)
-                </label>
-                <textarea
-                  value={customNotes}
-                  onChange={(e) => setCustomNotes(e.target.value)}
-                  placeholder="Add any additional context or details that will be shared with the student..."
-                  rows={3}
-                  className="w-full px-4 py-3 rounded-xl border text-white placeholder-gray-400 resize-none transition-all focus:outline-none focus:ring-2 focus:ring-orange-500"
-                  style={{
-                    background: "rgba(255, 255, 255, 0.05)",
-                    borderColor: "rgba(255, 104, 3, 0.2)",
-                  }}
-                />
-              </div>
-
-              {/* Notification Toggle */}
-              <div className="mb-4">
-                <div
-                  className="p-4 rounded-xl border"
-                  style={{
-                    background: notifyStudent
-                      ? "rgba(6, 182, 212, 0.1)"
-                      : "rgba(255, 255, 255, 0.03)",
-                    borderColor: notifyStudent
-                      ? "rgba(6, 182, 212, 0.3)"
-                      : "rgba(255, 104, 3, 0.2)",
-                  }}
-                >
-                  <label className="flex items-start gap-3 cursor-pointer">
-                    <input
-                      type="checkbox"
-                      checked={notifyStudent}
-                      onChange={(e) => setNotifyStudent(e.target.checked)}
-                      className="w-5 h-5 mt-0.5 rounded accent-orange-500"
-                    />
-                    <div className="flex-1">
-                      <div className="flex items-center gap-2 mb-1">
-                        {notifyStudent ? (
-                          <Bell
-                            size={18}
-                            style={{ color: colors.accentMint }}
-                          />
-                        ) : (
-                          <BellOff
-                            size={18}
-                            style={{ color: colors.textSecondary }}
-                          />
-                        )}
-                        <span className="font-medium text-white">
-                          {notifyStudent
-                            ? "Notification Enabled"
-                            : "Notification Disabled"}
-                        </span>
-                      </div>
-                      <p
-                        className="text-sm"
-                        style={{ color: colors.textSecondary }}
-                      >
-                        {notifyStudent
-                          ? `${selectedStudent.full_name} will receive a notification about this waiver with the reason and notes you provided.`
-                          : "The student will not be notified about this waiver."}
-                      </p>
-                    </div>
-                  </label>
-                </div>
-              </div>
-
-              {/* Waiver Preview */}
-              {waiverReason && (
-                <div
-                  className="p-4 rounded-xl"
-                  style={{
-                    background: "rgba(16, 185, 129, 0.1)",
-                    border: "1px solid rgba(16, 185, 129, 0.3)",
-                  }}
-                >
-                  <p
-                    className="text-sm font-medium mb-2"
-                    style={{ color: colors.statusPaid }}
-                  >
-                    ✅ Waiver Preview
-                  </p>
-                  <p className="text-sm text-white">
-                    The student will see this payment marked as "WAIVED" with
-                    the reason displayed in their payment history.
-                  </p>
-                </div>
-              )}
-            </motion.div>
-          )}
-
-          {/* Action Buttons */}
-          {selectedStudent && selectedPaymentType && waiverReason && (
-            <motion.div
-              className="flex gap-4"
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-            >
-              <button
-                onClick={resetForm}
-                disabled={loading}
-                className="flex-1 px-6 py-3 rounded-xl font-medium transition-opacity disabled:opacity-50"
+            <div className="space-y-1.5">
+              <label className="text-[11px] font-bold uppercase tracking-wider" style={{ color: tk.textTer }}>
+                Notes <span className="opacity-60">(optional)</span>
+              </label>
+              <textarea
+                value={customNotes}
+                onChange={(e) => setCustomNotes(e.target.value)}
+                placeholder="Anything you'd like the member to see along with the waiver…"
+                rows={3}
+                className="w-full px-3 py-2.5 rounded-xl text-sm resize-none outline-none focus:ring-2 transition-all"
                 style={{
-                  background: "rgba(255, 255, 255, 0.1)",
-                  color: colors.textPrimary,
+                  background: theme === 'light' ? 'rgba(15,7,3,0.03)' : 'rgba(255,255,255,0.04)',
+                  border: `1px solid ${tk.cardBorder}`,
+                  color: tk.text,
+                  ['--tw-ring-color' as string]: tk.primaryRing,
+                } as React.CSSProperties}
+              />
+            </div>
+
+            {/* Notify toggle — tinted when active, neutral when off. */}
+            <label
+              className="flex items-start gap-3 p-3 rounded-xl cursor-pointer transition-colors"
+              style={{
+                background: notifyStudent ? `${tk.mint}10` : (theme === 'light' ? 'rgba(15,7,3,0.03)' : 'rgba(255,255,255,0.03)'),
+                border: `1px solid ${notifyStudent ? tk.mint + '40' : tk.cardBorder}`,
+              }}
+            >
+              <input
+                type="checkbox"
+                checked={notifyStudent}
+                onChange={(e) => setNotifyStudent(e.target.checked)}
+                className="w-4 h-4 mt-0.5 shrink-0"
+                style={{ accentColor: tk.mint }}
+              />
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-1.5">
+                  {notifyStudent
+                    ? <Bell className="w-3.5 h-3.5" style={{ color: tk.mint }} />
+                    : <BellOff className="w-3.5 h-3.5" style={{ color: tk.textTer }} />}
+                  <span className="text-xs font-extrabold" style={{ color: tk.text }}>
+                    {notifyStudent ? 'Notification on' : 'Notification off'}
+                  </span>
+                </div>
+                <p className="text-[11px] mt-1 leading-relaxed" style={{ color: tk.textSec }}>
+                  {notifyStudent
+                    ? `${selectedStudent.full_name} will get an in-app notification with the reason and notes.`
+                    : `${selectedStudent.full_name} won't be notified about this waiver.`}
+                </p>
+              </div>
+            </label>
+
+            {/* Preview chip — shows what the member's payment record will read once waived. */}
+            {waiverReason && (
+              <div
+                className="p-3 rounded-xl"
+                style={{
+                  background: `${tk.mint}10`,
+                  border: `1px solid ${tk.mint}30`,
                 }}
               >
-                Cancel
-              </button>
-              <button
-                onClick={handleWaivePayment}
-                disabled={loading || !hasPermission('can_approve_payments')}
-                className="flex-1 px-6 py-3 rounded-xl font-medium text-white transition-opacity disabled:opacity-50"
-                style={{ background: gradients.primary }}
-              >
-                {loading ? "Processing..." : "Waive Payment"}
-              </button>
-            </motion.div>
-          )}
-        </GlassCard>
-        </motion.div>
+                <p className="text-[10px] font-bold uppercase tracking-[0.14em] mb-1 inline-flex items-center gap-1" style={{ color: tk.mint }}>
+                  <CheckCircle className="w-3 h-3" />
+                  Preview
+                </p>
+                <p className="text-xs leading-relaxed" style={{ color: tk.text }}>
+                  This payment row will be marked <span className="font-mono font-bold" style={{ color: tk.mint }}>WAIVED</span> in
+                  the member's history, with the reason shown next to it.
+                </p>
+              </div>
+            )}
+          </motion.section>
+        )}
+
+        {/* ── Actions ─────────────────────────────────────────── */}
+        {selectedStudent && selectedPaymentType && waiverReason && (
+          <motion.div
+            className="flex gap-2 flex-wrap justify-end"
+            initial={{ opacity: 0, y: 12 }}
+            animate={{ opacity: 1, y: 0 }}
+          >
+            <button
+              type="button"
+              onClick={resetForm}
+              disabled={loading}
+              className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-bold transition-all disabled:opacity-50"
+              style={{
+                background: theme === 'light' ? 'rgba(15,7,3,0.05)' : 'rgba(255,255,255,0.05)',
+                color: tk.textSec,
+                border: `1px solid ${tk.cardBorder}`,
+              }}
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              onClick={handleWaivePayment}
+              disabled={loading || !hasPermission('can_approve_payments')}
+              className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-bold transition-all hover:-translate-y-0.5 active:scale-[0.98] disabled:opacity-50"
+              style={{
+                background: tk.mint,
+                color: '#FFFFFF',
+                border: `1px solid ${tk.mint}`,
+                boxShadow: `0 8px 22px -10px ${tk.mint}`,
+              }}
+            >
+              <CheckCircle className="w-3.5 h-3.5" />
+              {loading ? 'Processing…' : 'Waive payment'}
+            </button>
+          </motion.div>
+        )}
       </div>
       <Footer />
     </div>
