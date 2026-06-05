@@ -587,7 +587,7 @@ export default function OrgMembersPage() {
   }, [showInviteModal, inviterMaxScope, inviterUnitGroupId, organization?.id, inviteClasses.length]);
 
   const generateInviteLink = async () => {
-    if (!organization || !user || !adminRecord) return;
+    if (!organization || !user) return;
 
     // ── Check plan limit before generating invite ──
     const limitCheck = canCreate('members');
@@ -601,7 +601,7 @@ export default function OrgMembersPage() {
     // group; org scope leaves it NULL so the joiner picks on signup.
     const resolvedGroupId: string | undefined =
       inviteScope === 'org' ? undefined
-      : (inviterMaxScope === 'group' ? group?.id : inviteTargetGroupId) || undefined;
+        : (inviterMaxScope === 'group' ? group?.id : inviteTargetGroupId) || undefined;
 
     if (inviteScope === 'class' && !resolvedGroupId) {
       setLimitMessage('Pick a class for this invite first.');
@@ -611,7 +611,7 @@ export default function OrgMembersPage() {
 
     setInviteLoading(true);
     try {
-      const createdBy = adminRecord.id || user.id;
+      const createdBy = adminRecord?.id || user.id;
       if (!createdBy) {
         throw new Error('Missing invite creator');
       }
@@ -642,6 +642,12 @@ export default function OrgMembersPage() {
       setInviteLink(link);
     } catch (err) {
       console.error('Invite generation failed:', err);
+      // Show the error in the modal so the admin knows what happened
+      setInviteLink('');
+      setInviteCode('');
+      // Reuse the limitMessage state to surface the error
+      setLimitMessage(err instanceof Error ? err.message : 'Failed to generate invite link. Please try again.');
+      setShowLimitModal(true);
     } finally {
       setInviteLoading(false);
     }
@@ -844,7 +850,7 @@ export default function OrgMembersPage() {
       if (existing && existing.length > 0) {
         // Remove role
         await supabase.from('member_admins').delete().eq('id', existing[0].id);
-        
+
         await supabase.from('notifications').insert({
           member_id: member.id,
           organization_id: orgId,
@@ -869,9 +875,9 @@ export default function OrgMembersPage() {
         // is actually org-tier — the active-role gate routes off
         // scope_level, not the legacy role name.
         const permissions = {
-          admin:     { scope_level: 'org' as const,   can_create_payments: true, can_approve_payments: true, can_manage_members: true,  can_view_analytics: true },
-          finsec:    { scope_level: 'group' as const, can_create_payments: true, can_approve_payments: true, can_manage_members: false, can_view_analytics: true },
-          class_rep: { scope_level: 'group' as const, can_create_payments: true, can_approve_payments: true, can_manage_members: true,  can_view_analytics: true },
+          admin: { scope_level: 'org' as const, can_create_payments: true, can_approve_payments: true, can_manage_members: true, can_view_analytics: true },
+          finsec: { scope_level: 'group' as const, can_create_payments: true, can_approve_payments: true, can_manage_members: false, can_view_analytics: true },
+          class_rep: { scope_level: 'group' as const, can_create_payments: true, can_approve_payments: true, can_manage_members: true, can_view_analytics: true },
         };
 
         await supabase.from('member_admins').insert({
@@ -927,7 +933,7 @@ export default function OrgMembersPage() {
       const dataToExport = [...raw].sort((a, b) =>
         (a.full_name || '').localeCompare(b.full_name || '', undefined, { sensitivity: 'base' })
       );
-      
+
       const escapeCSV = (field: string | number | boolean | null | undefined): string => {
         if (field === null || field === undefined) return '';
         const str = String(field);
@@ -941,7 +947,7 @@ export default function OrgMembersPage() {
       lines.push(`Generated,${new Date().toLocaleDateString('en-US', { dateStyle: 'full' })}`);
       lines.push(`Total ${memberLabelPlural},${dataToExport.length}`);
       lines.push('');
-      
+
       const headerCols: string[] = ['S/N'];
       if (exportFields.name) headerCols.push('Full Name');
       if (exportFields.regNumber) headerCols.push(`${memberLabel} ID`);
@@ -953,11 +959,11 @@ export default function OrgMembersPage() {
       if (exportFields.roles) headerCols.push('Roles');
       if (exportFields.joinDate) headerCols.push('Joined');
       lines.push(headerCols.join(','));
-      
+
       dataToExport.forEach((m, index) => {
         const { isAdmin, isFinsec, isClassRep } = getMemberRoles(m);
         const roles = [isAdmin ? 'Admin' : '', isFinsec ? 'FinSec' : '', isClassRep ? 'Class Rep' : ''].filter(Boolean).join(' | ') || memberLabel;
-        
+
         const rowCols: string[] = [escapeCSV(index + 1)];
         if (exportFields.name) rowCols.push(escapeCSV(m.full_name));
         if (exportFields.regNumber) rowCols.push(escapeCSV(m.member_id));
@@ -1215,8 +1221,8 @@ export default function OrgMembersPage() {
                       background: isAtLimit
                         ? `${colors.error}10`
                         : isNearLimit
-                        ? `${colors.warning}08`
-                        : 'rgba(255,255,255,0.02)',
+                          ? `${colors.warning}08`
+                          : 'rgba(255,255,255,0.02)',
                       border: `1px solid ${isAtLimit ? colors.error : isNearLimit ? colors.warning : tk.cardBorder}30`,
                     }}
                   >
@@ -1542,12 +1548,12 @@ export default function OrgMembersPage() {
                             </td>
                             <td className="py-4 px-4">
                               {(member.level || orgLevel) ? (
-                                  <span className="inline-flex items-center gap-1 px-2 py-1 rounded-lg text-xs font-semibold" style={{ background: `${colors.accentMint}15`, color: colors.accentMint, border: `1px solid ${colors.accentMint}25` }}>
-                                    {member.level || orgLevel}
-                                  </span>
-                                ) : (
-                                  <span className="text-xs italic" style={{ color: colors.textDisabled }}>—</span>
-                                )}
+                                <span className="inline-flex items-center gap-1 px-2 py-1 rounded-lg text-xs font-semibold" style={{ background: `${colors.accentMint}15`, color: colors.accentMint, border: `1px solid ${colors.accentMint}25` }}>
+                                  {member.level || orgLevel}
+                                </span>
+                              ) : (
+                                <span className="text-xs italic" style={{ color: colors.textDisabled }}>—</span>
+                              )}
                             </td>
                             <td className="py-4 px-4">
                               {member.email ? (
@@ -1855,137 +1861,85 @@ export default function OrgMembersPage() {
           </GlassCard>
         </motion.div>
 
-      {/* ═══════════════════════════════════════════════════════ */}
-      {/* INVITE LINK MODAL                                      */}
-      {/* ═══════════════════════════════════════════════════════ */}
-      <AnimatePresence>
-        {showInviteModal && (
-          <motion.div
-            className="fixed inset-0 z-50 flex items-center justify-center p-4"
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-          >
-            <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={() => setShowInviteModal(false)} />
+        {/* ═══════════════════════════════════════════════════════ */}
+        {/* INVITE LINK MODAL                                      */}
+        {/* ═══════════════════════════════════════════════════════ */}
+        <AnimatePresence>
+          {showInviteModal && (
             <motion.div
-              className="relative w-full max-w-lg rounded-3xl p-5 sm:p-8 z-10 overflow-hidden backdrop-blur-xl"
-              style={{
-                background: theme === 'light' ? 'rgba(255,255,255,0.92)' : 'rgba(15, 7, 3, 0.6)',
-                border: `1px solid ${tk.primaryRing}`,
-                color: tk.text,
-                boxShadow: `
+              className="fixed inset-0 z-50 flex items-center justify-center p-4"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+            >
+              <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={() => setShowInviteModal(false)} />
+              <motion.div
+                className="relative w-full max-w-lg rounded-3xl p-5 sm:p-8 z-10 overflow-hidden backdrop-blur-xl"
+                style={{
+                  background: theme === 'light' ? 'rgba(255,255,255,0.92)' : 'rgba(15, 7, 3, 0.6)',
+                  border: `1px solid ${tk.primaryRing}`,
+                  color: tk.text,
+                  boxShadow: `
                   0 0 0 1px ${theme === 'light' ? 'rgba(15, 7, 3, 0.06)' : 'rgba(255, 104, 3, 0.1)'},
                   0 20px 50px -12px ${theme === 'light' ? 'rgba(15, 7, 3, 0.15)' : 'rgba(0, 0, 0, 0.8)'},
                   inset 0 1px 0 0 ${theme === 'light' ? 'rgba(255, 255, 255, 0.45)' : 'rgba(255, 255, 255, 0.05)'}
                 `,
-              }}
-              initial={{ scale: 0.95, opacity: 0 }}
-              animate={{ scale: 1, opacity: 1 }}
-              exit={{ scale: 0.95, opacity: 0 }}
-            >
-              <div className="flex items-center justify-between mb-5">
-                <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-xl flex items-center justify-center" style={{ background: `${tk.mint}15` }}>
-                    <Link2 size={20} style={{ color: tk.mint }} />
-                  </div>
-                  <div>
-                    <h3 className="text-lg font-semibold" style={{ color: tk.text }}>Invite Link</h3>
-                    <p className="text-xs" style={{ color: tk.textSec }}>
-                      Share this link with {memberLabelPlural.toLowerCase()} to join
-                    </p>
-                  </div>
-                </div>
-                <button onClick={() => setShowInviteModal(false)} className="p-2 rounded-lg hover:bg-white/5 shrink-0"><X size={18} style={{ color: tk.textSec }} /></button>
-              </div>
-
-              {!inviteLink ? (
-                <div className="space-y-4">
-                  {/* Max Uses */}
-                  <div>
-                    <label className="block text-sm font-medium mb-1.5" style={{ color: tk.text }}>Max number of joins</label>
-                    <div className="flex flex-wrap gap-2">
-                      {[10, 25, 50, 100, 500].map(n => (
-                        <button
-                          key={n}
-                          onClick={() => setInviteMaxUses(n)}
-                          className="min-w-[4.5rem] flex-1 py-2 rounded-lg text-xs font-medium transition-all"
-                          style={{
-                            background: inviteMaxUses === n ? tk.primarySoft : theme === 'light' ? '#FFF6EE' : 'rgba(255,255,255,0.03)',
-                            border: `1px solid ${inviteMaxUses === n ? tk.primaryRing : tk.cardBorder}`,
-                            color: inviteMaxUses === n ? tk.primary : tk.textSec,
-                          }}
-                        >
-                          {n}
-                        </button>
-                      ))}
+                }}
+                initial={{ scale: 0.95, opacity: 0 }}
+                animate={{ scale: 1, opacity: 1 }}
+                exit={{ scale: 0.95, opacity: 0 }}
+              >
+                <div className="flex items-center justify-between mb-5">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-xl flex items-center justify-center" style={{ background: `${tk.mint}15` }}>
+                      <Link2 size={20} style={{ color: tk.mint }} />
                     </div>
-                  </div>
-
-                  {/* Expiry */}
-                  <div>
-                    <label className="block text-sm font-medium mb-1.5" style={{ color: tk.text }}>Expires in</label>
-                    <div className="flex flex-wrap gap-2">
-                      {([['1d', '1 day'], ['7d', '7 days'], ['30d', '30 days'], ['never', 'Never']] as const).map(([val, label]) => (
-                        <button
-                          key={val}
-                          onClick={() => setInviteExpiry(val)}
-                          className="min-w-[5.5rem] flex-1 py-2 rounded-lg text-xs font-medium transition-all"
-                          style={{
-                            background: inviteExpiry === val ? tk.primarySoft : theme === 'light' ? '#FFF6EE' : 'rgba(255,255,255,0.03)',
-                            border: `1px solid ${inviteExpiry === val ? tk.primaryRing : tk.cardBorder}`,
-                            color: inviteExpiry === val ? tk.primary : tk.textSec,
-                          }}
-                        >
-                          {label}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-
-                  {/* ── Scope card ── */}
-                  {(() => {
-                    // Resolve the breadcrumb to show. For class-scope inviters
-                    // this is fixed to their own group; for higher scopes it
-                    // follows the picker. For org-wide we say so explicitly.
-                    const selectedClass = inviterMaxScope === 'group'
-                      ? group
-                      : inviteClasses.find((c) => c.id === inviteTargetGroupId) ?? null;
-                    return (
-                      <div className="rounded-xl p-3.5 break-words" style={{ background: theme === 'light' ? '#FFFDF9' : 'rgba(255,255,255,0.03)', border: `1px solid ${tk.cardBorder}` }}>
-                        <p className="text-[10px] uppercase tracking-wider font-semibold mb-1" style={{ color: tk.textTer }}>
-                          Inviting to
-                        </p>
-                        <p className="text-sm leading-relaxed" style={{ color: tk.text }}>
-                          <span style={{ color: tk.textSec }}>{organization?.name}</span>
-                          {inviteScope === 'org'
-                            ? <> · <span className="font-semibold" style={{ color: tk.primary }}>Whole organization</span></>
-                            : selectedClass
-                              ? <> · <span className="font-semibold" style={{ color: tk.primary }}>{selectedClass.name}</span></>
-                              : <> · <span style={{ color: tk.textTer }}>Pick a class</span></>}
-                        </p>
-                        {inviteScope === 'org' && (
-                          <p className="text-[11px] mt-1.5" style={{ color: tk.textTer }}>
-                            Joiners will pick their own class on signup.
-                          </p>
-                        )}
-                      </div>
-                    );
-                  })()}
-
-                  {/* ── Scope toggle (higher-scope inviters only) ── */}
-                  {inviterMaxScope !== 'group' && (
                     <div>
-                      <label className="block text-sm font-medium mb-1.5" style={{ color: tk.text }}>Scope</label>
-                      <div className="grid grid-cols-2 gap-2">
-                        {([['class', 'Specific class'], ['org', 'Org-wide']] as const).map(([val, label]) => (
+                      <h3 className="text-lg font-semibold" style={{ color: tk.text }}>Invite Link</h3>
+                      <p className="text-xs" style={{ color: tk.textSec }}>
+                        Share this link with {memberLabelPlural.toLowerCase()} to join
+                      </p>
+                    </div>
+                  </div>
+                  <button onClick={() => setShowInviteModal(false)} className="p-2 rounded-lg hover:bg-white/5 shrink-0"><X size={18} style={{ color: tk.textSec }} /></button>
+                </div>
+
+                {!inviteLink ? (
+                  <div className="space-y-4">
+                    {/* Max Uses */}
+                    <div>
+                      <label className="block text-sm font-medium mb-1.5" style={{ color: tk.text }}>Max number of joins</label>
+                      <div className="flex flex-wrap gap-2">
+                        {[10, 25, 50, 100, 500].map(n => (
+                          <button
+                            key={n}
+                            onClick={() => setInviteMaxUses(n)}
+                            className="min-w-[4.5rem] flex-1 py-2 rounded-lg text-xs font-medium transition-all"
+                            style={{
+                              background: inviteMaxUses === n ? tk.primarySoft : theme === 'light' ? '#FFF6EE' : 'rgba(255,255,255,0.03)',
+                              border: `1px solid ${inviteMaxUses === n ? tk.primaryRing : tk.cardBorder}`,
+                              color: inviteMaxUses === n ? tk.primary : tk.textSec,
+                            }}
+                          >
+                            {n}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+
+                    {/* Expiry */}
+                    <div>
+                      <label className="block text-sm font-medium mb-1.5" style={{ color: tk.text }}>Expires in</label>
+                      <div className="flex flex-wrap gap-2">
+                        {([['1d', '1 day'], ['7d', '7 days'], ['30d', '30 days'], ['never', 'Never']] as const).map(([val, label]) => (
                           <button
                             key={val}
-                            onClick={() => setInviteScope(val)}
-                            className="py-2 rounded-lg text-xs font-medium transition-all"
+                            onClick={() => setInviteExpiry(val)}
+                            className="min-w-[5.5rem] flex-1 py-2 rounded-lg text-xs font-medium transition-all"
                             style={{
-                              background: inviteScope === val ? tk.primarySoft : theme === 'light' ? '#FFF6EE' : 'rgba(255,255,255,0.03)',
-                              border: `1px solid ${inviteScope === val ? tk.primaryRing : tk.cardBorder}`,
-                              color: inviteScope === val ? tk.primary : tk.textSec,
+                              background: inviteExpiry === val ? tk.primarySoft : theme === 'light' ? '#FFF6EE' : 'rgba(255,255,255,0.03)',
+                              border: `1px solid ${inviteExpiry === val ? tk.primaryRing : tk.cardBorder}`,
+                              color: inviteExpiry === val ? tk.primary : tk.textSec,
                             }}
                           >
                             {label}
@@ -1993,969 +1947,802 @@ export default function OrgMembersPage() {
                         ))}
                       </div>
                     </div>
-                  )}
 
-                  {/* ── Class picker (when scope is 'class' AND inviter has options) ── */}
-                  {inviterMaxScope !== 'group' && inviteScope === 'class' && (
-                    <div>
-                      <label className="block text-sm font-medium mb-1.5" style={{ color: tk.text }}>
-                        {inviterMaxScope === 'unit' ? 'Class under your unit' : 'Class'}
-                      </label>
-                      {inviteClassesLoading ? (
-                        <div className="text-xs flex items-center gap-2" style={{ color: tk.textTer }}>
-                          <Loader2 size={14} className="animate-spin" /> Loading classes…
+                    {/* ── Scope card ── */}
+                    {(() => {
+                      // Resolve the breadcrumb to show. For class-scope inviters
+                      // this is fixed to their own group; for higher scopes it
+                      // follows the picker. For org-wide we say so explicitly.
+                      const selectedClass = inviterMaxScope === 'group'
+                        ? group
+                        : inviteClasses.find((c) => c.id === inviteTargetGroupId) ?? null;
+                      return (
+                        <div className="rounded-xl p-3.5 break-words" style={{ background: theme === 'light' ? '#FFFDF9' : 'rgba(255,255,255,0.03)', border: `1px solid ${tk.cardBorder}` }}>
+                          <p className="text-[10px] uppercase tracking-wider font-semibold mb-1" style={{ color: tk.textTer }}>
+                            Inviting to
+                          </p>
+                          <p className="text-sm leading-relaxed" style={{ color: tk.text }}>
+                            <span style={{ color: tk.textSec }}>{organization?.name}</span>
+                            {inviteScope === 'org'
+                              ? <> · <span className="font-semibold" style={{ color: tk.primary }}>Whole organization</span></>
+                              : selectedClass
+                                ? <> · <span className="font-semibold" style={{ color: tk.primary }}>{selectedClass.name}</span></>
+                                : <> · <span style={{ color: tk.textTer }}>Pick a class</span></>}
+                          </p>
+                          {inviteScope === 'org' && (
+                            <p className="text-[11px] mt-1.5" style={{ color: tk.textTer }}>
+                              Joiners will pick their own class on signup.
+                            </p>
+                          )}
                         </div>
-                      ) : inviteClasses.length === 0 ? (
-                        <p className="text-xs" style={{ color: tk.textTer }}>
-                          No classes available in your scope yet.
-                        </p>
-                      ) : (
-                        <select
-                          value={inviteTargetGroupId}
-                          onChange={(e) => setInviteTargetGroupId(e.target.value)}
-                          className="w-full rounded-lg px-3 py-2 text-sm outline-none"
-                          style={{ background: theme === 'light' ? '#FFFDF9' : 'rgba(0,0,0,0.25)', border: `1px solid ${tk.cardBorder}`, color: tk.text }}
-                        >
-                          <option value="">— Pick a class —</option>
-                          {inviteClasses.map((c) => (
-                            <option key={c.id} value={c.id}>{c.name} {c.short_name ? `(${c.short_name})` : ''}</option>
-                          ))}
-                        </select>
-                      )}
-                    </div>
-                  )}
+                      );
+                    })()}
 
-                  <button
-                    onClick={generateInviteLink}
-                    disabled={inviteLoading}
-                    className="w-full px-6 py-3 rounded-xl font-semibold flex items-center justify-center gap-2 transition-all hover:scale-[1.02] active:scale-[0.98] disabled:opacity-60"
-                    style={{ background: tk.gradOrange, color: '#FFFFFF' }}
-                  >
-                    {inviteLoading ? <><Loader2 size={16} className="animate-spin" /> Generating...</> : <><Link2 size={16} /> Generate Link</>}
-                  </button>
-                </div>
-              ) : (
-                <div className="space-y-4">
-                  {/* Generated Link */}
-                  <div className="p-3 rounded-xl" style={{ background: theme === 'light' ? '#FFFDF9' : 'rgba(255,255,255,0.03)', border: `1px solid ${tk.cardBorder}` }}>
-                    <p className="text-xs font-medium mb-2" style={{ color: tk.textSec }}>Invite Link</p>
-                    <p className="text-xs sm:text-sm break-all font-mono leading-relaxed" style={{ color: tk.text }}>{inviteLink}</p>
-                  </div>
-
-                  <div className="p-3 rounded-xl text-center" style={{ background: tk.primarySoft, border: `1px solid ${tk.primaryRing}` }}>
-                    <p className="text-xs font-medium mb-1" style={{ color: tk.textSec }}>Invite Code</p>
-                    <p className="text-xl sm:text-2xl font-bold tracking-[0.18em] sm:tracking-[0.3em] break-all" style={{ color: tk.text }}>{inviteCode}</p>
-                  </div>
-
-                  <div className="flex flex-col sm:flex-row gap-2">
-                    <button
-                      onClick={copyInviteLink}
-                      className="flex-1 px-4 py-3 rounded-xl text-sm font-medium flex items-center justify-center gap-2 transition-all hover:scale-[1.02]"
-                      style={{
-                        background: inviteCopied ? `${tk.mint}15` : tk.primarySoft,
-                        color: inviteCopied ? tk.mint : tk.primary,
-                        border: `1px solid ${inviteCopied ? tk.mint : tk.primary}30`,
-                      }}
-                    >
-                      {inviteCopied ? <><Check size={16} /> Copied!</> : <><Copy size={16} /> Copy Link</>}
-                    </button>
-                    <button
-                      onClick={shareInviteLink}
-                      className="flex-1 px-4 py-3 rounded-xl text-sm font-medium flex items-center justify-center gap-2 transition-all hover:scale-[1.02]"
-                      style={{ background: tk.primarySoft, color: tk.primary, border: `1px solid ${tk.primaryRing}` }}
-                    >
-                      <Share2 size={16} /> Share
-                    </button>
-                  </div>
-
-                  <button
-                    onClick={() => { setInviteLink(''); setInviteCode(''); }}
-                    className="w-full text-center text-xs py-2 hover:underline"
-                    style={{ color: tk.textSec }}
-                  >
-                    Generate a new link
-                  </button>
-                </div>
-              )}
-            </motion.div>
-          </motion.div>
-        )}
-      </AnimatePresence>
-
-      {/* ═══════════════════════════════════════════════════════ */}
-      {/* ADD MEMBER MODAL                                       */}
-      {/* ═══════════════════════════════════════════════════════ */}
-      <AnimatePresence>
-        {showAddModal && (
-          <motion.div
-            className="fixed inset-0 z-50 flex items-center justify-center p-4"
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-          >
-            <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={() => setShowAddModal(false)} />
-            <motion.div
-              className="relative w-full max-w-md rounded-2xl p-6 border"
-              style={{ background: tk.card, borderColor: tk.cardBorder, boxShadow: '0 25px 60px rgba(0,0,0,0.18)', color: tk.text }}
-              initial={{ scale: 0.9, y: 20 }}
-              animate={{ scale: 1, y: 0 }}
-              exit={{ scale: 0.9, y: 20 }}
-            >
-              <div className="flex items-center justify-between mb-6">
-                <h3 className="text-lg font-bold" style={{ color: tk.text }}>Add {memberLabel}</h3>
-                <button onClick={() => setShowAddModal(false)} className="p-2 rounded-lg hover:bg-white/5">
-                  <X size={18} style={{ color: tk.textSec }} />
-                </button>
-              </div>
-
-              {/* Success State */}
-              {addSuccess ? (
-                <motion.div className="space-y-4" initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
-                  <div className="text-center py-4">
-                    <div className="w-14 h-14 rounded-full mx-auto mb-3 flex items-center justify-center" style={{ background: `${tk.mint}15` }}>
-                      <UserCheck size={28} style={{ color: tk.mint }} />
-                    </div>
-                    <h4 className="text-lg font-semibold" style={{ color: tk.text }}>{memberLabel} Added!</h4>
-                    <p className="text-sm mt-1" style={{ color: tk.textSec }}>{addSuccess.name} can now log in</p>
-                  </div>
-
-                  <div className="p-4 rounded-xl space-y-3" style={{ background: theme === 'light' ? '#FFFDF9' : 'rgba(255,255,255,0.03)', border: `1px solid ${tk.cardBorder}` }}>
-                    <div className="flex items-center justify-between">
+                    {/* ── Scope toggle (higher-scope inviters only) ── */}
+                    {inviterMaxScope !== 'group' && (
                       <div>
-                        <p className="text-xs" style={{ color: tk.textSec }}>Login ID</p>
-                        <p className="text-sm font-mono" style={{ color: tk.text }}>{addSuccess.id}</p>
+                        <label className="block text-sm font-medium mb-1.5" style={{ color: tk.text }}>Scope</label>
+                        <div className="grid grid-cols-2 gap-2">
+                          {([['class', 'Specific class'], ['org', 'Org-wide']] as const).map(([val, label]) => (
+                            <button
+                              key={val}
+                              onClick={() => setInviteScope(val)}
+                              className="py-2 rounded-lg text-xs font-medium transition-all"
+                              style={{
+                                background: inviteScope === val ? tk.primarySoft : theme === 'light' ? '#FFF6EE' : 'rgba(255,255,255,0.03)',
+                                border: `1px solid ${inviteScope === val ? tk.primaryRing : tk.cardBorder}`,
+                                color: inviteScope === val ? tk.primary : tk.textSec,
+                              }}
+                            >
+                              {label}
+                            </button>
+                          ))}
+                        </div>
                       </div>
-                      <button onClick={() => copyCredentials(addSuccess.id, addSuccess.password)} className="p-2 rounded-lg hover:bg-white/5" title="Copy">
-                        <Copy size={14} style={{ color: tk.primary }} />
-                      </button>
-                    </div>
-                    <div>
-                      <p className="text-xs" style={{ color: tk.textSec }}>Default Password</p>
-                      <p className="text-sm font-mono" style={{ color: tk.text }}>{addSuccess.password}</p>
-                    </div>
-                    <p className="text-xs" style={{ color: tk.amber }}>
-                      Share these credentials securely. They'll be asked to change their password on first login.
-                    </p>
-                  </div>
+                    )}
 
-                  <div className="flex gap-2">
+                    {/* ── Class picker (when scope is 'class' AND inviter has options) ── */}
+                    {inviterMaxScope !== 'group' && inviteScope === 'class' && (
+                      <div>
+                        <label className="block text-sm font-medium mb-1.5" style={{ color: tk.text }}>
+                          {inviterMaxScope === 'unit' ? 'Class under your unit' : 'Class'}
+                        </label>
+                        {inviteClassesLoading ? (
+                          <div className="text-xs flex items-center gap-2" style={{ color: tk.textTer }}>
+                            <Loader2 size={14} className="animate-spin" /> Loading classes…
+                          </div>
+                        ) : inviteClasses.length === 0 ? (
+                          <p className="text-xs" style={{ color: tk.textTer }}>
+                            No classes available in your scope yet.
+                          </p>
+                        ) : (
+                          <select
+                            value={inviteTargetGroupId}
+                            onChange={(e) => setInviteTargetGroupId(e.target.value)}
+                            className="w-full rounded-lg px-3 py-2 text-sm outline-none"
+                            style={{ background: theme === 'light' ? '#FFFDF9' : 'rgba(0,0,0,0.25)', border: `1px solid ${tk.cardBorder}`, color: tk.text }}
+                          >
+                            <option value="">— Pick a class —</option>
+                            {inviteClasses.map((c) => (
+                              <option key={c.id} value={c.id}>{c.name} {c.short_name ? `(${c.short_name})` : ''}</option>
+                            ))}
+                          </select>
+                        )}
+                      </div>
+                    )}
+
                     <button
-                      onClick={() => setAddSuccess(null)}
-                      className="flex-1 px-4 py-2.5 rounded-xl text-sm font-medium"
+                      onClick={generateInviteLink}
+                      disabled={inviteLoading}
+                      className="w-full px-6 py-3 rounded-xl font-semibold flex items-center justify-center gap-2 transition-all hover:scale-[1.02] active:scale-[0.98] disabled:opacity-60"
                       style={{ background: tk.gradOrange, color: '#FFFFFF' }}
                     >
-                      Add Another
-                    </button>
-                    <button
-                      onClick={() => setShowAddModal(false)}
-                      className="px-4 py-2.5 rounded-xl text-sm font-medium"
-                      style={{ color: tk.textSec, border: `1px solid ${tk.cardBorder}` }}
-                    >
-                      Done
+                      {inviteLoading ? <><Loader2 size={16} className="animate-spin" /> Generating...</> : <><Link2 size={16} /> Generate Link</>}
                     </button>
                   </div>
-                </motion.div>
-              ) : (
-                <div className="space-y-4">
-                  {addError && (
-                    <div className="flex items-start gap-2 p-3 rounded-xl text-sm" style={{ background: `${tk.danger}10`, color: tk.danger, border: `1px solid ${tk.danger}25` }}>
-                      <AlertTriangle size={16} className="mt-0.5 shrink-0" />
-                      {addError}
-                    </div>
-                  )}
-
-                  <div>
-                    <label className="block text-sm font-medium mb-1.5" style={{ color: tk.text }}>{memberLabel} ID *</label>
-                    <input
-                      type="text"
-                      placeholder={organization?.organization_type === 'university' ? 'e.g. CSC/2020/001' : 'e.g. MEM001'}
-                      value={newMember.member_id}
-                      onChange={e => setNewMember(prev => ({ ...prev, member_id: e.target.value }))}
-                      className="w-full rounded-xl px-4 py-3 outline-none transition-colors text-sm"
-                      style={{ background: theme === 'light' ? '#FFFDF9' : 'rgba(255,255,255,0.04)', border: `1px solid ${tk.cardBorder}`, color: tk.text }}
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block text-sm font-medium mb-1.5" style={{ color: tk.text }}>Full Name *</label>
-                    <input
-                      type="text"
-                      placeholder="e.g. John Doe"
-                      value={newMember.full_name}
-                      onChange={e => setNewMember(prev => ({ ...prev, full_name: e.target.value }))}
-                      className="w-full rounded-xl px-4 py-3 outline-none transition-colors text-sm"
-                      style={{ background: theme === 'light' ? '#FFFDF9' : 'rgba(255,255,255,0.04)', border: `1px solid ${tk.cardBorder}`, color: tk.text }}
-                    />
-                  </div>
-
-                  <div className="grid grid-cols-2 gap-3">
-                    <div>
-                      <label className="block text-sm font-medium mb-1.5" style={{ color: tk.text }}>Email</label>
-                      <input
-                        type="email"
-                        placeholder="Optional"
-                        value={newMember.email}
-                        onChange={e => setNewMember(prev => ({ ...prev, email: e.target.value }))}
-                        className="w-full rounded-xl px-4 py-3 outline-none transition-colors text-sm"
-                        style={{ background: theme === 'light' ? '#FFFDF9' : 'rgba(255,255,255,0.04)', border: `1px solid ${tk.cardBorder}`, color: tk.text }}
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium mb-1.5" style={{ color: tk.text }}>Phone</label>
-                      <input
-                        type="tel"
-                        placeholder="Optional"
-                        value={newMember.phone}
-                        onChange={e => setNewMember(prev => ({ ...prev, phone: e.target.value }))}
-                        className="w-full rounded-xl px-4 py-3 outline-none transition-colors text-sm"
-                        style={{ background: theme === 'light' ? '#FFFDF9' : 'rgba(255,255,255,0.04)', border: `1px solid ${tk.cardBorder}`, color: tk.text }}
-                      />
-                    </div>
-                  </div>
-
-                  <div>
-                    <label className="block text-sm font-medium mb-1.5" style={{ color: tk.text }}>Level / Year</label>
-                    <input
-                      type="text"
-                      placeholder="e.g. 200L, Year 2, Grade 10"
-                      value={newMember.level}
-                      onChange={e => setNewMember(prev => ({ ...prev, level: e.target.value }))}
-                      className="w-full rounded-xl px-4 py-3 outline-none transition-colors text-sm"
-                      style={{ background: theme === 'light' ? '#FFFDF9' : 'rgba(255,255,255,0.04)', border: `1px solid ${tk.cardBorder}`, color: tk.text }}
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block text-sm font-medium mb-1.5" style={{ color: tk.text }}>Default Password</label>
-                    <input
-                      type="text"
-                      value={newMember.password}
-                      onChange={e => setNewMember(prev => ({ ...prev, password: e.target.value }))}
-                      placeholder={newMember.member_id || 'Same as ID (auto)'}
-                      className="w-full rounded-xl px-4 py-3 outline-none transition-colors text-sm font-mono"
-                      style={{ background: theme === 'light' ? '#FFFDF9' : 'rgba(255,255,255,0.04)', border: `1px solid ${tk.cardBorder}`, color: tk.text }}
-                    />
-                    <p className="text-xs mt-1" style={{ color: tk.textSec }}>
-                      Defaults to their ID/Reg Number. {memberLabel} will be forced to change on first login.
-                    </p>
-                  </div>
-
-                  <button
-                    onClick={handleAddMember}
-                    disabled={addLoading}
-                    className="w-full flex items-center justify-center gap-2 px-4 py-3 rounded-xl font-semibold text-sm transition-all hover:scale-[1.02] active:scale-[0.98] disabled:opacity-60"
-                    style={{ background: tk.gradOrange, color: '#FFFFFF' }}
-                  >
-                    {addLoading ? <><Loader2 size={16} className="animate-spin" /> Adding...</> : <><UserPlus size={16} /> Add {memberLabel}</>}
-                  </button>
-                </div>
-              )}
-            </motion.div>
-          </motion.div>
-        )}
-      </AnimatePresence>
-
-      {/* ═══════════════════════════════════════════════════════ */}
-      {/* BULK IMPORT MODAL                                      */}
-      {/* ═══════════════════════════════════════════════════════ */}
-      <AnimatePresence>
-        {showBulkModal && (
-          <motion.div
-            className="fixed inset-0 z-50 flex items-center justify-center p-4"
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-          >
-            <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={() => { setShowBulkModal(false); resetBulkModal(); }} />
-            <motion.div
-              className="relative w-full max-w-2xl rounded-2xl border max-h-[90vh] flex flex-col"
-              style={{ background: colors.secondaryLight, borderColor: colors.borderLight, boxShadow: '0 25px 60px rgba(0,0,0,0.6)' }}
-              initial={{ scale: 0.9, y: 20 }}
-              animate={{ scale: 1, y: 0 }}
-              exit={{ scale: 0.9, y: 20 }}
-            >
-              {/* Header */}
-              <div className="flex items-center justify-between px-6 py-4 border-b" style={{ borderColor: 'rgba(255,255,255,0.06)' }}>
-                <div className="flex items-center gap-3">
-                  <div className="w-9 h-9 rounded-xl flex items-center justify-center" style={{ background: `${colors.primary}15`, color: colors.primary }}>
-                    <FileUp size={18} />
-                  </div>
-                  <div>
-                    <h3 className="text-lg font-bold text-white">Import {memberLabelPlural}</h3>
-                    <p className="text-xs" style={{ color: colors.textTertiary }}>
-                      {importStep === 'upload' && 'Upload a file or paste data'}
-                      {importStep === 'preview' && `${parsedPreview?.members.length || 0} ${memberLabelPlural.toLowerCase()} ready`}
-                      {importStep === 'result' && 'Import complete'}
-                    </p>
-                  </div>
-                </div>
-                <button onClick={() => { setShowBulkModal(false); resetBulkModal(); }} className="p-2 rounded-lg hover:bg-white/5 transition-colors">
-                  <X size={18} className="text-white" />
-                </button>
-              </div>
-
-              {/* Step indicator */}
-              <div className="flex items-center gap-2 px-6 py-3" style={{ borderBottom: `1px solid rgba(255,255,255,0.04)` }}>
-                {(['upload', 'preview', 'result'] as const).map((step, i) => (
-                  <div key={step} className="flex items-center gap-2">
-                    <div
-                      className="w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold transition-all"
-                      style={{
-                        background: importStep === step ? colors.primary : (['upload', 'preview', 'result'].indexOf(importStep) > i ? `${colors.success}20` : 'rgba(255,255,255,0.06)'),
-                        color: importStep === step ? '#fff' : (['upload', 'preview', 'result'].indexOf(importStep) > i ? colors.success : colors.textTertiary),
-                      }}
-                    >
-                      {['upload', 'preview', 'result'].indexOf(importStep) > i ? <Check size={12} /> : i + 1}
-                    </div>
-                    <span className="text-xs capitalize hidden sm:inline" style={{ color: importStep === step ? 'white' : colors.textTertiary }}>{step}</span>
-                    {i < 2 && <div className="w-6 h-px mx-1" style={{ background: 'rgba(255,255,255,0.1)' }} />}
-                  </div>
-                ))}
-              </div>
-
-              {/* Content (scrollable) */}
-              <div className="flex-1 overflow-y-auto modal-scrollbar px-6 py-4 space-y-4">
-                {/* ── Step 1: Upload ── */}
-                {importStep === 'upload' && (
-                  <>
-                    {/* Supported formats banner */}
-                    <div className="p-3 rounded-xl" style={{ background: `${colors.primary}06`, border: `1px solid ${colors.borderPrimary}` }}>
-                      <div className="flex items-center gap-2 mb-2">
-                        <FileSpreadsheet size={14} style={{ color: colors.primary }} />
-                        <p className="text-xs font-semibold" style={{ color: colors.primary }}>Supported Formats</p>
-                      </div>
-                      <div className="flex flex-wrap gap-2">
-                        {[
-                          { ext: 'Excel', desc: '.xlsx / .xls', icon: <FileSpreadsheet size={12} /> },
-                          { ext: 'CSV', desc: '.csv', icon: <FileText size={12} /> },
-                          { ext: 'Word', desc: '.docx (tables)', icon: <FileText size={12} /> },
-                          { ext: 'Text', desc: '.txt / .tsv', icon: <FileText size={12} /> },
-                        ].map(f => (
-                          <span key={f.ext} className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs" style={{ background: 'rgba(255,255,255,0.04)', color: colors.textSecondary }}>
-                            {f.icon} {f.ext} <span style={{ color: colors.textTertiary }}>{f.desc}</span>
-                          </span>
-                        ))}
-                      </div>
-                      <p className="text-xs mt-2" style={{ color: colors.textTertiary }}>
-                        Columns auto-detected: ID, Name, Email, Phone. Headers like "Matric No", "Student Name", "Mobile" etc. are recognized automatically.
-                      </p>
+                ) : (
+                  <div className="space-y-4">
+                    {/* Generated Link */}
+                    <div className="p-3 rounded-xl" style={{ background: theme === 'light' ? '#FFFDF9' : 'rgba(255,255,255,0.03)', border: `1px solid ${tk.cardBorder}` }}>
+                      <p className="text-xs font-medium mb-2" style={{ color: tk.textSec }}>Invite Link</p>
+                      <p className="text-xs sm:text-sm break-all font-mono leading-relaxed" style={{ color: tk.text }}>{inviteLink}</p>
                     </div>
 
-                    {/* Drag & Drop zone */}
-                    <input
-                      ref={fileInputRef}
-                      type="file"
-                      accept={getFileAcceptAttribute()}
-                      onChange={handleFileUpload}
-                      className="hidden"
-                    />
-                    <div
-                      ref={dropZoneRef}
-                      onDragEnter={handleDragEnter}
-                      onDragLeave={handleDragLeave}
-                      onDragOver={handleDragOver}
-                      onDrop={handleDrop}
-                      onClick={() => fileInputRef.current?.click()}
-                      className="relative cursor-pointer rounded-2xl p-8 text-center transition-all"
-                      style={{
-                        border: `2px dashed ${dragActive ? colors.primary : colors.borderMedium}`,
-                        background: dragActive ? `${colors.primary}08` : 'rgba(255,255,255,0.02)',
-                      }}
-                    >
-                      <motion.div
-                        animate={{ scale: dragActive ? 1.05 : 1 }}
-                        className="flex flex-col items-center gap-3"
-                      >
-                        <div className="w-14 h-14 rounded-2xl flex items-center justify-center" style={{ background: `${colors.primary}12`, color: colors.primary }}>
-                          <Upload size={24} />
-                        </div>
-                        <div>
-                          <p className="text-sm font-medium text-white">
-                            {dragActive ? 'Drop your file here' : 'Drag & drop your file here'}
-                          </p>
-                          <p className="text-xs mt-1" style={{ color: colors.textTertiary }}>
-                            or <span style={{ color: colors.primary, fontWeight: 600 }}>click to browse</span> — Excel, CSV, Word, or Text
-                          </p>
-                        </div>
-                      </motion.div>
+                    <div className="p-3 rounded-xl text-center" style={{ background: tk.primarySoft, border: `1px solid ${tk.primaryRing}` }}>
+                      <p className="text-xs font-medium mb-1" style={{ color: tk.textSec }}>Invite Code</p>
+                      <p className="text-xl sm:text-2xl font-bold tracking-[0.18em] sm:tracking-[0.3em] break-all" style={{ color: tk.text }}>{inviteCode}</p>
                     </div>
 
-                    {/* Divider */}
-                    <div className="flex items-center gap-3">
-                      <div className="flex-1 h-px" style={{ background: 'rgba(255,255,255,0.06)' }} />
-                      <span className="text-xs font-medium" style={{ color: colors.textTertiary }}>or paste data</span>
-                      <div className="flex-1 h-px" style={{ background: 'rgba(255,255,255,0.06)' }} />
-                    </div>
-
-                    {/* Paste area */}
-                    <textarea
-                      value={csvData}
-                      onChange={e => setCsvData(e.target.value)}
-                      placeholder={`Paste your data here (CSV, tab-separated, etc.)\n\nExample:\nCSC/2020/001, John Doe, john@email.com, 08012345678\nCSC/2020/002, Jane Smith, , 08087654321`}
-                      rows={5}
-                      className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white placeholder-gray-500 outline-none focus:border-[#FF6803] transition-colors text-sm font-mono resize-none"
-                    />
-
-                    {csvData.trim() && (
+                    <div className="flex flex-col sm:flex-row gap-2">
                       <button
-                        onClick={handlePastePreview}
-                        className="w-full flex items-center justify-center gap-2 px-4 py-3 rounded-xl text-white font-semibold text-sm transition-all hover:scale-[1.02]"
-                        style={{ background: colors.primary }}
-                      >
-                        <Eye size={16} /> Preview Pasted Data
-                      </button>
-                    )}
-
-                    {/* Parse warnings (shown if user uploaded but got 0 members) */}
-                    {parsedPreview && parsedPreview.members.length === 0 && parsedPreview.warnings.length > 0 && (
-                      <div className="p-3 rounded-xl space-y-1" style={{ background: `${colors.error}08`, border: `1px solid ${colors.error}20` }}>
-                        <p className="text-xs font-semibold" style={{ color: colors.error }}>Could not parse any {memberLabelPlural.toLowerCase()}</p>
-                        {parsedPreview.warnings.map((w, i) => (
-                          <p key={i} className="text-xs" style={{ color: colors.error }}>{w}</p>
-                        ))}
-                      </div>
-                    )}
-                  </>
-                )}
-
-                {/* ── Step 2: Preview ── */}
-                {importStep === 'preview' && parsedPreview && (
-                  <>
-                    {/* Summary bar */}
-                    <div className="flex flex-wrap items-center gap-3">
-                      <div className="flex items-center gap-2 px-3 py-2 rounded-xl" style={{ background: `${colors.success}08`, border: `1px solid ${colors.success}20` }}>
-                        <CheckCircle size={14} style={{ color: colors.success }} />
-                        <span className="text-xs font-medium" style={{ color: colors.success }}>
-                          {parsedPreview.members.length} {memberLabelPlural.toLowerCase()} found
-                        </span>
-                      </div>
-                      {uploadedFileName && (
-                        <div className="flex items-center gap-2 px-3 py-2 rounded-xl" style={{ background: 'rgba(255,255,255,0.04)' }}>
-                          <FileText size={14} style={{ color: colors.textTertiary }} />
-                          <span className="text-xs" style={{ color: colors.textSecondary }}>{uploadedFileName}</span>
-                          <span className="text-xs px-1.5 py-0.5 rounded-md font-mono" style={{ background: `${colors.primary}15`, color: colors.primary }}>
-                            {parsedPreview.detectedFormat}
-                          </span>
-                        </div>
-                      )}
-                      {parsedPreview.skippedRows > 0 && (
-                        <span className="text-xs" style={{ color: colors.warning }}>
-                          {parsedPreview.skippedRows} row{parsedPreview.skippedRows !== 1 ? 's' : ''} skipped
-                        </span>
-                      )}
-                    </div>
-
-                    {/* Column mapping info */}
-                    {Object.keys(parsedPreview.columnMapping).length > 0 && (
-                      <div className="p-3 rounded-xl" style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.06)' }}>
-                        <p className="text-xs font-medium mb-2" style={{ color: colors.textTertiary }}>Detected column mapping:</p>
-                        <div className="flex flex-wrap gap-2">
-                          {Object.entries(parsedPreview.columnMapping).map(([field, col]) => (
-                            <span key={field} className="text-xs px-2 py-1 rounded-md" style={{ background: 'rgba(255,255,255,0.05)', color: colors.textSecondary }}>
-                              <span style={{ color: colors.primary }}>{field}</span> ← "{col}"
-                            </span>
-                          ))}
-                        </div>
-                      </div>
-                    )}
-
-                    {/* Warnings */}
-                    {parsedPreview.warnings.length > 0 && (
-                      <div className="p-3 rounded-xl" style={{ background: `${colors.warning}06`, border: `1px solid ${colors.warning}15` }}>
-                        <div className="flex items-center gap-2 mb-1.5">
-                          <AlertTriangle size={12} style={{ color: colors.warning }} />
-                          <p className="text-xs font-semibold" style={{ color: colors.warning }}>{parsedPreview.warnings.length} warning{parsedPreview.warnings.length !== 1 ? 's' : ''}</p>
-                        </div>
-                        <div className="max-h-20 overflow-y-auto modal-scrollbar space-y-0.5">
-                          {parsedPreview.warnings.map((w, i) => (
-                            <p key={i} className="text-xs" style={{ color: colors.textTertiary }}>{w}</p>
-                          ))}
-                        </div>
-                      </div>
-                    )}
-
-                    {/* Preview table */}
-                    <div className="rounded-xl border overflow-hidden" style={{ borderColor: 'rgba(255,255,255,0.06)' }}>
-                      <div className="overflow-x-auto">
-                        <table className="w-full text-xs">
-                          <thead>
-                            <tr style={{ background: 'rgba(255,255,255,0.03)' }}>
-                              <th className="text-left px-3 py-2 font-semibold" style={{ color: colors.textTertiary }}>#</th>
-                              <th className="text-left px-3 py-2 font-semibold" style={{ color: colors.textTertiary }}>ID</th>
-                              <th className="text-left px-3 py-2 font-semibold" style={{ color: colors.textTertiary }}>Name</th>
-                              <th className="text-left px-3 py-2 font-semibold hidden sm:table-cell" style={{ color: colors.textTertiary }}>Email</th>
-                              <th className="text-left px-3 py-2 font-semibold hidden sm:table-cell" style={{ color: colors.textTertiary }}>Phone</th>
-                            </tr>
-                          </thead>
-                          <tbody className="divide-y" style={{ borderColor: 'rgba(255,255,255,0.04)' }}>
-                            {parsedPreview.members.slice(0, 50).map((m, i) => (
-                              <tr key={i} className="hover:bg-white/2 transition-colors" style={{ borderColor: 'rgba(255,255,255,0.04)' }}>
-                                <td className="px-3 py-2" style={{ color: colors.textTertiary }}>{i + 1}</td>
-                                <td className="px-3 py-2 font-mono" style={{ color: colors.textSecondary }}>{m.member_id}</td>
-                                <td className="px-3 py-2 text-white font-medium">{m.full_name}</td>
-                                <td className="px-3 py-2 hidden sm:table-cell" style={{ color: m.email ? colors.textSecondary : colors.textDisabled }}>{m.email || '—'}</td>
-                                <td className="px-3 py-2 hidden sm:table-cell" style={{ color: m.phone ? colors.textSecondary : colors.textDisabled }}>{m.phone || '—'}</td>
-                              </tr>
-                            ))}
-                          </tbody>
-                        </table>
-                      </div>
-                      {parsedPreview.members.length > 50 && (
-                        <div className="px-3 py-2 text-center" style={{ background: 'rgba(255,255,255,0.02)', color: colors.textTertiary }}>
-                          <span className="text-xs">Showing 50 of {parsedPreview.members.length} — all will be imported</span>
-                        </div>
-                      )}
-                    </div>
-
-                    <div className="p-3 rounded-xl" style={{ background: `${colors.primary}06`, border: `1px solid ${colors.borderPrimary}` }}>
-                      <p className="text-xs" style={{ color: colors.textTertiary }}>
-                        All {memberLabelPlural.toLowerCase()} will be created with default password: <span className="font-mono font-semibold" style={{ color: colors.primary }}>{DEFAULT_PASSWORD}</span>
-                        <br />They will be prompted to change it on first login.
-                      </p>
-                    </div>
-                  </>
-                )}
-
-                {/* ── Step 3: Result ── */}
-                {importStep === 'result' && bulkResult && (
-                  <>
-                    <motion.div
-                      className="flex flex-col items-center gap-4 py-4"
-                      initial={{ opacity: 0, scale: 0.9 }}
-                      animate={{ opacity: 1, scale: 1 }}
-                    >
-                      <div
-                        className="w-16 h-16 rounded-full flex items-center justify-center"
-                        style={{ background: bulkResult.failed === 0 ? `${colors.success}15` : `${colors.warning}15` }}
-                      >
-                        {bulkResult.failed === 0 ? (
-                          <CheckCircle size={32} style={{ color: colors.success }} />
-                        ) : (
-                          <AlertTriangle size={32} style={{ color: colors.warning }} />
-                        )}
-                      </div>
-                      <div className="text-center">
-                        <p className="text-xl font-bold text-white">
-                          {bulkResult.added} {memberLabelPlural} Added
-                        </p>
-                        {bulkResult.failed > 0 && (
-                          <p className="text-sm mt-1" style={{ color: colors.warning }}>
-                            {bulkResult.failed} failed
-                          </p>
-                        )}
-                      </div>
-                    </motion.div>
-
-                    {bulkResult.errors.length > 0 && (
-                      <div className="p-3 rounded-xl" style={{ background: `${colors.error}06`, border: `1px solid ${colors.error}15` }}>
-                        <p className="text-xs font-semibold mb-2" style={{ color: colors.error }}>Errors:</p>
-                        <div className="max-h-32 overflow-y-auto modal-scrollbar space-y-1">
-                          {bulkResult.errors.map((err, i) => (
-                            <p key={i} className="text-xs" style={{ color: colors.textTertiary }}>{err}</p>
-                          ))}
-                        </div>
-                      </div>
-                    )}
-
-                    <div className="p-3 rounded-xl" style={{ background: 'rgba(255,255,255,0.03)' }}>
-                      <p className="text-xs" style={{ color: colors.textTertiary }}>
-                        Default password: <span className="font-mono font-semibold" style={{ color: colors.primary }}>{DEFAULT_PASSWORD}</span>
-                      </p>
-                    </div>
-                  </>
-                )}
-              </div>
-
-              {/* Footer actions */}
-              <div className="px-6 py-4 border-t flex items-center gap-3" style={{ borderColor: 'rgba(255,255,255,0.06)' }}>
-                {importStep === 'upload' && (
-                  <button
-                    onClick={() => { setShowBulkModal(false); resetBulkModal(); }}
-                    className="flex-1 px-4 py-3 rounded-xl text-sm font-medium transition-all hover:bg-white/5"
-                    style={{ color: colors.textSecondary, border: `1px solid ${colors.borderLight}` }}
-                  >
-                    Cancel
-                  </button>
-                )}
-
-                {importStep === 'preview' && (
-                  <>
-                    <button
-                      onClick={() => { setImportStep('upload'); setParsedPreview(null); }}
-                      className="flex items-center justify-center gap-2 px-4 py-3 rounded-xl text-sm font-medium transition-all hover:bg-white/5"
-                      style={{ color: colors.textSecondary, border: `1px solid ${colors.borderLight}` }}
-                    >
-                      <RotateCcw size={14} /> Back
-                    </button>
-                    <button
-                      onClick={handleBulkImport}
-                      disabled={bulkLoading}
-                      className="flex-1 flex items-center justify-center gap-2 px-4 py-3 rounded-xl text-white font-semibold text-sm transition-all hover:scale-[1.02] disabled:opacity-60"
-                      style={{ background: colors.primary }}
-                    >
-                      {bulkLoading ? (
-                        <><Loader2 size={16} className="animate-spin" /> Importing {parsedPreview?.members.length || 0}...</>
-                      ) : (
-                        <><Download size={16} /> Import {parsedPreview?.members.length || 0} {memberLabelPlural}</>
-                      )}
-                    </button>
-                  </>
-                )}
-
-                {importStep === 'result' && (
-                  <>
-                    <button
-                      onClick={resetBulkModal}
-                      className="flex items-center justify-center gap-2 px-4 py-3 rounded-xl text-sm font-medium transition-all hover:bg-white/5"
-                      style={{ color: colors.textSecondary, border: `1px solid ${colors.borderLight}` }}
-                    >
-                      <RotateCcw size={14} /> Import More
-                    </button>
-                    <button
-                      onClick={() => { setShowBulkModal(false); resetBulkModal(); }}
-                      className="flex-1 flex items-center justify-center gap-2 px-4 py-3 rounded-xl text-white font-semibold text-sm transition-all hover:scale-[1.02]"
-                      style={{ background: colors.primary }}
-                    >
-                      <Check size={16} /> Done
-                    </button>
-                  </>
-                )}
-              </div>
-            </motion.div>
-          </motion.div>
-        )}
-      </AnimatePresence>
-
-      {/* ═══════════════════════════════════════════════════════ */}
-      {/* EDIT MEMBER MODAL                                      */}
-      {/* ═══════════════════════════════════════════════════════ */}
-      <AnimatePresence>
-        {showEditModal && editingMember && (
-          <motion.div
-            className="fixed inset-0 z-50 flex items-center justify-center p-4"
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-          >
-            <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={() => { setShowEditModal(false); setEditingMember(null); }} />
-            <motion.div
-              className="relative w-full max-w-md rounded-2xl p-6 border"
-              style={{ background: colors.secondaryLight, borderColor: colors.borderLight, boxShadow: '0 25px 60px rgba(0,0,0,0.6)' }}
-              initial={{ scale: 0.9, y: 20 }}
-              animate={{ scale: 1, y: 0 }}
-              exit={{ scale: 0.9, y: 20 }}
-            >
-              <div className="flex items-center justify-between mb-6">
-                <h3 className="text-lg font-bold text-white">Edit {memberLabel}</h3>
-                <button onClick={() => { setShowEditModal(false); setEditingMember(null); }} className="p-2 rounded-lg hover:bg-white/5">
-                  <X size={18} className="text-white" />
-                </button>
-              </div>
-
-              <div className="space-y-4">
-                <div>
-                  <label className="block text-sm font-medium text-white mb-1.5">Full Name</label>
-                  <input
-                    type="text"
-                    value={editingMember.full_name}
-                    onChange={e => setEditingMember(prev => prev ? { ...prev, full_name: e.target.value } : null)}
-                    className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white outline-none focus:border-[#FF6803] transition-colors text-sm"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-white mb-1.5">{memberLabel} ID</label>
-                  <input
-                    type="text"
-                    value={editingMember.member_id}
-                    disabled
-                    className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white/50 outline-none text-sm cursor-not-allowed"
-                  />
-                </div>
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <label className="block text-sm font-medium text-white mb-1.5">Email</label>
-                    <input
-                      type="email"
-                      value={editingMember.email || ''}
-                      onChange={e => setEditingMember(prev => prev ? { ...prev, email: e.target.value || null } : null)}
-                      className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white outline-none focus:border-[#FF6803] transition-colors text-sm"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-white mb-1.5">Phone</label>
-                    <input
-                      type="tel"
-                      value={editingMember.phone || ''}
-                      onChange={e => setEditingMember(prev => prev ? { ...prev, phone: e.target.value || null } : null)}
-                      className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white outline-none focus:border-[#FF6803] transition-colors text-sm"
-                    />
-                  </div>
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-white mb-1.5">Level / Year</label>
-                  <input
-                    type="text"
-                    placeholder="e.g. 200L, Year 2"
-                    value={editingMember.level || ''}
-                    onChange={e => setEditingMember(prev => prev ? { ...prev, level: e.target.value || null } : null)}
-                    className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white outline-none focus:border-[#FF6803] transition-colors text-sm"
-                  />
-                </div>
-
-                <div className="flex gap-2 pt-2">
-                  <button
-                    onClick={() => { setShowEditModal(false); setEditingMember(null); }}
-                    className="flex-1 px-4 py-2.5 rounded-xl text-sm font-medium"
-                    style={{ color: colors.textSecondary, border: `1px solid ${colors.borderLight}` }}
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    onClick={handleEditMember}
-                    className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl text-white text-sm font-semibold"
-                    style={{ background: colors.primary }}
-                  >
-                    <Check size={16} /> Save Changes
-                  </button>
-                </div>
-              </div>
-            </motion.div>
-          </motion.div>
-        )}
-      </AnimatePresence>
-
-      {/* ═══════════════════════════════════════════════════════ */}
-      {/* PASSWORD RESET SUCCESS CARD                             */}
-      {/* ═══════════════════════════════════════════════════════ */}
-      <AnimatePresence>
-        {addSuccess && !showAddModal && (
-          <motion.div
-            className="fixed inset-0 z-50 flex items-center justify-center p-4"
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-          >
-            <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={() => setAddSuccess(null)} />
-            <motion.div
-              className="relative w-full max-w-sm rounded-2xl p-6 border"
-              style={{ background: colors.secondaryLight, borderColor: colors.borderLight, boxShadow: '0 25px 60px rgba(0,0,0,0.6)' }}
-              initial={{ scale: 0.9, y: 20 }}
-              animate={{ scale: 1, y: 0 }}
-              exit={{ scale: 0.9, y: 20 }}
-            >
-              {/* Success icon */}
-              <div className="flex flex-col items-center text-center mb-5">
-                <div className="w-14 h-14 rounded-full flex items-center justify-center mb-3" style={{ background: `${colors.success}15` }}>
-                  <CheckCircle size={28} style={{ color: colors.success }} />
-                </div>
-                <h3 className="text-lg font-bold text-white">Password Reset Successful</h3>
-                <p className="text-xs mt-1" style={{ color: colors.textTertiary }}>
-                  {addSuccess.name}'s password has been reset
-                </p>
-              </div>
-
-              {/* Credentials card */}
-              <div className="rounded-xl p-4 mb-4 space-y-3" style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)' }}>
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-[10px] uppercase tracking-wider font-medium" style={{ color: colors.textTertiary }}>Login ID</p>
-                    <p className="text-sm font-mono font-semibold text-white mt-0.5">{addSuccess.id}</p>
-                  </div>
-                </div>
-                <div className="h-px" style={{ background: 'rgba(255,255,255,0.06)' }} />
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-[10px] uppercase tracking-wider font-medium" style={{ color: colors.textTertiary }}>New Password</p>
-                    <p className="text-sm font-mono font-semibold text-white mt-0.5">{addSuccess.password}</p>
-                  </div>
-                  <button
-                    onClick={() => copyCredentials(addSuccess.id, addSuccess.password)}
-                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all hover:scale-105"
-                    style={{ background: `${colors.primary}15`, color: colors.primary }}
-                  >
-                    <Copy size={12} /> Copy
-                  </button>
-                </div>
-              </div>
-
-              <p className="text-xs text-center mb-4" style={{ color: colors.textTertiary }}>
-                {memberLabel} will be prompted to change this on next login.
-              </p>
-
-              <button
-                onClick={() => setAddSuccess(null)}
-                className="w-full flex items-center justify-center gap-2 px-4 py-3 rounded-xl text-white font-semibold text-sm transition-all hover:scale-[1.02] active:scale-[0.98]"
-                style={{ background: colors.primary }}
-              >
-                <Check size={16} /> Done
-              </button>
-            </motion.div>
-          </motion.div>
-        )}
-      </AnimatePresence>
-
-      {/* ═══════════════════════════════════════════════════════ */}
-      {/* EXPORT FIELD SELECTION MODAL                           */}
-      {/* ═══════════════════════════════════════════════════════ */}
-      <AnimatePresence>
-        {showExportModal && (
-          <motion.div
-            className="fixed inset-0 z-50 flex items-center justify-center p-4"
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-          >
-            <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={() => setShowExportModal(false)} />
-            <motion.div
-              className="relative w-full max-w-lg rounded-2xl border max-h-[90vh] flex flex-col"
-              style={{ background: colors.secondaryLight, borderColor: colors.borderLight, boxShadow: '0 25px 60px rgba(0,0,0,0.6)' }}
-              initial={{ scale: 0.9, y: 20 }}
-              animate={{ scale: 1, y: 0 }}
-              exit={{ scale: 0.9, y: 20 }}
-            >
-              {/* Header */}
-              <div className="flex items-center justify-between px-6 pt-6 pb-4" style={{ borderBottom: `1px solid rgba(255,255,255,0.06)` }}>
-                <div className="flex items-center gap-3">
-                  <div className="w-12 h-12 rounded-xl flex items-center justify-center" style={{ background: `linear-gradient(135deg, ${colors.primary}30, ${colors.primary}10)`, border: `1px solid ${colors.primary}40` }}>
-                    <Download size={22} style={{ color: colors.primary }} />
-                  </div>
-                  <div>
-                    <h3 className="text-lg font-bold text-white">Export {memberLabelPlural}</h3>
-                    <p className="text-xs" style={{ color: colors.textTertiary }}>
-                      {selectedIds.size > 0 ? `${selectedIds.size} selected` : `All ${filtered.length} ${memberLabelPlural.toLowerCase()}`}
-                    </p>
-                  </div>
-                </div>
-                <button onClick={() => setShowExportModal(false)} className="p-2 rounded-lg hover:bg-white/5 transition-colors">
-                  <X size={18} className="text-white" />
-                </button>
-              </div>
-
-              {/* Scrollable Content */}
-              <div className="flex-1 overflow-y-auto modal-scrollbar px-6 py-5 space-y-6">
-                {/* Format Selection */}
-                <div>
-                  <p className="text-xs font-semibold mb-3 uppercase tracking-wider" style={{ color: colors.textTertiary }}>Export Format</p>
-                  <div className="grid grid-cols-2 gap-3">
-                    {([
-                      { value: 'pdf' as const, label: 'PDF Document', desc: 'Professional formatted report', icon: <FileText size={20} />, color: colors.statusUnpaid },
-                      { value: 'csv' as const, label: 'CSV Spreadsheet', desc: 'Excel compatible format', icon: <FileSpreadsheet size={20} />, color: colors.accentMint },
-                    ]).map(fmt => (
-                      <button
-                        key={fmt.value}
-                        onClick={() => setExportFormat(fmt.value)}
-                        className="flex flex-col items-center gap-2.5 px-4 py-4 rounded-xl text-sm font-medium transition-all hover:scale-[1.02]"
+                        onClick={copyInviteLink}
+                        className="flex-1 px-4 py-3 rounded-xl text-sm font-medium flex items-center justify-center gap-2 transition-all hover:scale-[1.02]"
                         style={{
-                          background: exportFormat === fmt.value ? `${fmt.color}15` : 'rgba(255,255,255,0.03)',
-                          color: exportFormat === fmt.value ? fmt.color : colors.textSecondary,
-                          border: `1px solid ${exportFormat === fmt.value ? fmt.color + '50' : 'rgba(255,255,255,0.08)'}`,
-                          boxShadow: exportFormat === fmt.value ? `0 4px 15px ${fmt.color}20` : 'none',
+                          background: inviteCopied ? `${tk.mint}15` : tk.primarySoft,
+                          color: inviteCopied ? tk.mint : tk.primary,
+                          border: `1px solid ${inviteCopied ? tk.mint : tk.primary}30`,
                         }}
                       >
-                        <div className="w-10 h-10 rounded-lg flex items-center justify-center" style={{ background: `${fmt.color}20` }}>
-                          {fmt.icon}
-                        </div>
-                        <span className="font-semibold">{fmt.label}</span>
-                        <span className="text-[10px]" style={{ color: colors.textTertiary }}>{fmt.desc}</span>
+                        {inviteCopied ? <><Check size={16} /> Copied!</> : <><Copy size={16} /> Copy Link</>}
                       </button>
-                    ))}
-                  </div>
-                </div>
-
-                {/* Field Selection */}
-                <div>
-                  <p className="text-xs font-semibold mb-3 uppercase tracking-wider" style={{ color: colors.textTertiary }}>Include Fields</p>
-                  <div className="space-y-1.5 rounded-xl p-1" style={{ background: 'rgba(255,255,255,0.02)' }}>
-                    {([
-                      { key: 'name' as const, label: 'Full Name', always: true },
-                      { key: 'regNumber' as const, label: `${memberLabel} ID` },
-                      { key: 'level' as const, label: 'Level' },
-                      { key: 'department' as const, label: 'Department' },
-                      { key: 'email' as const, label: 'Email Address' },
-                      { key: 'phone' as const, label: 'Phone Number' },
-                      { key: 'status' as const, label: 'Active Status' },
-                      { key: 'roles' as const, label: 'Roles (Admin / FinSec / Rep)' },
-                      { key: 'joinDate' as const, label: 'Date Joined' },
-                    ]).map(field => (
                       <button
-                        key={field.key}
-                        onClick={() => {
-                          if ('always' in field && field.always) return;
-                          setExportFields(prev => ({ ...prev, [field.key]: !prev[field.key] }));
-                        }}
-                        className="w-full flex items-center justify-between px-4 py-3 rounded-xl text-sm transition-all hover:bg-white/5"
-                        style={{
-                          color: exportFields[field.key] ? 'white' : colors.textTertiary,
-                          background: exportFields[field.key] ? 'rgba(255,255,255,0.04)' : 'transparent',
-                          border: exportFields[field.key] ? `1px solid rgba(255,255,255,0.08)` : '1px solid transparent',
-                        }}
+                        onClick={shareInviteLink}
+                        className="flex-1 px-4 py-3 rounded-xl text-sm font-medium flex items-center justify-center gap-2 transition-all hover:scale-[1.02]"
+                        style={{ background: tk.primarySoft, color: tk.primary, border: `1px solid ${tk.primaryRing}` }}
                       >
-                        <span className="flex items-center gap-2.5">
-                          {field.label}
-                          {'always' in field && field.always && (
-                            <span className="text-[10px] px-2 py-0.5 rounded-full font-semibold" style={{ background: `${colors.primary}20`, color: colors.primary, border: `1px solid ${colors.primary}30` }}>Required</span>
-                          )}
-                        </span>
-                        {exportFields[field.key]
-                          ? <CheckSquare size={18} style={{ color: colors.primary }} />
-                          : <Square size={18} style={{ color: colors.textDisabled }} />}
+                        <Share2 size={16} /> Share
                       </button>
-                    ))}
+                    </div>
+
+                    <button
+                      onClick={() => { setInviteLink(''); setInviteCode(''); }}
+                      className="w-full text-center text-xs py-2 hover:underline"
+                      style={{ color: tk.textSec }}
+                    >
+                      Generate a new link
+                    </button>
                   </div>
-                </div>
-
-                {/* Export Info */}
-                <div className="p-3 rounded-xl flex items-center gap-3" style={{ background: `${colors.primary}08`, border: `1px solid ${colors.primary}20` }}>
-                  <Download size={14} style={{ color: colors.primary }} />
-                  <p className="text-xs" style={{ color: colors.textSecondary }}>
-                    Exporting {selectedIds.size > 0 ? selectedIds.size : filtered.length} {memberLabelPlural.toLowerCase()} as {exportFormat.toUpperCase()}
-                  </p>
-                </div>
-              </div>
-
-              {/* Footer Actions */}
-              <div className="flex gap-3 px-6 py-4" style={{ borderTop: '1px solid rgba(255,255,255,0.06)' }}>
-                <motion.button
-                  whileHover={{ scale: 1.02 }}
-                  whileTap={{ scale: 0.98 }}
-                  onClick={() => setShowExportModal(false)}
-                  className="flex-1 px-4 py-3 rounded-xl text-sm font-medium transition-all"
-                  style={{ color: colors.textSecondary, background: 'rgba(255,255,255,0.05)', border: `1px solid rgba(255,255,255,0.1)` }}
-                >
-                  Cancel
-                </motion.button>
-                <motion.button
-                  whileHover={{ scale: 1.02 }}
-                  whileTap={{ scale: 0.98 }}
-                  onClick={() => exportFormat === 'csv' ? handleExportCSV() : handleExportPDF()}
-                  disabled={exporting}
-                  className="flex-1 flex items-center justify-center gap-2 px-4 py-3 rounded-xl text-white font-semibold text-sm transition-all disabled:opacity-60"
-                  style={{ background: `linear-gradient(135deg, ${colors.accentMint}, ${colors.primary})`, boxShadow: `0 4px 15px ${colors.accentMint}40` }}
-                >
-                  {exporting ? <><Loader2 size={16} className="animate-spin" /> Exporting...</> : <><Download size={16} /> Export {exportFormat.toUpperCase()}</>}
-                </motion.button>
-              </div>
+                )}
+              </motion.div>
             </motion.div>
-          </motion.div>
-        )}
-      </AnimatePresence>
+          )}
+        </AnimatePresence>
 
-      {/* ═══════════════════════════════════════════════════════ */}
-      {/* ROLE MANAGEMENT MODAL                                  */}
-      {/* ═══════════════════════════════════════════════════════ */}
-      <AnimatePresence>
-        {showRoleModal && roleTarget && (() => {
-          const currentMember = members.find(m => m.id === roleTarget.id) || roleTarget;
-          const currentRoles = getMemberRoles(currentMember);
-          return (
+        {/* ═══════════════════════════════════════════════════════ */}
+        {/* ADD MEMBER MODAL                                       */}
+        {/* ═══════════════════════════════════════════════════════ */}
+        <AnimatePresence>
+          {showAddModal && (
             <motion.div
               className="fixed inset-0 z-50 flex items-center justify-center p-4"
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
             >
-              <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={() => { setShowRoleModal(false); setRoleTarget(null); }} />
+              <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={() => setShowAddModal(false)} />
+              <motion.div
+                className="relative w-full max-w-md rounded-2xl p-6 border"
+                style={{ background: tk.card, borderColor: tk.cardBorder, boxShadow: '0 25px 60px rgba(0,0,0,0.18)', color: tk.text }}
+                initial={{ scale: 0.9, y: 20 }}
+                animate={{ scale: 1, y: 0 }}
+                exit={{ scale: 0.9, y: 20 }}
+              >
+                <div className="flex items-center justify-between mb-6">
+                  <h3 className="text-lg font-bold" style={{ color: tk.text }}>Add {memberLabel}</h3>
+                  <button onClick={() => setShowAddModal(false)} className="p-2 rounded-lg hover:bg-white/5">
+                    <X size={18} style={{ color: tk.textSec }} />
+                  </button>
+                </div>
+
+                {/* Success State */}
+                {addSuccess ? (
+                  <motion.div className="space-y-4" initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
+                    <div className="text-center py-4">
+                      <div className="w-14 h-14 rounded-full mx-auto mb-3 flex items-center justify-center" style={{ background: `${tk.mint}15` }}>
+                        <UserCheck size={28} style={{ color: tk.mint }} />
+                      </div>
+                      <h4 className="text-lg font-semibold" style={{ color: tk.text }}>{memberLabel} Added!</h4>
+                      <p className="text-sm mt-1" style={{ color: tk.textSec }}>{addSuccess.name} can now log in</p>
+                    </div>
+
+                    <div className="p-4 rounded-xl space-y-3" style={{ background: theme === 'light' ? '#FFFDF9' : 'rgba(255,255,255,0.03)', border: `1px solid ${tk.cardBorder}` }}>
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <p className="text-xs" style={{ color: tk.textSec }}>Login ID</p>
+                          <p className="text-sm font-mono" style={{ color: tk.text }}>{addSuccess.id}</p>
+                        </div>
+                        <button onClick={() => copyCredentials(addSuccess.id, addSuccess.password)} className="p-2 rounded-lg hover:bg-white/5" title="Copy">
+                          <Copy size={14} style={{ color: tk.primary }} />
+                        </button>
+                      </div>
+                      <div>
+                        <p className="text-xs" style={{ color: tk.textSec }}>Default Password</p>
+                        <p className="text-sm font-mono" style={{ color: tk.text }}>{addSuccess.password}</p>
+                      </div>
+                      <p className="text-xs" style={{ color: tk.amber }}>
+                        Share these credentials securely. They'll be asked to change their password on first login.
+                      </p>
+                    </div>
+
+                    <div className="flex gap-2">
+                      <button
+                        onClick={() => setAddSuccess(null)}
+                        className="flex-1 px-4 py-2.5 rounded-xl text-sm font-medium"
+                        style={{ background: tk.gradOrange, color: '#FFFFFF' }}
+                      >
+                        Add Another
+                      </button>
+                      <button
+                        onClick={() => setShowAddModal(false)}
+                        className="px-4 py-2.5 rounded-xl text-sm font-medium"
+                        style={{ color: tk.textSec, border: `1px solid ${tk.cardBorder}` }}
+                      >
+                        Done
+                      </button>
+                    </div>
+                  </motion.div>
+                ) : (
+                  <div className="space-y-4">
+                    {addError && (
+                      <div className="flex items-start gap-2 p-3 rounded-xl text-sm" style={{ background: `${tk.danger}10`, color: tk.danger, border: `1px solid ${tk.danger}25` }}>
+                        <AlertTriangle size={16} className="mt-0.5 shrink-0" />
+                        {addError}
+                      </div>
+                    )}
+
+                    <div>
+                      <label className="block text-sm font-medium mb-1.5" style={{ color: tk.text }}>{memberLabel} ID *</label>
+                      <input
+                        type="text"
+                        placeholder={organization?.organization_type === 'university' ? 'e.g. CSC/2020/001' : 'e.g. MEM001'}
+                        value={newMember.member_id}
+                        onChange={e => setNewMember(prev => ({ ...prev, member_id: e.target.value }))}
+                        className="w-full rounded-xl px-4 py-3 outline-none transition-colors text-sm"
+                        style={{ background: theme === 'light' ? '#FFFDF9' : 'rgba(255,255,255,0.04)', border: `1px solid ${tk.cardBorder}`, color: tk.text }}
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-sm font-medium mb-1.5" style={{ color: tk.text }}>Full Name *</label>
+                      <input
+                        type="text"
+                        placeholder="e.g. John Doe"
+                        value={newMember.full_name}
+                        onChange={e => setNewMember(prev => ({ ...prev, full_name: e.target.value }))}
+                        className="w-full rounded-xl px-4 py-3 outline-none transition-colors text-sm"
+                        style={{ background: theme === 'light' ? '#FFFDF9' : 'rgba(255,255,255,0.04)', border: `1px solid ${tk.cardBorder}`, color: tk.text }}
+                      />
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <label className="block text-sm font-medium mb-1.5" style={{ color: tk.text }}>Email</label>
+                        <input
+                          type="email"
+                          placeholder="Optional"
+                          value={newMember.email}
+                          onChange={e => setNewMember(prev => ({ ...prev, email: e.target.value }))}
+                          className="w-full rounded-xl px-4 py-3 outline-none transition-colors text-sm"
+                          style={{ background: theme === 'light' ? '#FFFDF9' : 'rgba(255,255,255,0.04)', border: `1px solid ${tk.cardBorder}`, color: tk.text }}
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium mb-1.5" style={{ color: tk.text }}>Phone</label>
+                        <input
+                          type="tel"
+                          placeholder="Optional"
+                          value={newMember.phone}
+                          onChange={e => setNewMember(prev => ({ ...prev, phone: e.target.value }))}
+                          className="w-full rounded-xl px-4 py-3 outline-none transition-colors text-sm"
+                          style={{ background: theme === 'light' ? '#FFFDF9' : 'rgba(255,255,255,0.04)', border: `1px solid ${tk.cardBorder}`, color: tk.text }}
+                        />
+                      </div>
+                    </div>
+
+                    <div>
+                      <label className="block text-sm font-medium mb-1.5" style={{ color: tk.text }}>Level / Year</label>
+                      <input
+                        type="text"
+                        placeholder="e.g. 200L, Year 2, Grade 10"
+                        value={newMember.level}
+                        onChange={e => setNewMember(prev => ({ ...prev, level: e.target.value }))}
+                        className="w-full rounded-xl px-4 py-3 outline-none transition-colors text-sm"
+                        style={{ background: theme === 'light' ? '#FFFDF9' : 'rgba(255,255,255,0.04)', border: `1px solid ${tk.cardBorder}`, color: tk.text }}
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-sm font-medium mb-1.5" style={{ color: tk.text }}>Default Password</label>
+                      <input
+                        type="text"
+                        value={newMember.password}
+                        onChange={e => setNewMember(prev => ({ ...prev, password: e.target.value }))}
+                        placeholder={newMember.member_id || 'Same as ID (auto)'}
+                        className="w-full rounded-xl px-4 py-3 outline-none transition-colors text-sm font-mono"
+                        style={{ background: theme === 'light' ? '#FFFDF9' : 'rgba(255,255,255,0.04)', border: `1px solid ${tk.cardBorder}`, color: tk.text }}
+                      />
+                      <p className="text-xs mt-1" style={{ color: tk.textSec }}>
+                        Defaults to their ID/Reg Number. {memberLabel} will be forced to change on first login.
+                      </p>
+                    </div>
+
+                    <button
+                      onClick={handleAddMember}
+                      disabled={addLoading}
+                      className="w-full flex items-center justify-center gap-2 px-4 py-3 rounded-xl font-semibold text-sm transition-all hover:scale-[1.02] active:scale-[0.98] disabled:opacity-60"
+                      style={{ background: tk.gradOrange, color: '#FFFFFF' }}
+                    >
+                      {addLoading ? <><Loader2 size={16} className="animate-spin" /> Adding...</> : <><UserPlus size={16} /> Add {memberLabel}</>}
+                    </button>
+                  </div>
+                )}
+              </motion.div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        {/* ═══════════════════════════════════════════════════════ */}
+        {/* BULK IMPORT MODAL                                      */}
+        {/* ═══════════════════════════════════════════════════════ */}
+        <AnimatePresence>
+          {showBulkModal && (
+            <motion.div
+              className="fixed inset-0 z-50 flex items-center justify-center p-4"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+            >
+              <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={() => { setShowBulkModal(false); resetBulkModal(); }} />
+              <motion.div
+                className="relative w-full max-w-2xl rounded-2xl border max-h-[90vh] flex flex-col"
+                style={{ background: colors.secondaryLight, borderColor: colors.borderLight, boxShadow: '0 25px 60px rgba(0,0,0,0.6)' }}
+                initial={{ scale: 0.9, y: 20 }}
+                animate={{ scale: 1, y: 0 }}
+                exit={{ scale: 0.9, y: 20 }}
+              >
+                {/* Header */}
+                <div className="flex items-center justify-between px-6 py-4 border-b" style={{ borderColor: 'rgba(255,255,255,0.06)' }}>
+                  <div className="flex items-center gap-3">
+                    <div className="w-9 h-9 rounded-xl flex items-center justify-center" style={{ background: `${colors.primary}15`, color: colors.primary }}>
+                      <FileUp size={18} />
+                    </div>
+                    <div>
+                      <h3 className="text-lg font-bold text-white">Import {memberLabelPlural}</h3>
+                      <p className="text-xs" style={{ color: colors.textTertiary }}>
+                        {importStep === 'upload' && 'Upload a file or paste data'}
+                        {importStep === 'preview' && `${parsedPreview?.members.length || 0} ${memberLabelPlural.toLowerCase()} ready`}
+                        {importStep === 'result' && 'Import complete'}
+                      </p>
+                    </div>
+                  </div>
+                  <button onClick={() => { setShowBulkModal(false); resetBulkModal(); }} className="p-2 rounded-lg hover:bg-white/5 transition-colors">
+                    <X size={18} className="text-white" />
+                  </button>
+                </div>
+
+                {/* Step indicator */}
+                <div className="flex items-center gap-2 px-6 py-3" style={{ borderBottom: `1px solid rgba(255,255,255,0.04)` }}>
+                  {(['upload', 'preview', 'result'] as const).map((step, i) => (
+                    <div key={step} className="flex items-center gap-2">
+                      <div
+                        className="w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold transition-all"
+                        style={{
+                          background: importStep === step ? colors.primary : (['upload', 'preview', 'result'].indexOf(importStep) > i ? `${colors.success}20` : 'rgba(255,255,255,0.06)'),
+                          color: importStep === step ? '#fff' : (['upload', 'preview', 'result'].indexOf(importStep) > i ? colors.success : colors.textTertiary),
+                        }}
+                      >
+                        {['upload', 'preview', 'result'].indexOf(importStep) > i ? <Check size={12} /> : i + 1}
+                      </div>
+                      <span className="text-xs capitalize hidden sm:inline" style={{ color: importStep === step ? 'white' : colors.textTertiary }}>{step}</span>
+                      {i < 2 && <div className="w-6 h-px mx-1" style={{ background: 'rgba(255,255,255,0.1)' }} />}
+                    </div>
+                  ))}
+                </div>
+
+                {/* Content (scrollable) */}
+                <div className="flex-1 overflow-y-auto modal-scrollbar px-6 py-4 space-y-4">
+                  {/* ── Step 1: Upload ── */}
+                  {importStep === 'upload' && (
+                    <>
+                      {/* Supported formats banner */}
+                      <div className="p-3 rounded-xl" style={{ background: `${colors.primary}06`, border: `1px solid ${colors.borderPrimary}` }}>
+                        <div className="flex items-center gap-2 mb-2">
+                          <FileSpreadsheet size={14} style={{ color: colors.primary }} />
+                          <p className="text-xs font-semibold" style={{ color: colors.primary }}>Supported Formats</p>
+                        </div>
+                        <div className="flex flex-wrap gap-2">
+                          {[
+                            { ext: 'Excel', desc: '.xlsx / .xls', icon: <FileSpreadsheet size={12} /> },
+                            { ext: 'CSV', desc: '.csv', icon: <FileText size={12} /> },
+                            { ext: 'Word', desc: '.docx (tables)', icon: <FileText size={12} /> },
+                            { ext: 'Text', desc: '.txt / .tsv', icon: <FileText size={12} /> },
+                          ].map(f => (
+                            <span key={f.ext} className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs" style={{ background: 'rgba(255,255,255,0.04)', color: colors.textSecondary }}>
+                              {f.icon} {f.ext} <span style={{ color: colors.textTertiary }}>{f.desc}</span>
+                            </span>
+                          ))}
+                        </div>
+                        <p className="text-xs mt-2" style={{ color: colors.textTertiary }}>
+                          Columns auto-detected: ID, Name, Email, Phone. Headers like "Matric No", "Student Name", "Mobile" etc. are recognized automatically.
+                        </p>
+                      </div>
+
+                      {/* Drag & Drop zone */}
+                      <input
+                        ref={fileInputRef}
+                        type="file"
+                        accept={getFileAcceptAttribute()}
+                        onChange={handleFileUpload}
+                        className="hidden"
+                      />
+                      <div
+                        ref={dropZoneRef}
+                        onDragEnter={handleDragEnter}
+                        onDragLeave={handleDragLeave}
+                        onDragOver={handleDragOver}
+                        onDrop={handleDrop}
+                        onClick={() => fileInputRef.current?.click()}
+                        className="relative cursor-pointer rounded-2xl p-8 text-center transition-all"
+                        style={{
+                          border: `2px dashed ${dragActive ? colors.primary : colors.borderMedium}`,
+                          background: dragActive ? `${colors.primary}08` : 'rgba(255,255,255,0.02)',
+                        }}
+                      >
+                        <motion.div
+                          animate={{ scale: dragActive ? 1.05 : 1 }}
+                          className="flex flex-col items-center gap-3"
+                        >
+                          <div className="w-14 h-14 rounded-2xl flex items-center justify-center" style={{ background: `${colors.primary}12`, color: colors.primary }}>
+                            <Upload size={24} />
+                          </div>
+                          <div>
+                            <p className="text-sm font-medium text-white">
+                              {dragActive ? 'Drop your file here' : 'Drag & drop your file here'}
+                            </p>
+                            <p className="text-xs mt-1" style={{ color: colors.textTertiary }}>
+                              or <span style={{ color: colors.primary, fontWeight: 600 }}>click to browse</span> — Excel, CSV, Word, or Text
+                            </p>
+                          </div>
+                        </motion.div>
+                      </div>
+
+                      {/* Divider */}
+                      <div className="flex items-center gap-3">
+                        <div className="flex-1 h-px" style={{ background: 'rgba(255,255,255,0.06)' }} />
+                        <span className="text-xs font-medium" style={{ color: colors.textTertiary }}>or paste data</span>
+                        <div className="flex-1 h-px" style={{ background: 'rgba(255,255,255,0.06)' }} />
+                      </div>
+
+                      {/* Paste area */}
+                      <textarea
+                        value={csvData}
+                        onChange={e => setCsvData(e.target.value)}
+                        placeholder={`Paste your data here (CSV, tab-separated, etc.)\n\nExample:\nCSC/2020/001, John Doe, john@email.com, 08012345678\nCSC/2020/002, Jane Smith, , 08087654321`}
+                        rows={5}
+                        className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white placeholder-gray-500 outline-none focus:border-[#FF6803] transition-colors text-sm font-mono resize-none"
+                      />
+
+                      {csvData.trim() && (
+                        <button
+                          onClick={handlePastePreview}
+                          className="w-full flex items-center justify-center gap-2 px-4 py-3 rounded-xl text-white font-semibold text-sm transition-all hover:scale-[1.02]"
+                          style={{ background: colors.primary }}
+                        >
+                          <Eye size={16} /> Preview Pasted Data
+                        </button>
+                      )}
+
+                      {/* Parse warnings (shown if user uploaded but got 0 members) */}
+                      {parsedPreview && parsedPreview.members.length === 0 && parsedPreview.warnings.length > 0 && (
+                        <div className="p-3 rounded-xl space-y-1" style={{ background: `${colors.error}08`, border: `1px solid ${colors.error}20` }}>
+                          <p className="text-xs font-semibold" style={{ color: colors.error }}>Could not parse any {memberLabelPlural.toLowerCase()}</p>
+                          {parsedPreview.warnings.map((w, i) => (
+                            <p key={i} className="text-xs" style={{ color: colors.error }}>{w}</p>
+                          ))}
+                        </div>
+                      )}
+                    </>
+                  )}
+
+                  {/* ── Step 2: Preview ── */}
+                  {importStep === 'preview' && parsedPreview && (
+                    <>
+                      {/* Summary bar */}
+                      <div className="flex flex-wrap items-center gap-3">
+                        <div className="flex items-center gap-2 px-3 py-2 rounded-xl" style={{ background: `${colors.success}08`, border: `1px solid ${colors.success}20` }}>
+                          <CheckCircle size={14} style={{ color: colors.success }} />
+                          <span className="text-xs font-medium" style={{ color: colors.success }}>
+                            {parsedPreview.members.length} {memberLabelPlural.toLowerCase()} found
+                          </span>
+                        </div>
+                        {uploadedFileName && (
+                          <div className="flex items-center gap-2 px-3 py-2 rounded-xl" style={{ background: 'rgba(255,255,255,0.04)' }}>
+                            <FileText size={14} style={{ color: colors.textTertiary }} />
+                            <span className="text-xs" style={{ color: colors.textSecondary }}>{uploadedFileName}</span>
+                            <span className="text-xs px-1.5 py-0.5 rounded-md font-mono" style={{ background: `${colors.primary}15`, color: colors.primary }}>
+                              {parsedPreview.detectedFormat}
+                            </span>
+                          </div>
+                        )}
+                        {parsedPreview.skippedRows > 0 && (
+                          <span className="text-xs" style={{ color: colors.warning }}>
+                            {parsedPreview.skippedRows} row{parsedPreview.skippedRows !== 1 ? 's' : ''} skipped
+                          </span>
+                        )}
+                      </div>
+
+                      {/* Column mapping info */}
+                      {Object.keys(parsedPreview.columnMapping).length > 0 && (
+                        <div className="p-3 rounded-xl" style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.06)' }}>
+                          <p className="text-xs font-medium mb-2" style={{ color: colors.textTertiary }}>Detected column mapping:</p>
+                          <div className="flex flex-wrap gap-2">
+                            {Object.entries(parsedPreview.columnMapping).map(([field, col]) => (
+                              <span key={field} className="text-xs px-2 py-1 rounded-md" style={{ background: 'rgba(255,255,255,0.05)', color: colors.textSecondary }}>
+                                <span style={{ color: colors.primary }}>{field}</span> ← "{col}"
+                              </span>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Warnings */}
+                      {parsedPreview.warnings.length > 0 && (
+                        <div className="p-3 rounded-xl" style={{ background: `${colors.warning}06`, border: `1px solid ${colors.warning}15` }}>
+                          <div className="flex items-center gap-2 mb-1.5">
+                            <AlertTriangle size={12} style={{ color: colors.warning }} />
+                            <p className="text-xs font-semibold" style={{ color: colors.warning }}>{parsedPreview.warnings.length} warning{parsedPreview.warnings.length !== 1 ? 's' : ''}</p>
+                          </div>
+                          <div className="max-h-20 overflow-y-auto modal-scrollbar space-y-0.5">
+                            {parsedPreview.warnings.map((w, i) => (
+                              <p key={i} className="text-xs" style={{ color: colors.textTertiary }}>{w}</p>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Preview table */}
+                      <div className="rounded-xl border overflow-hidden" style={{ borderColor: 'rgba(255,255,255,0.06)' }}>
+                        <div className="overflow-x-auto">
+                          <table className="w-full text-xs">
+                            <thead>
+                              <tr style={{ background: 'rgba(255,255,255,0.03)' }}>
+                                <th className="text-left px-3 py-2 font-semibold" style={{ color: colors.textTertiary }}>#</th>
+                                <th className="text-left px-3 py-2 font-semibold" style={{ color: colors.textTertiary }}>ID</th>
+                                <th className="text-left px-3 py-2 font-semibold" style={{ color: colors.textTertiary }}>Name</th>
+                                <th className="text-left px-3 py-2 font-semibold hidden sm:table-cell" style={{ color: colors.textTertiary }}>Email</th>
+                                <th className="text-left px-3 py-2 font-semibold hidden sm:table-cell" style={{ color: colors.textTertiary }}>Phone</th>
+                              </tr>
+                            </thead>
+                            <tbody className="divide-y" style={{ borderColor: 'rgba(255,255,255,0.04)' }}>
+                              {parsedPreview.members.slice(0, 50).map((m, i) => (
+                                <tr key={i} className="hover:bg-white/2 transition-colors" style={{ borderColor: 'rgba(255,255,255,0.04)' }}>
+                                  <td className="px-3 py-2" style={{ color: colors.textTertiary }}>{i + 1}</td>
+                                  <td className="px-3 py-2 font-mono" style={{ color: colors.textSecondary }}>{m.member_id}</td>
+                                  <td className="px-3 py-2 text-white font-medium">{m.full_name}</td>
+                                  <td className="px-3 py-2 hidden sm:table-cell" style={{ color: m.email ? colors.textSecondary : colors.textDisabled }}>{m.email || '—'}</td>
+                                  <td className="px-3 py-2 hidden sm:table-cell" style={{ color: m.phone ? colors.textSecondary : colors.textDisabled }}>{m.phone || '—'}</td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                        {parsedPreview.members.length > 50 && (
+                          <div className="px-3 py-2 text-center" style={{ background: 'rgba(255,255,255,0.02)', color: colors.textTertiary }}>
+                            <span className="text-xs">Showing 50 of {parsedPreview.members.length} — all will be imported</span>
+                          </div>
+                        )}
+                      </div>
+
+                      <div className="p-3 rounded-xl" style={{ background: `${colors.primary}06`, border: `1px solid ${colors.borderPrimary}` }}>
+                        <p className="text-xs" style={{ color: colors.textTertiary }}>
+                          All {memberLabelPlural.toLowerCase()} will be created with default password: <span className="font-mono font-semibold" style={{ color: colors.primary }}>{DEFAULT_PASSWORD}</span>
+                          <br />They will be prompted to change it on first login.
+                        </p>
+                      </div>
+                    </>
+                  )}
+
+                  {/* ── Step 3: Result ── */}
+                  {importStep === 'result' && bulkResult && (
+                    <>
+                      <motion.div
+                        className="flex flex-col items-center gap-4 py-4"
+                        initial={{ opacity: 0, scale: 0.9 }}
+                        animate={{ opacity: 1, scale: 1 }}
+                      >
+                        <div
+                          className="w-16 h-16 rounded-full flex items-center justify-center"
+                          style={{ background: bulkResult.failed === 0 ? `${colors.success}15` : `${colors.warning}15` }}
+                        >
+                          {bulkResult.failed === 0 ? (
+                            <CheckCircle size={32} style={{ color: colors.success }} />
+                          ) : (
+                            <AlertTriangle size={32} style={{ color: colors.warning }} />
+                          )}
+                        </div>
+                        <div className="text-center">
+                          <p className="text-xl font-bold text-white">
+                            {bulkResult.added} {memberLabelPlural} Added
+                          </p>
+                          {bulkResult.failed > 0 && (
+                            <p className="text-sm mt-1" style={{ color: colors.warning }}>
+                              {bulkResult.failed} failed
+                            </p>
+                          )}
+                        </div>
+                      </motion.div>
+
+                      {bulkResult.errors.length > 0 && (
+                        <div className="p-3 rounded-xl" style={{ background: `${colors.error}06`, border: `1px solid ${colors.error}15` }}>
+                          <p className="text-xs font-semibold mb-2" style={{ color: colors.error }}>Errors:</p>
+                          <div className="max-h-32 overflow-y-auto modal-scrollbar space-y-1">
+                            {bulkResult.errors.map((err, i) => (
+                              <p key={i} className="text-xs" style={{ color: colors.textTertiary }}>{err}</p>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+
+                      <div className="p-3 rounded-xl" style={{ background: 'rgba(255,255,255,0.03)' }}>
+                        <p className="text-xs" style={{ color: colors.textTertiary }}>
+                          Default password: <span className="font-mono font-semibold" style={{ color: colors.primary }}>{DEFAULT_PASSWORD}</span>
+                        </p>
+                      </div>
+                    </>
+                  )}
+                </div>
+
+                {/* Footer actions */}
+                <div className="px-6 py-4 border-t flex items-center gap-3" style={{ borderColor: 'rgba(255,255,255,0.06)' }}>
+                  {importStep === 'upload' && (
+                    <button
+                      onClick={() => { setShowBulkModal(false); resetBulkModal(); }}
+                      className="flex-1 px-4 py-3 rounded-xl text-sm font-medium transition-all hover:bg-white/5"
+                      style={{ color: colors.textSecondary, border: `1px solid ${colors.borderLight}` }}
+                    >
+                      Cancel
+                    </button>
+                  )}
+
+                  {importStep === 'preview' && (
+                    <>
+                      <button
+                        onClick={() => { setImportStep('upload'); setParsedPreview(null); }}
+                        className="flex items-center justify-center gap-2 px-4 py-3 rounded-xl text-sm font-medium transition-all hover:bg-white/5"
+                        style={{ color: colors.textSecondary, border: `1px solid ${colors.borderLight}` }}
+                      >
+                        <RotateCcw size={14} /> Back
+                      </button>
+                      <button
+                        onClick={handleBulkImport}
+                        disabled={bulkLoading}
+                        className="flex-1 flex items-center justify-center gap-2 px-4 py-3 rounded-xl text-white font-semibold text-sm transition-all hover:scale-[1.02] disabled:opacity-60"
+                        style={{ background: colors.primary }}
+                      >
+                        {bulkLoading ? (
+                          <><Loader2 size={16} className="animate-spin" /> Importing {parsedPreview?.members.length || 0}...</>
+                        ) : (
+                          <><Download size={16} /> Import {parsedPreview?.members.length || 0} {memberLabelPlural}</>
+                        )}
+                      </button>
+                    </>
+                  )}
+
+                  {importStep === 'result' && (
+                    <>
+                      <button
+                        onClick={resetBulkModal}
+                        className="flex items-center justify-center gap-2 px-4 py-3 rounded-xl text-sm font-medium transition-all hover:bg-white/5"
+                        style={{ color: colors.textSecondary, border: `1px solid ${colors.borderLight}` }}
+                      >
+                        <RotateCcw size={14} /> Import More
+                      </button>
+                      <button
+                        onClick={() => { setShowBulkModal(false); resetBulkModal(); }}
+                        className="flex-1 flex items-center justify-center gap-2 px-4 py-3 rounded-xl text-white font-semibold text-sm transition-all hover:scale-[1.02]"
+                        style={{ background: colors.primary }}
+                      >
+                        <Check size={16} /> Done
+                      </button>
+                    </>
+                  )}
+                </div>
+              </motion.div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        {/* ═══════════════════════════════════════════════════════ */}
+        {/* EDIT MEMBER MODAL                                      */}
+        {/* ═══════════════════════════════════════════════════════ */}
+        <AnimatePresence>
+          {showEditModal && editingMember && (
+            <motion.div
+              className="fixed inset-0 z-50 flex items-center justify-center p-4"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+            >
+              <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={() => { setShowEditModal(false); setEditingMember(null); }} />
+              <motion.div
+                className="relative w-full max-w-md rounded-2xl p-6 border"
+                style={{ background: colors.secondaryLight, borderColor: colors.borderLight, boxShadow: '0 25px 60px rgba(0,0,0,0.6)' }}
+                initial={{ scale: 0.9, y: 20 }}
+                animate={{ scale: 1, y: 0 }}
+                exit={{ scale: 0.9, y: 20 }}
+              >
+                <div className="flex items-center justify-between mb-6">
+                  <h3 className="text-lg font-bold text-white">Edit {memberLabel}</h3>
+                  <button onClick={() => { setShowEditModal(false); setEditingMember(null); }} className="p-2 rounded-lg hover:bg-white/5">
+                    <X size={18} className="text-white" />
+                  </button>
+                </div>
+
+                <div className="space-y-4">
+                  <div>
+                    <label className="block text-sm font-medium text-white mb-1.5">Full Name</label>
+                    <input
+                      type="text"
+                      value={editingMember.full_name}
+                      onChange={e => setEditingMember(prev => prev ? { ...prev, full_name: e.target.value } : null)}
+                      className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white outline-none focus:border-[#FF6803] transition-colors text-sm"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-white mb-1.5">{memberLabel} ID</label>
+                    <input
+                      type="text"
+                      value={editingMember.member_id}
+                      disabled
+                      className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white/50 outline-none text-sm cursor-not-allowed"
+                    />
+                  </div>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-sm font-medium text-white mb-1.5">Email</label>
+                      <input
+                        type="email"
+                        value={editingMember.email || ''}
+                        onChange={e => setEditingMember(prev => prev ? { ...prev, email: e.target.value || null } : null)}
+                        className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white outline-none focus:border-[#FF6803] transition-colors text-sm"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-white mb-1.5">Phone</label>
+                      <input
+                        type="tel"
+                        value={editingMember.phone || ''}
+                        onChange={e => setEditingMember(prev => prev ? { ...prev, phone: e.target.value || null } : null)}
+                        className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white outline-none focus:border-[#FF6803] transition-colors text-sm"
+                      />
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-white mb-1.5">Level / Year</label>
+                    <input
+                      type="text"
+                      placeholder="e.g. 200L, Year 2"
+                      value={editingMember.level || ''}
+                      onChange={e => setEditingMember(prev => prev ? { ...prev, level: e.target.value || null } : null)}
+                      className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white outline-none focus:border-[#FF6803] transition-colors text-sm"
+                    />
+                  </div>
+
+                  <div className="flex gap-2 pt-2">
+                    <button
+                      onClick={() => { setShowEditModal(false); setEditingMember(null); }}
+                      className="flex-1 px-4 py-2.5 rounded-xl text-sm font-medium"
+                      style={{ color: colors.textSecondary, border: `1px solid ${colors.borderLight}` }}
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      onClick={handleEditMember}
+                      className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl text-white text-sm font-semibold"
+                      style={{ background: colors.primary }}
+                    >
+                      <Check size={16} /> Save Changes
+                    </button>
+                  </div>
+                </div>
+              </motion.div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        {/* ═══════════════════════════════════════════════════════ */}
+        {/* PASSWORD RESET SUCCESS CARD                             */}
+        {/* ═══════════════════════════════════════════════════════ */}
+        <AnimatePresence>
+          {addSuccess && !showAddModal && (
+            <motion.div
+              className="fixed inset-0 z-50 flex items-center justify-center p-4"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+            >
+              <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={() => setAddSuccess(null)} />
               <motion.div
                 className="relative w-full max-w-sm rounded-2xl p-6 border"
                 style={{ background: colors.secondaryLight, borderColor: colors.borderLight, boxShadow: '0 25px 60px rgba(0,0,0,0.6)' }}
@@ -2963,70 +2750,289 @@ export default function OrgMembersPage() {
                 animate={{ scale: 1, y: 0 }}
                 exit={{ scale: 0.9, y: 20 }}
               >
-                {/* Header */}
-                <div className="flex items-center justify-between mb-5">
-                  <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 rounded-xl flex items-center justify-center" style={{ background: `${colors.accentPurple}15`, color: colors.accentPurple }}>
-                      <UserCog size={20} />
-                    </div>
+                {/* Success icon */}
+                <div className="flex flex-col items-center text-center mb-5">
+                  <div className="w-14 h-14 rounded-full flex items-center justify-center mb-3" style={{ background: `${colors.success}15` }}>
+                    <CheckCircle size={28} style={{ color: colors.success }} />
+                  </div>
+                  <h3 className="text-lg font-bold text-white">Password Reset Successful</h3>
+                  <p className="text-xs mt-1" style={{ color: colors.textTertiary }}>
+                    {addSuccess.name}'s password has been reset
+                  </p>
+                </div>
+
+                {/* Credentials card */}
+                <div className="rounded-xl p-4 mb-4 space-y-3" style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)' }}>
+                  <div className="flex items-center justify-between">
                     <div>
-                      <h3 className="text-lg font-bold text-white">Manage Roles</h3>
-                      <p className="text-xs" style={{ color: colors.textTertiary }}>{roleTarget.full_name}</p>
+                      <p className="text-[10px] uppercase tracking-wider font-medium" style={{ color: colors.textTertiary }}>Login ID</p>
+                      <p className="text-sm font-mono font-semibold text-white mt-0.5">{addSuccess.id}</p>
                     </div>
                   </div>
-                  <button onClick={() => { setShowRoleModal(false); setRoleTarget(null); }} className="p-2 rounded-lg hover:bg-white/5 transition-colors">
+                  <div className="h-px" style={{ background: 'rgba(255,255,255,0.06)' }} />
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-[10px] uppercase tracking-wider font-medium" style={{ color: colors.textTertiary }}>New Password</p>
+                      <p className="text-sm font-mono font-semibold text-white mt-0.5">{addSuccess.password}</p>
+                    </div>
+                    <button
+                      onClick={() => copyCredentials(addSuccess.id, addSuccess.password)}
+                      className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all hover:scale-105"
+                      style={{ background: `${colors.primary}15`, color: colors.primary }}
+                    >
+                      <Copy size={12} /> Copy
+                    </button>
+                  </div>
+                </div>
+
+                <p className="text-xs text-center mb-4" style={{ color: colors.textTertiary }}>
+                  {memberLabel} will be prompted to change this on next login.
+                </p>
+
+                <button
+                  onClick={() => setAddSuccess(null)}
+                  className="w-full flex items-center justify-center gap-2 px-4 py-3 rounded-xl text-white font-semibold text-sm transition-all hover:scale-[1.02] active:scale-[0.98]"
+                  style={{ background: colors.primary }}
+                >
+                  <Check size={16} /> Done
+                </button>
+              </motion.div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        {/* ═══════════════════════════════════════════════════════ */}
+        {/* EXPORT FIELD SELECTION MODAL                           */}
+        {/* ═══════════════════════════════════════════════════════ */}
+        <AnimatePresence>
+          {showExportModal && (
+            <motion.div
+              className="fixed inset-0 z-50 flex items-center justify-center p-4"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+            >
+              <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={() => setShowExportModal(false)} />
+              <motion.div
+                className="relative w-full max-w-lg rounded-2xl border max-h-[90vh] flex flex-col"
+                style={{ background: colors.secondaryLight, borderColor: colors.borderLight, boxShadow: '0 25px 60px rgba(0,0,0,0.6)' }}
+                initial={{ scale: 0.9, y: 20 }}
+                animate={{ scale: 1, y: 0 }}
+                exit={{ scale: 0.9, y: 20 }}
+              >
+                {/* Header */}
+                <div className="flex items-center justify-between px-6 pt-6 pb-4" style={{ borderBottom: `1px solid rgba(255,255,255,0.06)` }}>
+                  <div className="flex items-center gap-3">
+                    <div className="w-12 h-12 rounded-xl flex items-center justify-center" style={{ background: `linear-gradient(135deg, ${colors.primary}30, ${colors.primary}10)`, border: `1px solid ${colors.primary}40` }}>
+                      <Download size={22} style={{ color: colors.primary }} />
+                    </div>
+                    <div>
+                      <h3 className="text-lg font-bold text-white">Export {memberLabelPlural}</h3>
+                      <p className="text-xs" style={{ color: colors.textTertiary }}>
+                        {selectedIds.size > 0 ? `${selectedIds.size} selected` : `All ${filtered.length} ${memberLabelPlural.toLowerCase()}`}
+                      </p>
+                    </div>
+                  </div>
+                  <button onClick={() => setShowExportModal(false)} className="p-2 rounded-lg hover:bg-white/5 transition-colors">
                     <X size={18} className="text-white" />
                   </button>
                 </div>
 
-                {/* Role toggles */}
-                <div className="space-y-2">
-                  {([
-                    { role: 'admin' as const, label: 'Admin', desc: 'Full access to manage organization', color: colors.accentPurple, icon: <Shield size={16} /> },
-                    { role: 'finsec' as const, label: 'Financial Secretary', desc: 'Manage payments & finances', color: colors.success, icon: <Crown size={16} /> },
-                    { role: 'class_rep' as const, label: 'Class Representative', desc: 'Manage group members', color: colors.primary, icon: <Users size={16} /> },
-                  ]).map(r => {
-                    const isActive = r.role === 'admin' ? currentRoles.isAdmin : r.role === 'finsec' ? currentRoles.isFinsec : currentRoles.isClassRep;
-                    return (
-                      <button
-                        key={r.role}
-                        onClick={() => toggleRole(currentMember, r.role)}
-                        disabled={roleLoading}
-                        className="w-full flex items-center gap-3 px-4 py-3.5 rounded-xl text-left transition-all hover:scale-[1.01] active:scale-[0.99] disabled:opacity-50"
-                        style={{
-                          background: isActive ? `${r.color}10` : 'rgba(255,255,255,0.03)',
-                          border: `1px solid ${isActive ? r.color : 'rgba(255,255,255,0.08)'}`,
-                        }}
-                      >
-                        <div className="w-8 h-8 rounded-lg flex items-center justify-center shrink-0" style={{ background: `${r.color}15`, color: r.color }}>
-                          {r.icon}
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <p className="text-sm font-medium" style={{ color: isActive ? 'white' : colors.textSecondary }}>{r.label}</p>
-                          <p className="text-xs" style={{ color: colors.textTertiary }}>{r.desc}</p>
-                        </div>
-                        <div className="shrink-0">
-                          {roleLoading ? (
-                            <Loader2 size={16} className="animate-spin" style={{ color: r.color }} />
-                          ) : isActive ? (
-                            <CheckSquare size={18} style={{ color: r.color }} />
-                          ) : (
-                            <Square size={18} style={{ color: colors.textDisabled }} />
-                          )}
-                        </div>
-                      </button>
-                    );
-                  })}
+                {/* Scrollable Content */}
+                <div className="flex-1 overflow-y-auto modal-scrollbar px-6 py-5 space-y-6">
+                  {/* Format Selection */}
+                  <div>
+                    <p className="text-xs font-semibold mb-3 uppercase tracking-wider" style={{ color: colors.textTertiary }}>Export Format</p>
+                    <div className="grid grid-cols-2 gap-3">
+                      {([
+                        { value: 'pdf' as const, label: 'PDF Document', desc: 'Professional formatted report', icon: <FileText size={20} />, color: colors.statusUnpaid },
+                        { value: 'csv' as const, label: 'CSV Spreadsheet', desc: 'Excel compatible format', icon: <FileSpreadsheet size={20} />, color: colors.accentMint },
+                      ]).map(fmt => (
+                        <button
+                          key={fmt.value}
+                          onClick={() => setExportFormat(fmt.value)}
+                          className="flex flex-col items-center gap-2.5 px-4 py-4 rounded-xl text-sm font-medium transition-all hover:scale-[1.02]"
+                          style={{
+                            background: exportFormat === fmt.value ? `${fmt.color}15` : 'rgba(255,255,255,0.03)',
+                            color: exportFormat === fmt.value ? fmt.color : colors.textSecondary,
+                            border: `1px solid ${exportFormat === fmt.value ? fmt.color + '50' : 'rgba(255,255,255,0.08)'}`,
+                            boxShadow: exportFormat === fmt.value ? `0 4px 15px ${fmt.color}20` : 'none',
+                          }}
+                        >
+                          <div className="w-10 h-10 rounded-lg flex items-center justify-center" style={{ background: `${fmt.color}20` }}>
+                            {fmt.icon}
+                          </div>
+                          <span className="font-semibold">{fmt.label}</span>
+                          <span className="text-[10px]" style={{ color: colors.textTertiary }}>{fmt.desc}</span>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Field Selection */}
+                  <div>
+                    <p className="text-xs font-semibold mb-3 uppercase tracking-wider" style={{ color: colors.textTertiary }}>Include Fields</p>
+                    <div className="space-y-1.5 rounded-xl p-1" style={{ background: 'rgba(255,255,255,0.02)' }}>
+                      {([
+                        { key: 'name' as const, label: 'Full Name', always: true },
+                        { key: 'regNumber' as const, label: `${memberLabel} ID` },
+                        { key: 'level' as const, label: 'Level' },
+                        { key: 'department' as const, label: 'Department' },
+                        { key: 'email' as const, label: 'Email Address' },
+                        { key: 'phone' as const, label: 'Phone Number' },
+                        { key: 'status' as const, label: 'Active Status' },
+                        { key: 'roles' as const, label: 'Roles (Admin / FinSec / Rep)' },
+                        { key: 'joinDate' as const, label: 'Date Joined' },
+                      ]).map(field => (
+                        <button
+                          key={field.key}
+                          onClick={() => {
+                            if ('always' in field && field.always) return;
+                            setExportFields(prev => ({ ...prev, [field.key]: !prev[field.key] }));
+                          }}
+                          className="w-full flex items-center justify-between px-4 py-3 rounded-xl text-sm transition-all hover:bg-white/5"
+                          style={{
+                            color: exportFields[field.key] ? 'white' : colors.textTertiary,
+                            background: exportFields[field.key] ? 'rgba(255,255,255,0.04)' : 'transparent',
+                            border: exportFields[field.key] ? `1px solid rgba(255,255,255,0.08)` : '1px solid transparent',
+                          }}
+                        >
+                          <span className="flex items-center gap-2.5">
+                            {field.label}
+                            {'always' in field && field.always && (
+                              <span className="text-[10px] px-2 py-0.5 rounded-full font-semibold" style={{ background: `${colors.primary}20`, color: colors.primary, border: `1px solid ${colors.primary}30` }}>Required</span>
+                            )}
+                          </span>
+                          {exportFields[field.key]
+                            ? <CheckSquare size={18} style={{ color: colors.primary }} />
+                            : <Square size={18} style={{ color: colors.textDisabled }} />}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Export Info */}
+                  <div className="p-3 rounded-xl flex items-center gap-3" style={{ background: `${colors.primary}08`, border: `1px solid ${colors.primary}20` }}>
+                    <Download size={14} style={{ color: colors.primary }} />
+                    <p className="text-xs" style={{ color: colors.textSecondary }}>
+                      Exporting {selectedIds.size > 0 ? selectedIds.size : filtered.length} {memberLabelPlural.toLowerCase()} as {exportFormat.toUpperCase()}
+                    </p>
+                  </div>
                 </div>
 
-                <p className="text-xs mt-4 text-center" style={{ color: colors.textTertiary }}>
-                  Click to toggle roles. Changes take effect immediately.
-                </p>
+                {/* Footer Actions */}
+                <div className="flex gap-3 px-6 py-4" style={{ borderTop: '1px solid rgba(255,255,255,0.06)' }}>
+                  <motion.button
+                    whileHover={{ scale: 1.02 }}
+                    whileTap={{ scale: 0.98 }}
+                    onClick={() => setShowExportModal(false)}
+                    className="flex-1 px-4 py-3 rounded-xl text-sm font-medium transition-all"
+                    style={{ color: colors.textSecondary, background: 'rgba(255,255,255,0.05)', border: `1px solid rgba(255,255,255,0.1)` }}
+                  >
+                    Cancel
+                  </motion.button>
+                  <motion.button
+                    whileHover={{ scale: 1.02 }}
+                    whileTap={{ scale: 0.98 }}
+                    onClick={() => exportFormat === 'csv' ? handleExportCSV() : handleExportPDF()}
+                    disabled={exporting}
+                    className="flex-1 flex items-center justify-center gap-2 px-4 py-3 rounded-xl text-white font-semibold text-sm transition-all disabled:opacity-60"
+                    style={{ background: `linear-gradient(135deg, ${colors.accentMint}, ${colors.primary})`, boxShadow: `0 4px 15px ${colors.accentMint}40` }}
+                  >
+                    {exporting ? <><Loader2 size={16} className="animate-spin" /> Exporting...</> : <><Download size={16} /> Export {exportFormat.toUpperCase()}</>}
+                  </motion.button>
+                </div>
               </motion.div>
             </motion.div>
-          );
-        })()}
-      </AnimatePresence>
+          )}
+        </AnimatePresence>
+
+        {/* ═══════════════════════════════════════════════════════ */}
+        {/* ROLE MANAGEMENT MODAL                                  */}
+        {/* ═══════════════════════════════════════════════════════ */}
+        <AnimatePresence>
+          {showRoleModal && roleTarget && (() => {
+            const currentMember = members.find(m => m.id === roleTarget.id) || roleTarget;
+            const currentRoles = getMemberRoles(currentMember);
+            return (
+              <motion.div
+                className="fixed inset-0 z-50 flex items-center justify-center p-4"
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+              >
+                <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={() => { setShowRoleModal(false); setRoleTarget(null); }} />
+                <motion.div
+                  className="relative w-full max-w-sm rounded-2xl p-6 border"
+                  style={{ background: colors.secondaryLight, borderColor: colors.borderLight, boxShadow: '0 25px 60px rgba(0,0,0,0.6)' }}
+                  initial={{ scale: 0.9, y: 20 }}
+                  animate={{ scale: 1, y: 0 }}
+                  exit={{ scale: 0.9, y: 20 }}
+                >
+                  {/* Header */}
+                  <div className="flex items-center justify-between mb-5">
+                    <div className="flex items-center gap-3">
+                      <div className="w-10 h-10 rounded-xl flex items-center justify-center" style={{ background: `${colors.accentPurple}15`, color: colors.accentPurple }}>
+                        <UserCog size={20} />
+                      </div>
+                      <div>
+                        <h3 className="text-lg font-bold text-white">Manage Roles</h3>
+                        <p className="text-xs" style={{ color: colors.textTertiary }}>{roleTarget.full_name}</p>
+                      </div>
+                    </div>
+                    <button onClick={() => { setShowRoleModal(false); setRoleTarget(null); }} className="p-2 rounded-lg hover:bg-white/5 transition-colors">
+                      <X size={18} className="text-white" />
+                    </button>
+                  </div>
+
+                  {/* Role toggles */}
+                  <div className="space-y-2">
+                    {([
+                      { role: 'admin' as const, label: 'Admin', desc: 'Full access to manage organization', color: colors.accentPurple, icon: <Shield size={16} /> },
+                      { role: 'finsec' as const, label: 'Financial Secretary', desc: 'Manage payments & finances', color: colors.success, icon: <Crown size={16} /> },
+                      { role: 'class_rep' as const, label: 'Class Representative', desc: 'Manage group members', color: colors.primary, icon: <Users size={16} /> },
+                    ]).map(r => {
+                      const isActive = r.role === 'admin' ? currentRoles.isAdmin : r.role === 'finsec' ? currentRoles.isFinsec : currentRoles.isClassRep;
+                      return (
+                        <button
+                          key={r.role}
+                          onClick={() => toggleRole(currentMember, r.role)}
+                          disabled={roleLoading}
+                          className="w-full flex items-center gap-3 px-4 py-3.5 rounded-xl text-left transition-all hover:scale-[1.01] active:scale-[0.99] disabled:opacity-50"
+                          style={{
+                            background: isActive ? `${r.color}10` : 'rgba(255,255,255,0.03)',
+                            border: `1px solid ${isActive ? r.color : 'rgba(255,255,255,0.08)'}`,
+                          }}
+                        >
+                          <div className="w-8 h-8 rounded-lg flex items-center justify-center shrink-0" style={{ background: `${r.color}15`, color: r.color }}>
+                            {r.icon}
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <p className="text-sm font-medium" style={{ color: isActive ? 'white' : colors.textSecondary }}>{r.label}</p>
+                            <p className="text-xs" style={{ color: colors.textTertiary }}>{r.desc}</p>
+                          </div>
+                          <div className="shrink-0">
+                            {roleLoading ? (
+                              <Loader2 size={16} className="animate-spin" style={{ color: r.color }} />
+                            ) : isActive ? (
+                              <CheckSquare size={18} style={{ color: r.color }} />
+                            ) : (
+                              <Square size={18} style={{ color: colors.textDisabled }} />
+                            )}
+                          </div>
+                        </button>
+                      );
+                    })}
+                  </div>
+
+                  <p className="text-xs mt-4 text-center" style={{ color: colors.textTertiary }}>
+                    Click to toggle roles. Changes take effect immediately.
+                  </p>
+                </motion.div>
+              </motion.div>
+            );
+          })()}
+        </AnimatePresence>
       </div>
 
       {/* ── Confirm Action Modal ── */}
@@ -3053,9 +3059,10 @@ export default function OrgMembersPage() {
               }}
             >
               {/* Gradient accent bar */}
-              <div className="h-1" style={{ background: confirmAction.type === 'delete'
-                ? 'linear-gradient(90deg, #ef4444, #dc2626)'
-                : `linear-gradient(90deg, ${colors.warning}, ${colors.primary})`
+              <div className="h-1" style={{
+                background: confirmAction.type === 'delete'
+                  ? 'linear-gradient(90deg, #ef4444, #dc2626)'
+                  : `linear-gradient(90deg, ${colors.warning}, ${colors.primary})`
               }} />
 
               <div className="p-6">
