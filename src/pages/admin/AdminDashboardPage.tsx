@@ -47,6 +47,7 @@ import {
   Bell,
 } from 'lucide-react';
 import Footer from '@/components/Footer';
+import HandoverButton from '@/components/handover/HandoverButton';
 import StudentFeatureSettings from '@/components/admin/StudentFeatureSettings';
 // ExpenseVisibilitySettings import removed — the transparency toggle
 // was retired with the student-facing transparency dashboard.
@@ -1847,6 +1848,13 @@ export default function AdminDashboardPage() {
           </motion.div>
         )}
       </AnimatePresence>
+
+      {/* Discoverable exec handover entry — self-hides for non-execs.
+          Also on the profile page; mounted here so an exec doesn't
+          have to go hunting for "how do I step down / pass my role." */}
+      <div className="max-w-md mx-auto px-4 sm:px-0">
+        <HandoverButton />
+      </div>
 
       <Footer />
     </div>

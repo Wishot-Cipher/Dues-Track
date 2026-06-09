@@ -45,6 +45,7 @@ import { useThemeTokens } from '@/hooks/useThemeTokens';
 import { useAppNav } from '@/hooks/useAppNav';
 import { supabase } from '@/config/supabase';
 import type { MemberAdmin, OrganizationGroup } from '@/types/multiTenant';
+import HandoverButton from '@/components/handover/HandoverButton';
 
 // ── Local types ───────────────────────────────────────────────────────
 interface PaymentRow {
@@ -536,6 +537,9 @@ export default function ClassExecDashboardView({ admin, klass }: ClassExecDashbo
           })}.
         </p>
       )}
+
+      {/* Discoverable exec handover — self-hides for non-execs. */}
+      <HandoverButton />
     </div>
   );
 }

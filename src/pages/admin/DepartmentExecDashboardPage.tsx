@@ -46,6 +46,7 @@ import { useAppNav } from '@/hooks/useAppNav';
 import { supabase } from '@/config/supabase';
 import { organizationService } from '@/services/organizationService';
 import type { MemberAdmin, OrganizationGroup } from '@/types/multiTenant';
+import HandoverButton from '@/components/handover/HandoverButton';
 
 // ── Local types ───────────────────────────────────────────────────────
 interface ClassRow {
@@ -702,6 +703,9 @@ export default function DepartmentExecDashboardPage() {
           })}. Dept exec roles refresh each academic session.
         </p>
       )}
+
+      {/* Discoverable exec handover — self-hides for non-execs. */}
+      <HandoverButton />
     </div>
   );
 }
