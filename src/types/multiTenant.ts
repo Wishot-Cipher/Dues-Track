@@ -518,6 +518,12 @@ export interface MemberAdmin {
   can_view_analytics: boolean;
   can_export_data: boolean;
   can_manage_settings: boolean;
+  // Payout security (mig 106). Derived by a DB trigger from the
+  // exec's role — TRUE only for president / treasurer / fin sec /
+  // org-scope execs. Gates the payout setup page + the set_group_payout
+  // RPC. Optional here because rows created before mig 106 won't carry
+  // it until the backfill runs.
+  can_manage_payout?: boolean;
 
   // Status
   is_active: boolean;

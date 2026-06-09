@@ -169,6 +169,14 @@ export const paystackService = {
      * account — no cascading fallback to a parent tier.
      */
     groupId?: string | null;
+    /**
+     * Password re-verification (Payout security Layer 2, mig 106/107).
+     * The server re-checks this with verify_member_password before it
+     * touches Paystack or the payout row — proves the person setting
+     * where money lands is actually the account holder, not someone
+     * on an unlocked phone.
+     */
+    password: string;
   }): Promise<SubaccountResult> {
     try {
       const res = await fetch('/api/paystack/subaccount', {
@@ -180,6 +188,7 @@ export const paystackService = {
           accountNumber: input.accountNumber,
           businessName: input.businessName,
           groupId: input.groupId || null,
+          password: input.password,
         }),
       });
       const json = (await res.json().catch(() => ({}))) as SubaccountResult;

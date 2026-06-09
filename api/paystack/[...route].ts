@@ -726,7 +726,7 @@ async function handleSubaccount(req: any, res: any, body: any) {
   // set_group_payout RPC) instead of on the org. Each tier owns its
   // own money plumbing — strict ownership, no cascade — so a class
   // rep's class collects to the class's bank, not the org's.
-  const { memberId, bankCode, accountNumber, businessName, groupId } = body || {};
+  const { memberId, bankCode, accountNumber, businessName, groupId, password } = body || {};
 
   // Caller must be an admin with settings permission...
   const auth = await verifyAdmin(supabase, memberId, 'can_manage_settings');
@@ -734,6 +734,21 @@ async function handleSubaccount(req: any, res: any, body: any) {
     return res.status(auth.status || 401).json({ ok: false, error: auth.error || 'Admin access required' });
   }
   const orgId = auth.data.organization_id;
+
+  // ── Payout security Layer 2: password re-verification (mig 106/107).
+  //    Proves the person redirecting where money settles is actually
+  //    the account holder, not someone who grabbed an unlocked phone.
+  //    Checked BEFORE Paystack so a wrong password costs nothing. ──
+  if (!password || typeof password !== 'string') {
+    return res.status(400).json({ ok: false, error: 'Confirm your password to change payout details.' });
+  }
+  const { data: pwOk, error: pwErr } = await supabase.rpc('verify_member_password', {
+    p_member_id: auth.data.id,
+    p_password: password,
+  });
+  if (pwErr || !pwOk) {
+    return res.status(401).json({ ok: false, error: 'Incorrect password. Payout details were not changed.' });
+  }
 
   // ...and that admin must be VERIFIED (trusted) — a pending exec can't set payout.
   const { data: verifiedRow } = await supabase
@@ -747,6 +762,22 @@ async function handleSubaccount(req: any, res: any, body: any) {
     .maybeSingle();
   if (!verifiedRow) {
     return res.status(403).json({ ok: false, error: 'Only a verified exec can set up the payout account.' });
+  }
+
+  // ── Payout security Layer 1: finance-role gate (mig 106).
+  //    Only president / treasurer / fin sec (can_manage_payout) may
+  //    touch payout. set_group_payout enforces this again server-side
+  //    (defense in depth); we check here for a clean early error and
+  //    to cover the org-level direct-update path below too. ──
+  const { data: payoutOk } = await supabase.rpc('can_member_manage_payout', {
+    p_member_id: auth.data.id,
+    p_group_id: groupId || null,
+  });
+  if (!payoutOk) {
+    return res.status(403).json({
+      ok: false,
+      error: 'Only the president, treasurer or financial secretary can manage the payout account.',
+    });
   }
 
   if (!bankCode || !accountNumber || String(accountNumber).replace(/\D/g, '').length < 10) {
@@ -862,6 +893,15 @@ async function handleSubaccount(req: any, res: any, body: any) {
       });
     }
   } else {
+    // Capture the prior org account so the audit row records old→new.
+    const { data: priorOrg } = await supabase
+      .from('organizations')
+      .select('paystack_account_number, paystack_settlement_bank')
+      .eq('id', orgId)
+      .maybeSingle();
+    const priorAcct = (priorOrg as { paystack_account_number?: string | null })?.paystack_account_number || '';
+    const hadOrgAccount = priorAcct.trim() !== '';
+
     const { error: updErr } = await supabase
       .from('organizations')
       .update({
@@ -878,6 +918,22 @@ async function handleSubaccount(req: any, res: any, body: any) {
       console.error('[paystack/subaccount] org update error', updErr);
       return res.status(500).json({ ok: false, error: 'Payout account created but could not be saved. Contact support.' });
     }
+
+    // Org-level audit (the group path writes its own row inside
+    // set_group_payout; org direct-update mirrors it here). group_id
+    // NULL marks this as an org-tier change. Best-effort — never block
+    // a successful payout save on the audit write.
+    void supabase.from('payout_audit').insert({
+      organization_id: orgId,
+      group_id: null,
+      changed_by: auth.data.id,
+      changed_by_name: (auth.data as { full_name?: string }).full_name || null,
+      action: hadOrgAccount ? 'change' : 'setup',
+      old_account_last4: priorAcct.slice(-4),
+      new_account_last4: acctNum.slice(-4),
+      old_bank_code: (priorOrg as { paystack_settlement_bank?: string | null })?.paystack_settlement_bank || null,
+      new_bank_code: bankCode,
+    });
   }
 
   return res.status(200).json({

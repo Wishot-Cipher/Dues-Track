@@ -158,6 +158,33 @@ export default function PayoutSetupPage() {
   );
   const [editing, setEditing] = useState(!initialConnected);
 
+  // ── Payout security Layer 1 (FE mirror of mig 106).
+  //    Only an exec with can_manage_payout (president / treasurer /
+  //    fin sec / org-scope) may use this page. We read it off the
+  //    caller's active admin rows. The server enforces it again — this
+  //    just avoids showing the form to someone who'd be rejected. ──
+  const canManagePayout = useMemo(() => {
+    const rows = (user?.admin_records ?? []) as Array<{
+      is_active?: boolean; can_manage_payout?: boolean;
+      scope_level?: string; group_id?: string | null;
+    }>;
+    return rows.some((r) => {
+      if (!r.is_active) return false;
+      if (!r.can_manage_payout) return false;
+      // Org-scope finance exec covers every tier; otherwise the row
+      // must match the group we're configuring (or org mode = no group).
+      if (r.scope_level === 'org') return true;
+      if (!groupId) return r.scope_level === 'org';
+      return r.group_id === groupId;
+    });
+  }, [user?.admin_records, groupId]);
+
+  // ── Password confirm modal (Layer 2). Opening it is the last step
+  //    before the write; on confirm we pass the password to the
+  //    server which re-verifies before touching Paystack. ──
+  const [showConfirm, setShowConfirm] = useState(false);
+  const [confirmPassword, setConfirmPassword] = useState('');
+
   // When the tier context resolves async, re-seed the "connected" UI.
   useEffect(() => {
     if (!groupId) return;
@@ -187,11 +214,28 @@ export default function PayoutSetupPage() {
     return () => { active = false; };
   }, [toast]);
 
-  const handleSave = useCallback(async () => {
+  // Step 1 — validate inputs, then open the password confirm modal.
+  // We do NOT call the server here; the actual write happens in
+  // handleConfirmedSave once the exec re-enters their password.
+  const handleSave = useCallback(() => {
     if (!user?.id) { toast?.error?.('Sign in required.'); return; }
+    if (!canManagePayout) {
+      toast?.error?.('Only the president, treasurer or financial secretary can manage payout.');
+      return;
+    }
     if (!bankCode) { toast?.error?.('Please choose your bank.'); return; }
     const digits = accountNumber.replace(/\D/g, '');
     if (digits.length !== 10) { toast?.error?.('Account number must be 10 digits.'); return; }
+    setConfirmPassword('');
+    setShowConfirm(true);
+  }, [user?.id, canManagePayout, bankCode, accountNumber, toast]);
+
+  // Step 2 — password entered. Send everything to the server, which
+  // re-verifies the password + finance role before touching Paystack.
+  const handleConfirmedSave = useCallback(async () => {
+    if (!user?.id) return;
+    if (!confirmPassword) { toast?.error?.('Enter your password to confirm.'); return; }
+    const digits = accountNumber.replace(/\D/g, '');
 
     setSaving(true);
     const res = await paystackService.setupSubaccount({
@@ -199,16 +243,17 @@ export default function PayoutSetupPage() {
       bankCode,
       accountNumber: digits,
       groupId: groupId || null,
+      password: confirmPassword,
     });
     setSaving(false);
 
     if (!res.ok) { toast?.error?.(res.error || 'Could not set up the payout account.'); return; }
 
+    setShowConfirm(false);
+    setConfirmPassword('');
     setConnected(true);
     setConnectedName(res.account_name || null);
     setEditing(false);
-    // Update local group context so the "Connected" panel reflects
-    // the new state without a full refresh.
     if (groupId && groupCtx) {
       setGroupCtx({
         ...groupCtx,
@@ -223,10 +268,8 @@ export default function PayoutSetupPage() {
         ? `Payout connected for ${groupCtx?.name ?? 'this tier'}: ${res.account_name || 'verified'}.`
         : `Payout account connected: ${res.account_name || 'verified'}.`,
     );
-    // Org-wide flow refreshes the session because org fields move
-    // into the auth context. Tier-scoped flow doesn't need that.
     if (!groupId) void refreshSession();
-  }, [user?.id, bankCode, accountNumber, toast, refreshSession, groupId, groupCtx]);
+  }, [user?.id, confirmPassword, bankCode, accountNumber, toast, refreshSession, groupId, groupCtx]);
 
   return (
     <div className="min-h-screen px-4 sm:px-6 py-6" style={{ background: tk.bg }}>
@@ -273,8 +316,28 @@ export default function PayoutSetupPage() {
             : 'Where your collected dues are settled. Until this is set, payments are held in the platform account.'}
         </p>
 
+        {/* ── Role gate (Layer 1). A non-finance exec sees a locked
+            panel instead of the account details — they can't read OR
+            change where money lands. ── */}
+        {!canManagePayout && (
+          <motion.div
+            initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }}
+            className="rounded-2xl p-5"
+            style={{ background: `${tk.danger}0E`, border: `1px solid ${tk.danger}30` }}
+          >
+            <div className="flex items-center gap-2 mb-2">
+              <ShieldCheck className="w-5 h-5" style={{ color: tk.danger }} />
+              <span className="font-bold" style={{ color: tk.text }}>Payout is finance-only</span>
+            </div>
+            <p className="text-sm" style={{ color: tk.textSec }}>
+              Only the <span className="font-semibold" style={{ color: tk.text }}>president, treasurer or financial secretary</span> can
+              view or change where money settles. If that's your role, claim it from your profile and ask a peer to verify you — then this page unlocks.
+            </p>
+          </motion.div>
+        )}
+
         {/* Connected state */}
-        {connected && !editing && (
+        {canManagePayout && connected && !editing && (
           <motion.div
             initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }}
             className="rounded-2xl p-5 mb-5"
@@ -308,7 +371,7 @@ export default function PayoutSetupPage() {
         )}
 
         {/* Form */}
-        {editing && (
+        {canManagePayout && editing && (
           <motion.div
             initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }}
             className="rounded-2xl p-5"
@@ -370,6 +433,72 @@ export default function PayoutSetupPage() {
           </motion.div>
         )}
       </div>
+
+      {/* ── Password confirm modal (Layer 2). Last gate before the
+          write — the password is re-verified server-side before
+          anything touches Paystack or the payout row. ── */}
+      {showConfirm && (
+        <div
+          className="fixed inset-0 z-[200] flex items-center justify-center px-4"
+          style={{ background: 'rgba(0,0,0,0.72)', backdropFilter: 'blur(8px)' }}
+          role="dialog"
+          aria-modal="true"
+        >
+          <motion.div
+            initial={{ opacity: 0, scale: 0.96, y: 8 }}
+            animate={{ opacity: 1, scale: 1, y: 0 }}
+            className="w-full max-w-sm rounded-2xl p-6"
+            style={{ background: tk.panel, border: `1px solid ${tk.border}` }}
+          >
+            <div className="flex items-center gap-2.5 mb-3">
+              <div
+                className="w-10 h-10 rounded-xl flex items-center justify-center"
+                style={{ background: `${tk.primary}18`, color: tk.primary }}
+              >
+                <ShieldCheck className="w-5 h-5" />
+              </div>
+              <div>
+                <h2 className="text-base font-bold" style={{ color: tk.text }}>Confirm it's you</h2>
+                <p className="text-[12px]" style={{ color: tk.textSec }}>
+                  Re-enter your password to change where money lands.
+                </p>
+              </div>
+            </div>
+
+            <input
+              type="password"
+              value={confirmPassword}
+              onChange={(e) => setConfirmPassword(e.target.value)}
+              onKeyDown={(e) => { if (e.key === 'Enter' && confirmPassword && !saving) handleConfirmedSave(); }}
+              placeholder="Your password"
+              autoFocus
+              disabled={saving}
+              className="w-full rounded-xl px-3 py-2.5 text-sm outline-none mt-1"
+              style={{ background: tk.inputBg, border: `1px solid ${tk.border}`, color: tk.text }}
+            />
+
+            <div className="flex items-center gap-2 mt-4">
+              <button
+                onClick={handleConfirmedSave}
+                disabled={saving || !confirmPassword}
+                className="flex-1 inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl text-sm font-bold disabled:opacity-50"
+                style={{ background: tk.primary, color: '#1A0E09' }}
+              >
+                {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCircle2 className="w-4 h-4" />}
+                {saving ? 'Verifying…' : 'Confirm & save'}
+              </button>
+              <button
+                onClick={() => { setShowConfirm(false); setConfirmPassword(''); }}
+                disabled={saving}
+                className="px-4 py-2.5 rounded-xl text-sm font-bold"
+                style={{ background: 'rgba(255,255,255,0.04)', color: tk.textSec, border: `1px solid ${tk.border}` }}
+              >
+                Cancel
+              </button>
+            </div>
+          </motion.div>
+        </div>
+      )}
     </div>
   );
 }
