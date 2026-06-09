@@ -76,9 +76,67 @@ async function loadOrgGroups(orgId: string): Promise<GroupRow[] | null> {
 }
 
 /**
+ * OwnedTierScope — the dues/expenses a tier exec actually OWNS.
+ *
+ * The tier-autonomy rule: each tier (class / department / faculty /
+ * org) manages ONLY the dues IT created, never the dues of the tiers
+ * below it. A department president sees + edits + waives department
+ * dues; the class's own dues belong to the class rep / fin sec /
+ * treasurer alone. This is DIFFERENT from getScopedGroupIds (which
+ * walks the whole subtree) — that one is only for finding the MEMBERS
+ * a tier-due applies to (the waive member-picker), never for the dues
+ * list itself.
+ *
+ *   'org-wide'   org-scope exec → only org-wide dues (group_id IS NULL)
+ *   'group'      class/dept/faculty exec → only that exact group's dues
+ *   'unscoped'   no active exec role → don't add a tier filter
+ *                (member/self views resolve their own scope elsewhere)
+ */
+export type OwnedTierScope =
+  | { mode: 'org-wide' }
+  | { mode: 'group'; groupId: string }
+  | { mode: 'unscoped' };
+
+export function getOwnedTierScope(input: {
+  activeKind?: 'student' | 'exec' | null;
+  activeGroupId?: string | null;
+  activeScopeLevel?: 'org' | 'unit' | 'group' | null;
+}): OwnedTierScope {
+  const { activeKind, activeGroupId, activeScopeLevel } = input;
+  if (activeKind !== 'exec' || !activeScopeLevel) return { mode: 'unscoped' };
+  if (activeScopeLevel === 'org') return { mode: 'org-wide' };
+  if (activeGroupId) return { mode: 'group', groupId: activeGroupId };
+  return { mode: 'unscoped' };
+}
+
+/**
+ * Apply an OwnedTierScope to a Supabase query builder on a table that
+ * has a `group_id` column (payment_types, expenses). Centralizes the
+ * three-way branch so every consumer stays consistent.
+ *
+ *   org-wide → .is('group_id', null)   (only the org's own dues)
+ *   group    → .eq('group_id', id)     (only that tier's dues)
+ *   unscoped → unchanged
+ */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export function applyOwnedTierScope<T extends { is: any; eq: any }>(
+  query: T,
+  scope: OwnedTierScope,
+): T {
+  if (scope.mode === 'org-wide') return query.is('group_id', null);
+  if (scope.mode === 'group') return query.eq('group_id', scope.groupId);
+  return query;
+}
+
+/**
  * Returns a Set of organization_groups.id the caller's active role
  * covers. Returns null when no filter should apply (org-scope or
  * missing role context).
+ *
+ * NOTE: subtree walker — use ONLY for finding members a tier-due
+ * applies to (the waive member-picker). For the dues/expenses LIST,
+ * use getOwnedTierScope (own tier only) instead, or a dept exec will
+ * see the dues of every class below them.
  */
 export async function getScopedGroupIds(
   input: ScopedGroupsInput,

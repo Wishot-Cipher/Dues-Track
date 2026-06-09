@@ -12,7 +12,7 @@ import { useAuth } from '@/hooks/useAppAuth'
 import { useToast } from '@/hooks/useToast'
 import { supabase } from '@/config/supabase'
 import { getOrgScope } from '@/utils/orgScope'
-import { getScopedGroupIds } from '@/utils/scopedGroups'
+import { getOwnedTierScope, applyOwnedTierScope } from '@/utils/scopedGroups'
 import { useActiveRole } from '@/hooks/useActiveRole'
 import { useMultiTenantAuth } from '@/hooks/useMultiTenantAuth'
 import { formatDate } from '@/utils/formatters'
@@ -161,24 +161,24 @@ export default function ManageDuesPage() {
     try {
       setLoading(true)
       const scope = getOrgScope()
-      // The old filter pinned group_id to the user's PRIMARY group,
-      // which meant a faculty/dept exec only saw dues for their own
-      // unit and never the dues they published targeting classes
-      // below them. We now scope to the ACTIVE role's subtree —
-      //   class rep → just their class
-      //   dept exec → their dept + all classes under it
-      //   faculty exec → their faculty + every dept + every class
-      //   org owner → everything (scope = null → no filter)
-      const scopedIds = scope ? await getScopedGroupIds({
-        orgId: scope.orgId,
+      // Tier autonomy: an exec manages ONLY the dues their OWN tier
+      // created — never the dues of the tiers below them. So we scope
+      // to the active role's own group, not its subtree:
+      //   class rep   → only their class's dues
+      //   dept exec   → only dept-tier dues (NOT the classes' dues)
+      //   faculty exec→ only faculty-tier dues
+      //   org exec    → only org-wide dues (group_id IS NULL)
+      // (The earlier subtree scoping let a dept president see + edit +
+      //  waive every class's dues — a tier-autonomy violation.)
+      const ownedScope = getOwnedTierScope({
+        activeKind: activeRole?.kind ?? null,
         activeGroupId: activeRole?.groupId ?? null,
         activeScopeLevel: activeRole?.scopeLevel ?? null,
-      }) : null
+      })
       // Trimmed projection — only the columns this page actually
       // renders. The previous `select *` pulled every event_*
       // metadata column (cover URL, max attendees, RFC-shape JSON…)
-      // for rows that aren't events. On a uni with hundreds of
-      // dues that doubled the payload size and the time-to-first-row.
+      // for rows that aren't events.
       let query = supabase
         .from('payment_types')
         .select(`
@@ -191,9 +191,7 @@ export default function ManageDuesPage() {
         .order('created_at', { ascending: false })
       if (scope) {
         query = query.eq('organization_id', scope.orgId)
-        if (scopedIds) {
-          query = query.in('group_id', Array.from(scopedIds))
-        }
+        query = applyOwnedTierScope(query, ownedScope)
       }
       const { data, error } = await query
 

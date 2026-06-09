@@ -5,7 +5,7 @@ import {  } from "react-router-dom";
 import { useAppNav } from '@/hooks/useAppNav';
 import { supabase, getStoredAccessToken } from "@/config/supabase";
 import { getOrgScope } from '@/utils/orgScope';
-import { getScopedGroupIds } from '@/utils/scopedGroups';
+import { getScopedGroupIds, getOwnedTierScope, applyOwnedTierScope } from '@/utils/scopedGroups';
 import { useActiveRole } from '@/hooks/useActiveRole';
 import { useMultiTenantAuth } from '@/hooks/useMultiTenantAuth';
 import { organizationService } from '@/services/organizationService';
@@ -161,21 +161,25 @@ export default function WaivePaymentPage() {
       // toward dues they published — not just class-pinned dues. The
       // previous filter quietly hid every dept/faculty due from the
       // waive list, leaving execs unable to waive their own dues.
+      // Tier autonomy: the waivable dues are ONLY the ones this exec's
+      // own tier created — a dept exec waives dept dues, a class rep
+      // waives class dues. The class's own dues never appear in the
+      // dept exec's list (that's the class rep's job). The MEMBER
+      // search below still spans the subtree, so a dept exec can pick
+      // any student under them to waive a DEPT due for.
       const scope = getOrgScope();
-      const scopedIds = scope ? await getScopedGroupIds({
-        orgId: scope.orgId,
+      const ownedScope = getOwnedTierScope({
+        activeKind: activeRole?.kind ?? null,
         activeGroupId: activeRole?.groupId ?? null,
         activeScopeLevel: activeRole?.scopeLevel ?? null,
-      }) : null;
+      });
       let ptQ = supabase
         .from("payment_types")
         .select("id, title, amount, description, deadline, target_levels, group_id, category")
         .eq("is_active", true);
       if (scope) {
         ptQ = ptQ.eq('organization_id', scope.orgId);
-        if (scopedIds) {
-          ptQ = ptQ.in('group_id', Array.from(scopedIds));
-        }
+        ptQ = applyOwnedTierScope(ptQ, ownedScope);
       }
       const { data: allPaymentTypes, error: ptError } = await ptQ;
 
