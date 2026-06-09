@@ -34,6 +34,7 @@ import { useAuth } from '@/hooks/useAppAuth';
 import {  } from 'react-router-dom';
 import { useAppNav } from '@/hooks/useAppNav';
 import GlassCard from '@/components/ui/GlassCard';
+import HandoverButton from '@/components/handover/HandoverButton';
 import Input from '@/components/ui/Input';
 import CustomButton from '@/components/ui/CustomButton';
 import { formatCurrency, formatDate } from '@/utils/formatters';
@@ -598,6 +599,9 @@ export default function ProfilePage() {
                 </GlassCard>
               </motion.div>
             )}
+
+            {/* Exec handover — self-hides for non-execs (mig 108). */}
+            <HandoverButton />
 
             {/* Payment Summary Card - Mobile */}
             <motion.div

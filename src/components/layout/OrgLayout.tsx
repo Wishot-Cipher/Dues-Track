@@ -63,6 +63,7 @@ import { multiTenantAuthService, type MembershipSummary } from '@/services/multi
 import RoleSwitcher from '@/components/RoleSwitcher';
 import RoleSwitcherSheet from '@/components/RoleSwitcherSheet';
 import OfficeClassGate from '@/components/layout/OfficeClassGate';
+import HandoverNomineeBanner from '@/components/handover/HandoverNomineeBanner';
 
 /* ─────────────────────── types ─────────────────────── */
 interface NavItem {
@@ -543,6 +544,11 @@ export default function OrgLayout() {
           modal when the user's primary group is flagged is_staff_office
           (mig 099). Self-closes after move_member_to_class (mig 100). */}
       <OfficeClassGate />
+
+      {/* Durable prompt for a member nominated to take over an exec
+          role (mig 108). Server-driven, so it survives dismiss/reload
+          until they accept or decline. Self-hides otherwise. */}
+      <HandoverNomineeBanner />
 
       {/* ═══════════ TOP BAR ═══════════ */}
       <header
