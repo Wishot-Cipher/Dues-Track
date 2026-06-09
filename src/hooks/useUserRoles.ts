@@ -60,13 +60,22 @@ function buildScopeLabel(params: {
   if (scopeLevel === 'org') {
     return orgType === 'university' || orgType === 'school' ? 'SUG Exec' : 'Org Exec';
   }
+  // scope='unit' covers BOTH department and faculty execs (the DB only
+  // has org|unit|group). They must be distinguished by groupKind, or a
+  // departmental president gets mislabeled "Faculty Exec" — the bug the
+  // user hit on the role switcher. The previous code returned the
+  // faculty/unit label here BEFORE the groupKind checks below ever ran.
   if (scopeLevel === 'unit') {
+    if (groupKind === 'department') return 'Department Exec';
+    if (groupKind === 'faculty' || groupKind === 'college') return `${orgUnitLabel || 'Faculty'} Exec`;
+    if (groupKind === 'association') return 'Association Exec';
+    // Genuinely unknown unit-tier group — fall back to the org's unit label.
     return `${orgUnitLabel || 'Unit'} Exec`;
   }
   if (groupKind === 'class' || groupKind === 'level') return 'Class Exec';
   if (groupKind === 'department') return 'Department Exec';
   if (groupKind === 'association') return 'Association Exec';
-  if (groupKind === 'faculty') return `${orgUnitLabel || 'Faculty'} Exec`;
+  if (groupKind === 'faculty' || groupKind === 'college') return `${orgUnitLabel || 'Faculty'} Exec`;
   return `${orgGroupLabel || 'Group'} Exec`;
 }
 
