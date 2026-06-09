@@ -907,25 +907,33 @@ function Row({ children }: { children: React.ReactNode }) {
 }
 
 function RecapRow({ label, value, highlight }: { label: string; value: string; highlight?: boolean }) {
-  // RecapRow's tk prop dropped in the theme-awareness pass — the
-  // helper now reads from TokensContext like every other helper in
-  // this file. Callers that still pass `tk={tk}` are TS errors;
-  // remove the prop from the call site.
+  // Stacked layout — label on top (small uppercase), value below
+  // (full-width, breakable). The previous flex-row layout squashed
+  // long values like "ECE 300L (300CVE - 300L)" or
+  // "John Doe · john@example.com" against the label and pushed
+  // text-right against text-left in a small modal width. Vertical
+  // stack reads like a fintech receipt and never clips.
   const tk = useTokens();
   return (
     <div
-      className="flex items-start justify-between gap-3 px-3.5 py-2.5 rounded-xl"
+      className="rounded-xl px-3.5 py-3"
       style={{
         background: highlight ? `${tk.primary}10` : tk.panel,
         border: `1px solid ${highlight ? `${tk.primary}30` : tk.border}`,
       }}
     >
-      <span className="text-[11px] uppercase tracking-wider font-semibold shrink-0" style={{ color: tk.textTer }}>
+      <p
+        className="text-[10px] uppercase tracking-[0.15em] font-semibold mb-1"
+        style={{ color: tk.textTer }}
+      >
         {label}
-      </span>
-      <span className="text-sm text-right" style={{ color: highlight ? tk.primary : tk.text }}>
+      </p>
+      <p
+        className="text-sm font-medium break-words leading-snug"
+        style={{ color: highlight ? tk.primary : tk.text }}
+      >
         {value}
-      </span>
+      </p>
     </div>
   );
 }
