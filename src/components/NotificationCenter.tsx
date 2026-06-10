@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Bell, X, AlertCircle, DollarSign, CheckCircle, BellOff, Sparkles, Trash2 } from 'lucide-react';
+import { Bell, X, AlertCircle, DollarSign, CheckCircle, BellOff, Sparkles } from 'lucide-react';
 import { supabase } from '@/config/supabase';
 import notificationService from '@/services/notificationService';
 import { useAppAuth as useAuth } from '@/hooks/useAppAuth';
@@ -203,21 +203,9 @@ export const NotificationCenter = () => {
     }
   };
 
-  const clearReadNotifications = async () => {
-    try {
-      const userId = user?.id;
-      if (!userId) throw new Error('Not authenticated');
-
-      const ok = await notificationService.deleteAllRead(userId);
-      if (!ok) throw new Error('Failed to clear read notifications');
-
-      setNotifications(prev => prev.filter(n => !n.is_read));
-      return true;
-    } catch (error) {
-      console.error('Error clearing read notifications:', error);
-      return false;
-    }
-  };
+  // clearReadNotifications removed — notifications are a permanent
+  // audit record; users mark-as-read + browse the full history page,
+  // they never delete. (See NotificationsPage / the removed button.)
 
   const getNotificationIcon = (type: string) => {
     const iconClass = "w-5 h-5";
@@ -375,22 +363,12 @@ export const NotificationCenter = () => {
                     </div>
                   </div>
                   <div className="flex items-center gap-2">
-                    {notifications.some(n => n.is_read) && (
-                      <motion.button
-                        onClick={clearReadNotifications}
-                        className="text-xs px-3 py-1.5 rounded-lg font-medium transition-all flex items-center gap-1"
-                        style={{
-                          color: colors.statusUnpaid,
-                          background: `${colors.statusUnpaid}15`,
-                        }}
-                        whileHover={{ background: `${colors.statusUnpaid}25` }}
-                        whileTap={{ scale: 0.95 }}
-                        title="Delete all read notifications"
-                      >
-                        <Trash2 className="w-3 h-3" />
-                        Clear read
-                      </motion.button>
-                    )}
+                    {/* Delete intentionally removed — notifications are
+                        a permanent record (receipts, waivers, role
+                        changes). Letting users delete them would erase
+                        an audit trail on a financial app. They can
+                        mark-as-read and browse the full history page
+                        instead. */}
                     {unreadCount > 0 && (
                       <motion.button
                         onClick={markAllAsRead}
@@ -511,8 +489,11 @@ export const NotificationCenter = () => {
                               } else if (notification.type === 'payment_waived') {
                                 targetLink = '/payments';
                               } else {
-                                // Default to dashboard
-                                targetLink = '/dashboard';
+                                // No action link → open the full detail
+                                // view so a long informational message
+                                // (waiver reason, announcement, role
+                                // note) is read in full, not truncated.
+                                targetLink = `/notifications/${notification.id}`;
                               }
                             }
                             
@@ -607,7 +588,7 @@ export const NotificationCenter = () => {
                 >
                   <motion.button
                     onClick={() => {
-                      navigate('/payments');
+                      navigate('/notifications');
                       setShowPanel(false);
                     }}
                     className="text-xs font-medium flex items-center justify-center gap-1.5 mx-auto"
@@ -616,7 +597,7 @@ export const NotificationCenter = () => {
                     whileTap={{ scale: 0.98 }}
                   >
                     <Sparkles className="w-3.5 h-3.5" />
-                    View payment history
+                    See all notifications
                   </motion.button>
                 </div>
               )}

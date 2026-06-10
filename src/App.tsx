@@ -25,6 +25,8 @@ import SettingsPage from '@/pages/student/SettingsPage';
 import PaymentDetailPage from '@/pages/PaymentDetailPage';
 import MakePaymentPage from '@/pages/MakePaymentPage';
 import MyDuesPage from '@/pages/MyDuesPage';
+import NotificationsPage from '@/pages/NotificationsPage';
+import NotificationDetailPage from '@/pages/NotificationDetailPage';
 import MyGroupsPage from '@/pages/MyGroupsPage';
 import MyTicketsPage from '@/pages/MyTicketsPage';
 import TicketPage from '@/pages/TicketPage';
@@ -166,6 +168,8 @@ function App() {
                 <Route path="claim" element={<OrgProtectedRoute><ClaimSubmitPage /></OrgProtectedRoute>} />
                 <Route path="claim/:claimId/decide" element={<OrgProtectedRoute><ClaimDecisionPage /></OrgProtectedRoute>} />
                 <Route path="payments" element={<OrgProtectedRoute><MyDuesPage /></OrgProtectedRoute>} />
+                <Route path="notifications" element={<OrgProtectedRoute><NotificationsPage /></OrgProtectedRoute>} />
+                <Route path="notifications/:id" element={<OrgProtectedRoute><NotificationDetailPage /></OrgProtectedRoute>} />
                 <Route path="groups" element={<OrgProtectedRoute><MyGroupsPage /></OrgProtectedRoute>} />
                 <Route path="tickets" element={<OrgProtectedRoute><MyTicketsPage /></OrgProtectedRoute>} />
                 {/* Default Pay flow — clean Paystack-first MakePaymentPage. */}

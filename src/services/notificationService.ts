@@ -276,17 +276,18 @@ class NotificationService {
         // If serverless API isn't available in dev (Vite), fall back to direct Supabase update
         if (res.status === 404 || res.status === 500) {
           console.warn(`mark-read endpoint error (${res.status}). Falling back to direct Supabase update.`);
-          const nScope = getOrgScope();
-          let mrQ = supabase
+          // Match on id + member_id ONLY. Do NOT filter by group_id:
+          // a notification's stored group_id is frequently a different
+          // group from the reader's active group (the creating admin's
+          // group, or a faculty/dept-tier due), so an `.eq('group_id',
+          // activeGroup)` matched 0 rows → 0-row UPDATE is not an error
+          // → markAsRead returned true while nothing persisted, so the
+          // unread state came back on reload ("not tracking when read").
+          const { error } = await supabase
             .from('notifications')
             .update({ is_read: true, read_at: new Date().toISOString() })
             .eq('id', notificationId)
             .eq('member_id', userId);
-          if (nScope) {
-            mrQ = mrQ.eq('organization_id', nScope.orgId);
-            mrQ = mrQ.eq('group_id', nScope.groupId);
-          }
-          const { error } = await mrQ;
           if (error) {
             console.error('Supabase fallback error marking as read:', error);
             return false;
@@ -326,17 +327,14 @@ class NotificationService {
         // Fallback for local dev when serverless API routes are not available
         if (res.status === 404 || res.status === 500) {
           console.warn(`mark-read endpoint error (${res.status}). Falling back to direct Supabase update.`);
-          const naScope = getOrgScope();
-          let marQ = supabase
+          // Member-scoped only — NOT group-scoped (see markAsRead): a
+          // group_id filter left other-tier notifications unread and the
+          // bell count never cleared.
+          const { error } = await supabase
             .from('notifications')
             .update({ is_read: true, read_at: new Date().toISOString() })
             .eq('member_id', userId)
             .eq('is_read', false);
-          if (naScope) {
-            marQ = marQ.eq('organization_id', naScope.orgId);
-            marQ = marQ.eq('group_id', naScope.groupId);
-          }
-          const { error } = await marQ;
           if (error) {
             console.error('Supabase fallback error marking all as read:', error);
             return false;
