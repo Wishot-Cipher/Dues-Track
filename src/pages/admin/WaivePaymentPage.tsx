@@ -365,15 +365,9 @@ export default function WaivePaymentPage() {
         if (!issueRes.ok || !issueData?.ok) {
           throw new Error(issueData?.error || 'Could not grant the free ticket.');
         }
-        if (notifyStudent) {
-          await notificationService.sendPaymentWaivedNotification(
-            selectedStudent.id,
-            selectedStudent.full_name,
-            paymentType.title,
-            paymentType.amount,
-            reasonForRecord,
-          );
-        }
+        // The endpoint already notifies the recipient server-side
+        // (reliable, links to their ticket) — no client notification
+        // here, or they'd get two.
         success(`Free ticket granted to ${selectedStudent.full_name}`);
         setShowSuccess(true);
         setTimeout(() => navigate('/admin/dashboard'), 2000);

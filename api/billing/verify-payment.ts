@@ -292,6 +292,24 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       });
     }
 
+    // ── Notify the recipient SERVER-SIDE (service_role, guaranteed).
+    //    A waive is a complete handoff: they're told, and the link
+    //    takes them straight to their ticket. Doing it here (not on
+    //    the client) means it can't be lost to RLS/scope quirks and
+    //    always carries the recipient's correct org/group context.
+    //    Best-effort — never fail the grant on a notification hiccup. ──
+    await supabase.from('notifications').insert({
+      organization_id: orgId,
+      member_id: recipient.id,
+      group_id: recipient.group_id ?? null,
+      type: 'free_ticket_granted',
+      title: '🎟️ You got a free ticket!',
+      message: `You've been given a free "${tier.name}" ticket to ${pt.title}. Open your Tickets to see the QR for check-in.`,
+      link: '/tickets',
+      related_type: 'event_ticket',
+      related_id: issueRes.ticket_id ?? null,
+    }).then(undefined, () => {});
+
     return res.status(200).json({
       ok: true,
       payment_id: payment.id,
