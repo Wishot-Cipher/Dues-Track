@@ -23,6 +23,53 @@ const SESSION_KEYS = {
   GROUP_ID: 'pvx_group_id',
 } as const;
 
+/**
+ * Every localStorage key that holds IDENTITY, SESSION, CONTEXT or
+ * CACHED FINANCIAL data. These MUST be wiped on logout / session
+ * invalidation — otherwise, on a shared or public device, the next
+ * person can read the previous user's token, role, org context, or
+ * cached dashboard/payments. (Pure UX prefs — theme, settings — are
+ * deliberately NOT here; they're not sensitive and survive logout.)
+ */
+const SENSITIVE_STORAGE_KEYS: readonly string[] = [
+  // Auth + identity
+  'pvx_jwt', 'pvx_auth', 'pvx_member_id', 'pvx_org_id', 'pvx_org_slug',
+  'pvx_group_id', 'pvx_group',
+  // Role + org/system context
+  'pvx_active_role', 'pvx_organization', 'pvx_sys_ctx', 'pvx_privacy_mask',
+  // Cached financial data (the real leak)
+  'offline_pending_payments', 'cached_payment_types', 'cached_dashboard_data',
+  'last_sync_timestamp',
+  // Legacy single-tenant auth keys
+  'current_user_id', 'auth_session',
+];
+
+/**
+ * Wipe all sensitive app storage. Call on every logout path + on
+ * session invalidation. Idempotent and failure-tolerant.
+ */
+export function clearAppStorage(): void {
+  try {
+    for (const k of SENSITIVE_STORAGE_KEYS) {
+      localStorage.removeItem(k);
+    }
+    // Defensive sweep: any future pvx_/cached_/offline_ key we forgot
+    // to enumerate still gets cleared, while UX prefs (pvx_theme,
+    // pvx_settings) are explicitly preserved.
+    const preserve = new Set(['pvx_theme', 'pvx_settings']);
+    for (let i = localStorage.length - 1; i >= 0; i--) {
+      const key = localStorage.key(i);
+      if (!key) continue;
+      if (preserve.has(key)) continue;
+      if (key.startsWith('pvx_') || key.startsWith('cached_') || key.startsWith('offline_')) {
+        localStorage.removeItem(key);
+      }
+    }
+  } catch {
+    /* storage unavailable — nothing to clear */
+  }
+}
+
 export interface OrgScope {
   orgId: string;
   orgSlug: string;

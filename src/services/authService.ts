@@ -1,6 +1,6 @@
 import { supabase } from '@/config/supabase';
 import type { Student } from '@/types';
-import { getOrgScope } from '@/utils/orgScope';
+import { getOrgScope, clearAppStorage } from '@/utils/orgScope';
 
 interface LoginResponse {
   student: Student;
@@ -158,14 +158,16 @@ export const authService = {
    */
   async logout(): Promise<boolean> {
     try {
-      // Clear session from localStorage (only storing id now)
-      localStorage.removeItem('auth_session');
-      localStorage.removeItem('current_user_id');
-      
+      // Full sensitive-storage wipe — token, identity, role/org context
+      // AND cached financial data — so nothing leaks to the next user
+      // on a shared device. (Covers the legacy auth_session/current_user_id
+      // keys too via the prefix sweep + explicit list.)
+      clearAppStorage();
+
       // For Supabase Auth (if using in future):
       // const { error } = await supabase.auth.signOut();
       // if (error) throw error;
-      
+
       return true;
     } catch (error) {
       console.error('Logout error:', error);

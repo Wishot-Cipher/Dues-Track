@@ -5,6 +5,7 @@
  */
 
 import { supabase, getStoredAccessToken } from '@/config/supabase';
+import { clearAppStorage } from '@/utils/orgScope';
 import type { OrganizationMember, MemberAdmin, Organization, OrganizationGroup, AggregatedPermissions } from '@/types/multiTenant';
 
 // ============================================================
@@ -197,12 +198,11 @@ export const multiTenantAuthService = {
    * Logout
    */
   async logout(): Promise<void> {
-    localStorage.removeItem(SESSION_KEYS.AUTH_STATUS);
-    localStorage.removeItem(SESSION_KEYS.MEMBER_ID);
-    localStorage.removeItem(SESSION_KEYS.ORG_ID);
-    localStorage.removeItem(SESSION_KEYS.ORG_SLUG);
-    localStorage.removeItem(SESSION_KEYS.GROUP_ID);
-    localStorage.removeItem(SESSION_KEYS.JWT);
+    // Wipe EVERYTHING sensitive — token, identity, role/org context AND
+    // cached financial data — not just the 6 session keys. On a shared
+    // device, leftover cached_dashboard_data / payments would otherwise
+    // be readable by the next user.
+    clearAppStorage();
   },
 
   /**
@@ -313,12 +313,9 @@ export const multiTenantAuthService = {
    * Clear session data
    */
   clearSession(): void {
-    localStorage.removeItem(SESSION_KEYS.AUTH_STATUS);
-    localStorage.removeItem(SESSION_KEYS.MEMBER_ID);
-    localStorage.removeItem(SESSION_KEYS.ORG_ID);
-    localStorage.removeItem(SESSION_KEYS.ORG_SLUG);
-    localStorage.removeItem(SESSION_KEYS.GROUP_ID);
-    localStorage.removeItem(SESSION_KEYS.JWT);
+    // Full sensitive-storage wipe (see logout). Session invalidation
+    // must not leave cached financial data or role context behind.
+    clearAppStorage();
   },
 
   /**
