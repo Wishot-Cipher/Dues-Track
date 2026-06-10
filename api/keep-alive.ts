@@ -104,12 +104,25 @@ export default async function handler(
       // Non-critical — function may not exist yet
     }
 
+    // ── Auto-promote stranded claims (#9, mig 121) ──
+    // A peer-verified higher-role claim that's sat unconfirmed past the
+    // cool-off window (no parent/org exec acted — absent or unreachable)
+    // is promoted to Layer 4 here, so an exec is never stuck waiting.
+    let promoteResult = null;
+    try {
+      const { data } = await supabase.rpc('promote_stale_claims', { p_window_days: 7 });
+      promoteResult = data;
+    } catch {
+      // Non-critical — function may not exist yet
+    }
+
     return res.status(200).json({
       success: true,
       message: 'Database is active',
       timestamp: new Date().toISOString(),
       table: 'organizations',
       notifications_cleanup: cleanupResult,
+      claims_promoted: promoteResult,
     });
 
   } catch (error) {
