@@ -17,6 +17,27 @@ import { useThemeTokens, type ThemeTokens } from '@/hooks/useThemeTokens';
 import { getOrgScope } from '@/utils/orgScope';
 import { useToast } from '@/hooks/useToast';
 
+/**
+ * Pull a ticket code out of scanned text. Ticket QRs encode the raw
+ * code (PVX-TKT-XXXXXXXX); we also accept a URL that contains it. A
+ * scan that ISN'T a ticket (a random QR in the camera's view, a
+ * website, a Wi-Fi code) returns null so the scanner keeps running
+ * instead of firing a bogus "invalid ticket" — the door stays fast
+ * and we never act on the wrong code.
+ */
+function extractTicketCode(raw: string): string | null {
+  const text = (raw || '').trim();
+  if (!text) return null;
+  const m = text.match(/PVX[-_]?TKT[-_]?[A-Z0-9]+/i);
+  if (m) return m[0].toUpperCase().replace(/_/g, '-');
+  // Bare code typed/scanned (no URL scheme, no spaces) — let the server
+  // be the authority, but only for plausible code shapes.
+  if (!/^https?:\/\//i.test(text) && /^[A-Z0-9][A-Z0-9-]{4,40}$/i.test(text)) {
+    return text.toUpperCase();
+  }
+  return null;
+}
+
 function resultMeta(t: ThemeTokens) {
   return {
     checked_in:     { color: t.mint,   icon: <CheckCircle2 className="w-6 h-6" />, label: 'Checked in' },
@@ -45,8 +66,15 @@ export default function TicketCheckInPage() {
   const runCheckIn = useCallback(async (codeRaw: string) => {
     const scope = getOrgScope();
     if (!scope?.memberId) { toast.error('Session expired. Please sign in again.'); return; }
-    const code = codeRaw.trim();
-    if (!code || busy) return;
+    if (busy) return;
+    const code = extractTicketCode(codeRaw);
+    if (!code) {
+      // Not a ticket QR. In scan mode, stay live + keep scanning (don't
+      // stop or show an error for every stray code the camera catches).
+      // In manual mode the user typed it, so tell them it's not valid.
+      if (mode === 'manual') toast.error("That doesn't look like a ticket code.");
+      return;
+    }
     setBusy(true);
     setScanning(false);
     try {
@@ -59,7 +87,7 @@ export default function TicketCheckInPage() {
       toast.error(e instanceof Error ? e.message : 'Check-in failed');
     }
     setBusy(false);
-  }, [busy, toast]);
+  }, [busy, toast, mode]);
 
   const resetForNext = () => { setLast(null); setManualCode(''); setScanning(true); };
 
