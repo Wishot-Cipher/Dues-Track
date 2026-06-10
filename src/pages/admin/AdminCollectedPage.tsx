@@ -10,7 +10,6 @@ import AnimatedCounter from '@/components/ui/AnimatedCounter';
 import FinancialChart from '@/components/admin/FinancialChart';
 import { supabase } from '@/config/supabase';
 import { getOrgScope } from '@/utils/orgScope';
-import { colors } from '@/config/colors';
 import Footer from '@/components/Footer';
 import { formatCurrency, formatDate } from '@/utils/formatters';
 import { PrivacyMask } from '@/components/ui/PrivacyMask';
@@ -770,7 +769,7 @@ export default function AdminCollectedPage() {
                   onClick={() => setCategoryFilter(cat.category)}
                   className={`p-4 rounded-xl text-left transition-all relative overflow-hidden ${categoryFilter === cat.category ? 'ring-2 shadow-xl' : ''}`}
                   style={{
-                    background: categoryFilter === cat.category ? `linear-gradient(135deg, ${tk.primary}30, ${tk.primary}10)` : (theme === 'light' ? '#FFFFFF' : 'rgba(255,255,255,0.03)'),
+                    background: categoryFilter === cat.category ? `linear-gradient(135deg, ${tk.primary}30, ${tk.primary}10)` : (theme === 'light' ? '#FFFFFF' : tk.cardHover),
                     borderWidth: '1px', borderStyle: 'solid',
                     borderColor: categoryFilter === cat.category ? tk.primary : tk.cardBorder,
                     boxShadow: categoryFilter === cat.category ? `0 4px 20px ${tk.primary}30` : 'none',
@@ -820,18 +819,18 @@ export default function AdminCollectedPage() {
           <GlassCard>
             <div className="flex flex-col gap-4">
               <div className="flex-1 relative">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4" style={{ color: colors.textSecondary }} />
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4" style={{ color: tk.textSec }} />
                 <input
                   type="text" placeholder="Search by student name or reg number..."
                   value={searchTerm}
                   onChange={(e) => { setSearchTerm(e.target.value); setCurrentPage(1); }}
                   className="w-full pl-10 pr-4 py-2.5 rounded-lg focus:outline-none focus:ring-2 transition-all"
-                  style={{ background: theme === 'light' ? '#FFFFFF' : 'rgba(255,255,255,0.05)', borderWidth: '1px', borderStyle: 'solid', borderColor: tk.cardBorder, color: tk.text }}
+                  style={{ background: theme === 'light' ? '#FFFFFF' : tk.cardHover, borderWidth: '1px', borderStyle: 'solid', borderColor: tk.cardBorder, color: tk.text }}
                 />
               </div>
 
               <div className="flex flex-wrap items-center gap-2">
-                <div className="flex items-center gap-1 text-xs sm:text-sm" style={{ color: colors.textSecondary }}>
+                <div className="flex items-center gap-1 text-xs sm:text-sm" style={{ color: tk.textSec }}>
                   <Filter className="w-3 h-3 sm:w-4 sm:h-4" /><span className="hidden sm:inline">Payment:</span>
                 </div>
                 {(['all', 'paid', ...(filteredTotals.isDateFiltered ? [] : ['unpaid' as const])] as const).map((f) => (
@@ -839,10 +838,10 @@ export default function AdminCollectedPage() {
                     onClick={() => { setPaymentFilter(f as 'all' | 'paid' | 'unpaid'); setCurrentPage(1); }}
                     className={`px-3 sm:px-4 py-1.5 sm:py-2 rounded-lg text-xs sm:text-sm font-medium transition-all hover:shadow-md ${paymentFilter === f ? 'scale-105 shadow-lg' : 'hover:scale-[1.02]'}`}
                     style={{
-                      background: paymentFilter === f ? `linear-gradient(135deg, ${colors.primary}40, ${colors.primary}20)` : 'rgba(255,255,255,0.05)',
+                      background: paymentFilter === f ? `linear-gradient(135deg, ${tk.primary}40, ${tk.primary}20)` : tk.cardHover,
                       borderWidth: '1px', borderStyle: 'solid',
-                      borderColor: paymentFilter === f ? colors.primary : 'rgba(255,255,255,0.1)',
-                      color: paymentFilter === f ? 'white' : colors.textSecondary,
+                      borderColor: paymentFilter === f ? tk.primary : tk.cardBorder,
+                      color: paymentFilter === f ? 'white' : tk.textSec,
                     }}
                   >
                     {f === 'all' ? 'All' : f === 'paid' ? `Paid (${filteredTotals.totalStudentsPaid})` : `Not Paid (${totalStudentsUnpaid})`}
@@ -851,16 +850,16 @@ export default function AdminCollectedPage() {
               </div>
 
               <div className="flex flex-wrap items-center gap-2">
-                <span className="text-xs sm:text-sm" style={{ color: colors.textSecondary }}>Activity:</span>
+                <span className="text-xs sm:text-sm" style={{ color: tk.textSec }}>Activity:</span>
                 {(['all', 'active', 'inactive'] as const).map((s) => (
                   <button key={s}
                     onClick={() => { setStatusFilter(s); setCurrentPage(1); }}
                     className={`px-3 sm:px-4 py-1.5 sm:py-2 rounded-lg text-xs sm:text-sm font-medium transition-all hover:shadow-md ${statusFilter === s ? 'scale-105 shadow-lg' : 'hover:scale-[1.02]'}`}
                     style={{
-                      background: statusFilter === s ? `linear-gradient(135deg, ${colors.primary}40, ${colors.primary}20)` : 'rgba(255,255,255,0.05)',
+                      background: statusFilter === s ? `linear-gradient(135deg, ${tk.primary}40, ${tk.primary}20)` : tk.cardHover,
                       borderWidth: '1px', borderStyle: 'solid',
-                      borderColor: statusFilter === s ? colors.primary : 'rgba(255,255,255,0.1)',
-                      color: statusFilter === s ? 'white' : colors.textSecondary,
+                      borderColor: statusFilter === s ? tk.primary : tk.cardBorder,
+                      color: statusFilter === s ? 'white' : tk.textSec,
                     }}
                   >
                     {s === 'all' ? 'All' : s.charAt(0).toUpperCase() + s.slice(1)}
@@ -870,20 +869,20 @@ export default function AdminCollectedPage() {
 
               {categoryFilter !== 'all' && (
                 <div className="flex items-center gap-2">
-                  <span className="text-sm" style={{ color: colors.textSecondary }}>Filtered by:</span>
+                  <span className="text-sm" style={{ color: tk.textSec }}>Filtered by:</span>
                   <button onClick={() => setCategoryFilter('all')}
                     className="px-3 py-1 rounded-full text-sm font-medium flex items-center gap-2 transition-all hover:scale-105"
-                    style={{ background: `linear-gradient(135deg, ${colors.primary}30, ${colors.primary}10)`, border: `1px solid ${colors.primary}60`, color: 'white' }}>
+                    style={{ background: `linear-gradient(135deg, ${tk.primary}30, ${tk.primary}10)`, border: `1px solid ${tk.primary}60`, color: 'white' }}>
                     <span className="capitalize">{categoryFilter.replace(/_/g, ' ')}</span>
                     <span className="text-xs">✕</span>
                   </button>
                 </div>
               )}
 
-              <div className="text-sm" style={{ color: colors.textSecondary }}>
+              <div className="text-sm" style={{ color: tk.textSec }}>
                 Showing {filteredStudents.length} of {allStudents.length} students
                 {filteredTotals.isDateFiltered && (
-                  <span className="ml-2 px-2 py-0.5 rounded-full text-xs" style={{ background: `${colors.primary}15`, color: colors.primary, border: `1px solid ${colors.primary}30` }}>
+                  <span className="ml-2 px-2 py-0.5 rounded-full text-xs" style={{ background: `${tk.primary}15`, color: tk.primary, border: `1px solid ${tk.primary}30` }}>
                     Date filtered: {rangeStart} → {rangeEnd}
                   </span>
                 )}
@@ -896,16 +895,16 @@ export default function AdminCollectedPage() {
         {loading ? (
           <div className="flex items-center justify-center py-20">
             <div className="flex flex-col items-center gap-3">
-              <div className="animate-spin rounded-full h-12 w-12 border-3 border-t-transparent" style={{ borderColor: colors.primary, borderTopColor: 'transparent' }} />
-              <p className="text-sm" style={{ color: colors.textSecondary }}>Loading students...</p>
+              <div className="animate-spin rounded-full h-12 w-12 border-3 border-t-transparent" style={{ borderColor: tk.primary, borderTopColor: 'transparent' }} />
+              <p className="text-sm" style={{ color: tk.textSec }}>Loading students...</p>
             </div>
           </div>
         ) : paginatedStudents.length === 0 ? (
           <GlassCard>
             <div className="text-center py-12">
-              <Users className="w-16 h-16 mx-auto mb-4 opacity-30" style={{ color: colors.textSecondary }} />
-              <p className="text-lg font-medium" style={{ color: colors.textSecondary }}>No students found</p>
-              <p className="text-sm mt-2" style={{ color: colors.textSecondary }}>Try adjusting your filters or search query</p>
+              <Users className="w-16 h-16 mx-auto mb-4 opacity-30" style={{ color: tk.textSec }} />
+              <p className="text-lg font-medium" style={{ color: tk.textSec }}>No students found</p>
+              <p className="text-sm mt-2" style={{ color: tk.textSec }}>Try adjusting your filters or search query</p>
             </div>
           </GlassCard>
         ) : (
@@ -917,15 +916,15 @@ export default function AdminCollectedPage() {
                     <div className="flex-1">
                       <div className="flex items-start gap-2">
                         <div className="w-8 h-8 sm:w-10 sm:h-10 rounded-full flex items-center justify-center text-white text-sm sm:text-base font-bold shrink-0"
-                          style={{ background: `linear-gradient(135deg, ${colors.primary}, ${colors.accentMint})` }}>
+                          style={{ background: `linear-gradient(135deg, ${tk.primary}, ${tk.mint})` }}>
                           {student.student_name.charAt(0).toUpperCase()}
                         </div>
                         <div className="flex-1 min-w-0">
-                          <p className="font-semibold text-sm sm:text-base text-white">{student.student_name}</p>
-                          <p className="text-xs sm:text-sm truncate" style={{ color: colors.textSecondary }}>{student.reg_number}</p>
+                          <p className="font-semibold text-sm sm:text-base" style={{ color: tk.text }}>{student.student_name}</p>
+                          <p className="text-xs sm:text-sm truncate" style={{ color: tk.textSec }}>{student.reg_number}</p>
                         </div>
                         <span className="px-2 py-0.5 rounded-full text-xs font-semibold whitespace-nowrap shrink-0"
-                          style={{ background: student.is_active ? colors.statusPaid : colors.statusFailed, color: 'white' }}>
+                          style={{ background: student.is_active ? tk.mint : tk.danger, color: 'white' }}>
                           {student.is_active ? 'Active' : 'Inactive'}
                         </span>
                       </div>
@@ -933,22 +932,22 @@ export default function AdminCollectedPage() {
 
                     <div className="grid grid-cols-3 gap-3 sm:gap-6 mt-2 sm:mt-0">
                       <div className="text-center">
-                        <p className="text-[10px] sm:text-sm" style={{ color: colors.textSecondary }}>Total Paid</p>
-                        <PrivacyMask><p className="text-sm sm:text-xl font-bold text-white">{formatCurrency(student.total_paid)}</p></PrivacyMask>
+                        <p className="text-[10px] sm:text-sm" style={{ color: tk.textSec }}>Total Paid</p>
+                        <PrivacyMask><p className="text-sm sm:text-xl font-bold" style={{ color: tk.text }}>{formatCurrency(student.total_paid)}</p></PrivacyMask>
                       </div>
                       <div className="text-center">
-                        <p className="text-[10px] sm:text-sm" style={{ color: colors.textSecondary }}>Payments</p>
-                        <p className="text-sm sm:text-xl font-bold" style={{ color: colors.accentMint }}>{student.payment_count}</p>
+                        <p className="text-[10px] sm:text-sm" style={{ color: tk.textSec }}>Payments</p>
+                        <p className="text-sm sm:text-xl font-bold" style={{ color: tk.mint }}>{student.payment_count}</p>
                         {student.payments.filter(p => p.waived).length > 0 && (
-                          <p className="text-xs mt-1 inline-flex items-center gap-2" style={{ color: (colors as any).statusWaived }}>
-                            <span className="w-2 h-2 rounded-full" style={{ background: (colors as any).statusWaived }} />
+                          <p className="text-xs mt-1 inline-flex items-center gap-2" style={{ color: tk.amber }}>
+                            <span className="w-2 h-2 rounded-full" style={{ background: tk.amber }} />
                             {student.payments.filter(p => p.waived).length} waived
                           </p>
                         )}
                       </div>
                       <div className="text-center">
-                        <p className="text-[10px] sm:text-sm" style={{ color: colors.textSecondary }}>Categories</p>
-                        <p className="text-sm sm:text-xl font-bold" style={{ color: colors.primary }}>{student.categories_paid.length}</p>
+                        <p className="text-[10px] sm:text-sm" style={{ color: tk.textSec }}>Categories</p>
+                        <p className="text-sm sm:text-xl font-bold" style={{ color: tk.primary }}>{student.categories_paid.length}</p>
                       </div>
                     </div>
                   </div>
@@ -957,39 +956,39 @@ export default function AdminCollectedPage() {
                     <div className="mt-4 flex flex-wrap gap-2">
                       {student.categories_paid.map(cat => (
                         <span key={cat} className="px-3 py-1 rounded-full text-xs font-medium capitalize"
-                          style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', color: colors.textSecondary }}>
+                          style={{ background: tk.cardHover, border: `1px solid ${tk.cardBorder}`, color: tk.textSec }}>
                           {cat.replace(/_/g, ' ')}
                         </span>
                       ))}
                     </div>
                   ) : (
-                    <div className="mt-4 p-3 rounded-lg text-center" style={{ background: 'rgba(255,100,100,0.1)', border: '1px solid rgba(255,100,100,0.2)' }}>
-                      <p className="text-sm font-medium" style={{ color: colors.statusFailed }}>No payments recorded yet</p>
+                    <div className="mt-4 p-3 rounded-lg text-center" style={{ background: `${tk.danger}10`, border: `1px solid ${tk.danger}20` }}>
+                      <p className="text-sm font-medium" style={{ color: tk.danger }}>No payments recorded yet</p>
                     </div>
                   )}
 
                   {student.has_paid && (
                     <div className="mt-4 space-y-2">
-                      <p className="text-xs font-semibold uppercase tracking-wide" style={{ color: colors.textSecondary }}>Payment History</p>
-                      <p className="text-xs mt-1" style={{ color: colors.textSecondary }}>Waived payments are marked and excluded from totals.</p>
+                      <p className="text-xs font-semibold uppercase tracking-wide" style={{ color: tk.textSec }}>Payment History</p>
+                      <p className="text-xs mt-1" style={{ color: tk.textSec }}>Waived payments are marked and excluded from totals.</p>
                       <div className="space-y-1.5">
                         {student.payments.slice(0, 3).map(payment => (
-                          <div key={payment.id} className="flex items-center justify-between p-2 rounded-lg" style={{ background: 'rgba(255,255,255,0.02)' }}>
+                          <div key={payment.id} className="flex items-center justify-between p-2 rounded-lg" style={{ background: tk.cardHover }}>
                             <div className="flex-1">
-                              <p className="text-sm font-medium text-white">{payment.payment_type}</p>
-                              <p className="text-xs" style={{ color: colors.textSecondary }}>{formatDate(payment.created_at, 'short')} • {payment.transaction_ref}</p>
+                              <p className="text-sm font-medium" style={{ color: tk.text }}>{payment.payment_type}</p>
+                              <p className="text-xs" style={{ color: tk.textSec }}>{formatDate(payment.created_at, 'short')} • {payment.transaction_ref}</p>
                             </div>
                             <div className="text-right">
-                              <PrivacyMask><p className="text-sm font-semibold text-white">{formatCurrency(payment.amount)}</p></PrivacyMask>
+                              <PrivacyMask><p className="text-sm font-semibold" style={{ color: tk.text }}>{formatCurrency(payment.amount)}</p></PrivacyMask>
                               <div className="flex items-center justify-end gap-2">
                                 <span className="text-xs px-2 py-0.5 rounded-full"
-                                  style={{ background: payment.status === 'approved' ? colors.statusPaid : payment.status === 'pending' ? 'rgba(255,165,0,0.2)' : 'rgba(59,130,246,0.2)', color: payment.status === 'approved' ? 'white' : colors.primary }}>
+                                  style={{ background: payment.status === 'approved' ? tk.mint : payment.status === 'pending' ? `${tk.amber}20` : `${tk.blue}20`, color: payment.status === 'approved' ? '#06281C' : payment.status === 'pending' ? tk.amber : tk.blue }}>
                                   {payment.status.toUpperCase()}
                                 </span>
                                 {payment.waived && (
                                   <span className="inline-flex items-center gap-2 text-xs px-2 py-0.5 rounded-full"
-                                    style={{ background: `linear-gradient(135deg, ${(colors as any).statusWaived}10, rgba(255,255,255,0.02))`, color: (colors as any).statusWaived, border: `1px solid ${(colors as any).statusWaived}30`, boxShadow: '0 2px 8px rgba(0,0,0,0.18)' }}>
-                                    <span className="w-2 h-2 rounded-full" style={{ background: (colors as any).statusWaived }} />Waived
+                                    style={{ background: `${tk.amber}14`, color: tk.amber, border: `1px solid ${tk.amber}30` }}>
+                                    <span className="w-2 h-2 rounded-full" style={{ background: tk.amber }} />Waived
                                   </span>
                                 )}
                               </div>
@@ -997,7 +996,7 @@ export default function AdminCollectedPage() {
                           </div>
                         ))}
                         {student.payments.length > 3 && (
-                          <p className="text-xs text-center py-1" style={{ color: colors.textSecondary }}>
+                          <p className="text-xs text-center py-1" style={{ color: tk.textSec }}>
                             + {student.payments.length - 3} more payment{student.payments.length - 3 !== 1 ? 's' : ''}
                           </p>
                         )}
@@ -1014,15 +1013,15 @@ export default function AdminCollectedPage() {
         {totalPages > 1 && (
           <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.8 }}>
             <GlassCard className="relative overflow-hidden">
-              <div className="absolute bottom-0 left-0 w-full h-1" style={{ background: `linear-gradient(90deg, ${colors.statusPaid}, ${colors.primary}, transparent)` }} />
+              <div className="absolute bottom-0 left-0 w-full h-1" style={{ background: `linear-gradient(90deg, ${tk.mint}, ${tk.primary}, transparent)` }} />
               <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
                 <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-xl flex items-center justify-center" style={{ background: `${colors.primary}15`, border: `1px solid ${colors.primary}30` }}>
-                    <Users className="w-5 h-5" style={{ color: colors.primary }} />
+                  <div className="w-10 h-10 rounded-xl flex items-center justify-center" style={{ background: `${tk.primary}15`, border: `1px solid ${tk.primary}30` }}>
+                    <Users className="w-5 h-5" style={{ color: tk.primary }} />
                   </div>
                   <div>
-                    <p className="text-sm font-medium text-white">Page {currentPage} of {totalPages}</p>
-                    <p className="text-xs" style={{ color: colors.textSecondary }}>
+                    <p className="text-sm font-medium" style={{ color: tk.text }}>Page {currentPage} of {totalPages}</p>
+                    <p className="text-xs" style={{ color: tk.textSec }}>
                       Showing {(currentPage - 1) * itemsPerPage + 1}–{Math.min(currentPage * itemsPerPage, filteredStudents.length)} of {filteredStudents.length}
                     </p>
                   </div>
@@ -1031,7 +1030,7 @@ export default function AdminCollectedPage() {
                   <motion.button whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}
                     onClick={() => setCurrentPage(p => Math.max(1, p - 1))} disabled={currentPage === 1}
                     className="flex items-center gap-2 px-4 py-2.5 rounded-xl transition-all disabled:opacity-40 disabled:cursor-not-allowed"
-                    style={{ background: currentPage === 1 ? 'rgba(255,255,255,0.03)' : `linear-gradient(135deg, ${colors.primary}30, ${colors.primary}10)`, border: `1px solid ${currentPage === 1 ? 'transparent' : colors.primary}40`, color: currentPage === 1 ? colors.textSecondary : colors.primary }}>
+                    style={{ background: currentPage === 1 ? tk.cardHover : `linear-gradient(135deg, ${tk.primary}30, ${tk.primary}10)`, border: `1px solid ${currentPage === 1 ? 'transparent' : tk.primary}40`, color: currentPage === 1 ? tk.textSec : tk.primary }}>
                     <ChevronLeft className="w-4 h-4" /><span className="hidden sm:inline font-medium">Previous</span>
                   </motion.button>
                   <div className="flex gap-1">
@@ -1045,7 +1044,7 @@ export default function AdminCollectedPage() {
                         <motion.button key={page} whileHover={{ scale: 1.1 }} whileTap={{ scale: 0.9 }}
                           onClick={() => setCurrentPage(page)}
                           className="w-10 h-10 rounded-xl text-sm font-semibold transition-all"
-                          style={{ background: currentPage === page ? `linear-gradient(135deg, ${colors.statusPaid}, ${colors.primary})` : 'rgba(255,255,255,0.05)', color: currentPage === page ? 'white' : colors.textSecondary, boxShadow: currentPage === page ? `0 4px 15px ${colors.primary}40` : 'none' }}>
+                          style={{ background: currentPage === page ? `linear-gradient(135deg, ${tk.mint}, ${tk.primary})` : tk.cardHover, color: currentPage === page ? 'white' : tk.textSec, boxShadow: currentPage === page ? `0 4px 15px ${tk.primary}40` : 'none' }}>
                           {page}
                         </motion.button>
                       );
@@ -1054,7 +1053,7 @@ export default function AdminCollectedPage() {
                   <motion.button whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}
                     onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))} disabled={currentPage === totalPages}
                     className="flex items-center gap-2 px-4 py-2.5 rounded-xl transition-all disabled:opacity-40 disabled:cursor-not-allowed"
-                    style={{ background: currentPage === totalPages ? 'rgba(255,255,255,0.03)' : `linear-gradient(135deg, ${colors.primary}30, ${colors.primary}10)`, border: `1px solid ${currentPage === totalPages ? 'transparent' : colors.primary}40`, color: currentPage === totalPages ? colors.textSecondary : colors.primary }}>
+                    style={{ background: currentPage === totalPages ? tk.cardHover : `linear-gradient(135deg, ${tk.primary}30, ${tk.primary}10)`, border: `1px solid ${currentPage === totalPages ? 'transparent' : tk.primary}40`, color: currentPage === totalPages ? tk.textSec : tk.primary }}>
                     <span className="hidden sm:inline font-medium">Next</span><ChevronRight className="w-4 h-4" />
                   </motion.button>
                 </div>
