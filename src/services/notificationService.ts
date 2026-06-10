@@ -79,6 +79,20 @@ class NotificationService {
         return false;
       }
 
+      // Best-effort "top of phone" push for EVERY notification created
+      // through here (welcome, role, ticket, handover…), not just the
+      // hardcoded payment ones. In-app sound + the unread badge come
+      // from the realtime subscription; this reaches the device when
+      // the app is backgrounded or closed. Non-blocking — a push miss
+      // never fails the notification.
+      void sendPushNotification(
+        params.recipientId,
+        params.title,
+        params.message,
+        link || '/notifications',
+        params.type,
+      );
+
       return true;
     } catch (error) {
       console.error('Error creating notification:', error);
