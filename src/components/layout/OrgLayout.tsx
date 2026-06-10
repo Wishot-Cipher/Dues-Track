@@ -58,6 +58,7 @@ import { supabase } from '@/config/supabase';
 import LoadingSpinner from '@/components/ui/LoadingSpinner';
 import ConfirmDialog from '@/components/ui/ConfirmDialog';
 import { NotificationCenter } from '@/components/NotificationCenter';
+import AppGuide from '@/components/guide/AppGuide';
 import { organizationService } from '@/services/organizationService';
 import { multiTenantAuthService, type MembershipSummary } from '@/services/multiTenantAuthService';
 import RoleSwitcher from '@/components/RoleSwitcher';
@@ -780,6 +781,10 @@ export default function OrgLayout() {
               sm: and above, we add the first-name + chevron so the
               chip reads more like a full identity card. */}
           <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
+            {/* Guide — "show me around" (role-aware: members see member
+                features; execs also see the admin tools). */}
+            <AppGuide />
+
             {/* Notification bell. Wrapped so the chip sizing is
                 consistent with the profile trigger — same 38px
                 height, same rounded shape. */}
