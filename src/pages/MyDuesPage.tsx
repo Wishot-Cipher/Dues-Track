@@ -75,7 +75,10 @@ function hexAlpha(color: string, alpha: number): string {
 interface DueRowData {
   pt: PaymentType;
   groupLabel: string;
-  status: 'unpaid' | 'partial' | 'pending' | 'paid';
+  // 'waived' is a zero-money settlement — the member doesn't owe it,
+  // but it was NOT money they paid. It contributes ₦0 to approvedSum
+  // and shows a distinct "Waived" badge (never "Paid").
+  status: 'unpaid' | 'partial' | 'pending' | 'paid' | 'waived';
   approvedSum: number;
   outstanding: number;
   daysLeft: number | null;
@@ -124,15 +127,24 @@ export default function MyDuesPage() {
 
     return paymentTypes.map((pt) => {
       const own = payments.filter(p => p.payment_type_id === pt.id);
-      const approvedSum = own.filter(p => p.status === 'approved')
+      // A waiver is stored as an approved payment whose transaction_ref
+      // starts with "WAIVED-". It is NOT money — exclude it from the
+      // paid sum. approvedSum = real money the member actually paid.
+      const isWaived = own.some(
+        p => p.status === 'approved' && p.transaction_ref?.startsWith('WAIVED-'),
+      );
+      const approvedSum = own
+        .filter(p => p.status === 'approved' && !p.transaction_ref?.startsWith('WAIVED-'))
         .reduce((s, p) => s + Number(p.amount || 0), 0);
 
-      // PAID must win over a stray 'pending' row: an abandoned Paystack init
-      // leaves a pending row behind, and if pending took priority a fully-paid
-      // due would show as payable again → double payment. Check paid first.
+      // Priority: WAIVED wins (the member owes nothing, paid nothing),
+      // then PAID (real money covers it), then pending, partial, unpaid.
+      // PAID-before-pending guards the abandoned-Paystack-init case
+      // (stray pending row on a fully-paid due → double payment).
       const amount = Number(pt.amount || 0);
       const status: DueRowData['status'] =
-        amount > 0 && approvedSum >= amount ? 'paid'
+        isWaived ? 'waived'
+        : amount > 0 && approvedSum >= amount ? 'paid'
         : own.some(p => p.status === 'pending') ? 'pending'
         : approvedSum > 0 ? 'partial'
         : 'unpaid';
@@ -148,7 +160,8 @@ export default function MyDuesPage() {
         groupLabel: pt.group_id ? (groupNameById.get(pt.group_id) || 'Group due') : 'Org-wide',
         status,
         approvedSum,
-        outstanding: Math.max(0, Number(pt.amount || 0) - approvedSum),
+        // Waived → nothing outstanding (settled at ₦0).
+        outstanding: isWaived ? 0 : Math.max(0, amount - approvedSum),
         daysLeft: daysFromNow(pt.deadline),
         paidAt: lastApproved?.created_at ?? null,
       };
@@ -160,8 +173,10 @@ export default function MyDuesPage() {
     () => rows.filter(r => r.status === 'unpaid' || r.status === 'partial' || r.status === 'pending'),
     [rows],
   );
+  // Waived sits with paid — both are "settled, nothing owed" — but
+  // renders with its own badge + no money figure.
   const paidRows = useMemo(
-    () => rows.filter(r => r.status === 'paid'),
+    () => rows.filter(r => r.status === 'paid' || r.status === 'waived'),
     [rows],
   );
 
@@ -555,17 +570,21 @@ function PaidRow({
         <p className="text-[11px] mt-0.5 font-semibold" style={{ color: t.textSec }}>
           {data.groupLabel}
         </p>
-        {/* Show what the MEMBER actually paid (approvedSum), not
-            pt.amount (which is the cheapest tier price for ticketed
-            events). A VIP ticket buyer who paid ₦25k saw the
-            Regular price ₦3k here until this fix. The base price
-            only matters for unpaid rows — paid/partial rows always
-            display the receipt amount. */}
-        <p className="text-[14px] font-extrabold tabular-nums mt-0.5" style={{ color: t.text }}>
-          {formatNaira(Number(data.approvedSum || 0))}
-        </p>
+        {/* A waiver is a zero-money settlement — show "Waived", not a
+            naira figure (it wasn't money the member paid). Real paid
+            rows show what the MEMBER actually paid (approvedSum), not
+            pt.amount, so a VIP ticket buyer sees ₦25k not the ₦3k base. */}
+        {data.status === 'waived' ? (
+          <p className="text-[14px] font-extrabold mt-0.5" style={{ color: t.amber }}>
+            Waived
+          </p>
+        ) : (
+          <p className="text-[14px] font-extrabold tabular-nums mt-0.5" style={{ color: t.text }}>
+            {formatNaira(Number(data.approvedSum || 0))}
+          </p>
+        )}
         <p className="text-[11px] mt-1" style={{ color: t.textSec }}>
-          Paid on {formatDate(data.paidAt)}
+          {data.status === 'waived' ? 'Cleared for you — nothing to pay' : `Paid on ${formatDate(data.paidAt)}`}
         </p>
       </div>
 
@@ -573,11 +592,15 @@ function PaidRow({
         <div
           className="w-8 h-8 rounded-full flex items-center justify-center"
           style={{
-            background: isLight ? hexAlpha(mintBrand, 0.14) : hexAlpha(mintBrand, 0.20),
-            border: `1px solid ${hexAlpha(mintBrand, isLight ? 0.22 : 0.32)}`,
+            background: data.status === 'waived'
+              ? hexAlpha(t.amber, isLight ? 0.14 : 0.20)
+              : hexAlpha(mintBrand, isLight ? 0.14 : 0.20),
+            border: `1px solid ${data.status === 'waived'
+              ? hexAlpha(t.amber, isLight ? 0.22 : 0.32)
+              : hexAlpha(mintBrand, isLight ? 0.22 : 0.32)}`,
           }}
         >
-          <CheckCircle2 size={16} color={mintBrand} />
+          <CheckCircle2 size={16} color={data.status === 'waived' ? t.amber : mintBrand} />
         </div>
       </div>
     </motion.button>

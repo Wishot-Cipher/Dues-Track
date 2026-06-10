@@ -164,11 +164,18 @@ export default function StudentDashboardPage() {
   const enriched = useMemo(() => {
     return paymentTypes.map((pt) => {
       const own = payments.filter((p) => p.payment_type_id === pt.id);
+      // A waiver (approved + WAIVED- ref) is a zero-money settlement —
+      // it clears the obligation but isn't money paid. Exclude it from
+      // approvedSum; flag it so the row reads 'waived', not 'paid'.
+      const isWaived = own.some(
+        (p) => p.status === 'approved' && p.transaction_ref?.startsWith('WAIVED-'),
+      );
       const approvedSum = own
-        .filter((p) => p.status === 'approved')
+        .filter((p) => p.status === 'approved' && !p.transaction_ref?.startsWith('WAIVED-'))
         .reduce((s, p) => s + Number(p.amount || 0), 0);
-      const status: 'paid' | 'partial' | 'pending' | 'unpaid' =
-        own.some((p) => p.status === 'pending') ? 'pending'
+      const status: 'paid' | 'partial' | 'pending' | 'unpaid' | 'waived' =
+        isWaived ? 'waived'
+        : own.some((p) => p.status === 'pending') ? 'pending'
         : approvedSum >= Number(pt.amount || 0) ? 'paid'
         : approvedSum > 0 ? 'partial'
         : 'unpaid';
@@ -177,7 +184,7 @@ export default function StudentDashboardPage() {
         category: pt.category ?? null,
         status,
         approvedSum,
-        owed: Math.max(0, Number(pt.amount || 0) - approvedSum),
+        owed: isWaived ? 0 : Math.max(0, Number(pt.amount || 0) - approvedSum),
         daysLeft: daysFromNow(pt.deadline),
       };
     });
@@ -218,7 +225,7 @@ export default function StudentDashboardPage() {
   // All dues with status — sorted: unpaid mandatory first, then partial, paid last
   const allDuesSorted = useMemo(() => {
     const rank: Record<typeof enriched[number]['status'], number> = {
-      unpaid: 0, partial: 1, pending: 2, paid: 3,
+      unpaid: 0, partial: 1, pending: 2, paid: 3, waived: 3,
     };
     return [...duesOnly].sort((a, b) => {
       if (rank[a.status] !== rank[b.status]) return rank[a.status] - rank[b.status];
@@ -234,13 +241,15 @@ export default function StudentDashboardPage() {
   // empty-state and skeletons itself.
   const dueNextItems: DueNextItem[] = useMemo(() => {
     return allDuesSorted
-      .filter((e) => e.status !== 'paid')
+      // "Due next" = things the member still needs to act on. Paid AND
+      // waived are both settled (nothing owed) — exclude both.
+      .filter((e) => e.status !== 'paid' && e.status !== 'waived')
       .slice(0, 5)
       .map((e) => ({
         id: e.pt.id,
         title: e.pt.title || 'Untitled due',
         amount: Number(e.pt.amount || 0),
-        status: e.status,
+        status: e.status as DueNextItem['status'],
         daysLeft: e.daysLeft,
         isMandatory: Boolean(e.pt.is_mandatory),
         categoryKey: (e.pt as { category?: string | null }).category ?? null,
