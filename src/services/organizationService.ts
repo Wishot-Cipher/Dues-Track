@@ -5,6 +5,7 @@
  */
 
 import { supabase } from '@/config/supabase';
+import { friendlyEligibilityError } from '@/utils/claimErrors';
 import type {
   Organization,
   OrganizationGroup,
@@ -421,14 +422,19 @@ export const organizationService = {
     });
     if (error) {
       console.error('submitClaim RPC error', error);
-      return { ok: false, error: error.message };
+      return { ok: false, error: friendlyEligibilityError(error.message) };
     }
-    return (data ?? { ok: false, error: 'Empty response' }) as {
+    const result = (data ?? { ok: false, error: 'Empty response' }) as {
       ok: boolean; error?: string; claim_id?: string;
       votes_required?: number; vote_deadline?: string;
       bootstrap_path?: boolean; required_layer?: number;
       contested?: boolean; contested_count?: number;
     };
+    // The RPC can also return ok:false with a terse code in `error`.
+    if (result.ok === false && result.error) {
+      result.error = friendlyEligibilityError(result.error);
+    }
+    return result;
   },
 
   // Back-compat alias used by older claim pages.
@@ -1833,13 +1839,18 @@ export const organizationService = {
 
       if (error) {
         console.error('Error creating invite:', error);
-        return null;
+        // Surface the REAL Postgres error (RLS, FK, NOT NULL, check
+        // constraint…) instead of swallowing it as a null → generic
+        // "Invite creation failed". A class exec was being blocked
+        // with no clue why; now the modal shows the actual reason.
+        throw new Error(error.message || error.details || error.code || 'Invite creation failed');
       }
 
       return data as OrganizationInvite;
     } catch (error) {
       console.error('Error in createInvite:', error);
-      return null;
+      if (error instanceof Error) throw error;
+      throw new Error('Invite creation failed');
     }
   },
 

@@ -14,6 +14,7 @@
  */
 
 import { supabase } from '@/config/supabase';
+import { friendlyEligibilityError } from '@/utils/claimErrors';
 
 export interface TierMember {
   member_id: string;
@@ -87,8 +88,13 @@ export const handoverService = {
       p_handover_id: handoverId,
       p_accept: accept,
     });
-    if (error) return { ok: false, error: error.message };
-    return (data ?? { ok: false }) as { ok: boolean; status?: string; claim_id?: string; error?: string };
+    if (error) return { ok: false, error: friendlyEligibilityError(error.message) };
+    const res = (data ?? { ok: false }) as { ok: boolean; status?: string; claim_id?: string; error?: string };
+    // Accepting a handover files a claim, which can hit the same
+    // eligibility rules (e.g. a dept exec can't also be faculty) —
+    // translate the code into clear guidance instead of raw text.
+    if (res.ok === false && res.error) res.error = friendlyEligibilityError(res.error);
+    return res;
   },
 
   async cancel(
