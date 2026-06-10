@@ -35,6 +35,7 @@ import {
   Clock,
   Layers,
   Loader2,
+  PieChart,
   Plus,
   Receipt,
   ShieldCheck,
@@ -337,6 +338,14 @@ export default function ClassExecDashboardView({ admin, klass }: ClassExecDashbo
           tk={tk}
           accent={tk.purple}
           onClick={() => go('/admin/manage-dues')}
+        />
+        <ActionCard
+          icon={<PieChart className="w-5 h-5" />}
+          title="Audit & finance"
+          sub="Collected, expenses, balance."
+          tk={tk}
+          accent={tk.mint}
+          onClick={() => go('/admin/collected')}
         />
       </motion.section>
 
