@@ -451,220 +451,192 @@ export default function AdminCollectedPage() {
     finally { setExporting(false); }
   };
 
+  // At-a-glance figures (respect the active date filter).
+  const shownCollected = filteredTotals.isDateFiltered ? filteredTotals.totalCollected : totalCollected;
+  const shownNet = shownCollected - totalExpenses;
+  const shownPayments = studentsToFilter.reduce((sum, s) => sum + s.payment_count, 0);
+  // Tier-aware chip so an exec knows exactly whose money they're
+  // auditing — own-tier scoped, never the tiers below.
+  const financeScopeLabel = activeRole?.kind !== 'exec'
+    ? 'Finance'
+    : activeRole.scopeLevel === 'org' ? 'Org-wide finance'
+    : activeRole.scopeLevel === 'unit' ? 'Faculty / dept finance'
+    : 'Class finance';
+
   return (
-    <div className="min-h-screen py-6 px-4" style={{
-      background: tk.bgWash,
-    }}>
-      {/* Background Grid */}
-      <div className="absolute inset-0 opacity-20 pointer-events-none" style={{
-        backgroundImage: `linear-gradient(${colors.primary}40 1px, transparent 1px), linear-gradient(90deg, ${colors.primary}40 1px, transparent 1px)`,
-        backgroundSize: '50px 50px',
-      }} />
+    <div
+      className="min-h-screen relative overflow-hidden py-6 px-4 pb-20"
+      style={{ background: tk.bgWash, color: tk.text }}
+    >
+      {/* Soft brand blobs — matches every other exec surface (no
+          50px grid + pulsing orbs). */}
+      <div aria-hidden className="pointer-events-none absolute -top-32 -right-24 w-[520px] h-[520px] rounded-full"
+        style={{ background: tk.blob1, filter: 'blur(120px)' }} />
+      <div aria-hidden className="pointer-events-none absolute -bottom-40 -left-32 w-[420px] h-[420px] rounded-full"
+        style={{ background: tk.blob2, filter: 'blur(110px)' }} />
 
-      {/* Ambient orbs */}
-      <div className="fixed inset-0 overflow-hidden pointer-events-none">
-        <div className="absolute w-[500px] h-[500px] rounded-full blur-[120px] opacity-30"
-          style={{ background: `radial-gradient(circle, ${colors.primary} 0%, transparent 70%)`, top: '-10%', right: '-5%', animation: 'pulse 4s ease-in-out infinite' }} />
-        <div className="absolute w-[400px] h-[400px] rounded-full blur-[100px] opacity-20"
-          style={{ background: `radial-gradient(circle, ${colors.accentMint} 0%, transparent 70%)`, bottom: '-5%', left: '-5%', animation: 'pulse 6s ease-in-out infinite' }} />
-      </div>
+      <div className="relative z-10 max-w-6xl mx-auto space-y-5">
 
-      <div className="max-w-7xl mx-auto relative z-10 space-y-6">
+        {/* ── Hero: back · chip → H1 → subtitle · controls ── */}
+        <motion.header initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} className="space-y-3">
+          <button
+            type="button"
+            onClick={() => navigate('/admin/dashboard')}
+            className="inline-flex items-center gap-1 text-[11px] font-semibold uppercase tracking-wider transition-opacity hover:opacity-80"
+            style={{ color: tk.textTer }}
+          >
+            <ArrowLeft className="w-3 h-3" /> Back to dashboard
+          </button>
 
-        {/* ── Header ── */}
-        <motion.div initial={{ opacity: 0, y: -20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.5 }}>
-          <GlassCard className="relative overflow-hidden">
-            <div className="absolute top-0 right-0 w-64 h-64 opacity-5 pointer-events-none">
-              <BarChart3 className="w-full h-full" style={{ color: tk.mint }} />
+          <div className="flex items-start justify-between gap-3 flex-wrap">
+            <div className="min-w-0">
+              <span
+                className="inline-flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-[0.18em] px-2 py-1 rounded-full mb-2"
+                style={{ background: `${tk.mint}18`, color: tk.mint, border: `1px solid ${tk.mint}40` }}
+              >
+                <PieChart className="w-3 h-3" /> {financeScopeLabel}
+              </span>
+              <h1 className="text-2xl sm:text-[28px] font-extrabold tracking-tight" style={{ color: tk.text }}>
+                Finance &amp; audit
+              </h1>
+              <p className="text-sm mt-1" style={{ color: tk.textSec }}>
+                What your tier collected, spent, and has left — every figure traceable, waivers excluded.
+              </p>
             </div>
-            <div className="absolute top-0 left-0 w-full h-1"
-              style={{ background: `linear-gradient(90deg, ${tk.mint}, ${tk.primary}, transparent)` }} />
 
-            <div className="relative z-10">
-              <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 mb-6">
-                <div className="flex flex-col sm:flex-row sm:items-center gap-3 sm:gap-4">
-                  <motion.button
-                    whileHover={{ x: -4 }}
-                    onClick={() => navigate('/admin/dashboard')}
-                    className="flex items-center justify-center sm:justify-start gap-2 w-fit px-4 py-2 rounded-xl transition-all"
-                    style={{ background: tk.primarySoft, border: `1px solid ${tk.primaryRing}`, color: tk.primary }}
-                  >
-                    <ArrowLeft className="w-4 h-4" />
-                    <span className="font-medium">Back</span>
-                  </motion.button>
-
-                  <div className="flex items-center gap-4">
-                    <motion.div
-                      initial={{ scale: 0.9 }} animate={{ scale: 1 }}
-                      className="w-14 h-14 rounded-xl flex items-center justify-center shrink-0 shadow-lg"
-                      style={{ background: `linear-gradient(135deg, ${tk.mint}30, ${tk.mint}10)`, border: `1px solid ${tk.mint}40`, boxShadow: `0 4px 15px ${tk.mint}20` }}
-                    >
-                      <PieChart className="w-7 h-7" style={{ color: tk.mint }} />
-                    </motion.div>
-                    <div>
+            {/* Controls */}
+            <div className="flex flex-wrap items-center gap-2 shrink-0">
+              <ProfessionalDateTimePicker
+                mode="range"
+                label="Date Range"
+                rangeStart={rangeStart}
+                rangeEnd={rangeEnd}
+                onRangeChange={(s, e) => { setRangeStart(s); setRangeEnd(e); setCurrentPage(1); }}
+                placeholder="All time"
+              />
+              <button
+                type="button"
+                onClick={() => setShowCharts(!showCharts)}
+                className="inline-flex items-center gap-1.5 px-3 py-2.5 rounded-xl text-sm font-semibold transition-all"
+                style={{
+                  background: showCharts ? tk.primarySoft : tk.card,
+                  border: `1px solid ${showCharts ? tk.primaryRing : tk.cardBorder}`,
+                  color: showCharts ? tk.primary : tk.textSec,
+                }}
+              >
+                <LineChart className="w-4 h-4" />
+                <span className="hidden sm:inline">Charts</span>
+              </button>
+              <div className="relative">
+                <button
+                  type="button"
+                  onClick={() => setShowExportMenu(!showExportMenu)}
+                  disabled={exporting}
+                  className="inline-flex items-center gap-1.5 px-4 py-2.5 rounded-xl text-sm font-bold text-white disabled:opacity-50"
+                  style={{ background: tk.gradOrange, boxShadow: `0 6px 18px ${tk.primary}33` }}
+                >
+                  {exporting
+                    ? <div className="w-4 h-4 border-2 border-t-transparent rounded-full animate-spin" style={{ borderColor: '#fff', borderTopColor: 'transparent' }} />
+                    : <Download className="w-4 h-4" />}
+                  <span>Export</span>
+                  <ChevronDown className={`w-4 h-4 transition-transform ${showExportMenu ? 'rotate-180' : ''}`} />
+                </button>
+                <AnimatePresence>
+                  {showExportMenu && (
+                    <>
+                      <div className="fixed inset-0 z-40" onClick={() => setShowExportMenu(false)} />
                       <motion.div
-                        initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} transition={{ delay: 0.1 }}
-                        className="inline-flex items-center gap-2 px-3 py-1 rounded-full text-xs font-semibold mb-2"
-                        style={{ background: `linear-gradient(135deg, ${tk.mint}30, ${tk.mint}10)`, border: `1px solid ${tk.mint}40`, color: tk.mint }}
+                        initial={{ opacity: 0, y: -8, scale: 0.96 }}
+                        animate={{ opacity: 1, y: 0, scale: 1 }}
+                        exit={{ opacity: 0, y: -8, scale: 0.96 }}
+                        className="absolute right-0 top-full mt-2 w-56 rounded-xl overflow-hidden z-50"
+                        style={{ background: tk.card, border: `1px solid ${tk.cardBorder}`, boxShadow: '0 20px 50px rgba(0,0,0,0.25)' }}
                       >
-                        <Sparkles className="w-3 h-3" /> COLLECTION OVERVIEW
-                      </motion.div>
-                      <h1 className="text-xl sm:text-2xl lg:text-3xl font-bold" style={{ color: tk.text }}>Payment Collection</h1>
-                      <p className="text-xs sm:text-sm" style={{ color: tk.textSec }}>Detailed breakdown of student payments</p>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Controls row */}
-                <div className="flex flex-wrap items-center gap-3">
-
-                  {/* ── Date range picker — correctly wired ── */}
-                  <ProfessionalDateTimePicker
-                    mode="range"
-                    label="Date Range"
-                    rangeStart={rangeStart}
-                    rangeEnd={rangeEnd}
-                    onRangeChange={(s, e) => {
-                      setRangeStart(s);
-                      setRangeEnd(e);
-                      setCurrentPage(1); // reset pagination on filter change
-                    }}
-                    placeholder="All time"
-                  />
-
-                  {/* Charts toggle */}
-                  <motion.button
-                    whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }}
-                    onClick={() => setShowCharts(!showCharts)}
-                    className="flex items-center gap-2 px-4 py-2.5 rounded-xl transition-all"
-                    style={{
-                      background: showCharts ? tk.primarySoft : (theme === 'light' ? 'rgba(15, 7, 3, 0.04)' : 'rgba(255,255,255,0.05)'),
-                      border: `1px solid ${showCharts ? tk.primaryRing : tk.cardBorder}`,
-                      color: showCharts ? tk.primary : tk.textSec,
-                    }}
-                  >
-                    <LineChart className="w-4 h-4" />
-                    <span className="text-sm font-medium hidden sm:inline">Charts</span>
-                  </motion.button>
-
-                  {/* Export dropdown */}
-                  <div className="relative">
-                    <motion.button
-                      whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}
-                      onClick={() => setShowExportMenu(!showExportMenu)}
-                      disabled={exporting}
-                      className="flex items-center justify-center gap-2 px-5 py-3 rounded-xl transition-all text-sm font-semibold disabled:opacity-50"
-                      style={{ background: tk.gradOrange, boxShadow: `0 4px 15px ${tk.primary}40`, color: tk.text }}
-                    >
-                      {exporting
-                        ? <div className="w-4 h-4 border-2 border-t-transparent rounded-full animate-spin" style={{ borderColor: tk.text, borderTopColor: 'transparent' }} />
-                        : <Download className="w-4 h-4" />}
-                      <span>Export</span>
-                      <ChevronDown className={`w-4 h-4 transition-transform ${showExportMenu ? 'rotate-180' : ''}`} />
-                    </motion.button>
-
-                    <AnimatePresence>
-                      {showExportMenu && (
-                        <>
-                          <div className="fixed inset-0 z-40" onClick={() => setShowExportMenu(false)} />
-                          <motion.div
-                            initial={{ opacity: 0, y: -10, scale: 0.95 }}
-                            animate={{ opacity: 1, y: 0, scale: 1 }}
-                            exit={{ opacity: 0, y: -10, scale: 0.95 }}
-                            className="fixed sm:absolute left-4 right-4 sm:left-auto sm:right-0 bottom-4 sm:bottom-auto sm:top-full sm:mt-2 w-auto sm:w-56 rounded-xl overflow-hidden shadow-2xl z-50"
-                            style={{ background: theme === 'light' ? 'rgba(255,255,255,0.98)' : 'linear-gradient(135deg, rgba(30,20,15,0.98), rgba(20,12,8,0.98))', border: `1px solid ${tk.cardBorder}`, backdropFilter: 'blur(20px)' }}
-                          >
-                            <div className="p-2">
-                              <p className="px-3 py-1.5 text-xs font-medium" style={{ color: tk.textSec }}>Export Format</p>
-                              <motion.button
-                                whileHover={{ x: 4, background: theme === 'light' ? 'rgba(15, 7, 3, 0.04)' : 'rgba(255,255,255,0.05)' }}
-                                onClick={() => { setShowExportMenu(false); exportToPDF(); }}
-                                className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg"
-                              >
-                                <div className="w-8 h-8 rounded-lg flex items-center justify-center" style={{ background: `${tk.danger}20` }}>
-                                  <FileText className="w-4 h-4" style={{ color: tk.danger }} />
-                                </div>
-                                <div className="text-left">
-                                  <span className="text-sm font-medium" style={{ color: tk.text }}>PDF Report</span>
-                                  <p className="text-xs" style={{ color: tk.textSec }}>Full financial summary</p>
-                                </div>
-                              </motion.button>
-                              <motion.button
-                                whileHover={{ x: 4, background: theme === 'light' ? 'rgba(15, 7, 3, 0.04)' : 'rgba(255,255,255,0.05)' }}
-                                onClick={() => { setShowExportMenu(false); exportToCSV(); }}
-                                className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg"
-                              >
-                                <div className="w-8 h-8 rounded-lg flex items-center justify-center" style={{ background: `${tk.mint}20` }}>
-                                  <FileSpreadsheet className="w-4 h-4" style={{ color: tk.mint }} />
-                                </div>
-                                <div className="text-left">
-                                  <span className="text-sm font-medium" style={{ color: tk.text }}>CSV Spreadsheet</span>
-                                  <p className="text-xs" style={{ color: tk.textSec }}>For data analysis</p>
-                                </div>
-                              </motion.button>
+                        <div className="p-2">
+                          <p className="px-3 py-1.5 text-[10px] uppercase tracking-wider font-semibold" style={{ color: tk.textTer }}>Export format</p>
+                          <button onClick={() => { setShowExportMenu(false); exportToPDF(); }}
+                            className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg hover:opacity-90 transition-opacity">
+                            <div className="w-8 h-8 rounded-lg flex items-center justify-center" style={{ background: `${tk.danger}1A` }}>
+                              <FileText className="w-4 h-4" style={{ color: tk.danger }} />
                             </div>
-                          </motion.div>
-                        </>
-                      )}
-                    </AnimatePresence>
-                  </div>
-                </div>
-              </div>
-
-              {/* Summary Stats */}
-              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 sm:gap-4">
-                {[
-                  {
-                    delay: 0.1, label: filteredTotals.isDateFiltered ? 'Collected (Filtered)' : 'Total Collected',
-                    value: <PrivacyMask><p className="text-lg sm:text-2xl font-bold text-white"><AnimatedCounter value={filteredTotals.isDateFiltered ? filteredTotals.totalCollected : totalCollected} prefix="₦" /></p></PrivacyMask>,
-                    sub: <p className="text-[10px] sm:text-xs mt-1" style={{ color: tk.mint }}><AnimatedCounter value={studentsToFilter.reduce((sum, s) => sum + s.payment_count, 0)} /> payments</p>,
-                    icon: <Wallet className="w-full h-full" style={{ color: tk.mint }} />, bg: theme === 'light' ? '#FFFFFF' : 'rgba(255,255,255,0.03)', border: tk.cardBorder,
-                  },
-                  {
-                    delay: 0.15, label: 'Total Expenses',
-                    value: <PrivacyMask><p className="text-lg sm:text-2xl font-bold" style={{ color: totalExpenses > 0 ? tk.danger : tk.textSec }}><AnimatedCounter value={totalExpenses} prefix="₦" /></p></PrivacyMask>,
-                    sub: <p className="text-[10px] sm:text-xs mt-1" style={{ color: tk.textSec }}>{totalExpenses > 0 ? 'Approved' : 'None yet'}</p>,
-                    icon: <TrendingUp className="w-full h-full" style={{ color: tk.danger }} />, bg: `${tk.danger}08`, border: `${tk.danger}15`,
-                  },
-                  {
-                    delay: 0.2, label: 'Net Balance',
-                    value: <PrivacyMask><p className="text-lg sm:text-2xl font-bold" style={{ color: netBalance >= 0 ? tk.mint : tk.danger }}><AnimatedCounter value={netBalance} prefix="₦" /></p></PrivacyMask>,
-                    sub: <p className="text-[10px] sm:text-xs mt-1" style={{ color: tk.textSec }}>Available</p>,
-                    icon: <Wallet className="w-full h-full" style={{ color: netBalance >= 0 ? tk.mint : tk.danger }} />,
-                    bg: netBalance >= 0 ? `${tk.mint}08` : `${tk.danger}08`,
-                    border: `${netBalance >= 0 ? tk.mint : tk.danger}15`,
-                  },
-                  {
-                    delay: 0.25, label: filteredTotals.isDateFiltered ? 'Students in Range' : 'Paid Students',
-                    value: <p className="text-lg sm:text-2xl font-bold" style={{ color: tk.text }}><AnimatedCounter value={filteredTotals.totalStudentsPaid} /></p>,
-                    sub: <p className="text-[10px] sm:text-xs mt-1" style={{ color: tk.mint }}>{filteredTotals.isDateFiltered ? 'With Payments' : 'Completed'}</p>,
-                    icon: <CheckCircle className="w-full h-full" style={{ color: tk.mint }} />, bg: `${tk.mint}08`, border: `${tk.mint}15`,
-                  },
-                ].map((card, i) => (
-                  <motion.div key={i} initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} transition={{ delay: card.delay }}
-                    className="p-4 rounded-xl relative overflow-hidden"
-                    style={{ background: card.bg, border: `1px solid ${card.border}` }}>
-                    <div className="absolute top-0 right-0 w-12 h-12 opacity-10">{card.icon}</div>
-                    <p className="text-[10px] sm:text-xs font-medium mb-1" style={{ color: tk.textSec }}>{card.label}</p>
-                    {card.value}
-                    {card.sub}
-                  </motion.div>
-                ))}
-
-                {/* Unpaid card — hidden when date range is active */}
-                {!filteredTotals.isDateFiltered && (
-                  <motion.div initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} transition={{ delay: 0.3 }}
-                    className="p-4 rounded-xl relative overflow-hidden"
-                    style={{ background: `${tk.danger}08`, border: `1px solid ${tk.danger}15` }}>
-                    <div className="absolute top-0 right-0 w-12 h-12 opacity-10"><XCircle className="w-full h-full" style={{ color: tk.danger }} /></div>
-                    <p className="text-[10px] sm:text-xs font-medium mb-1" style={{ color: tk.textSec }}>Unpaid Students</p>
-                    <p className="text-lg sm:text-2xl font-bold" style={{ color: tk.danger }}><AnimatedCounter value={totalStudentsUnpaid} /></p>
-                    <p className="text-[10px] sm:text-xs mt-1" style={{ color: tk.textSec }}>Pending</p>
-                  </motion.div>
-                )}
+                            <div className="text-left">
+                              <span className="text-sm font-semibold" style={{ color: tk.text }}>PDF report</span>
+                              <p className="text-[11px]" style={{ color: tk.textSec }}>Full financial summary</p>
+                            </div>
+                          </button>
+                          <button onClick={() => { setShowExportMenu(false); exportToCSV(); }}
+                            className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg hover:opacity-90 transition-opacity">
+                            <div className="w-8 h-8 rounded-lg flex items-center justify-center" style={{ background: `${tk.mint}1A` }}>
+                              <FileSpreadsheet className="w-4 h-4" style={{ color: tk.mint }} />
+                            </div>
+                            <div className="text-left">
+                              <span className="text-sm font-semibold" style={{ color: tk.text }}>CSV spreadsheet</span>
+                              <p className="text-[11px]" style={{ color: tk.textSec }}>For data analysis</p>
+                            </div>
+                          </button>
+                        </div>
+                      </motion.div>
+                    </>
+                  )}
+                </AnimatePresence>
               </div>
             </div>
-          </GlassCard>
+          </div>
+        </motion.header>
+
+        {/* ── Money at a glance: Collected · Expenses · Net (big 3) ── */}
+        <motion.div
+          initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.05 }}
+          className="grid grid-cols-1 sm:grid-cols-3 gap-3"
+        >
+          <FinanceTile
+            tk={tk} accent={tk.mint} label={filteredTotals.isDateFiltered ? 'Collected (in range)' : 'Collected'}
+            icon={<Wallet className="w-4 h-4" />}
+            value={<PrivacyMask><AnimatedCounter value={shownCollected} prefix="₦" /></PrivacyMask>}
+            hint={`${shownPayments} payment${shownPayments === 1 ? '' : 's'} · waivers excluded`}
+            emphasis
+          />
+          <FinanceTile
+            tk={tk} accent={tk.danger} label="Expenses"
+            icon={<TrendingUp className="w-4 h-4" />}
+            value={<PrivacyMask><AnimatedCounter value={totalExpenses} prefix="₦" /></PrivacyMask>}
+            hint={totalExpenses > 0 ? 'Approved spend out' : 'Nothing spent yet'}
+          />
+          <FinanceTile
+            tk={tk} accent={shownNet >= 0 ? tk.mint : tk.danger} label="Net balance"
+            icon={<Wallet className="w-4 h-4" />}
+            value={<PrivacyMask><AnimatedCounter value={shownNet} prefix="₦" /></PrivacyMask>}
+            hint={shownNet >= 0 ? 'Available to spend' : 'Overspent — review expenses'}
+            emphasis
+          />
+        </motion.div>
+
+        {/* ── Member coverage: paid vs unpaid ── */}
+        <motion.div
+          initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }}
+          className="grid grid-cols-2 gap-3"
+        >
+          <FinanceTile
+            tk={tk} accent={tk.mint} label={filteredTotals.isDateFiltered ? 'Members in range' : 'Paid members'}
+            icon={<CheckCircle className="w-4 h-4" />}
+            value={<AnimatedCounter value={filteredTotals.totalStudentsPaid} />}
+            hint={filteredTotals.isDateFiltered ? 'With payments' : 'Settled up'}
+          />
+          {!filteredTotals.isDateFiltered ? (
+            <FinanceTile
+              tk={tk} accent={tk.danger} label="Unpaid members"
+              icon={<XCircle className="w-4 h-4" />}
+              value={<AnimatedCounter value={totalStudentsUnpaid} />}
+              hint="Still owe a due"
+            />
+          ) : (
+            <FinanceTile
+              tk={tk} accent={tk.textSec} label="Date filter active"
+              icon={<Filter className="w-4 h-4" />}
+              value={<span style={{ fontSize: 16 }}>Range</span>}
+              hint="Clear it to see unpaid"
+            />
+          )}
         </motion.div>
 
         {/* Charts */}
@@ -998,6 +970,48 @@ export default function AdminCollectedPage() {
       </div>
 
       <Footer />
+    </div>
+  );
+}
+
+// ── FinanceTile ──────────────────────────────────────────────────
+// One headline metric on the finance hero. Soft accent-tinted card,
+// theme-aware, with an optional emphasis ring for the money figures
+// (Collected / Net) so they read first.
+function FinanceTile({
+  tk, accent, label, value, hint, icon, emphasis,
+}: {
+  tk: ReturnType<typeof getDashboardTokens>;
+  accent: string;
+  label: string;
+  value: React.ReactNode;
+  hint?: string;
+  icon?: React.ReactNode;
+  emphasis?: boolean;
+}) {
+  return (
+    <div
+      className="rounded-2xl p-4 relative overflow-hidden"
+      style={{
+        background: emphasis ? `${accent}0E` : tk.card,
+        border: `1px solid ${emphasis ? `${accent}33` : tk.cardBorder}`,
+      }}
+    >
+      <div className="flex items-center gap-2 mb-2">
+        <span
+          className="w-7 h-7 rounded-lg flex items-center justify-center shrink-0"
+          style={{ background: `${accent}1A`, color: accent }}
+        >
+          {icon}
+        </span>
+        <span className="text-[10px] uppercase tracking-[0.14em] font-bold" style={{ color: tk.textTer }}>
+          {label}
+        </span>
+      </div>
+      <div className="text-2xl font-extrabold tabular-nums" style={{ color: emphasis ? accent : tk.text }}>
+        {value}
+      </div>
+      {hint && <p className="text-[11px] mt-1" style={{ color: tk.textSec }}>{hint}</p>}
     </div>
   );
 }
