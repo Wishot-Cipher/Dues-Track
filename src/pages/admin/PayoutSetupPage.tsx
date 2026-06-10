@@ -238,37 +238,43 @@ export default function PayoutSetupPage() {
     const digits = accountNumber.replace(/\D/g, '');
 
     setSaving(true);
-    const res = await paystackService.setupSubaccount({
-      memberId: user.id,
-      bankCode,
-      accountNumber: digits,
-      groupId: groupId || null,
-      password: confirmPassword,
-    });
-    setSaving(false);
-
-    if (!res.ok) { toast?.error?.(res.error || 'Could not set up the payout account.'); return; }
-
-    setShowConfirm(false);
-    setConfirmPassword('');
-    setConnected(true);
-    setConnectedName(res.account_name || null);
-    setEditing(false);
-    if (groupId && groupCtx) {
-      setGroupCtx({
-        ...groupCtx,
-        subaccount_code: res.subaccount_code || groupCtx.subaccount_code,
-        account_name:    res.account_name || groupCtx.account_name,
-        account_number:  digits,
-        settlement_bank: bankCode,
+    try {
+      const res = await paystackService.setupSubaccount({
+        memberId: user.id,
+        bankCode,
+        accountNumber: digits,
+        groupId: groupId || null,
+        password: confirmPassword,
       });
+
+      if (!res.ok) { toast?.error?.(res.error || 'Could not set up the payout account.'); return; }
+
+      setShowConfirm(false);
+      setConfirmPassword('');
+      setConnected(true);
+      setConnectedName(res.account_name || null);
+      setEditing(false);
+      if (groupId && groupCtx) {
+        setGroupCtx({
+          ...groupCtx,
+          subaccount_code: res.subaccount_code || groupCtx.subaccount_code,
+          account_name:    res.account_name || groupCtx.account_name,
+          account_number:  digits,
+          settlement_bank: bankCode,
+        });
+      }
+      toast?.success?.(
+        groupId
+          ? `Payout connected for ${groupCtx?.name ?? 'this tier'}: ${res.account_name || 'verified'}.`
+          : `Payout account connected: ${res.account_name || 'verified'}.`,
+      );
+      if (!groupId) void refreshSession();
+    } catch (e) {
+      toast?.error?.(e instanceof Error ? e.message : 'Could not set up the payout account.');
+    } finally {
+      // Always clear the spinner — the modal must never get stuck.
+      setSaving(false);
     }
-    toast?.success?.(
-      groupId
-        ? `Payout connected for ${groupCtx?.name ?? 'this tier'}: ${res.account_name || 'verified'}.`
-        : `Payout account connected: ${res.account_name || 'verified'}.`,
-    );
-    if (!groupId) void refreshSession();
   }, [user?.id, confirmPassword, bankCode, accountNumber, toast, refreshSession, groupId, groupCtx]);
 
   return (

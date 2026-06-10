@@ -511,12 +511,14 @@ export default function AdminDashboardPage() {
     return <ClassExecDashboardView admin={classView.admin} klass={classView.klass} />;
   }
 
-  // If we already know we're about to redirect to /admin/dept or
-  // /admin/faculty, don't paint the legacy class-rep widgets — they'll
-  // flash for a frame and then disappear, which reads as a broken
-  // navigation. Show a calm, theme-aware loader until the effect
-  // fires the navigate().
-  if (willRedirectToTier) {
+  // Hold the main (legacy/org) dashboard until the class probe
+  // resolves. Without this, a class exec sees the OLD admin dashboard
+  // flash for the async window before classProbeDone flips and the
+  // ClassExecDashboardView takes over (the flicker the user reported).
+  // For org-scope admins the probe resolves synchronously (no group
+  // admin row), so this loader is at most a single frame for them.
+  // Also covers the dept/faculty redirect window.
+  if (willRedirectToTier || !classProbeDone) {
     return (
       <div
         className="min-h-screen flex items-center justify-center"

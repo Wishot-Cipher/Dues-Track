@@ -178,6 +178,13 @@ export const paystackService = {
      */
     password: string;
   }): Promise<SubaccountResult> {
+    // Hard timeout so the payout button can NEVER hang silently —
+    // bank resolution + subaccount creation are external calls and a
+    // slow/stuck upstream would otherwise leave the modal spinning
+    // forever (the symptom the user hit). 30s is well past a healthy
+    // round-trip; past that we surface a clear, retryable error.
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 30_000);
     try {
       const res = await fetch('/api/paystack/subaccount', {
         method: 'POST',
@@ -190,12 +197,18 @@ export const paystackService = {
           groupId: input.groupId || null,
           password: input.password,
         }),
+        signal: controller.signal,
       });
       const json = (await res.json().catch(() => ({}))) as SubaccountResult;
       if (!res.ok || !json?.ok) return { ok: false, error: json?.error || `HTTP ${res.status}` };
       return json;
     } catch (e) {
+      if (e instanceof DOMException && e.name === 'AbortError') {
+        return { ok: false, error: 'The payout service took too long to respond. Please try again.' };
+      }
       return { ok: false, error: e instanceof Error ? e.message : 'Network error' };
+    } finally {
+      clearTimeout(timer);
     }
   },
 };
