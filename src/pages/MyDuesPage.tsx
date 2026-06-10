@@ -125,7 +125,16 @@ export default function MyDuesPage() {
   const rows: DueRowData[] = useMemo(() => {
     const groupNameById = new Map(memberGroups.map((item) => [item.group_id, item.name]));
 
-    return paymentTypes.map((pt) => {
+    return paymentTypes
+      // Events are tickets, not dues — they live in My Tickets. A
+      // member can buy MULTIPLE tickets to one event, and summing
+      // every ticket payment into a single "due" row inflated the
+      // amount (2 × ₦5k showed as ₦10k owed/paid) with no per-ticket
+      // receipt. Excluding events here keeps My Dues about actual
+      // dues; each ticket payment has its own receipt via recent
+      // activity → /receipt.
+      .filter((pt) => String((pt as { category?: string | null }).category ?? '').toLowerCase() !== 'event')
+      .map((pt) => {
       const own = payments.filter(p => p.payment_type_id === pt.id);
       // A waiver is stored as an approved payment whose transaction_ref
       // starts with "WAIVED-". It is NOT money — exclude it from the

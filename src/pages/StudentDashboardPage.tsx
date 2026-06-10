@@ -548,7 +548,20 @@ export default function StudentDashboardPage() {
                   index={i}
                   privacyOn={privacyOn}
                   theme={theme}
-                  onClick={() => p.id && navigate(`/${orgSlug ?? ''}/payment/${p.id}`)}
+                  onClick={() => {
+                    if (!p.id) return;
+                    const base = `/${orgSlug ?? ''}`;
+                    // A completed (approved) payment is already paid —
+                    // open its RECEIPT (keyed by payment id), never the
+                    // pay page. Anything else (pending / rejected) goes
+                    // to the pay flow for the underlying due so they can
+                    // finish or retry it (keyed by payment_type id).
+                    if (p.status === 'approved') {
+                      navigate(`${base}/receipt/${p.id}`);
+                    } else if (p.payment_type_id) {
+                      navigate(`${base}/payment/${p.payment_type_id}`);
+                    }
+                  }}
                 />
               ))}
             </div>
