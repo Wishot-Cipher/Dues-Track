@@ -257,7 +257,12 @@ export default function WaivePaymentPage() {
         .select("id, full_name, member_id, level, email, group_id")
         .or(`full_name.ilike.%${query}%,member_id.ilike.%${query}%`)
         .eq("is_active", true)
-        .limit(10);
+        // 30, not 10 — a faculty spans many depts/classes, so a common
+        // name prefix can have far more than 10 matches and the person
+        // the exec wants was getting truncated off ("faculty doesn't
+        // get everyone"). Ordered by name so results are deterministic.
+        .order("full_name", { ascending: true })
+        .limit(30);
       if (scope) {
         searchQ = searchQ.eq('organization_id', scope.orgId);
         if (scopedIds) {
