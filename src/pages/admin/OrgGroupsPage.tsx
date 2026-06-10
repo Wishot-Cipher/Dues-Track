@@ -24,7 +24,7 @@ import { useTheme, getDashboardTokens } from '@/hooks/useTheme';
 import { supabase } from '@/config/supabase';
 import organizationService from '@/services/organizationService';
 import type { OrganizationGroup, GroupKind } from '@/types/multiTenant';
-import { getOrgTiers } from '@/config/constants';
+import { getOrgTiers, getTierLabel } from '@/config/constants';
 import EmptyState from '@/components/ui/EmptyState';
 import Textarea from '@/components/ui/Textarea';
 import ProfessionalDropdown from '@/components/ui/ProfessionalDropdown';
@@ -98,11 +98,15 @@ const DEFAULT_FORM: GroupFormData = {
 type GroupTab = 'all' | 'faculty' | 'class'
 
 // ── Pill component ──────────────────────────────────────────────────────────
-function KindPill({ kind }: { kind?: string }) {
+function KindPill({ kind, orgType }: { kind?: string; orgType?: string }) {
   const color = kindColor(kind)
+  // Show the per-org-type label (Ministry/Section/Branch…) instead of
+  // the raw canonical kind (department/class) so a church admin never
+  // sees academic words. Falls back to the kind when no orgType.
+  const label = orgType ? getTierLabel(orgType, kind || 'general') : (kind || 'general')
   return (
     <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wide" style={{ background: `${color}15`, color }}>
-      {kind || 'general'}
+      {label}
     </span>
   )
 }
@@ -137,10 +141,11 @@ function TabBtn({ active, onClick, children }: { active: boolean; onClick: () =>
 
 // ── Group card ──────────────────────────────────────────────────────────────
 function GroupCard({
-  group, groups, isAcademicOrg, onEdit, canEdit,
+  group, groups, isAcademicOrg, orgType, onEdit, canEdit,
 }: {
   group: OrganizationGroup; groups: OrganizationGroup[];
   isAcademicOrg: boolean;
+  orgType?: string;
   onEdit: (g: OrganizationGroup) => void;
   canEdit: boolean;
 }) {
@@ -189,7 +194,7 @@ function GroupCard({
                   </span>
                 </div>
                 <div className="flex flex-wrap items-center gap-1.5">
-                  <KindPill kind={group.kind} />
+                  <KindPill kind={group.kind} orgType={orgType} />
                   {primaryLevel && (
                     <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold" style={{ background: 'rgba(255,255,255,0.06)', color: tk.textSec }}>
                       L{primaryLevel}
@@ -814,7 +819,7 @@ export default function OrgGroupsPage() {
                           <div className="flex items-center gap-2 flex-wrap">
                             <span className="font-bold text-white truncate">{o.name}</span>
                             <span className="text-[10px] font-mono px-1.5 py-0.5 rounded-md" style={{ background: 'rgba(255,255,255,0.08)', color: tk.textSec }}>{o.short_name}</span>
-                            <KindPill kind={o.kind} />
+                            <KindPill kind={o.kind} orgType={organization?.organization_type} />
                           </div>
                           <p className="text-[11px] mt-1" style={{ color: tk.amber }}>
                             {ISSUE_LABEL[o.issue]}
@@ -976,6 +981,7 @@ export default function OrgGroupsPage() {
                     group={group}
                     groups={groups}
                     isAcademicOrg={isAcademicOrg}
+                    orgType={organization?.organization_type}
                     onEdit={openEdit}
                     canEdit={canEditGroup(group)}
                   />
@@ -997,6 +1003,7 @@ export default function OrgGroupsPage() {
                       group={group}
                       groups={groups}
                       isAcademicOrg={isAcademicOrg}
+                      orgType={organization?.organization_type}
                       onEdit={openEdit}
                       canEdit={canEditGroup(group)}
                     />
@@ -1062,6 +1069,7 @@ export default function OrgGroupsPage() {
                       onEdit={openEdit}
                       canEditFn={canEditGroup}
                       isAcademicOrg={isAcademicOrg}
+                      orgType={organization?.organization_type}
                       tt={tt}
                       depth={0}
                     />
@@ -1076,7 +1084,7 @@ export default function OrgGroupsPage() {
       <Modal
         isOpen={showModal}
         onClose={closeModal}
-        title={editTarget ? `Edit ${getGroupLabel(form.kind, classLabel, groupLabel, isAcademicOrg)}` : `Create ${getGroupLabel(form.kind, classLabel, groupLabel, isAcademicOrg)}`}
+        title={editTarget ? `Edit ${getGroupLabel(form.kind, organization?.organization_type)}` : `Create ${getGroupLabel(form.kind, organization?.organization_type)}`}
         size="lg"
       >
         <div className="space-y-4">
@@ -1267,9 +1275,10 @@ export default function OrgGroupsPage() {
   )
 }
 
-function getGroupLabel(kind: GroupKind, classLabel: string, groupLabel: string, isAcademic: boolean) {
-  if (!isAcademic) return groupLabel
-  return kind === 'faculty' ? 'Faculty' : classLabel
+function getGroupLabel(kind: GroupKind, orgType?: string) {
+  // Per-org-type tier label (Faculty/Department/Class · Ministry/Section
+  // · Branch/Unit …). Falls back to a title-cased kind.
+  return getTierLabel(orgType, kind)
 }
 
 /**
@@ -1286,10 +1295,11 @@ function getGroupLabel(kind: GroupKind, classLabel: string, groupLabel: string, 
  * the tree its visual hierarchy without an explicit guideline.
  */
 function GroupTreeNode({
-  group, groups, duesCounts, payoutFlags, toggledKeys, onToggle, onEdit, canEditFn, isAcademicOrg, tt, depth,
+  group, groups, duesCounts, payoutFlags, toggledKeys, onToggle, onEdit, canEditFn, isAcademicOrg, orgType, tt, depth,
 }: {
   group: OrganizationGroup
   groups: OrganizationGroup[]
+  orgType?: string
   duesCounts: Map<string, number>
   payoutFlags: Set<string>
   toggledKeys: Set<string>
@@ -1316,7 +1326,7 @@ function GroupTreeNode({
   const accent = kindColor(group.kind)
   const dues = duesCounts.get(group.id) || 0
   const hasPayout = payoutFlags.has(group.id)
-  const kindLabel = group.kind || 'group'
+  const kindLabel = getTierLabel(orgType, group.kind || 'group')
   const primaryLevel = group.levels?.[0] ? organizationService.canonicalizeLevel(group.levels[0]) : null
   // Whole row toggles when there are children — the chevron alone
   // was too small a target. Falls back to a no-op for leaves.
@@ -1465,6 +1475,7 @@ function GroupTreeNode({
               onEdit={onEdit}
               canEditFn={canEditFn}
               isAcademicOrg={isAcademicOrg}
+              orgType={orgType}
               tt={tt}
               depth={depth + 1}
             />
