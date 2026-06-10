@@ -149,7 +149,7 @@ export function useUserRoles() {
           // "SUG Exec" / prepend "SUG". It's a selectable setup role so
           // the founder can reach the admin/setup surfaces; its powers
           // are gated by the can_* flags (money off), not by this label.
-          if (ar.role === 'org_setup') {
+          if ((ar.role as string) === 'org_setup') {
             return {
               key: `admin:${ar.id}`,
               kind: 'exec',
