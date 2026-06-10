@@ -4,7 +4,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { useAppNav } from '@/hooks/useAppNav';
 import { useActiveRole } from '@/hooks/useActiveRole';
 import { useMultiTenantAuth } from '@/hooks/useMultiTenantAuth';
-import { getScopedGroupIds } from '@/utils/scopedGroups';
+import { getScopedGroupIds, getOwnedTierScope, applyOwnedTierScope } from '@/utils/scopedGroups';
 import GlassCard from '@/components/ui/GlassCard';
 import AnimatedCounter from '@/components/ui/AnimatedCounter';
 import FinancialChart from '@/components/admin/FinancialChart';
@@ -115,18 +115,41 @@ export default function AdminCollectedPage() {
       setLoading(true);
 
       const scope = getOrgScope();
-      const scopedIds = scope ? await getScopedGroupIds({
+      // Members: the people a tier's dues APPLY to = the subtree (a
+      // dept due cascades to every class below). Keep the descendant
+      // walk for the paid/unpaid member list.
+      const memberScopedIds = scope ? await getScopedGroupIds({
         orgId: scope.orgId,
         activeGroupId: activeRole?.groupId ?? null,
         activeScopeLevel: activeRole?.scopeLevel ?? null,
       }) : null;
+      // Collected + expenses key off the exec's OWN tier — a dept exec
+      // audits dept-created dues, NOT the classes' own dues below them.
+      const ownedScope = getOwnedTierScope({
+        activeKind: activeRole?.kind ?? null,
+        activeGroupId: activeRole?.groupId ?? null,
+        activeScopeLevel: activeRole?.scopeLevel ?? null,
+      });
+
+      // Resolve THIS tier's own dues → their ids. Collected is the sum
+      // of payments toward these (payments carry the payer's class, so
+      // we key collected off the DUE, not the payer's group_id — that's
+      // what makes the cascade work without leaking lower-tier dues).
+      let duesQ = supabase.from('payment_types').select('id');
+      if (scope) {
+        duesQ = duesQ.eq('organization_id', scope.orgId);
+        duesQ = applyOwnedTierScope(duesQ, ownedScope);
+      }
+      const { data: ownDuesData } = await duesQ;
+      const ownDueIds = (ownDuesData || []).map((d) => d.id as string);
+
       let membersQ = supabase
         .from('organization_members')
         .select('id, full_name, member_id, is_active, level, section')
         .order('full_name', { ascending: true });
       if (scope) {
         membersQ = membersQ.eq('organization_id', scope.orgId);
-        if (scopedIds) membersQ = membersQ.in('group_id', Array.from(scopedIds));
+        if (memberScopedIds) membersQ = membersQ.in('group_id', Array.from(memberScopedIds));
       }
       const { data: studentsData, error: studentsError } = await membersQ;
       if (studentsError) throw studentsError;
@@ -145,7 +168,10 @@ export default function AdminCollectedPage() {
         .order('created_at', { ascending: false });
       if (scope) {
         paymentsQ = paymentsQ.eq('organization_id', scope.orgId);
-        if (scopedIds) paymentsQ = paymentsQ.in('group_id', Array.from(scopedIds));
+        // Payments toward MY tier's dues only. Empty list (tier has no
+        // dues) → matches nothing, which is correct (₦0 collected).
+        paymentsQ = paymentsQ.in('payment_type_id',
+          ownDueIds.length ? ownDueIds : ['00000000-0000-0000-0000-000000000000']);
       }
       const { data: paymentsData, error } = await paymentsQ;
       if (error) throw error;
@@ -160,7 +186,7 @@ export default function AdminCollectedPage() {
         .eq('status', 'approved');
       if (scope) {
         expQ = expQ.eq('organization_id', scope.orgId);
-        if (scopedIds) expQ = expQ.in('group_id', Array.from(scopedIds));
+        expQ = applyOwnedTierScope(expQ, ownedScope);
       }
       const { data: expensesData, error: expensesError } = await expQ;
       if (expensesError) console.warn('Error fetching expenses:', expensesError);
