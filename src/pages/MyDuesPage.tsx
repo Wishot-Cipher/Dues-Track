@@ -84,6 +84,14 @@ interface DueRowData {
   daysLeft: number | null;
   /** Most recent approved payment, if any (for "Paid on …" date). */
   paidAt: string | null;
+  /** Unique key for this row (handles events with multiple rows). */
+  rowKey: string;
+  /** For EVENT rows: the specific ticket payment id → its receipt.
+   *  Each event ticket purchase is its own row, never summed. */
+  paymentId?: string;
+  /** For EVENT rows when the member bought more than one ticket:
+   *  the 1-based ticket number, shown as "· Ticket #N". */
+  ticketIndex?: number;
 }
 
 type TabKey = 'all' | 'pending' | 'paid';
@@ -125,20 +133,44 @@ export default function MyDuesPage() {
   const rows: DueRowData[] = useMemo(() => {
     const groupNameById = new Map(memberGroups.map((item) => [item.group_id, item.name]));
 
-    return paymentTypes
-      // Events are tickets, not dues — they live in My Tickets. A
-      // member can buy MULTIPLE tickets to one event, and summing
-      // every ticket payment into a single "due" row inflated the
-      // amount (2 × ₦5k showed as ₦10k owed/paid) with no per-ticket
-      // receipt. Excluding events here keeps My Dues about actual
-      // dues; each ticket payment has its own receipt via recent
-      // activity → /receipt.
-      .filter((pt) => String((pt as { category?: string | null }).category ?? '').toLowerCase() !== 'event')
-      .map((pt) => {
+    const out: DueRowData[] = [];
+
+    for (const pt of paymentTypes) {
       const own = payments.filter(p => p.payment_type_id === pt.id);
-      // A waiver is stored as an approved payment whose transaction_ref
-      // starts with "WAIVED-". It is NOT money — exclude it from the
-      // paid sum. approvedSum = real money the member actually paid.
+      const groupLabel = pt.group_id ? (groupNameById.get(pt.group_id) || 'Group due') : 'Org-wide';
+      const isEvent = String((pt as { category?: string | null }).category ?? '').toLowerCase() === 'event';
+
+      if (isEvent) {
+        // EACH event ticket purchase is its OWN row — never summed. A
+        // member who paid ₦5k for themselves and ₦5k for a friend sees
+        // TWO distinct ₦5k lines, each with its own receipt — not one
+        // confusing ₦10k row. Only the member's actual purchases show
+        // (approved/pending); events they haven't bought live in the
+        // Events section, not here.
+        const purchases = own
+          .filter(p => p.status === 'approved' || p.status === 'pending')
+          .sort((a, b) => new Date(a.created_at || '').getTime() - new Date(b.created_at || '').getTime());
+        purchases.forEach((p, idx) => {
+          const waived = p.status === 'approved' && p.transaction_ref?.startsWith('WAIVED-');
+          const paid = p.status === 'approved' && !waived;
+          out.push({
+            pt,
+            groupLabel,
+            status: waived ? 'waived' : paid ? 'paid' : 'pending',
+            approvedSum: paid ? Number(p.amount || 0) : 0,
+            outstanding: 0,
+            daysLeft: daysFromNow(pt.deadline),
+            paidAt: p.created_at ?? null,
+            rowKey: `${pt.id}:${p.id ?? idx}`,
+            paymentId: p.id,
+            ticketIndex: purchases.length > 1 ? idx + 1 : undefined,
+          });
+        });
+        continue;
+      }
+
+      // NON-EVENT due: one row per type. Installments toward one due
+      // are correctly summed (approvedSum = total real money paid).
       const isWaived = own.some(
         p => p.status === 'approved' && p.transaction_ref?.startsWith('WAIVED-'),
       );
@@ -148,8 +180,6 @@ export default function MyDuesPage() {
 
       // Priority: WAIVED wins (the member owes nothing, paid nothing),
       // then PAID (real money covers it), then pending, partial, unpaid.
-      // PAID-before-pending guards the abandoned-Paystack-init case
-      // (stray pending row on a fully-paid due → double payment).
       const amount = Number(pt.amount || 0);
       const status: DueRowData['status'] =
         isWaived ? 'waived'
@@ -164,17 +194,19 @@ export default function MyDuesPage() {
           new Date(b.created_at || '').getTime() - new Date(a.created_at || '').getTime(),
         )[0];
 
-      return {
+      out.push({
         pt,
-        groupLabel: pt.group_id ? (groupNameById.get(pt.group_id) || 'Group due') : 'Org-wide',
+        groupLabel,
         status,
         approvedSum,
-        // Waived → nothing outstanding (settled at ₦0).
         outstanding: isWaived ? 0 : Math.max(0, amount - approvedSum),
         daysLeft: daysFromNow(pt.deadline),
         paidAt: lastApproved?.created_at ?? null,
-      };
-    });
+        rowKey: pt.id,
+      });
+    }
+
+    return out;
   }, [memberGroups, paymentTypes, payments]);
 
   // ── Tab partitions ──────────────────────────────────────────────
@@ -320,7 +352,7 @@ export default function MyDuesPage() {
             <div className="mt-3 space-y-3">
               {visiblePending.map((r, i) => (
                 <DueRow
-                  key={r.pt.id}
+                  key={r.rowKey}
                   data={r}
                   index={i}
                   theme={theme}
@@ -344,14 +376,17 @@ export default function MyDuesPage() {
             />
             <div className="mt-3 space-y-3">
               {visiblePaid.map((r, i) => {
-                const paidPaymentId = payments
+                // Event rows carry their own ticket payment id → that
+                // exact receipt. Non-event rows resolve the most recent
+                // approved payment for the type.
+                const paidPaymentId = r.paymentId ?? payments
                   .filter(p => p.payment_type_id === r.pt.id && p.status === 'approved')
                   .sort((a, b) =>
                     new Date(b.created_at || '').getTime() - new Date(a.created_at || '').getTime(),
                   )[0]?.id;
                 return (
                   <PaidRow
-                    key={r.pt.id}
+                    key={r.rowKey}
                     data={r}
                     index={i}
                     theme={theme}
@@ -507,6 +542,7 @@ function DueRow({
       <div className="flex-1 min-w-0">
         <p className="text-[14px] font-extrabold truncate" style={{ color: t.text }}>
           {data.pt.title}
+          {data.ticketIndex ? <span style={{ color: t.textTer }}> · Ticket #{data.ticketIndex}</span> : null}
         </p>
         <p className="text-[11px] mt-0.5 font-semibold" style={{ color: t.textSec }}>
           {data.groupLabel}
@@ -575,6 +611,7 @@ function PaidRow({
       <div className="flex-1 min-w-0">
         <p className="text-[14px] font-extrabold truncate" style={{ color: t.text }}>
           {data.pt.title}
+          {data.ticketIndex ? <span style={{ color: t.textTer }}> · Ticket #{data.ticketIndex}</span> : null}
         </p>
         <p className="text-[11px] mt-0.5 font-semibold" style={{ color: t.textSec }}>
           {data.groupLabel}
