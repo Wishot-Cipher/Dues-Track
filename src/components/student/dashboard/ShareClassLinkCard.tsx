@@ -26,6 +26,8 @@ import { Share2, Copy, Check, Loader2, X, Link as LinkIcon, Info, ShieldCheck, U
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '@/config/supabase';
 import { getDashboardTokens, type ResolvedTheme } from '@/hooks/useTheme';
+import { useActiveRole } from '@/hooks/useActiveRole';
+import { useMultiTenantAuth } from '@/hooks/useMultiTenantAuth';
 
 export interface ShareClassLinkCardProps {
   theme: ResolvedTheme;
@@ -77,7 +79,38 @@ export default function ShareClassLinkCard({
   const t = getDashboardTokens(theme);
   const isLight = theme === 'light';
   const navigate = useNavigate();
+  const { user, organization } = useMultiTenantAuth();
+  const { setActiveRole } = useActiveRole({ orgId: organization?.id, memberId });
   const [loading, setLoading] = useState(false);
+
+  // The admin row that makes THIS class member a full class exec.
+  // Needed to switch the active role before routing to /admin/members
+  // (see openMemberTools).
+  const adminForGroup = (user?.admin_records || []).find(
+    (a: { is_active?: boolean; group_id?: string | null }) =>
+      a.is_active !== false && a.group_id === groupId,
+  ) as { id?: string; group_id?: string | null; scope_level?: string } | undefined;
+
+  // A class exec lands here from the STUDENT dashboard, so their active
+  // role is "student". /admin/members has a tier gate (active role must
+  // be an exec at group/org scope) and would bounce them straight back
+  // to /dashboard. So we switch them into their class-exec role FIRST,
+  // then navigate — no more silent reroute to the student layout.
+  function openMemberTools() {
+    if (adminForGroup?.id) {
+      setActiveRole({
+        key: `admin:${adminForGroup.id}`,
+        kind: 'exec',
+        adminId: adminForGroup.id,
+        groupId: groupId ?? null,
+        scopeLevel: (adminForGroup.scope_level as 'org' | 'unit' | 'group') || 'group',
+        label: className,
+        orgId: organization?.id,
+        memberId,
+      });
+    }
+    navigate(`/${orgSlug}/admin/members`);
+  }
   const [error, setError] = useState<string | null>(null);
   const [invite, setInvite] = useState<{ code: string; expiresAt?: string; maxUses?: number } | null>(null);
   const [copied, setCopied] = useState<'code' | 'link' | 'message' | null>(null);
@@ -310,7 +343,7 @@ This invite expires in 14 days.`
     return (
       <button
         type="button"
-        onClick={() => navigate(`/${orgSlug}/admin/members`)}
+        onClick={openMemberTools}
         className="group relative w-full text-left rounded-2xl p-4 sm:p-5 overflow-hidden transition-all active:scale-[0.995]"
         style={{
           background: t.card,
