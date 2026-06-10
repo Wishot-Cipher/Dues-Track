@@ -20,6 +20,86 @@ export const ORGANIZATION_TYPES = {
 export type OrganizationType = typeof ORGANIZATION_TYPES[keyof typeof ORGANIZATION_TYPES]
 
 /**
+ * Per-org-type HIERARCHY (the #27 flexible-depth model).
+ *
+ * Every org uses the SAME canonical DB kinds — 'faculty' | 'department'
+ * | 'class' — so all tier-autonomy + scoping + finance logic keeps
+ * working unchanged. What varies per org type is (a) how MANY tiers
+ * they use (depth) and (b) the LABELS shown to users. The LAST tier is
+ * always the leaf where members live (canonical kind 'class').
+ *
+ * A church is therefore Ministry ('department') → Section ('class') —
+ * 2 levels, never a "faculty". A co-op is a single Unit ('class').
+ */
+export interface OrgTier {
+  /** Canonical DB kind — drives all logic. Never shown to users. */
+  kind: 'faculty' | 'department' | 'class'
+  label: string
+  label_plural: string
+}
+
+export const ORG_TIER_CONFIG: Record<OrganizationType, OrgTier[]> = {
+  university: [
+    { kind: 'faculty',    label: 'Faculty',    label_plural: 'Faculties' },
+    { kind: 'department', label: 'Department', label_plural: 'Departments' },
+    { kind: 'class',      label: 'Class',      label_plural: 'Classes' },
+  ],
+  school: [
+    { kind: 'faculty',    label: 'Section',    label_plural: 'Sections' },
+    { kind: 'department', label: 'Department', label_plural: 'Departments' },
+    { kind: 'class',      label: 'Class',      label_plural: 'Classes' },
+  ],
+  church: [
+    { kind: 'department', label: 'Ministry', label_plural: 'Ministries' },
+    { kind: 'class',      label: 'Section',  label_plural: 'Sections' },
+  ],
+  club: [
+    { kind: 'department', label: 'Chapter', label_plural: 'Chapters' },
+    { kind: 'class',      label: 'Group',   label_plural: 'Groups' },
+  ],
+  association: [
+    { kind: 'department', label: 'Branch', label_plural: 'Branches' },
+    { kind: 'class',      label: 'Unit',   label_plural: 'Units' },
+  ],
+  cooperative: [
+    { kind: 'class', label: 'Unit', label_plural: 'Units' },
+  ],
+  ngo: [
+    { kind: 'department', label: 'Program', label_plural: 'Programs' },
+    { kind: 'class',      label: 'Team',    label_plural: 'Teams' },
+  ],
+  other: [
+    { kind: 'department', label: 'Group',    label_plural: 'Groups' },
+    { kind: 'class',      label: 'Subgroup', label_plural: 'Subgroups' },
+  ],
+}
+
+/** The ordered tier list (top → leaf) for an org type. */
+export function getOrgTiers(type: OrganizationType | string | null | undefined): OrgTier[] {
+  return ORG_TIER_CONFIG[(type as OrganizationType)] ?? ORG_TIER_CONFIG.association
+}
+
+/** Human label for a canonical kind under a given org type. */
+export function getTierLabel(
+  type: OrganizationType | string | null | undefined,
+  kind: string,
+  plural = false,
+): string {
+  const tier = getOrgTiers(type).find((t) => t.kind === kind)
+  if (tier) return plural ? tier.label_plural : tier.label
+  const cap = kind ? kind.charAt(0).toUpperCase() + kind.slice(1) : 'Group'
+  return plural ? `${cap}s` : cap
+}
+
+/** Does this org type use the given canonical tier? (church has no faculty) */
+export function orgUsesTier(
+  type: OrganizationType | string | null | undefined,
+  kind: 'faculty' | 'department' | 'class',
+): boolean {
+  return getOrgTiers(type).some((t) => t.kind === kind)
+}
+
+/**
  * Academic org types use the faculty/department/level hierarchy.
  * Non-academic orgs (church, club, association, cooperative, ngo, other)
  * skip these fields in onboarding and signup.

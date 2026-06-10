@@ -24,6 +24,7 @@ import { useTheme, getDashboardTokens } from '@/hooks/useTheme';
 import { supabase } from '@/config/supabase';
 import organizationService from '@/services/organizationService';
 import type { OrganizationGroup, GroupKind } from '@/types/multiTenant';
+import { getOrgTiers } from '@/config/constants';
 import EmptyState from '@/components/ui/EmptyState';
 import Textarea from '@/components/ui/Textarea';
 import ProfessionalDropdown from '@/components/ui/ProfessionalDropdown';
@@ -562,32 +563,33 @@ export default function OrgGroupsPage() {
   // What new group can this viewer create, if any? Returns the
   // pre-filled kind + parent + a label for the CTA. null = the
   // viewer has no new-group powers and the button hides.
+  // The org's tier hierarchy (top → leaf) using canonical kinds with
+  // per-type labels (#27). A church is Ministry → Section, a co-op is a
+  // single Unit, a university is Faculty → Department → Class.
+  const orgTiers = useMemo(() => getOrgTiers(organization?.organization_type), [organization?.organization_type])
+
   const createTarget = useMemo<{ kind: GroupKind; parentId: string | null; label: string } | null>(() => {
     if (!activeRole || activeRole.kind !== 'exec') return null
 
-    // Org owner — top of the tree. Academic orgs default to a new
-    // faculty; non-academic orgs default to a generic group.
+    // Org owner — creates the TOP tier of this org type.
     if (activeRole.scopeLevel === 'org') {
-      return isAcademicOrg
-        ? { kind: 'faculty', parentId: null, label: 'New faculty' }
-        : { kind: 'general', parentId: null, label: `New ${groupLabel.toLowerCase()}` }
+      const top = orgTiers[0]
+      return { kind: top.kind as GroupKind, parentId: null, label: `New ${top.label.toLowerCase()}` }
     }
 
     if (!activeRole.groupId) return null
     const ownGroup = groups.find(g => g.id === activeRole.groupId)
     if (!ownGroup) return null
 
-    // Faculty / college exec — creates departments under their own.
-    if (ownGroup.kind === 'faculty' || ownGroup.kind === 'college') {
-      return { kind: 'department', parentId: ownGroup.id, label: 'New department' }
-    }
-    // Dept exec — creates classes under their own.
-    if (ownGroup.kind === 'department') {
-      return { kind: 'class', parentId: ownGroup.id, label: `New ${classLabel.toLowerCase()}` }
-    }
-    // Class / leaf — nothing to create downstream.
-    return null
-  }, [activeRole, groups, isAcademicOrg, groupLabel, classLabel])
+    // An exec creates the NEXT tier down from their own. Find their
+    // tier in the config; if there's a tier below, that's the child.
+    // Treat legacy 'college' like 'faculty'.
+    const ownKind = ownGroup.kind === 'college' ? 'faculty' : ownGroup.kind
+    const idx = orgTiers.findIndex(tier => tier.kind === ownKind)
+    if (idx === -1 || idx >= orgTiers.length - 1) return null // leaf / unknown → nothing below
+    const child = orgTiers[idx + 1]
+    return { kind: child.kind as GroupKind, parentId: ownGroup.id, label: `New ${child.label.toLowerCase()}` }
+  }, [activeRole, groups, orgTiers])
 
   const openCreate = () => {
     if (!createTarget) {
