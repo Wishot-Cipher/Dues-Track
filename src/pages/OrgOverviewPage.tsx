@@ -632,6 +632,13 @@ export default function OrgOverviewPage() {
                       </>
                     )}
                   </div>
+                  {/* Public description — the org's own words, shown on
+                      its landing card so visitors know what it is. */}
+                  {(org as { description?: string | null }).description && (
+                    <p className="text-[13px] mt-2 leading-snug max-w-xl" style={{ color: tk.textSec }}>
+                      {(org as { description?: string | null }).description}
+                    </p>
+                  )}
                 </div>
               </div>
 
@@ -664,6 +671,15 @@ export default function OrgOverviewPage() {
                   />
                 )}
 
+                {/* Members — a trust/size signal on the public card. */}
+                {typeof (org as { member_count?: number }).member_count === 'number' && (
+                  <div className="rounded-xl px-4 py-2.5 text-center relative overflow-hidden"
+                    style={{ background: tk.cardBg, border: `1px solid ${tk.cardBorder}`, minWidth: 72 }}>
+                    <div className="absolute top-0 inset-x-0 h-0.5" style={{ background: tk.mint }} />
+                    <p className="text-[9px] uppercase tracking-wider" style={{ color: tk.textTer }}>Members</p>
+                    <p className="text-xl font-bold mt-1" style={{ color: tk.textPrimary }}>{(org as { member_count?: number }).member_count}</p>
+                  </div>
+                )}
                 <div className="rounded-xl px-4 py-2.5 text-center relative overflow-hidden"
                   style={{ background: tk.cardBg, border: `1px solid ${tk.cardBorder}`, minWidth: 72 }}>
                   <div className="absolute top-0 inset-x-0 h-0.5" style={{ background: tk.primary }} />
