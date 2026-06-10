@@ -143,6 +143,28 @@ export function useUserRoles() {
         .filter((ar) => ar.is_active)
         .map((ar) => {
           const groupInfo = ar.group_id ? groupMap.get(ar.group_id) : null;
+
+          // The founder's money-locked SETUP STEWARD (mig 111). It's
+          // org-scoped but NOT a governance role — don't dress it up as
+          // "SUG Exec" / prepend "SUG". It's a selectable setup role so
+          // the founder can reach the admin/setup surfaces; its powers
+          // are gated by the can_* flags (money off), not by this label.
+          if (ar.role === 'org_setup') {
+            return {
+              key: `admin:${ar.id}`,
+              kind: 'exec',
+              label: ar.role_label || 'Founder · setup',
+              subLabel: 'Setup steward',
+              adminId: ar.id,
+              groupId: ar.group_id ?? null,
+              groupKind: groupInfo?.kind ?? null,
+              scopeLevel: 'org' as RoleScopeLevel,
+              verified: true,
+              pending: false,
+              role: ar.role,
+            } as RoleTab;
+          }
+
           const baseLabel = ar.role_label || ar.custom_role_name || titleCase(ar.role || 'exec');
           const roleLabel = normalizeRoleLabel(baseLabel, {
             scopeLevel: (ar.scope_level || 'group') as RoleScopeLevel,
