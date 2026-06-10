@@ -646,7 +646,16 @@ export default function OrgGroupsPage() {
       short_name: form.short_name.trim().toUpperCase(),
       description: form.description.trim() || undefined,
       kind: form.kind,
-      parent_group_id: form.kind === 'class' ? (form.parent_group_id || undefined) : undefined,
+      // Persist the parent for EVERY nested tier, not just classes. The
+      // old `form.kind === 'class'` guard orphaned departments: a dept
+      // created here got a NULL parent, so it never sat under its
+      // faculty — which broke the faculty→dept→class subtree walk
+      // (faculty execs couldn't see their depts' members in waive /
+      // finance / audit). createTarget already pins the right parent
+      // (faculty exec → dept under their faculty; dept exec → class
+      // under their dept). A top-level faculty has no parent, so an
+      // empty value correctly becomes undefined (null).
+      parent_group_id: form.parent_group_id || undefined,
       levels: form.level.trim() ? [form.level.trim()] : undefined,
     }
     try {
