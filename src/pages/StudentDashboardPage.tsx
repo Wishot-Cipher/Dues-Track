@@ -211,14 +211,17 @@ export default function StudentDashboardPage() {
     })[0] ?? null;
   }, [unpaidActive]);
 
-  // Recent activity = last 6 payments
+  // Recent activity = the 5 most recent payments only. This is a
+  // glanceable "what just happened" strip, not a ledger — the full
+  // history lives behind "See all" → /payments. Capping at 5 keeps
+  // it tight as the member's payment count grows over the years.
   const recentActivity = useMemo(
     () =>
       [...payments]
         .sort((a, b) =>
           new Date(b.created_at || '').getTime() - new Date(a.created_at || '').getTime()
         )
-        .slice(0, 6),
+        .slice(0, 5),
     [payments]
   );
 
@@ -619,12 +622,19 @@ function ActivityRow({
   onClick?: () => void;
 }) {
   const t = getDashboardTokens(theme);
+  // A waiver is an approved payment with a WAIVED- ref. It must read
+  // "Waived" (amber, gift-like), NOT "Paid" with a naira figure — it
+  // wasn't money the member paid.
+  const isWaived = payment.status === 'approved'
+    && (payment as { transaction_ref?: string | null }).transaction_ref?.startsWith('WAIVED-');
   const statusMeta: Record<string, { color: string; label: string; icon: React.ElementType }> = {
     approved: { color: t.mint,   label: 'Paid',     icon: CheckCircle2 },
     pending:  { color: t.amber,  label: 'Pending',  icon: Loader2 },
     rejected: { color: t.danger, label: 'Rejected', icon: AlertCircle },
   };
-  const meta = statusMeta[payment.status as string] ?? { color: t.textTer, label: payment.status as string, icon: BookOpen };
+  const meta = isWaived
+    ? { color: t.amber, label: 'Waived', icon: CheckCircle2 }
+    : statusMeta[payment.status as string] ?? { color: t.textTer, label: payment.status as string, icon: BookOpen };
   const Icon = meta.icon;
 
   return (
@@ -656,11 +666,11 @@ function ActivityRow({
         <p
           className="text-sm font-bold tabular-nums"
           style={{
-            color: t.text,
-            filter: privacyOn ? 'blur(6px)' : 'none',
+            color: isWaived ? t.amber : t.text,
+            filter: privacyOn && !isWaived ? 'blur(6px)' : 'none',
           }}
         >
-          {formatCurrency(Number(payment.amount || 0))}
+          {isWaived ? 'Waived' : formatCurrency(Number(payment.amount || 0))}
         </p>
       </div>
       <ChevronRight className="w-4 h-4 ml-1 shrink-0" style={{ color: t.textTer }} />
