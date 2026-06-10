@@ -22,10 +22,11 @@
  */
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { motion } from 'framer-motion';
+import { motion, AnimatePresence } from 'framer-motion';
 import {
   ArrowLeft, ChevronRight, CheckCircle2, AlertCircle, BookOpen, Calendar,
   GraduationCap, Heart, Sparkles, Ticket, Wallet, SlidersHorizontal, Users,
+  Search, X, ArrowUpDown, Check,
 } from 'lucide-react';
 import { useAppAuth as useAuth } from '@/hooks/useAppAuth';
 import { useAppNav } from '@/hooks/useAppNav';
@@ -33,6 +34,8 @@ import { useTheme, getDashboardTokens } from '@/hooks/useTheme';
 import PayvexoBackground from '@/components/student/dashboard/PayvexoBackground';
 import paymentService from '@/services/paymentService';
 import { groupMembershipService, type MyGroup } from '@/services/groupMembershipService';
+import { supabase } from '@/config/supabase';
+import { getOrgScope } from '@/utils/orgScope';
 import type { Payment, PaymentType } from '@/types';
 
 // ── Helpers ────────────────────────────────────────────────────────
@@ -92,9 +95,30 @@ interface DueRowData {
   /** For EVENT rows when the member bought more than one ticket:
    *  the 1-based ticket number, shown as "· Ticket #N". */
   ticketIndex?: number;
+  /** Which tier created this due — drives the tier filter chips. */
+  tier: DueTier;
 }
 
 type TabKey = 'all' | 'pending' | 'paid';
+type DueTier = 'org' | 'faculty' | 'department' | 'class' | 'other';
+type SortKey = 'recent' | 'oldest' | 'amount_high' | 'amount_low' | 'name';
+
+const TIER_LABEL: Record<DueTier, string> = {
+  org: 'Org-wide', faculty: 'Faculty', department: 'Department', class: 'Class', other: 'Other',
+};
+const SORT_LABEL: Record<SortKey, string> = {
+  recent: 'Most recent', oldest: 'Oldest', amount_high: 'Amount: high → low',
+  amount_low: 'Amount: low → high', name: 'Name (A–Z)',
+};
+
+/** Map a group kind to one of our filter tiers. */
+function kindToTier(kind: string | undefined | null): DueTier {
+  const k = String(kind ?? '').toLowerCase();
+  if (k === 'faculty' || k === 'college') return 'faculty';
+  if (k === 'department') return 'department';
+  if (k === 'class' || k === 'level' || k === 'year_group') return 'class';
+  return 'other';
+}
 
 // ── Page ───────────────────────────────────────────────────────────
 export default function MyDuesPage() {
@@ -108,20 +132,40 @@ export default function MyDuesPage() {
   const [paymentTypes, setPaymentTypes] = useState<PaymentType[]>([]);
   const [payments, setPayments] = useState<Payment[]>([]);
   const [memberGroups, setMemberGroups] = useState<MyGroup[]>([]);
+  // group_id → kind, for resolving each due's tier (incl. ancestor
+  // groups the member isn't directly in — faculty/dept cascade dues).
+  const [groupKindById, setGroupKindById] = useState<Map<string, string>>(new Map());
   const [tab, setTab] = useState<TabKey>('all');
+  // ── Filter / sort / paging state ──
+  const [showFilter, setShowFilter] = useState(false);
+  const [searchText, setSearchText] = useState('');
+  const [tierFilter, setTierFilter] = useState<DueTier | 'all'>('all');
+  const [sortBy, setSortBy] = useState<SortKey>('recent');
+  const [visibleCount, setVisibleCount] = useState(8); // pagination ("Show more")
 
   const fetchAll = useCallback(async () => {
     if (!user?.id) return;
     setLoading(true);
     try {
-      const [pts, pays, groups] = await Promise.all([
+      const scope = getOrgScope();
+      const [pts, pays, groups, kindRes] = await Promise.all([
         paymentService.getActivePaymentTypesForStudent(user.id),
         paymentService.getStudentPayments(user.id),
         groupMembershipService.getMyGroups(user.id),
+        // All org groups' kinds — so a faculty/dept cascade due (whose
+        // group the member isn't directly in) still resolves its tier.
+        scope
+          ? supabase.from('organization_groups').select('id, kind').eq('organization_id', scope.orgId)
+          : Promise.resolve({ data: [] as Array<{ id: string; kind: string }> }),
       ]);
       setPaymentTypes(pts);
       setPayments(pays);
       setMemberGroups(groups);
+      const km = new Map<string, string>();
+      for (const g of ((kindRes as { data?: Array<{ id: string; kind: string }> }).data || [])) {
+        km.set(g.id, g.kind);
+      }
+      setGroupKindById(km);
     } finally {
       setLoading(false);
     }
@@ -138,6 +182,7 @@ export default function MyDuesPage() {
     for (const pt of paymentTypes) {
       const own = payments.filter(p => p.payment_type_id === pt.id);
       const groupLabel = pt.group_id ? (groupNameById.get(pt.group_id) || 'Group due') : 'Org-wide';
+      const tier: DueTier = pt.group_id ? kindToTier(groupKindById.get(pt.group_id)) : 'org';
       const isEvent = String((pt as { category?: string | null }).category ?? '').toLowerCase() === 'event';
 
       if (isEvent) {
@@ -164,6 +209,7 @@ export default function MyDuesPage() {
             rowKey: `${pt.id}:${p.id ?? idx}`,
             paymentId: p.id,
             ticketIndex: purchases.length > 1 ? idx + 1 : undefined,
+            tier,
           });
         });
         continue;
@@ -203,11 +249,12 @@ export default function MyDuesPage() {
         daysLeft: daysFromNow(pt.deadline),
         paidAt: lastApproved?.created_at ?? null,
         rowKey: pt.id,
+        tier,
       });
     }
 
     return out;
-  }, [memberGroups, paymentTypes, payments]);
+  }, [memberGroups, paymentTypes, payments, groupKindById]);
 
   // ── Tab partitions ──────────────────────────────────────────────
   const pendingRows = useMemo(
@@ -221,8 +268,57 @@ export default function MyDuesPage() {
     [rows],
   );
 
-  const visiblePending = tab === 'paid' ? [] : pendingRows;
-  const visiblePaid    = tab === 'pending' ? [] : paidRows;
+  // ── Filter + sort pipeline (search · tier · sort) ──
+  const applyFilters = useCallback((list: DueRowData[]): DueRowData[] => {
+    const q = searchText.trim().toLowerCase();
+    let out = list;
+    if (q) out = out.filter(r => (r.pt.title || '').toLowerCase().includes(q));
+    if (tierFilter !== 'all') out = out.filter(r => r.tier === tierFilter);
+
+    const ts = (s: string | null) => (s ? new Date(s).getTime() : 0);
+    const sorted = [...out];
+    switch (sortBy) {
+      case 'recent':
+        // Most recent activity first: paid-on date, else soonest deadline.
+        sorted.sort((a, b) => ts(b.paidAt) - ts(a.paidAt)
+          || (a.daysLeft ?? Number.MAX_SAFE_INTEGER) - (b.daysLeft ?? Number.MAX_SAFE_INTEGER));
+        break;
+      case 'oldest':
+        sorted.sort((a, b) => ts(a.paidAt) - ts(b.paidAt));
+        break;
+      case 'amount_high':
+        sorted.sort((a, b) => Number(b.pt.amount || 0) - Number(a.pt.amount || 0));
+        break;
+      case 'amount_low':
+        sorted.sort((a, b) => Number(a.pt.amount || 0) - Number(b.pt.amount || 0));
+        break;
+      case 'name':
+        sorted.sort((a, b) => (a.pt.title || '').localeCompare(b.pt.title || ''));
+        break;
+    }
+    return sorted;
+  }, [searchText, tierFilter, sortBy]);
+
+  const filteredPending = useMemo(() => applyFilters(pendingRows), [applyFilters, pendingRows]);
+  const filteredPaid    = useMemo(() => applyFilters(paidRows), [applyFilters, paidRows]);
+
+  const visiblePending = tab === 'paid' ? [] : filteredPending;
+  // Paid history can be long → paginate with "Show more".
+  const visiblePaid    = tab === 'pending' ? [] : filteredPaid.slice(0, visibleCount);
+  const hasMorePaid    = tab !== 'pending' && filteredPaid.length > visibleCount;
+
+  // Reset paging whenever the filter/sort/tab changes so "Show more"
+  // doesn't carry a stale offset into a smaller result set.
+  useEffect(() => { setVisibleCount(8); }, [searchText, tierFilter, sortBy, tab]);
+
+  const activeFilterCount =
+    (searchText.trim() ? 1 : 0) + (tierFilter !== 'all' ? 1 : 0) + (sortBy !== 'recent' ? 1 : 0);
+  // Which tiers actually exist in the member's dues — only show those chips.
+  const availableTiers = useMemo(() => {
+    const set = new Set<DueTier>();
+    rows.forEach(r => set.add(r.tier));
+    return (['org', 'faculty', 'department', 'class', 'other'] as DueTier[]).filter(tt => set.has(tt));
+  }, [rows]);
 
   // ── Render ───────────────────────────────────────────────────────
   return (
@@ -252,19 +348,131 @@ export default function MyDuesPage() {
           </h1>
           <button
             type="button"
-            className="w-9 h-9 rounded-full flex items-center justify-center transition-colors shrink-0"
+            onClick={() => setShowFilter(v => !v)}
+            className="relative w-9 h-9 rounded-full flex items-center justify-center transition-colors shrink-0"
             style={{
-              background: isLight ? '#FFFFFF' : 'rgba(255,255,255,0.06)',
-              color: t.textSec,
-              border: `1px solid ${t.cardBorder}`,
+              background: showFilter || activeFilterCount > 0 ? t.primarySoft : (isLight ? '#FFFFFF' : 'rgba(255,255,255,0.06)'),
+              color: showFilter || activeFilterCount > 0 ? t.primary : t.textSec,
+              border: `1px solid ${showFilter || activeFilterCount > 0 ? t.primaryRing : t.cardBorder}`,
               boxShadow: isLight ? '0 6px 18px -8px rgba(15,7,3,0.10)' : 'none',
             }}
             aria-label="Filter dues"
-            title="Filter (coming soon)"
+            title="Filter & sort"
           >
             <SlidersHorizontal size={15} />
+            {activeFilterCount > 0 && (
+              <span
+                className="absolute -top-1 -right-1 min-w-[16px] h-4 px-1 rounded-full text-[9px] font-bold flex items-center justify-center"
+                style={{ background: t.primary, color: '#fff' }}
+              >
+                {activeFilterCount}
+              </span>
+            )}
           </button>
         </header>
+
+        {/* ── Filter & sort panel ──────────────────────────────── */}
+        <AnimatePresence>
+          {showFilter && (
+            <motion.div
+              initial={{ opacity: 0, height: 0 }}
+              animate={{ opacity: 1, height: 'auto' }}
+              exit={{ opacity: 0, height: 0 }}
+              className="overflow-hidden mb-4"
+            >
+              <div
+                className="rounded-2xl p-4 space-y-3.5"
+                style={{ background: t.card, border: `1px solid ${t.cardBorder}` }}
+              >
+                {/* Search */}
+                <div
+                  className="flex items-center gap-2 rounded-xl px-3 py-2"
+                  style={{ background: isLight ? '#F8F4F1' : 'rgba(255,255,255,0.04)', border: `1px solid ${t.cardBorder}` }}
+                >
+                  <Search size={15} style={{ color: t.textTer }} />
+                  <input
+                    value={searchText}
+                    onChange={(e) => setSearchText(e.target.value)}
+                    placeholder="Search dues by name…"
+                    className="flex-1 bg-transparent outline-none text-sm"
+                    style={{ color: t.text }}
+                  />
+                  {searchText && (
+                    <button type="button" onClick={() => setSearchText('')} aria-label="Clear search">
+                      <X size={14} style={{ color: t.textTer }} />
+                    </button>
+                  )}
+                </div>
+
+                {/* Tier chips — class / department / faculty / org-wide */}
+                {availableTiers.length > 0 && (
+                  <div>
+                    <p className="text-[10px] font-bold uppercase tracking-wider mb-1.5" style={{ color: t.textTer }}>Due tier</p>
+                    <div className="flex flex-wrap gap-1.5">
+                      {(['all', ...availableTiers] as const).map((tier) => {
+                        const active = tierFilter === tier;
+                        return (
+                          <button
+                            key={tier}
+                            type="button"
+                            onClick={() => setTierFilter(tier as DueTier | 'all')}
+                            className="px-2.5 py-1 rounded-full text-[11px] font-bold transition-all"
+                            style={{
+                              background: active ? t.primary : (isLight ? '#F1EEEB' : 'rgba(255,255,255,0.05)'),
+                              color: active ? '#fff' : t.textSec,
+                              border: `1px solid ${active ? t.primary : t.cardBorder}`,
+                            }}
+                          >
+                            {tier === 'all' ? 'All' : TIER_LABEL[tier as DueTier]}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+
+                {/* Sort */}
+                <div>
+                  <p className="text-[10px] font-bold uppercase tracking-wider mb-1.5 flex items-center gap-1" style={{ color: t.textTer }}>
+                    <ArrowUpDown size={11} /> Sort
+                  </p>
+                  <div className="grid grid-cols-1 gap-1">
+                    {(Object.keys(SORT_LABEL) as SortKey[]).map((key) => {
+                      const active = sortBy === key;
+                      return (
+                        <button
+                          key={key}
+                          type="button"
+                          onClick={() => setSortBy(key)}
+                          className="flex items-center justify-between px-3 py-2 rounded-lg text-sm transition-colors"
+                          style={{
+                            background: active ? t.primarySoft : 'transparent',
+                            color: active ? t.primary : t.textSec,
+                            border: `1px solid ${active ? t.primaryRing : 'transparent'}`,
+                          }}
+                        >
+                          {SORT_LABEL[key]}
+                          {active && <Check size={14} />}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                {activeFilterCount > 0 && (
+                  <button
+                    type="button"
+                    onClick={() => { setSearchText(''); setTierFilter('all'); setSortBy('recent'); }}
+                    className="w-full py-2 rounded-xl text-xs font-bold"
+                    style={{ background: isLight ? '#F1EEEB' : 'rgba(255,255,255,0.06)', color: t.text, border: `1px solid ${t.cardBorder}` }}
+                  >
+                    Reset filters
+                  </button>
+                )}
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
 
         {/* ── Tabs ─────────────────────────────────────────────── */}
         <TabBar
@@ -397,6 +605,16 @@ export default function MyDuesPage() {
                 );
               })}
             </div>
+            {hasMorePaid && (
+              <button
+                type="button"
+                onClick={() => setVisibleCount((c) => c + 12)}
+                className="mt-3 w-full py-2.5 rounded-xl text-xs font-bold transition-colors"
+                style={{ background: t.card, color: t.primary, border: `1px solid ${t.cardBorder}` }}
+              >
+                Show more ({filteredPaid.length - visibleCount} more)
+              </button>
+            )}
           </section>
         )}
 
