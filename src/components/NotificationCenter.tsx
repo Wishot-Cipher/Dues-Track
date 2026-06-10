@@ -268,23 +268,22 @@ export const NotificationCenter = () => {
 
   return (
     <>
-      {/* Notification Bell Button */}
+      {/* Notification Bell Button — routes straight to the full
+          notifications PAGE (no dropdown). Reading is the default
+          action; the page handles previews → detail, mark-as-read,
+          and the full history. The live unread badge stays here. */}
       <motion.button
-        onClick={() => {
-          setShowPanel(prev => {
-            if (!prev) void fetchNotifications();
-            return !prev;
-          });
-        }}
+        onClick={() => navigate('/notifications')}
         className="relative p-2.5 rounded-xl transition-all duration-300"
         style={{
-          background: showPanel ? tk.primarySoft : (theme === 'light' ? 'rgba(15, 7, 3, 0.04)' : 'rgba(255, 255, 255, 0.05)'),
-          border: `1px solid ${showPanel ? tk.primaryRing : tk.cardBorder}`,
+          background: theme === 'light' ? 'rgba(15, 7, 3, 0.04)' : 'rgba(255, 255, 255, 0.05)',
+          border: `1px solid ${tk.cardBorder}`,
         }}
         whileHover={{ scale: 1.05 }}
         whileTap={{ scale: 0.95 }}
+        aria-label="Notifications"
       >
-        <Bell className="w-5 h-5" style={{ color: showPanel ? tk.primary : tk.text }} />
+        <Bell className="w-5 h-5" style={{ color: tk.text }} />
         <AnimatePresence>
           {unreadCount > 0 && (
             <motion.div

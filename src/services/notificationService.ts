@@ -266,40 +266,23 @@ class NotificationService {
       const userId = localStorage.getItem('pvx_member_id') || localStorage.getItem('current_user_id');
       if (!userId) throw new Error('Not authenticated');
 
-      const res = await fetch('/api/notifications/mark-read', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ notificationId, callerId: userId }),
-      });
-
-      if (!res.ok) {
-        // If serverless API isn't available in dev (Vite), fall back to direct Supabase update
-        if (res.status === 404 || res.status === 500) {
-          console.warn(`mark-read endpoint error (${res.status}). Falling back to direct Supabase update.`);
-          // Match on id + member_id ONLY. Do NOT filter by group_id:
-          // a notification's stored group_id is frequently a different
-          // group from the reader's active group (the creating admin's
-          // group, or a faculty/dept-tier due), so an `.eq('group_id',
-          // activeGroup)` matched 0 rows → 0-row UPDATE is not an error
-          // → markAsRead returned true while nothing persisted, so the
-          // unread state came back on reload ("not tracking when read").
-          const { error } = await supabase
-            .from('notifications')
-            .update({ is_read: true, read_at: new Date().toISOString() })
-            .eq('id', notificationId)
-            .eq('member_id', userId);
-          if (error) {
-            console.error('Supabase fallback error marking as read:', error);
-            return false;
-          }
-          return true;
-        }
-
-        const txt = await res.text();
-        console.error('mark-read API error:', txt);
+      // Update Supabase DIRECTLY. A member marking THEIR OWN notification
+      // read is allowed by RLS (notifications_update: member_id =
+      // auth.uid()), so we don't need the serverless API for this — and
+      // relying on it broke dev: Vite's SPA fallback serves index.html
+      // with 200 OK for /api/* so `res.ok` was true while nothing was
+      // ever updated. Match on id + member_id only (NEVER group_id — a
+      // notification's group is often a different tier than the reader's
+      // active group, which silently matched 0 rows).
+      const { error } = await supabase
+        .from('notifications')
+        .update({ is_read: true, read_at: new Date().toISOString() })
+        .eq('id', notificationId)
+        .eq('member_id', userId);
+      if (error) {
+        console.error('Error marking notification as read:', error);
         return false;
       }
-
       return true;
     } catch (error) {
       console.error('Error marking notification as read:', error);
@@ -317,36 +300,19 @@ class NotificationService {
         throw new Error('Not authenticated or mismatched user');
       }
 
-      const res = await fetch('/api/notifications/mark-read', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ callerId: userId }),
-      });
-
-      if (!res.ok) {
-        // Fallback for local dev when serverless API routes are not available
-        if (res.status === 404 || res.status === 500) {
-          console.warn(`mark-read endpoint error (${res.status}). Falling back to direct Supabase update.`);
-          // Member-scoped only — NOT group-scoped (see markAsRead): a
-          // group_id filter left other-tier notifications unread and the
-          // bell count never cleared.
-          const { error } = await supabase
-            .from('notifications')
-            .update({ is_read: true, read_at: new Date().toISOString() })
-            .eq('member_id', userId)
-            .eq('is_read', false);
-          if (error) {
-            console.error('Supabase fallback error marking all as read:', error);
-            return false;
-          }
-          return true;
-        }
-
-        const txt = await res.text();
-        console.error('mark-all-read API error:', txt);
+      // Direct Supabase update (see markAsRead for why we don't use the
+      // serverless API). Member-scoped only — NOT group-scoped, so every
+      // unread notification across all tiers clears and the bell count
+      // actually reaches zero.
+      const { error } = await supabase
+        .from('notifications')
+        .update({ is_read: true, read_at: new Date().toISOString() })
+        .eq('member_id', userId)
+        .eq('is_read', false);
+      if (error) {
+        console.error('Error marking all notifications as read:', error);
         return false;
       }
-
       return true;
     } catch (error) {
       console.error('Error marking all notifications as read:', error);
