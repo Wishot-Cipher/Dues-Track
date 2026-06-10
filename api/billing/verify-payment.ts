@@ -1,6 +1,7 @@
 import { createClient } from '@supabase/supabase-js';
 import { sendEmail, billingReceiptEmail } from '../_lib/email.js';
 import { verifyMember, setCorsHeaders } from '../_lib/auth.js';
+import { sendPushToUser } from '../_lib/push.js';
 
 interface VercelRequest {
   method?: string;
@@ -298,17 +299,21 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     //    the client) means it can't be lost to RLS/scope quirks and
     //    always carries the recipient's correct org/group context.
     //    Best-effort — never fail the grant on a notification hiccup. ──
+    const ticketTitle = '🎟️ You got a free ticket!';
+    const ticketBody = `You've been given a free "${tier.name}" ticket to ${pt.title}. Open your Tickets to see the QR for check-in.`;
     await supabase.from('notifications').insert({
       organization_id: orgId,
       member_id: recipient.id,
       group_id: recipient.group_id ?? null,
       type: 'free_ticket_granted',
-      title: '🎟️ You got a free ticket!',
-      message: `You've been given a free "${tier.name}" ticket to ${pt.title}. Open your Tickets to see the QR for check-in.`,
+      title: ticketTitle,
+      message: ticketBody,
       link: '/tickets',
       related_type: 'event_ticket',
       related_id: issueRes.ticket_id ?? null,
     }).then(undefined, () => {});
+    // Reach the recipient's phone even if the app is closed.
+    await sendPushToUser(supabase, recipient.id, { title: ticketTitle, body: ticketBody, url: '/tickets', tag: 'free_ticket' });
 
     return res.status(200).json({
       ok: true,

@@ -147,6 +147,8 @@ export default async function handler(req: any, res: any) {
       console.error('❌ Notification insert error:', error);
       // Non-critical, continue with other notifications
     }
+    // (Push to approvers is sent below — this file already fans out via
+    // web-push to each approver's push_subscription.)
 
     // Send email notifications to admins with valid emails
     const reviewUrl = `${appUrl.replace(/\/$/, '')}${reviewLink}`
