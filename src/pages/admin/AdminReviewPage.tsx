@@ -280,8 +280,20 @@ export default function AdminReviewPage() {
         return true; // approved
       });
 
+      // Normalize the member join once so every render/export site is
+      // null-safe. A payment can reference a member that was removed or
+      // sits outside the caller's visibility (the join then returns
+      // null) — without this, the table crashes on member.full_name.
+      const normalized = filtered.map((p) => ({
+        ...p,
+        member: (p as { member?: PendingPayment['member'] | null }).member
+          ?? { full_name: 'Unknown member', member_id: '—', level: '' },
+        payment_types: (p as { payment_types?: PendingPayment['payment_types'] | null }).payment_types
+          ?? { title: 'Unknown due', category: 'other' },
+      }));
+
       // Sort: pending first, then approved/rejected
-      const sorted = filtered.sort((a, b) => {
+      const sorted = normalized.sort((a, b) => {
         if (a.status === "pending" && b.status !== "pending") return -1;
         if (a.status !== "pending" && b.status === "pending") return 1;
         return (
@@ -773,14 +785,14 @@ export default function AdminReviewPage() {
                             </div>
                             <div>
                               <p className="font-medium" style={{ color: tk.text }}>
-                                {payment.member.full_name}
+                                {payment.member?.full_name ?? 'Unknown member'}
                               </p>
                               <p
                                 className="text-sm"
                                 style={{ color: tk.textSec }}
                               >
-                                {payment.member.member_id} •{" "}
-                                {payment.member.level}
+                                {payment.member?.member_id ?? '—'}
+                                {payment.member?.level ? ` • ${payment.member.level}` : ''}
                               </p>
                             </div>
                           </div>
