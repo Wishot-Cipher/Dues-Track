@@ -769,10 +769,27 @@ async function handleSubaccount(req: any, res: any, body: any) {
   //    touch payout. set_group_payout enforces this again server-side
   //    (defense in depth); we check here for a clean early error and
   //    to cover the org-level direct-update path below too. ──
-  const { data: payoutOk } = await supabase.rpc('can_member_manage_payout', {
-    p_member_id: auth.data.id,
-    p_group_id: groupId || null,
-  });
+  // Bounded so a stalled query (e.g. a group-hierarchy cycle before
+  // mig 112's depth guard is applied) fails fast instead of hanging
+  // the whole payout request. 8s is far past a healthy round-trip.
+  let payoutOk: boolean | null = null;
+  try {
+    const payoutCheck = await Promise.race([
+      supabase.rpc('can_member_manage_payout', {
+        p_member_id: auth.data.id,
+        p_group_id: groupId || null,
+      }),
+      new Promise<{ data: null }>((_, reject) =>
+        setTimeout(() => reject(new Error('payout-check-timeout')), 8_000),
+      ),
+    ]);
+    payoutOk = (payoutCheck as { data: boolean | null }).data;
+  } catch {
+    return res.status(503).json({
+      ok: false,
+      error: 'Could not verify your payout permission in time. Please try again (and ensure migration 112 has been applied).',
+    });
+  }
   if (!payoutOk) {
     return res.status(403).json({
       ok: false,
@@ -785,19 +802,29 @@ async function handleSubaccount(req: any, res: any, body: any) {
   }
   const acctNum = String(accountNumber).replace(/\D/g, '');
 
-  // 1) Resolve the account → confirm it's real + get the account name
+  // 1) Resolve the account → confirm it's real + get the account name.
+  //    Bounded to 12s so a slow/unreachable Paystack fails fast with a
+  //    clear error rather than hanging the request (which surfaced as
+  //    "the payout service took too long" on the client).
   let resolveJson: any;
   try {
-    const rr = await fetch(
-      `https://api.paystack.co/bank/resolve?account_number=${encodeURIComponent(acctNum)}&bank_code=${encodeURIComponent(bankCode)}`,
-      { headers: { Authorization: `Bearer ${paystackSecret}` } },
-    );
+    const rc = new AbortController();
+    const rt = setTimeout(() => rc.abort(), 12_000);
+    let rr: Response;
+    try {
+      rr = await fetch(
+        `https://api.paystack.co/bank/resolve?account_number=${encodeURIComponent(acctNum)}&bank_code=${encodeURIComponent(bankCode)}`,
+        { headers: { Authorization: `Bearer ${paystackSecret}` }, signal: rc.signal },
+      );
+    } finally {
+      clearTimeout(rt);
+    }
     resolveJson = await rr.json().catch(() => ({}));
     if (!rr.ok || resolveJson?.status !== true) {
       return res.status(400).json({ ok: false, error: resolveJson?.message || 'Could not verify that account number with the selected bank.' });
     }
   } catch {
-    return res.status(502).json({ ok: false, error: 'Could not reach Paystack to verify the account.' });
+    return res.status(502).json({ ok: false, error: 'Could not reach Paystack to verify the account. Please try again.' });
   }
   const accountName = resolveJson?.data?.account_name || null;
 
