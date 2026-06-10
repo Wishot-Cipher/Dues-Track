@@ -49,7 +49,7 @@ import { useMultiTenantAuth } from '@/hooks/useMultiTenantAuth';
 import { useActiveRole } from '@/hooks/useActiveRole';
 import { useTheme, getDashboardTokens } from '@/hooks/useTheme';
 import { supabase } from '@/config/supabase';
-import { getScopedGroupIds } from '@/utils/scopedGroups';
+import { getScopedGroupIds, getOwnedTierScope, applyOwnedTierScope } from '@/utils/scopedGroups';
 import { exportTableToPDF } from '@/utils/pdfExport';
 import LoadingSpinner from '@/components/ui/LoadingSpinner';
 
@@ -154,6 +154,28 @@ export default function AuditPage() {
           activeScopeLevel: activeRole?.scopeLevel ?? null,
         });
 
+        // Tier autonomy: the audit's MONEY must be the exec's OWN dues
+        // only — a faculty/dept exec should NOT see the classes' own
+        // dues rolled into their audit (that money belongs to the class
+        // rep / fin sec). Resolve this tier's own dues and key payments
+        // off them. The group tree (below) still spans the subtree for
+        // structure/context, but the figures are own-tier.
+        const ownedScope = getOwnedTierScope({
+          activeKind: activeRole?.kind ?? null,
+          activeGroupId: activeRole?.groupId ?? null,
+          activeScopeLevel: activeRole?.scopeLevel ?? null,
+        });
+        let ownDueIds: string[] | null = null;
+        if (ownedScope.mode !== 'unscoped') {
+          let duesQ = supabase
+            .from('payment_types')
+            .select('id')
+            .eq('organization_id', organization.id);
+          duesQ = applyOwnedTierScope(duesQ, ownedScope);
+          const { data: ownDues } = await duesQ;
+          ownDueIds = (ownDues || []).map((d) => d.id as string);
+        }
+
         // Groups — restricted to the scope when one is set. The
         // previous attempt nested `organization_members(count)` as
         // a sub-select, but that requires PostgREST to find a
@@ -188,7 +210,15 @@ export default function AuditPage() {
           `)
           .eq('organization_id', organization.id)
           .order('created_at', { ascending: false });
-        if (scopedIds) {
+        // Own-tier dues only (tier autonomy). Empty list → no payments
+        // (this tier created no dues yet → ₦0, which is correct).
+        if (ownDueIds !== null) {
+          pQuery = pQuery.in(
+            'payment_type_id',
+            ownDueIds.length ? ownDueIds : ['00000000-0000-0000-0000-000000000000'],
+          );
+        } else if (scopedIds) {
+          // Org-scope / unscoped fallback keeps the prior subtree filter.
           const idList = Array.from(scopedIds).join(',');
           pQuery = pQuery.or(`group_id.in.(${idList}),group_id.is.null`);
         }
