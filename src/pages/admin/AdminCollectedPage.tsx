@@ -17,7 +17,7 @@ import { PrivacyMask } from '@/components/ui/PrivacyMask';
 import { getDashboardTokens, useTheme } from '@/hooks/useTheme';
 import {
   ArrowLeft, Users, Wallet, TrendingUp, Filter, Search, Download,
-  ChevronLeft, ChevronRight, Sparkles, PieChart, CheckCircle, XCircle,
+  ChevronLeft, ChevronRight, PieChart, CheckCircle, XCircle,
   BarChart3, FileText, FileSpreadsheet, ChevronDown, LineChart,
 } from 'lucide-react';
 import { exportCollectedPaymentsToPDF } from '@/utils/htmlPrintExports';
@@ -463,6 +463,40 @@ export default function AdminCollectedPage() {
     : activeRole.scopeLevel === 'unit' ? 'Faculty / dept finance'
     : 'Class finance';
 
+  // ── Per-DUE breakdown (the "where did the money come from" detail).
+  //    Aggregates every member's payments by due title: real money
+  //    collected (waivers excluded), how many members paid it, and
+  //    how many were waived. This is the transparency the user asked
+  //    for — drill past the category total into each specific due. ──
+  const duesBreakdown = useMemo(() => {
+    const map = new Map<string, {
+      title: string; category: string; collected: number;
+      payers: Set<string>; waived: number; pending: number;
+    }>();
+    for (const s of studentsToFilter) {
+      for (const p of s.payments) {
+        const key = p.payment_type || 'Untitled due';
+        const row = map.get(key) ?? {
+          title: key, category: p.category || 'Other',
+          collected: 0, payers: new Set<string>(), waived: 0, pending: 0,
+        };
+        const isWaived = p.waived || String(p.transaction_ref || '').startsWith('WAIVED-');
+        if (p.status === 'approved' && !isWaived) {
+          row.collected += Number(p.amount || 0);
+          row.payers.add(s.member_id);
+        } else if (isWaived) {
+          row.waived += 1;
+        } else if (p.status === 'pending') {
+          row.pending += 1;
+        }
+        map.set(key, row);
+      }
+    }
+    return Array.from(map.values())
+      .map(r => ({ ...r, payerCount: r.payers.size }))
+      .sort((a, b) => b.collected - a.collected);
+  }, [studentsToFilter]);
+
   return (
     <div
       className="min-h-screen relative overflow-hidden py-6 px-4 pb-20"
@@ -652,6 +686,67 @@ export default function AdminCollectedPage() {
             </motion.div>
           )}
         </AnimatePresence>
+
+        {/* ── Per-due breakdown — where the money came from ── */}
+        {duesBreakdown.length > 0 && (
+          <motion.section
+            initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.14 }}
+            className="rounded-2xl p-5"
+            style={{ background: tk.card, border: `1px solid ${tk.cardBorder}` }}
+          >
+            <div className="flex items-center gap-2.5 mb-4">
+              <span className="w-9 h-9 rounded-xl flex items-center justify-center" style={{ background: tk.primarySoft, color: tk.primary }}>
+                <Wallet className="w-4.5 h-4.5" />
+              </span>
+              <div>
+                <h2 className="text-base font-bold" style={{ color: tk.text }}>Collected by due</h2>
+                <p className="text-[12px]" style={{ color: tk.textSec }}>Each due your tier created — real money in, who paid, who was waived.</p>
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              {duesBreakdown.map((d) => {
+                const pct = shownCollected > 0 ? Math.round((d.collected / shownCollected) * 100) : 0;
+                return (
+                  <div key={d.title} className="rounded-xl px-3.5 py-3" style={{ background: tk.bgWash, border: `1px solid ${tk.cardBorder}` }}>
+                    <div className="flex items-center justify-between gap-3">
+                      <div className="min-w-0">
+                        <p className="text-sm font-bold truncate" style={{ color: tk.text }}>{d.title}</p>
+                        <div className="flex items-center gap-2 mt-0.5 flex-wrap">
+                          <span className="text-[11px]" style={{ color: tk.textSec }}>
+                            {d.payerCount} payer{d.payerCount === 1 ? '' : 's'}
+                          </span>
+                          {d.waived > 0 && (
+                            <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full" style={{ background: `${tk.amber}18`, color: tk.amber }}>
+                              {d.waived} waived
+                            </span>
+                          )}
+                          {d.pending > 0 && (
+                            <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full" style={{ background: `${tk.primary}14`, color: tk.primary }}>
+                              {d.pending} pending
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                      <div className="text-right shrink-0">
+                        <PrivacyMask>
+                          <p className="text-sm font-extrabold tabular-nums" style={{ color: tk.mint }}>
+                            {formatCurrency(d.collected)}
+                          </p>
+                        </PrivacyMask>
+                        <p className="text-[10px]" style={{ color: tk.textTer }}>{pct}% of total</p>
+                      </div>
+                    </div>
+                    {/* Share-of-total bar */}
+                    <div className="mt-2 h-1.5 rounded-full overflow-hidden" style={{ background: tk.cardBorder }}>
+                      <div className="h-full rounded-full" style={{ width: `${pct}%`, background: tk.mint }} />
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </motion.section>
+        )}
 
         {/* Category Breakdown */}
         <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.4 }}>
