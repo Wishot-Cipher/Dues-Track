@@ -1,6 +1,6 @@
 ﻿/* eslint-disable @typescript-eslint/no-explicit-any */
 /* eslint-disable @typescript-eslint/no-unused-vars */
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useMemo } from 'react';
 import { motion} from 'framer-motion';
 import { 
   User, 
@@ -16,6 +16,7 @@ import {
   Wallet,
   Lock,
   CheckCircle2,
+  Sparkles,
   AlertCircle,
   GraduationCap,
   Hash,
@@ -97,6 +98,20 @@ export default function ProfilePage() {
     phone: user?.phone || '',
     section: user?.section || '',
   });
+
+  // Profile completeness — a gentle nudge to finish the profile. Drawn
+  // from the live `user` fields (not formData, which resets on edit).
+  const completeness = useMemo(() => {
+    const fields = [
+      { label: 'Full name', val: user?.full_name },
+      { label: 'Email',     val: user?.email },
+      { label: 'Phone',     val: user?.phone },
+      { label: 'Section',   val: user?.section },
+    ];
+    const missing = fields.filter((f) => !String(f.val ?? '').trim()).map((f) => f.label);
+    const pct = Math.round(((fields.length - missing.length) / fields.length) * 100);
+    return { pct, missing };
+  }, [user?.full_name, user?.email, user?.phone, user?.section]);
 
   // Org logo state
   const logoInputRef = useRef<HTMLInputElement>(null);
@@ -348,6 +363,51 @@ export default function ProfilePage() {
               </div>
             )}
           </div>
+
+          {/* Profile completeness — modern progress nudge */}
+          {completeness.pct < 100 && (
+            <motion.div
+              initial={{ opacity: 0, y: -6 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="rounded-2xl p-4"
+              style={{ background: t.card, border: `1px solid ${t.cardBorder}` }}
+            >
+              <div className="flex items-center justify-between mb-2">
+                <div className="flex items-center gap-2">
+                  <Sparkles size={15} style={{ color: t.primary }} />
+                  <span className="text-sm font-bold" style={{ color: t.text }}>
+                    Complete your profile
+                  </span>
+                </div>
+                <span className="text-sm font-extrabold tabular-nums" style={{ color: t.primary }}>
+                  {completeness.pct}%
+                </span>
+              </div>
+              <div className="h-2 rounded-full overflow-hidden" style={{ background: t.cardBorder }}>
+                <motion.div
+                  initial={{ width: 0 }}
+                  animate={{ width: `${completeness.pct}%` }}
+                  transition={{ duration: 0.6, ease: 'easeOut' }}
+                  className="h-full rounded-full"
+                  style={{ background: t.gradOrange ?? t.primary }}
+                />
+              </div>
+              {completeness.missing.length > 0 && (
+                <p className="text-[12px] mt-2" style={{ color: t.textSec }}>
+                  Add your{' '}
+                  <button
+                    type="button"
+                    onClick={() => setIsEditing(true)}
+                    className="font-semibold underline-offset-2 hover:underline"
+                    style={{ color: t.primary }}
+                  >
+                    {completeness.missing.join(', ').toLowerCase()}
+                  </button>{' '}
+                  to finish.
+                </p>
+              )}
+            </motion.div>
+          )}
 
           {/* Success/Error Message */}
           {message && (
