@@ -644,7 +644,10 @@ export default function OrgGroupsPage() {
     if (!organization) return false
     if (!form.name.trim())       { setFormError('Group name is required.'); return false }
     if (!form.short_name.trim()) { setFormError('Short name is required.'); return false }
-    const needsLevel = isAcademicOrg ? form.kind === 'class' : true
+    // Level is required ONLY for an academic class. Non-academic orgs are
+    // structural — the level input is hidden for them, so requiring it
+    // (the old `: true`) made non-academic group creation impossible.
+    const needsLevel = isAcademicOrg && form.kind === 'class'
     if (needsLevel && !form.level.trim()) { setFormError('Primary level is required.'); return false }
     const taken = groups.some(g => g.short_name.toUpperCase() === form.short_name.trim().toUpperCase() && g.id !== editTarget?.id)
     if (taken) { setFormError('Another group already uses this short name.'); return false }

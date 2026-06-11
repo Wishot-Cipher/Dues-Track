@@ -37,7 +37,7 @@ import {
 import { organizationService } from '@/services/organizationService';
 import { supabase } from '@/config/supabase';
 import TrustBadge from '@/components/trust/TrustBadge';
-import { APP_NAME } from '@/config/constants';
+import { APP_NAME, isAcademicOrgType } from '@/config/constants';
 import { useTheme, getDashboardTokens } from '@/hooks/useTheme';
 import type {
   Organization,
@@ -190,6 +190,11 @@ export default function AddDepartmentPage() {
   const tk = useMemo(() => buildAddPageTokens(theme), [theme]);
 
   const isAddingClass = Boolean(departmentShort);
+  // Academic orgs (university/school) carry a level + set identity on each
+  // class. Non-academic orgs (church, club, association, co-op…) are
+  // structural only — never force them to enter a level / entry year /
+  // course length just to add a group.
+  const isAcademic = isAcademicOrgType(org?.organization_type);
 
   // Wizard path. The intent picker that used to lead this form was
   // dropped in Chunk G5c — every founder on the dept-flow goes
@@ -256,14 +261,14 @@ export default function AddDepartmentPage() {
         // Adding a class also captures the current level on this step.
         return form.departmentName.trim().length > 1
           && form.departmentShortName.trim().length >= 2
-          && (!isAddingClass || form.userLevel.trim().length > 0);
+          && (!isAddingClass || !isAcademic || form.userLevel.trim().length > 0);
       case 'class':
         // Level is now required at class creation. The class shares
         // one level; new members inherit it instead of typing one,
         // which collapses the "wrong level on someone's profile"
         // class of bug. Class rep can bump it later when the
         // cohort moves up a year.
-        return form.className.trim().length > 1 && form.userLevel.trim().length > 0;
+        return form.className.trim().length > 1 && (!isAcademic || form.userLevel.trim().length > 0);
       case 'account':
         return form.fullName.trim().length > 1 &&
                form.memberNumber.trim().length > 1 &&
@@ -365,8 +370,9 @@ export default function AddDepartmentPage() {
 
     // Persist the class's set identity (entry year + course length) via
     // the SECURITY DEFINER RPC — the level already went in through the
-    // bootstrap. Best-effort: a hiccup here must not block the signup.
-    if (isAddingClass && res.class_id) {
+    // bootstrap. Academic orgs only; non-academic groups have no set
+    // identity. Best-effort: a hiccup here must not block the signup.
+    if (isAddingClass && isAcademic && res.class_id) {
       const ey = parseInt(form.entryYear, 10);
       const cd = parseInt(form.courseDuration, 10);
       try {
@@ -612,9 +618,10 @@ export default function AddDepartmentPage() {
             </Field>
           </Row>
 
-          {/* Set identity — only when adding a class. Captures the level
-              + year-group so the level-timeline works from day one. */}
-          {isAddingClass && (
+          {/* Set identity — only when adding a class to an ACADEMIC org.
+              Captures the level + year-group so the level-timeline works
+              from day one. Non-academic orgs skip this entirely. */}
+          {isAddingClass && isAcademic && (
             <>
               <Field
                 label="Current level"
@@ -674,18 +681,20 @@ export default function AddDepartmentPage() {
               />
             </Field>
           </Row>
-          <Field
-            label="Class level / year"
-            required
-            hint="The class shares ONE level (e.g. 300L). Every member who joins this class inherits it automatically. The class rep can bump it when the year ends."
-          >
-            <Input
-              value={form.userLevel}
-              onChange={(v) => setF('userLevel', v)}
-              placeholder="300L"
+          {isAcademic && (
+            <Field
+              label="Class level / year"
               required
-            />
-          </Field>
+              hint="The class shares ONE level (e.g. 300L). Every member who joins this class inherits it automatically. The class rep can bump it when the year ends."
+            >
+              <Input
+                value={form.userLevel}
+                onChange={(v) => setF('userLevel', v)}
+                placeholder="300L"
+                required
+              />
+            </Field>
+          )}
         </Panel>
         </motion.div>
         )}
