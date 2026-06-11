@@ -69,17 +69,6 @@ const DEFAULT_FEE_FLAT_KOBO = 0;    // no flat component
 const DEFAULT_FEE_MIN_KOBO = 5000;  // ₦50 floor
 const DEFAULT_FEE_CAP_KOBO = 50000; // ₦500 cap
 
-// ── Plan fee multiplier ──────────────────────────────────────
-// The paid plan LOWERS the platform fee (paying saves big collectors
-// money); it never gates features or caps members. Multiplier is applied
-// to BOTH the percent and the cap. TUNE THESE — they're placeholders
-// until pricing is finalised; 'free' must stay 1 (no discount).
-const PLAN_FEE_MULTIPLIER: Record<string, number> = {
-  free:       1,    // org's configured fee, unchanged
-  pro:        0.5,  // PLACEHOLDER: pro halves the platform fee
-  enterprise: 0,    // PLACEHOLDER: enterprise pays a flat plan fee, 0 per-txn
-};
-
 function computeFeeKobo(
   duesKobo: number,
   cfg: { percent?: number; flat?: number; min?: number; cap?: number; mode?: string },
@@ -240,7 +229,7 @@ async function handleInitCore(req: any, res: any, body: any) {
   const [orgRes, priorRes, tiersRes] = await Promise.all([
     supabase
       .from('organizations')
-      .select('id, slug, name, currency_code, platform_fee_percent, platform_fee_flat, platform_fee_min, platform_fee_cap, platform_fee_mode, paystack_subaccount_code, billing_plan, activated_at')
+      .select('id, slug, name, currency_code, platform_fee_percent, platform_fee_flat, platform_fee_min, platform_fee_cap, platform_fee_mode, paystack_subaccount_code')
       .eq('id', pt.organization_id)
       .maybeSingle(),
     (isDue && !isGuestCheckout)
@@ -306,33 +295,17 @@ async function handleInitCore(req: any, res: any, body: any) {
   if (!duesKobo || duesKobo < 100) {
     return res.status(400).json({ ok: false, error: 'Invalid payment amount.' });
   }
-  // Apply the org's billing plan: the paid plan lowers the platform fee
-  // (percent + cap) via a tunable multiplier. 'free' (or unknown) → 1.
-  const planMult = PLAN_FEE_MULTIPLIER[String(org.billing_plan || 'free')] ?? 1;
+  // Per-org fee (set from the Platform Console — a 'pro'/'enterprise' org
+  // simply has a lower platform_fee_percent/cap). Falls back to the system
+  // default when the org hasn't been configured.
   const feeKobo = computeFeeKobo(duesKobo, {
-    percent: (org.platform_fee_percent ?? undefined) !== undefined
-      ? Number(org.platform_fee_percent) * planMult
-      : DEFAULT_FEE_PERCENT * planMult,
+    percent: org.platform_fee_percent ?? undefined,
     flat:    org.platform_fee_flat ?? undefined,
-    min:     planMult === 0 ? 0 : (org.platform_fee_min ?? undefined),
-    cap:     (org.platform_fee_cap ?? undefined) !== undefined
-      ? Number(org.platform_fee_cap) * planMult
-      : DEFAULT_FEE_CAP_KOBO * planMult,
+    min:     org.platform_fee_min ?? undefined,
+    cap:     org.platform_fee_cap ?? undefined,
     mode:    org.platform_fee_mode ?? undefined,
   });
   const totalKobo = duesKobo + feeKobo;
-
-  // First-payout hold: a brand-new org's first HOLD_DAYS of activity
-  // settle to the PLATFORM (held), not their bank, so early collections
-  // are recoverable if the org turns out fraudulent. After the window the
-  // split resumes and the held funds are released to the org.
-  const HOLD_DAYS = 5; // tunable
-  const withinHold = !org.activated_at
-    || (Date.now() - new Date(org.activated_at).getTime()) < HOLD_DAYS * 86400000;
-  // Only money that WOULD have split to the org (they have a subaccount)
-  // counts as "held". Orgs without a subaccount already settle to the
-  // platform by default — that's a "set up your bank" state, not a hold.
-  const heldForCooldown = Boolean(org.paystack_subaccount_code) && withinHold;
 
   const payerEmail = isGuestCheckout
     ? String(guestEmail).trim()
@@ -366,7 +339,6 @@ async function handleInitCore(req: any, res: any, body: any) {
     payer_name:          payerName,
     paystack_reference:  reference,
     transaction_ref:     reference,
-    platform_held:       heldForCooldown,
   };
 
   const { data: inserted, error: insErr } = await supabase
@@ -411,7 +383,7 @@ async function handleInitCore(req: any, res: any, body: any) {
     },
   };
 
-  if (org.paystack_subaccount_code && !withinHold) {
+  if (org.paystack_subaccount_code) {
     // Split payment: the org's dues settle to THEIR bank (subaccount); the
     // platform keeps exactly the service fee via transaction_charge. The org
     // bears Paystack's own processing cost out of their slice (bearer).
@@ -421,9 +393,6 @@ async function handleInitCore(req: any, res: any, body: any) {
     paystackBody.transaction_charge = feeKobo;
     paystackBody.bearer = 'subaccount';
   }
-  // else: within the first-payout hold (or no subaccount) → no split, so
-  // the full charge settles to the PLATFORM. Held cooldown payments are
-  // flagged platform_held on the row for later release to the org.
 
   let psRes: Response;
   try {
