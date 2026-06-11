@@ -154,15 +154,16 @@ export const billingService = {
     }
 
     const current = status.usage[resource];
-    const limit = status.usage[`${resource}Limit` as keyof typeof status.usage] as number;
 
-    // -1 means unlimited
-    const allowed = limit === -1 || current < limit;
-
+    // Members, groups and admins are NEVER capped — the platform is free +
+    // unlimited and monetises the transaction fee + value-add features,
+    // not org size. Capping members directly contradicts that (and was
+    // silently blocking joins at the old 50-member free limit), so size is
+    // always allowed regardless of any plan/org limit still in the data.
     return {
-      allowed,
+      allowed: true,
       current,
-      limit,
+      limit: -1,
       planName: status.plan.name,
     };
   },

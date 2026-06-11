@@ -44,25 +44,11 @@ export function useSubscriptionLimits() {
     limit: number;
     message?: string;
   } => {
-    if (!status) return { allowed: true, current: 0, limit: -1 };
-
-    const current = status.usage[resource];
-    const limit = status.usage[`${resource}Limit` as keyof typeof status.usage] as number;
-
-    // -1 means unlimited
-    if (limit === -1) return { allowed: true, current, limit };
-
-    if (current >= limit) {
-      const resourceName = resource === 'members' ? 'members' : resource === 'groups' ? 'groups/departments' : 'admins';
-      return {
-        allowed: false,
-        current,
-        limit,
-        message: `You've reached the maximum of ${limit} ${resourceName} on the ${status.plan.name} plan. Upgrade to add more.`,
-      };
-    }
-
-    return { allowed: true, current, limit };
+    // Size (members / groups / admins) is NEVER capped — free + unlimited
+    // is the model; we monetise the transaction fee + value-add features,
+    // not org size. Always allow.
+    const current = status ? status.usage[resource] : 0;
+    return { allowed: true, current, limit: -1 };
   }, [status]);
 
   /**
