@@ -57,6 +57,7 @@ import OutstandingHero from '@/components/student/dashboard/OutstandingHero';
 import EventsSection from '@/components/student/dashboard/EventsSection';
 import QuickActionsGrid from '@/components/student/dashboard/QuickActionsGrid';
 import DueNextList, { type DueNextItem } from '@/components/student/dashboard/DueNextList';
+import OptionalContributions from '@/components/student/dashboard/OptionalContributions';
 import PayOnTimeCard from '@/components/student/dashboard/PayOnTimeCard';
 import ShareClassLinkCard from '@/components/student/dashboard/ShareClassLinkCard';
 import ThemeSwitcher from '@/components/ThemeSwitcher';
@@ -239,14 +240,31 @@ export default function StudentDashboardPage() {
     });
   }, [duesOnly]);
 
-  // ── Items for the new DueNextList (Phase 2) ─────────────────
-  // We surface the next ~5 unpaid/partial dues. The component handles
-  // empty-state and skeletons itself.
+  // ── Items for the dues surfaces ─────────────────────────────
+  // Required and optional dues are now split into two sections: "Due
+  // Next" carries only what the member actually owes (mandatory), while
+  // optional/non-mandatory dues live in their own calm "Optional
+  // contributions" card (they never hit the balance). Both exclude
+  // settled rows (paid AND waived).
   const dueNextItems: DueNextItem[] = useMemo(() => {
     return allDuesSorted
-      // "Due next" = things the member still needs to act on. Paid AND
-      // waived are both settled (nothing owed) — exclude both.
-      .filter((e) => e.status !== 'paid' && e.status !== 'waived')
+      .filter((e) => e.status !== 'paid' && e.status !== 'waived' && e.pt.is_mandatory)
+      .slice(0, 5)
+      .map((e) => ({
+        id: e.pt.id,
+        title: e.pt.title || 'Untitled due',
+        amount: Number(e.pt.amount || 0),
+        status: e.status as DueNextItem['status'],
+        daysLeft: e.daysLeft,
+        isMandatory: Boolean(e.pt.is_mandatory),
+        categoryKey: (e.pt as { category?: string | null }).category ?? null,
+        paidAmount: e.approvedSum,
+      }));
+  }, [allDuesSorted]);
+
+  const optionalDueItems: DueNextItem[] = useMemo(() => {
+    return allDuesSorted
+      .filter((e) => e.status !== 'paid' && e.status !== 'waived' && !e.pt.is_mandatory)
       .slice(0, 5)
       .map((e) => ({
         id: e.pt.id,
@@ -432,6 +450,15 @@ export default function StudentDashboardPage() {
           totalCount={allDuesSorted.length}
           onItemClick={(id) => go(`/payment/${id}`)}
           onSeeAllClick={() => go('/payments')}
+        />
+
+        {/* Optional contributions — opt-in dues that never touch the
+            balance. Renders nothing when there are none. */}
+        <OptionalContributions
+          theme={theme}
+          privacyOn={privacyOn}
+          items={optionalDueItems}
+          onGive={(id) => go(`/payment/${id}`)}
         />
 
         <EventsSection

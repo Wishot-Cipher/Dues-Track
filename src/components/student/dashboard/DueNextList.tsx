@@ -278,12 +278,22 @@ function DueRow({
         >
           {item.title}
         </p>
-        <div className="flex items-center gap-1.5 mt-0.5">
+        <div className="flex items-center gap-1.5 mt-1">
+          {/* Required/Optional as a clear pill, not a faint word — a member
+              should know at a glance what they actually owe. */}
           <span
-            className="text-[10px] font-bold uppercase tracking-wider"
-            style={{ color: tokens.textTer }}
+            className="inline-flex items-center gap-1 text-[9.5px] font-extrabold uppercase tracking-wider px-1.5 py-0.5 rounded-md"
+            style={
+              item.isMandatory
+                ? { color: isLight ? '#B45309' : '#FCD9A6', background: isLight ? '#FFF3DC' : 'rgba(245,158,11,0.16)' }
+                : { color: tokens.textSec, background: isLight ? 'rgba(15,7,3,0.05)' : 'rgba(255,255,255,0.06)' }
+            }
           >
-            {item.isMandatory ? 'Mandatory' : 'Optional'}
+            <span
+              className="w-1.5 h-1.5 rounded-full"
+              style={{ background: item.isMandatory ? '#E0820B' : tokens.textTer }}
+            />
+            {item.isMandatory ? 'Required' : 'Optional'}
           </span>
           {item.status === 'partial' && typeof item.paidAmount === 'number' && item.paidAmount > 0 && (
             <span
