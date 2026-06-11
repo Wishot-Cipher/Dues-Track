@@ -8,7 +8,7 @@ import { useExpenses } from '@/hooks/useExpenses'
 import { useAppAuth as useAuth } from '@/hooks/useAppAuth'
 import { getPublicUrl, supabase } from '@/config/supabase'
 import { getOrgScope } from '@/utils/orgScope'
-import { getScopedGroupIds } from '@/utils/scopedGroups'
+import { getOwnedTierScope, applyOwnedTierScope } from '@/utils/scopedGroups'
 import { useActiveRole } from '@/hooks/useActiveRole'
 import { useMultiTenantAuth } from '@/hooks/useMultiTenantAuth'
 import { useToast } from '@/hooks/useToast'
@@ -74,37 +74,36 @@ function StatusBadge({ status }: { status: 'pending' | 'approved' | 'rejected' }
 }
 
 export default function ExpenseList({ categoryFilter = 'all' }: { categoryFilter?: string }) {
-  const { expenses, loading, error, reload } = useExpenses()
-  const [paymentTypes, setPaymentTypes] = useState<{ id: string; title: string }[]>([])
-  const [paymentFilter, setPaymentFilter] = useState<string>('all')
-  // Tier-aware filtering. Used to be: every payment_types + payments
-  // query pinned `.eq('group_id', scope.groupId)`, which only matched
-  // the caller's PRIMARY class. A dept exec saw zero expenses /
-  // payments tied to their dept-level rows, and a faculty exec saw
-  // nothing from their dept children. Now we resolve the active
-  // role's full subtree (class rep → just their class; dept exec →
-  // dept + every class under it; faculty exec → faculty + every
-  // dept + every class; org owner → null = no filter, sees all).
+  // Own-tier scope: each tier exec sees only the expenses/payments
+  // THEIR tier created — a dept president sees dept expenses, never
+  // the classes' expenses below them (org-wide → group_id IS NULL).
+  // This was previously a subtree walk (getScopedGroupIds), which let
+  // a dept/faculty exec see the classes' own money. The audit +
+  // collected pages enforce the same own-tier rule.
   const { user: mtUser, organization } = useMultiTenantAuth()
   const { activeRole } = useActiveRole({
     orgId: organization?.id,
     memberId: mtUser?.id,
   })
+  const ownedScope = useMemo(() => getOwnedTierScope({
+    activeKind: activeRole?.kind ?? null,
+    activeGroupId: activeRole?.groupId ?? null,
+    activeScopeLevel: activeRole?.scopeLevel ?? null,
+  }), [activeRole?.kind, activeRole?.groupId, activeRole?.scopeLevel])
+
+  const { expenses, loading, error, reload } = useExpenses(undefined, ownedScope)
+  const [paymentTypes, setPaymentTypes] = useState<{ id: string; title: string }[]>([])
+  const [paymentFilter, setPaymentFilter] = useState<string>('all')
 
   useEffect(() => {
     let mounted = true
     ;(async () => {
       try {
         const scope = getOrgScope()
-        const scopedIds = scope ? await getScopedGroupIds({
-          orgId: scope.orgId,
-          activeGroupId: activeRole?.groupId ?? null,
-          activeScopeLevel: activeRole?.scopeLevel ?? null,
-        }) : null
         let q = supabase.from('payment_types').select('id, title').eq('is_active', true).order('title')
         if (scope) {
           q = q.eq('organization_id', scope.orgId)
-          if (scopedIds) q = q.in('group_id', Array.from(scopedIds))
+          q = applyOwnedTierScope(q, ownedScope)
         }
         const { data } = await q
         if (mounted) setPaymentTypes(data || [])
@@ -113,7 +112,7 @@ export default function ExpenseList({ categoryFilter = 'all' }: { categoryFilter
       }
     })()
     return () => { mounted = false }
-  }, [activeRole?.groupId, activeRole?.scopeLevel])
+  }, [ownedScope])
   // Collected totals for selected payment type (exclude waived)
   const [collectedAmount, setCollectedAmount] = useState<number>(0)
 
@@ -122,16 +121,11 @@ export default function ExpenseList({ categoryFilter = 'all' }: { categoryFilter
     ;(async () => {
       try {
         // Approved-payments rollup for the collected-amount strip.
-        // Filtered to the active role's subtree so a dept exec sees
-        // collections from every class under them, not just their
-        // own primary class. Excludes waived rows (transaction_ref
-        // starts with WAIVED-).
+        // Own-tier only: a dept exec's strip reflects the dept's own
+        // dues, not the classes' collections below them (that money
+        // belongs to the class rep / fin sec). Excludes waived rows
+        // (transaction_ref starts with WAIVED-).
         const scope = getOrgScope()
-        const scopedIds = scope ? await getScopedGroupIds({
-          orgId: scope.orgId,
-          activeGroupId: activeRole?.groupId ?? null,
-          activeScopeLevel: activeRole?.scopeLevel ?? null,
-        }) : null
         let query = supabase
           .from('payments')
           .select('amount, transaction_ref, status, payment_type_id')
@@ -140,7 +134,7 @@ export default function ExpenseList({ categoryFilter = 'all' }: { categoryFilter
 
         if (scope) {
           query = query.eq('organization_id', scope.orgId)
-          if (scopedIds) query = query.in('group_id', Array.from(scopedIds))
+          query = applyOwnedTierScope(query, ownedScope)
         }
 
         if (paymentFilter && paymentFilter !== 'all') {
@@ -163,7 +157,7 @@ export default function ExpenseList({ categoryFilter = 'all' }: { categoryFilter
       }
     })()
     return () => { mounted = false }
-  }, [paymentFilter, activeRole?.groupId, activeRole?.scopeLevel])
+  }, [paymentFilter, ownedScope])
   const { hasPermission } = useAuth()
   const { success: showSuccess, error: showError } = useToast()
   const [selected, setSelected] = useState<Expense | null>(null)
@@ -184,18 +178,13 @@ export default function ExpenseList({ categoryFilter = 'all' }: { categoryFilter
   useEffect(() => {
     const loadData = async () => {
       try {
-        const cats = await fetchExpenseCategories()
+        const cats = await fetchExpenseCategories(false, ownedScope)
         setCategories(cats)
         const scope = getOrgScope()
-        const scopedIds = scope ? await getScopedGroupIds({
-          orgId: scope.orgId,
-          activeGroupId: activeRole?.groupId ?? null,
-          activeScopeLevel: activeRole?.scopeLevel ?? null,
-        }) : null
         let q = supabase.from('payment_types').select('id, title').eq('is_active', true)
         if (scope) {
           q = q.eq('organization_id', scope.orgId)
-          if (scopedIds) q = q.in('group_id', Array.from(scopedIds))
+          q = applyOwnedTierScope(q, ownedScope)
         }
         const { data } = await q
         setPaymentTypes(data || [])
@@ -204,7 +193,7 @@ export default function ExpenseList({ categoryFilter = 'all' }: { categoryFilter
       }
     }
     loadData()
-  }, [activeRole?.groupId, activeRole?.scopeLevel])
+  }, [ownedScope])
 
   // Filter by funding/payment type if set
   const filteredExpenses = useMemo(() => {

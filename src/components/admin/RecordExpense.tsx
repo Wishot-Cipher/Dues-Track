@@ -21,7 +21,7 @@ import {
   ShieldAlert,
 } from 'lucide-react'
 import { getOrgScope } from '@/utils/orgScope'
-import { getScopedGroupIds } from '@/utils/scopedGroups'
+import { getOwnedTierScope, applyOwnedTierScope, type OwnedTierScope } from '@/utils/scopedGroups'
 import { useActiveRole } from '@/hooks/useActiveRole'
 import { useMultiTenantAuth } from '@/hooks/useMultiTenantAuth'
 import { motion, AnimatePresence } from 'framer-motion'
@@ -176,19 +176,17 @@ export default function RecordExpense() {
   useEffect(() => {
     async function loadData() {
       try {
-        // Resolve the active-role subtree once so fetchPaymentTypes
-        // pulls the right slice. A dept exec sees dept-tier + every
-        // class under; class rep sees just her class; org owner sees
-        // everything (null = no filter).
-        const scope = getOrgScope()
-        const scopedIds = scope ? await getScopedGroupIds({
-          orgId: scope.orgId,
+        // Own-tier scope: this exec records expenses for THEIR tier
+        // and funds them from THEIR tier's dues only — a dept exec
+        // funds dept expenses from dept dues, never a class's money.
+        const ownedScope = getOwnedTierScope({
+          activeKind: activeRole?.kind ?? null,
           activeGroupId: activeRole?.groupId ?? null,
           activeScopeLevel: activeRole?.scopeLevel ?? null,
-        }) : undefined
+        })
         const [cats, types] = await Promise.all([
-          fetchExpenseCategories(),
-          fetchPaymentTypes(scopedIds),
+          fetchExpenseCategories(false, ownedScope),
+          fetchPaymentTypes(ownedScope),
         ])
         setCategories(cats)
         setPaymentTypes(types)
@@ -208,13 +206,13 @@ export default function RecordExpense() {
     try {
       const { supabase } = await import('@/config/supabase')
       const scope = getOrgScope()
-      // Active-role scope: payments + expenses both restricted to the
-      // subtree this exec actually owns. Org owner → null (no filter).
-      const scopedIds = scope ? await getScopedGroupIds({
-        orgId: scope.orgId,
+      // Own-tier balance: a tier's available funds are ITS OWN dues
+      // minus ITS OWN expenses — never the classes' money below it.
+      const ownedScope = getOwnedTierScope({
+        activeKind: activeRole?.kind ?? null,
         activeGroupId: activeRole?.groupId ?? null,
         activeScopeLevel: activeRole?.scopeLevel ?? null,
-      }) : null
+      })
 
       let qPayments = supabase
         .from('payments')
@@ -223,7 +221,7 @@ export default function RecordExpense() {
         .not('transaction_ref', 'like', 'WAIVED-%')
       if (scope) {
         qPayments = qPayments.eq('organization_id', scope.orgId)
-        if (scopedIds) qPayments = qPayments.in('group_id', Array.from(scopedIds))
+        qPayments = applyOwnedTierScope(qPayments, ownedScope)
       }
       const { data: paymentsData } = await qPayments
 
@@ -233,7 +231,7 @@ export default function RecordExpense() {
         .eq('status', 'approved')
       if (scope) {
         qExpenses = qExpenses.eq('organization_id', scope.orgId)
-        if (scopedIds) qExpenses = qExpenses.in('group_id', Array.from(scopedIds))
+        qExpenses = applyOwnedTierScope(qExpenses, ownedScope)
       }
       const { data: expensesData } = await qExpenses
 
@@ -780,20 +778,20 @@ export default function RecordExpense() {
 // back to the legacy "current class only" behavior so old call sites
 // keep working — but in this file the new in-component caller always
 // supplies the set.
-async function fetchPaymentTypes(scopedIds?: Set<string> | null) {
+async function fetchPaymentTypes(ownedScope?: OwnedTierScope) {
   const { supabase } = await import('@/config/supabase')
   const scope = getOrgScope()
   let q = supabase.from('payment_types').select('id, title, amount').order('title')
   if (scope) {
     q = q.eq('organization_id', scope.orgId)
-    if (scopedIds === undefined) {
+    if (ownedScope === undefined) {
       // Legacy path — pin to caller's primary class.
       q = q.eq('group_id', scope.groupId)
-    } else if (scopedIds && scopedIds.size > 0) {
-      // Tier-aware path — every group in the active role's subtree.
-      q = q.in('group_id', Array.from(scopedIds))
+    } else {
+      // Own-tier path — only the dues this exact tier created, so a
+      // dept exec funds dept expenses from dept dues, never a class's.
+      q = applyOwnedTierScope(q, ownedScope)
     }
-    // scopedIds === null → no group filter (org-tier exec).
   }
   const { data, error } = await q
   if (error) throw error

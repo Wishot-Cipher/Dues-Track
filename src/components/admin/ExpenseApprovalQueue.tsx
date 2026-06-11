@@ -9,7 +9,7 @@ import { useAppAuth as useAuth } from '@/hooks/useAppAuth'
 import { useActiveRole } from '@/hooks/useActiveRole'
 import { useMultiTenantAuth } from '@/hooks/useMultiTenantAuth'
 import { useToast } from '@/hooks/useToast'
-import { getScopedGroupIds } from '@/utils/scopedGroups'
+import { getOwnedTierScope, applyOwnedTierScope } from '@/utils/scopedGroups'
 import {
   fetchExpenses,
   approveExpense,
@@ -426,30 +426,31 @@ export default function ExpenseApprovalQueue() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeRole?.groupId, activeRole?.scopeLevel])
 
+  // Own-tier scope: a tier exec manages only the dues/expenses THEIR
+  // tier created — a dept president sees dept expenses, never the
+  // classes' expenses below (org-wide → group_id IS NULL). This is the
+  // same tier-autonomy rule used by the audit + collected pages.
+  function ownedScope() {
+    return getOwnedTierScope({
+      activeKind: activeRole?.kind ?? null,
+      activeGroupId: activeRole?.groupId ?? null,
+      activeScopeLevel: activeRole?.scopeLevel ?? null,
+    })
+  }
+
   async function loadCategories() {
     try {
-      const scope = getOrgScope()
-      const scopedIds = scope ? await getScopedGroupIds({
-        orgId: scope.orgId,
-        activeGroupId: activeRole?.groupId ?? null,
-        activeScopeLevel: activeRole?.scopeLevel ?? null,
-      }) : null
-      setCategories(await fetchExpenseCategories(true, scopedIds))
+      setCategories(await fetchExpenseCategories(true, ownedScope()))
     } catch { /* */ }
   }
 
   async function loadPaymentTypes() {
     try {
       const scope = getOrgScope()
-      const scopedIds = scope ? await getScopedGroupIds({
-        orgId: scope.orgId,
-        activeGroupId: activeRole?.groupId ?? null,
-        activeScopeLevel: activeRole?.scopeLevel ?? null,
-      }) : null
       let q = supabase.from('payment_types').select('id, name').eq('is_active', true)
       if (scope) {
         q = q.eq('organization_id', scope.orgId)
-        if (scopedIds) q = q.in('group_id', Array.from(scopedIds))
+        q = applyOwnedTierScope(q, ownedScope())
       }
       const { data } = await q
       setPaymentTypes(data || [])
@@ -459,13 +460,7 @@ export default function ExpenseApprovalQueue() {
   async function loadPendingExpenses() {
     try {
       setLoading(true)
-      const scope = getOrgScope()
-      const scopedIds = scope ? await getScopedGroupIds({
-        orgId: scope.orgId,
-        activeGroupId: activeRole?.groupId ?? null,
-        activeScopeLevel: activeRole?.scopeLevel ?? null,
-      }) : null
-      const data = await fetchExpenses(100, 'pending', scopedIds)
+      const data = await fetchExpenses(100, 'pending', ownedScope())
       setPendingExpenses(data || [])
       await fetchAvailableBalances()
     } catch { showError('Failed to load pending expenses') }
@@ -475,17 +470,13 @@ export default function ExpenseApprovalQueue() {
   async function fetchAvailableBalances() {
     try {
       const scope = getOrgScope()
-      const scopedIds = scope ? await getScopedGroupIds({
-        orgId: scope.orgId,
-        activeGroupId: activeRole?.groupId ?? null,
-        activeScopeLevel: activeRole?.scopeLevel ?? null,
-      }) : null
+      const owned = ownedScope()
       let qPayments = supabase
         .from('payments').select('amount, payment_type_id, payment_types ( id, category )')
         .eq('status', 'approved').not('transaction_ref', 'like', 'WAIVED-%')
       if (scope) {
         qPayments = qPayments.eq('organization_id', scope.orgId)
-        if (scopedIds) qPayments = qPayments.in('group_id', Array.from(scopedIds))
+        qPayments = applyOwnedTierScope(qPayments, owned)
       }
       const { data: paymentsData } = await qPayments
 
@@ -494,7 +485,7 @@ export default function ExpenseApprovalQueue() {
         .eq('status', 'approved')
       if (scope) {
         qExpenses = qExpenses.eq('organization_id', scope.orgId)
-        if (scopedIds) qExpenses = qExpenses.in('group_id', Array.from(scopedIds))
+        qExpenses = applyOwnedTierScope(qExpenses, owned)
       }
       const { data: expensesData } = await qExpenses
 

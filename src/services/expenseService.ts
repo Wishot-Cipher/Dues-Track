@@ -1,6 +1,7 @@
 import { supabase, STORAGE_BUCKETS, getPublicUrl } from '../config/supabase'
 import type { PostgrestError } from '@supabase/supabase-js'
 import { getOrgScope } from '@/utils/orgScope'
+import { applyOwnedTierScope, type OwnedTierScope } from '@/utils/scopedGroups'
 
 export interface Expense {
   id: string
@@ -271,15 +272,15 @@ export async function createExpense(payload: CreateExpensePayload) {
 
 // Fetch expenses with optional status filter.
 //
-// Tier-aware: pass `scopedIds` (the active role's subtree) and the
-// query filters with .in('group_id', ...) so a dept/faculty exec
-// sees every expense under their tier. Omit scopedIds (or pass
-// undefined) to keep the legacy "primary class only" behavior so
-// existing call sites don't change behavior accidentally.
+// Tier-aware (OWN-TIER): pass `ownedScope` so a tier exec sees only
+// the expenses THEIR tier created — a department president sees
+// department expenses, never the classes' expenses below them
+// (org-wide → group_id IS NULL). Omit ownedScope to keep the legacy
+// "primary class only" behavior so existing call sites don't change.
 export async function fetchExpenses(
   limit = 50,
   status?: 'pending' | 'approved' | 'rejected',
-  scopedIds?: Set<string> | null,
+  ownedScope?: OwnedTierScope,
 ) {
   const scope = getOrgScope()
   let query = supabase
@@ -293,12 +294,11 @@ export async function fetchExpenses(
 
   if (scope) {
     query = query.eq('organization_id', scope.orgId)
-    if (scopedIds === undefined) {
+    if (ownedScope === undefined) {
       query = query.eq('group_id', scope.groupId)
-    } else if (scopedIds && scopedIds.size > 0) {
-      query = query.in('group_id', Array.from(scopedIds))
+    } else {
+      query = applyOwnedTierScope(query, ownedScope)
     }
-    // scopedIds === null → no group filter (org-tier exec).
   }
   if (status) {
     query = query.eq('status', status)
@@ -309,12 +309,12 @@ export async function fetchExpenses(
   return data
 }
 
-// Fetch expense categories. Same tier-scope contract as fetchExpenses
-// — omit scopedIds for the legacy primary-class behavior, pass the
-// active role's subtree to widen.
+// Fetch expense categories. Same own-tier contract as fetchExpenses
+// — omit ownedScope for the legacy primary-class behavior, pass the
+// active role's own-tier scope so each tier sees only its categories.
 export async function fetchExpenseCategories(
   includeInactive = false,
-  scopedIds?: Set<string> | null,
+  ownedScope?: OwnedTierScope,
 ): Promise<ExpenseCategory[]> {
   const scope = getOrgScope()
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -328,10 +328,10 @@ export async function fetchExpenseCategories(
   }
   if (scope) {
     query = query.eq('organization_id', scope.orgId)
-    if (scopedIds === undefined) {
+    if (ownedScope === undefined) {
       query = query.eq('group_id', scope.groupId)
-    } else if (scopedIds && scopedIds.size > 0) {
-      query = query.in('group_id', Array.from(scopedIds))
+    } else {
+      query = applyOwnedTierScope(query, ownedScope)
     }
   }
 

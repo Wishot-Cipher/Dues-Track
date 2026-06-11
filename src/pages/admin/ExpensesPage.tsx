@@ -10,8 +10,9 @@
  * Tier-aware copy adapts to the active role so an org owner /
  * faculty exec / dept exec / class rep each sees the scope they're
  * recording into. The body delegates to RecordExpense + ExpenseList +
- * ExpenseApprovalQueue — those components are tier-scoped server-side
- * via getScopedGroupIds.
+ * ExpenseApprovalQueue — those components are own-tier scoped (each
+ * tier sees only the expenses/dues IT created, never the tiers below)
+ * via getOwnedTierScope / applyOwnedTierScope.
  */
 
 import { motion } from 'framer-motion';
@@ -58,15 +59,15 @@ export default function ExpensesPage() {
         chip: 'Org-wide expenses',
         title: 'Organisation expenses',
         subtitle:
-          'Every expense across the org. You can record at the org tier or audit anything published below.',
+          "The organisation's own spending, funded by org-wide dues. Each faculty, department, and class tracks its own expenses separately.",
       };
     }
     if (activeRole.scopeLevel === 'unit') {
       return {
         chip: 'Faculty / dept expenses',
-        title: 'Expenses for your subtree',
+        title: "Your tier's expenses",
         subtitle:
-          'Record expenses at your tier or audit any class-level entry below. Each entry is timestamped and audited.',
+          'Record and review what your faculty or department spent, funded by your own dues. Classes under you manage their expenses separately. Every entry is timestamped and audited.',
       };
     }
     return {
