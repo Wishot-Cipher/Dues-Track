@@ -1466,6 +1466,11 @@ export const organizationService = {
     leader_title?: string;
     parent_group_id?: string;
     kind?: GroupKind;
+    // Model-B set fields (classes) — captured at creation.
+    entry_year?: number;
+    current_level?: string;
+    course_duration?: number;
+    graduation_year?: number;
   }): Promise<OrganizationGroup | null> {
     try {
       const kind = groupData.kind ?? 'general';

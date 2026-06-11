@@ -33,6 +33,7 @@ import {
   CalendarClock,
   CheckCircle2,
   Clock,
+  GraduationCap,
   Layers,
   Loader2,
   PieChart,
@@ -42,6 +43,7 @@ import {
   Users,
 } from 'lucide-react';
 import { useMultiTenantAuth } from '@/hooks/useMultiTenantAuth';
+import LevelManager from '@/components/admin/LevelManager';
 import { useThemeTokens } from '@/hooks/useThemeTokens';
 import { useAppNav } from '@/hooks/useAppNav';
 import { supabase } from '@/config/supabase';
@@ -111,10 +113,11 @@ export { pickClassAdmin };
 
 export default function ClassExecDashboardView({ admin, klass }: ClassExecDashboardViewProps) {
   const tk = useThemeTokens();
-  const { organization } = useMultiTenantAuth();
+  const { organization, user } = useMultiTenantAuth();
   const { go, orgSlug } = useAppNav();
   const navigate = useNavigate();
 
+  const [showLevel, setShowLevel] = useState(false);
   const [loading, setLoading] = useState(true);
   const [stats, setStats] = useState<DashStats>({
     members: 0, activeDues: 0, pending: 0, collected: 0,
@@ -347,7 +350,23 @@ export default function ClassExecDashboardView({ admin, klass }: ClassExecDashbo
           accent={tk.mint}
           onClick={() => go('/admin/collected')}
         />
+        <ActionCard
+          icon={<GraduationCap className="w-5 h-5" />}
+          title="Set & level"
+          sub="Advance, graduate, history."
+          tk={tk}
+          accent={tk.blue}
+          onClick={() => setShowLevel(true)}
+        />
       </motion.section>
+
+      {showLevel && user?.id && (
+        <LevelManager
+          groupId={klass.id}
+          callerMemberId={user.id}
+          onClose={() => setShowLevel(false)}
+        />
+      )}
 
       {/* ── Recent dues published ─────────────────────────────── */}
       <motion.section

@@ -91,9 +91,13 @@ function kindIcon(kind?: string) {
 interface GroupFormData {
   name: string; short_name: string; description: string;
   kind: GroupKind; parent_group_id: string; level: string;
+  // Model-B "set" fields (classes only): the year-group identity + how
+  // long the course runs. current_level = `level` above.
+  entry_year: string; course_duration: string;
 }
 const DEFAULT_FORM: GroupFormData = {
   name: '', short_name: '', description: '', kind: 'general', parent_group_id: '', level: '',
+  entry_year: String(new Date().getFullYear()), course_duration: '4',
 }
 type GroupTab = 'all' | 'faculty' | 'class'
 
@@ -623,10 +627,13 @@ export default function OrgGroupsPage() {
       return
     }
     const kind = (group.kind || (isAcademicOrg ? 'class' : 'general')) as GroupKind
+    const g = group as OrganizationGroup & { entry_year?: number; course_duration?: number; current_level?: string }
     setForm({
       name: group.name || '', short_name: group.short_name || '', description: group.description || '',
       kind, parent_group_id: group.parent_group_id || '',
-      level: group.levels?.length ? organizationService.canonicalizeLevel(group.levels[0]) : '',
+      level: g.current_level || (group.levels?.length ? organizationService.canonicalizeLevel(group.levels[0]) : ''),
+      entry_year: g.entry_year ? String(g.entry_year) : String(new Date().getFullYear()),
+      course_duration: g.course_duration ? String(g.course_duration) : '4',
     })
     setEditTarget(group); setFormError(''); setShowModal(true)
   }
@@ -664,6 +671,18 @@ export default function OrgGroupsPage() {
       // empty value correctly becomes undefined (null).
       parent_group_id: form.parent_group_id || undefined,
       levels: form.level.trim() ? [form.level.trim()] : undefined,
+      // Model-B set identity (academic classes) — so the level-timeline
+      // works from day one. graduation_year is just an estimate.
+      ...(isAcademicOrg && form.kind === 'class' ? (() => {
+        const ey = parseInt(form.entry_year, 10);
+        const cd = parseInt(form.course_duration, 10);
+        return {
+          entry_year: Number.isFinite(ey) ? ey : undefined,
+          current_level: form.level.trim() || undefined,
+          course_duration: Number.isFinite(cd) ? cd : undefined,
+          graduation_year: Number.isFinite(ey) && Number.isFinite(cd) ? ey + cd : undefined,
+        };
+      })() : {}),
     }
     try {
       if (editTarget) await organizationService.updateGroup(editTarget.id, { name: payload.name, short_name: payload.short_name, description: payload.description, parent_group_id: payload.parent_group_id, levels: payload.levels, kind: payload.kind })
@@ -1116,14 +1135,28 @@ export default function OrgGroupsPage() {
           )}
 
           <div>
-            <FL required>Group Name</FL>
-            <SInput value={form.name} onChange={v => setForm(p => ({ ...p, name: v }))} placeholder={isAcademicOrg && form.kind === 'faculty' ? 'e.g. Faculty of Engineering' : `e.g. ${classLabel} Name`} />
+            {/* Label names the EXACT tier being created, so "Class name"
+                can never be mistaken for creating a department. */}
+            <FL required>{getTierLabel(organization?.organization_type, form.kind)} name</FL>
+            <SInput
+              value={form.name}
+              onChange={v => setForm(p => ({ ...p, name: v }))}
+              placeholder={
+                form.kind === 'faculty' ? 'e.g. Faculty of Engineering'
+                  : form.kind === 'department' ? 'e.g. Computer Science'
+                  : 'e.g. Computer Science (2023 set)'
+              }
+            />
+            <p className="mt-1 text-[10px]" style={{ color: tk.textTer }}>
+              You are creating a <b>{getTierLabel(organization?.organization_type, form.kind).toLowerCase()}</b>
+              {createTarget && form.parent_group_id ? ` under ${groups.find(g => g.id === form.parent_group_id)?.name || 'its parent'}` : ''}.
+            </p>
           </div>
 
           <div>
-            <FL required>Short Name / Code</FL>
-            <SInput value={form.short_name} onChange={v => setForm(p => ({ ...p, short_name: v.toUpperCase().slice(0, 10) }))} placeholder={isAcademicOrg && form.kind === 'faculty' ? 'e.g. ENG' : 'e.g. CSC'} maxLength={10} />
-            <p className="mt-1 text-[10px]" style={{ color: tk.textTer }}>{form.short_name.length}/10 characters · auto-uppercased</p>
+            <FL required>Short code</FL>
+            <SInput value={form.short_name} onChange={v => setForm(p => ({ ...p, short_name: v.toUpperCase().slice(0, 10) }))} placeholder={form.kind === 'faculty' ? 'e.g. ENG' : form.kind === 'department' ? 'e.g. CSC' : 'e.g. CSC23'} maxLength={10} />
+            <p className="mt-1 text-[10px]" style={{ color: tk.textTer }}>{form.short_name.length}/10 · used on receipts &amp; reports · auto-uppercased</p>
           </div>
 
           <div>
@@ -1160,8 +1193,41 @@ export default function OrgGroupsPage() {
 
           {(!isAcademicOrg || form.kind === 'class') && (
             <div>
-              <FL required>Primary Level</FL>
+              <FL required>Current level</FL>
               <SInput value={form.level} onChange={v => setForm(p => ({ ...p, level: v }))} placeholder={organization?.organization_type === 'university' ? 'e.g. 200L' : 'e.g. SS2'} />
+              <p className="mt-1 text-[10px]" style={{ color: tk.textTer }}>
+                The level this set is at NOW. It advances over time from the set's dashboard — not automatically.
+              </p>
+            </div>
+          )}
+
+          {/* Set identity (academic classes only) — captured at creation
+              so the level-timeline works from day one. */}
+          {isAcademicOrg && form.kind === 'class' && (
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <FL>Year of entry</FL>
+                <ProfessionalDropdown
+                  value={form.entry_year}
+                  onChange={v => setForm(p => ({ ...p, entry_year: v as string }))}
+                  options={(() => {
+                    const y = new Date().getFullYear();
+                    return [2, 1, 0, -1, -2, -3].map(d => ({ value: String(y - d), label: String(y - d) }));
+                  })()}
+                  variant="outlined" size="md"
+                />
+                <p className="mt-1 text-[10px]" style={{ color: tk.textTer }}>The set's identity (e.g. "2023 set").</p>
+              </div>
+              <div>
+                <FL>Course length</FL>
+                <ProfessionalDropdown
+                  value={form.course_duration}
+                  onChange={v => setForm(p => ({ ...p, course_duration: v as string }))}
+                  options={[3, 4, 5, 6, 7].map(n => ({ value: String(n), label: `${n} years` }))}
+                  variant="outlined" size="md"
+                />
+                <p className="mt-1 text-[10px]" style={{ color: tk.textTer }}>Used to estimate graduation.</p>
+              </div>
             </div>
           )}
         </div>
