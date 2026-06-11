@@ -59,6 +59,9 @@ interface FormData {
   academic_level: string;
   custom_level: string;
   academic_year: string;
+  // Model-B "set" identity for the founder's first class.
+  entry_year: string;
+  course_duration: string;
   faculty: string;
   custom_faculty: string;
   department: string;
@@ -126,6 +129,8 @@ export default function CreateOrganizationPage() {
     academic_level: '',
     custom_level: '',
     academic_year: '',
+    entry_year: String(new Date().getFullYear()),
+    course_duration: '4',
     faculty: '',
     custom_faculty: '',
     department: '',
@@ -385,6 +390,24 @@ export default function CreateOrganizationPage() {
               .from('organization_groups')
               .update({ description: desc })
               .eq('id', result.group_id);
+
+            // The first group is a class only in 'level' scope — seed its
+            // Model-B set identity (entry year + course length) so the
+            // level-timeline works from day one. RPC because the founder
+            // isn't logged in yet (RLS would block a direct update).
+            if (form.academic_scope === 'level' && result.member_id) {
+              const ey = parseInt(form.entry_year, 10);
+              const cd = parseInt(form.course_duration, 10);
+              try {
+                await supabase.rpc('set_group_set_fields', {
+                  p_group_id: result.group_id,
+                  p_caller_member_id: result.member_id,
+                  p_entry_year: Number.isFinite(ey) ? ey : new Date().getFullYear(),
+                  p_current_level: organizationService.canonicalizeLevel(academicLevelRaw) || null,
+                  p_course_duration: Number.isFinite(cd) ? cd : 4,
+                });
+              } catch { /* best-effort */ }
+            }
           }
         }
 
@@ -854,6 +877,27 @@ export default function CreateOrganizationPage() {
                         className="w-full mt-3 bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white placeholder-gray-500 outline-none focus:border-[#FF6803] transition-colors"
                       />
                     )}
+
+                    {/* Your set's identity — so the level-timeline works
+                        from day one. The level above is where you are NOW;
+                        these say which set you are + how long the course
+                        runs (for graduation). */}
+                    <div className="grid grid-cols-2 gap-3 mt-3">
+                      <ProfessionalDropdown
+                        label="Year of entry"
+                        value={form.entry_year}
+                        onChange={(v) => updateForm({ entry_year: v as string })}
+                        options={(() => { const y = new Date().getFullYear(); return [2,1,0,-1,-2,-3].map(d => ({ value: String(y-d), label: String(y-d) })); })()}
+                        variant="outlined" size="md"
+                      />
+                      <ProfessionalDropdown
+                        label="Course length"
+                        value={form.course_duration}
+                        onChange={(v) => updateForm({ course_duration: v as string })}
+                        options={[3,4,5,6,7].map(n => ({ value: String(n), label: `${n} years` }))}
+                        variant="outlined" size="md"
+                      />
+                    </div>
                   </motion.div>
                 )}
 
