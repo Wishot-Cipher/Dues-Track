@@ -12,6 +12,7 @@
  */
 
 import { useMemo, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   HelpCircle, X, Wallet, Ticket, Bell, Users, UserCircle, ClipboardCheck,
@@ -189,15 +190,16 @@ export default function AppGuide() {
         <HelpCircle className="w-5 h-5" style={{ color: t.text }} />
       </button>
 
-      <AnimatePresence>
+      {createPortal(
+        <AnimatePresence>
         {open && (
           <motion.div
-            className="fixed inset-0 z-[130] flex items-end sm:items-center justify-center sm:p-4"
+            className="fixed inset-0 z-[200] flex items-end sm:items-center justify-center sm:p-4"
             initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
           >
             <motion.div
               className="absolute inset-0"
-              style={{ background: 'rgba(0,0,0,0.55)', backdropFilter: 'blur(4px)' }}
+              style={{ background: 'rgba(0,0,0,0.78)', backdropFilter: 'blur(6px)' }}
               onClick={close}
               initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
             />
@@ -206,8 +208,9 @@ export default function AppGuide() {
               style={{
                 background: t.card,
                 border: `1px solid ${t.cardBorder}`,
-                boxShadow: '0 24px 60px rgba(0,0,0,0.42)',
-                maxHeight: '90dvh',
+                boxShadow: '0 24px 60px rgba(0,0,0,0.5)',
+                maxHeight: '85vh',
+                maxWidth: 'min(28rem, 100%)',
               }}
               initial={{ y: '100%', opacity: 0.6 }} animate={{ y: 0, opacity: 1 }} exit={{ y: '100%', opacity: 0 }}
               transition={{ type: 'spring', stiffness: 360, damping: 34 }}
@@ -312,7 +315,9 @@ export default function AppGuide() {
             </motion.div>
           </motion.div>
         )}
-      </AnimatePresence>
+        </AnimatePresence>,
+        document.body,
+      )}
     </>
   );
 }
