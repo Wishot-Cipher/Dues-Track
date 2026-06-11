@@ -450,11 +450,14 @@ export async function updateOrgSubscription(
   if (!admin?.can_manage_subscriptions) throw new Error('Insufficient permissions');
 
   // Plan defaults
+  // Size is NEVER capped (free + unlimited model). Every plan is unlimited
+  // members/groups/admins (-1); plans differ by value-add features + the
+  // transaction fee, not by org size.
   const planLimits: Record<string, { max_groups: number; max_members: number; max_admins: number }> = {
-    free: { max_groups: 1, max_members: 50, max_admins: 3 },
-    starter: { max_groups: 3, max_members: 300, max_admins: 10 },
-    professional: { max_groups: 20, max_members: 5000, max_admins: 50 },
-    enterprise: { max_groups: 999, max_members: 99999, max_admins: 999 },
+    free:         { max_groups: -1, max_members: -1, max_admins: -1 },
+    starter:      { max_groups: -1, max_members: -1, max_admins: -1 },
+    professional: { max_groups: -1, max_members: -1, max_admins: -1 },
+    enterprise:   { max_groups: -1, max_members: -1, max_admins: -1 },
   };
 
   const defaults = planLimits[plan];

@@ -28,7 +28,7 @@ import {
   toggleOrganizationStatus, listPendingClaims, grantClaimOverride, rejectClaim,
   getFinancialSummary, getAuditFeed, getGrowthFunnel,
   getPlatformSettings, updatePlatformSettings, getUniversityMap, broadcast,
-  listOrgAdmins, setAdminActive,
+  listOrgAdmins, setAdminActive, updateOrgSubscription,
   type PlatformAdmin, type PlatformStats, type OrgOverview, type PendingClaim,
   type FinancialSummary, type AuditEntry, type FunnelStage,
   type PlatformSettings, type UniRow, type OrgAdminRow,
@@ -721,6 +721,22 @@ function OrgCard({ o, busy, onToggle }: { o: OrgOverview; busy: boolean; onToggl
     return () => { cancelled = true; };
   }, [expanded, setsLoaded, isAcademic, o.id]);
 
+  // ── Billing plan control. Size is never capped; the plan drives the
+  // value-add features + the transaction fee (set the org's fee % in the
+  // Config section). Lets you change an org's plan without touching code.
+  const planToast = useToast();
+  const [plan, setPlan] = useState<string>((o as { subscription_plan?: string }).subscription_plan || 'free');
+  const [savingPlan, setSavingPlan] = useState(false);
+  async function changePlan(next: string) {
+    setSavingPlan(true);
+    try {
+      await updateOrgSubscription(o.id, next as 'free' | 'starter' | 'professional' | 'enterprise');
+      setPlan(next);
+      planToast.success(`${o.name} → ${next} plan.`);
+    } catch (e) { planToast.error(e instanceof Error ? e.message : 'Failed to update plan'); }
+    setSavingPlan(false);
+  }
+
   return (
     <div style={{ background: T.card, border: `1px solid ${T.border}`, borderRadius: 12, padding: 16 }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 8 }}>
@@ -744,6 +760,22 @@ function OrgCard({ o, busy, onToggle }: { o: OrgOverview; busy: boolean; onToggl
             {expanded ? <ChevronUp size={13} /> : <ChevronDown size={13} />} Sets
           </Btn>
         )}
+      </div>
+
+      {/* Billing plan — change without touching code. */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 10 }}>
+        <span style={{ fontSize: 11, color: T.textSec, flexShrink: 0 }}>Plan</span>
+        <select
+          value={plan}
+          disabled={savingPlan}
+          onChange={(e) => changePlan(e.target.value)}
+          style={{ flex: 1, padding: '6px 8px', background: 'rgba(255,255,255,0.03)', border: `1px solid ${T.border}`, borderRadius: 8, color: T.text, fontSize: 12, textTransform: 'capitalize' }}
+        >
+          {['free', 'starter', 'professional', 'enterprise'].map((p) => (
+            <option key={p} value={p}>{p}</option>
+          ))}
+        </select>
+        {savingPlan && <Loader2 size={12} className="animate-spin" style={{ color: T.textSec, flexShrink: 0 }} />}
       </div>
 
       {isAcademic && expanded && (
