@@ -29,15 +29,15 @@ function buildPayoutTokens(theme: 'light' | 'dark') {
   const dt = getDashboardTokens(theme);
   const isLight = theme === 'light';
   return {
-    bg:      dt.bg,
-    panel:   dt.card,
-    border:  dt.cardBorder,
-    text:    dt.text,
+    bg: dt.bg,
+    panel: dt.card,
+    border: dt.cardBorder,
+    text: dt.text,
     textSec: dt.textSec,
     textTer: dt.textTer,
     primary: dt.primary,
-    mint:    dt.mint,
-    danger:  dt.danger,
+    mint: dt.mint,
+    danger: dt.danger,
     inputBg: isLight ? '#FFFFFF' : 'rgba(0,0,0,0.25)',
   };
 }
@@ -101,12 +101,12 @@ export default function PayoutSetupPage() {
         .maybeSingle();
       if (cancelled || !baseData) return;
       const base = {
-        id:              baseData.id as string,
-        name:            (baseData.name as string) || 'this group',
-        kind:            ((baseData.kind as string) || 'group').toLowerCase(),
+        id: baseData.id as string,
+        name: (baseData.name as string) || 'this group',
+        kind: ((baseData.kind as string) || 'group').toLowerCase(),
         subaccount_code: null as string | null,
-        account_name:    null as string | null,
-        account_number:  null as string | null,
+        account_name: null as string | null,
+        account_number: null as string | null,
         settlement_bank: null as string | null,
       };
       // Show the banner with name/kind RIGHT NOW.
@@ -127,8 +127,8 @@ export default function PayoutSetupPage() {
           setGroupCtx({
             ...base,
             subaccount_code: (payoutData.paystack_subaccount_code as string | null) ?? null,
-            account_name:    (payoutData.account_name as string | null) ?? null,
-            account_number:  (payoutData.account_number as string | null) ?? null,
+            account_name: (payoutData.account_name as string | null) ?? null,
+            account_number: (payoutData.account_number as string | null) ?? null,
             settlement_bank: (payoutData.bank_code as string | null) ?? null,
           });
         }
@@ -258,8 +258,8 @@ export default function PayoutSetupPage() {
         setGroupCtx({
           ...groupCtx,
           subaccount_code: res.subaccount_code || groupCtx.subaccount_code,
-          account_name:    res.account_name || groupCtx.account_name,
-          account_number:  digits,
+          account_name: res.account_name || groupCtx.account_name,
+          account_number: digits,
           settlement_bank: bankCode,
         });
       }
@@ -380,8 +380,8 @@ export default function PayoutSetupPage() {
                 Paystack settles collected dues into this account on the{' '}
                 <span className="font-semibold" style={{ color: tk.text }}>next working day</span>{' '}
                 (weekends/holidays roll to the next business day) — not the second a member pays.
-                Nothing to withdraw; it lands automatically. Want same-day settlement? You can
-                request it from your Paystack dashboard.
+                Nothing to withdraw; it lands automatically. Settlement is automatic.
+                No action required from your organization.
               </div>
             </div>
 
