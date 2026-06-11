@@ -471,15 +471,32 @@ export default function ExpenseApprovalQueue() {
     try {
       const scope = getOrgScope()
       const owned = ownedScope()
+
+      // Collected = payments toward THIS tier's OWN dues. A payment carries
+      // the payer's group_id (their class), NOT the due's tier, so we key
+      // off the DUE — otherwise a class member's payment toward a dept due
+      // never rolls up to the dept's balance. (Same rule as the collected/
+      // audit pages; keying payments off group_id was the "no funds" bug.)
+      let duesQ = supabase.from('payment_types').select('id')
+      if (scope) {
+        duesQ = duesQ.eq('organization_id', scope.orgId)
+        duesQ = applyOwnedTierScope(duesQ, owned)
+      }
+      const { data: ownDues } = await duesQ
+      const ownDueIds = (ownDues || []).map((d: any) => d.id as string)
+
       let qPayments = supabase
         .from('payments').select('amount, payment_type_id, payment_types ( id, category )')
         .eq('status', 'approved').not('transaction_ref', 'like', 'WAIVED-%')
       if (scope) {
         qPayments = qPayments.eq('organization_id', scope.orgId)
-        qPayments = applyOwnedTierScope(qPayments, owned)
+        qPayments = qPayments.in('payment_type_id',
+          ownDueIds.length ? ownDueIds : ['00000000-0000-0000-0000-000000000000'])
       }
       const { data: paymentsData } = await qPayments
 
+      // Expenses DO carry the creating tier's group_id, so own-tier group
+      // scoping is correct here.
       let qExpenses = supabase
         .from('expenses').select('amount, category, category_id, payment_type_id, payment_types ( id, category )')
         .eq('status', 'approved')

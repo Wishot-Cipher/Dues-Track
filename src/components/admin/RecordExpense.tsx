@@ -214,6 +214,18 @@ export default function RecordExpense() {
         activeScopeLevel: activeRole?.scopeLevel ?? null,
       })
 
+      // Collected keys off THIS tier's OWN dues, not the payer's group_id
+      // (a payment carries the payer's class, so a class member's payment
+      // toward a dept due must still count for the dept). Resolve own-due
+      // ids first, then sum payments toward them.
+      let duesQ = supabase.from('payment_types').select('id')
+      if (scope) {
+        duesQ = duesQ.eq('organization_id', scope.orgId)
+        duesQ = applyOwnedTierScope(duesQ, ownedScope)
+      }
+      const { data: ownDues } = await duesQ
+      const ownDueIds = (ownDues || []).map((d: { id: string }) => d.id)
+
       let qPayments = supabase
         .from('payments')
         .select('amount, payment_type_id, payment_types ( id, title, category )')
@@ -221,10 +233,13 @@ export default function RecordExpense() {
         .not('transaction_ref', 'like', 'WAIVED-%')
       if (scope) {
         qPayments = qPayments.eq('organization_id', scope.orgId)
-        qPayments = applyOwnedTierScope(qPayments, ownedScope)
+        qPayments = qPayments.in('payment_type_id',
+          ownDueIds.length ? ownDueIds : ['00000000-0000-0000-0000-000000000000'])
       }
       const { data: paymentsData } = await qPayments
 
+      // Expenses carry the creating tier's group_id → own-tier group
+      // scoping is right here.
       let qExpenses = supabase
         .from('expenses')
         .select('amount, funded_by, payment_types:funded_by ( id, title, category )')

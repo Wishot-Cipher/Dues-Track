@@ -121,11 +121,20 @@ export default function ExpenseList({ categoryFilter = 'all' }: { categoryFilter
     ;(async () => {
       try {
         // Approved-payments rollup for the collected-amount strip.
-        // Own-tier only: a dept exec's strip reflects the dept's own
-        // dues, not the classes' collections below them (that money
-        // belongs to the class rep / fin sec). Excludes waived rows
-        // (transaction_ref starts with WAIVED-).
+        // Own-tier, but keyed off the DUE: a payment carries the payer's
+        // group_id (their class), not the due's tier, so we sum payments
+        // toward THIS tier's own dues — that way a class member's payment
+        // toward a dept due still counts for the dept, while a class's own
+        // dues never leak up. Excludes waived rows (WAIVED- prefix).
         const scope = getOrgScope()
+        let ownDueIds: string[] = []
+        if (scope) {
+          let duesQ = supabase.from('payment_types').select('id').eq('organization_id', scope.orgId)
+          duesQ = applyOwnedTierScope(duesQ, ownedScope)
+          const { data: ownDues } = await duesQ
+          ownDueIds = (ownDues || []).map((d: { id: string }) => d.id)
+        }
+
         let query = supabase
           .from('payments')
           .select('amount, transaction_ref, status, payment_type_id')
@@ -134,10 +143,14 @@ export default function ExpenseList({ categoryFilter = 'all' }: { categoryFilter
 
         if (scope) {
           query = query.eq('organization_id', scope.orgId)
-          query = applyOwnedTierScope(query, ownedScope)
-        }
-
-        if (paymentFilter && paymentFilter !== 'all') {
+          if (paymentFilter && paymentFilter !== 'all') {
+            // A specific due is selected — scope to exactly it.
+            query = query.eq('payment_type_id', paymentFilter)
+          } else {
+            query = query.in('payment_type_id',
+              ownDueIds.length ? ownDueIds : ['00000000-0000-0000-0000-000000000000'])
+          }
+        } else if (paymentFilter && paymentFilter !== 'all') {
           query = query.eq('payment_type_id', paymentFilter)
         }
 
