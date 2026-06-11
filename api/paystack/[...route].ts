@@ -240,7 +240,7 @@ async function handleInitCore(req: any, res: any, body: any) {
   const [orgRes, priorRes, tiersRes] = await Promise.all([
     supabase
       .from('organizations')
-      .select('id, slug, name, currency_code, platform_fee_percent, platform_fee_flat, platform_fee_min, platform_fee_cap, platform_fee_mode, paystack_subaccount_code, billing_plan')
+      .select('id, slug, name, currency_code, platform_fee_percent, platform_fee_flat, platform_fee_min, platform_fee_cap, platform_fee_mode, paystack_subaccount_code, billing_plan, activated_at')
       .eq('id', pt.organization_id)
       .maybeSingle(),
     (isDue && !isGuestCheckout)
@@ -322,6 +322,18 @@ async function handleInitCore(req: any, res: any, body: any) {
   });
   const totalKobo = duesKobo + feeKobo;
 
+  // First-payout hold: a brand-new org's first HOLD_DAYS of activity
+  // settle to the PLATFORM (held), not their bank, so early collections
+  // are recoverable if the org turns out fraudulent. After the window the
+  // split resumes and the held funds are released to the org.
+  const HOLD_DAYS = 5; // tunable
+  const withinHold = !org.activated_at
+    || (Date.now() - new Date(org.activated_at).getTime()) < HOLD_DAYS * 86400000;
+  // Only money that WOULD have split to the org (they have a subaccount)
+  // counts as "held". Orgs without a subaccount already settle to the
+  // platform by default — that's a "set up your bank" state, not a hold.
+  const heldForCooldown = Boolean(org.paystack_subaccount_code) && withinHold;
+
   const payerEmail = isGuestCheckout
     ? String(guestEmail).trim()
     : (member.email || `${member.member_id}@payvexo.app`);
@@ -354,6 +366,7 @@ async function handleInitCore(req: any, res: any, body: any) {
     payer_name:          payerName,
     paystack_reference:  reference,
     transaction_ref:     reference,
+    platform_held:       heldForCooldown,
   };
 
   const { data: inserted, error: insErr } = await supabase
@@ -398,7 +411,7 @@ async function handleInitCore(req: any, res: any, body: any) {
     },
   };
 
-  if (org.paystack_subaccount_code) {
+  if (org.paystack_subaccount_code && !withinHold) {
     // Split payment: the org's dues settle to THEIR bank (subaccount); the
     // platform keeps exactly the service fee via transaction_charge. The org
     // bears Paystack's own processing cost out of their slice (bearer).
@@ -408,6 +421,9 @@ async function handleInitCore(req: any, res: any, body: any) {
     paystackBody.transaction_charge = feeKobo;
     paystackBody.bearer = 'subaccount';
   }
+  // else: within the first-payout hold (or no subaccount) → no split, so
+  // the full charge settles to the PLATFORM. Held cooldown payments are
+  // flagged platform_held on the row for later release to the org.
 
   let psRes: Response;
   try {
