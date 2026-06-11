@@ -59,6 +59,7 @@ import LoadingSpinner from '@/components/ui/LoadingSpinner';
 import ConfirmDialog from '@/components/ui/ConfirmDialog';
 import { NotificationCenter } from '@/components/NotificationCenter';
 import AppGuide from '@/components/guide/AppGuide';
+import SwipeNavigator from '@/components/layout/SwipeNavigator';
 import { organizationService } from '@/services/organizationService';
 import { multiTenantAuthService, type MembershipSummary } from '@/services/multiTenantAuthService';
 import RoleSwitcher from '@/components/RoleSwitcher';
@@ -508,6 +509,9 @@ export default function OrgLayout() {
   ];
   const leftTabs = isExecContext ? execTabsLeft : memberTabs;
   const rightTabs = isExecContext ? execTabsRight : memberTrailingTabs;
+  // The exact bottom-tab order → the WhatsApp-style horizontal swipe
+  // sequence (left two, then right two; the center FAB isn't a page).
+  const swipeRoutes = [...leftTabs, ...rightTabs].map((item) => `${basePath}${item.path}`);
 
   // Routes that overflow the 4-tab bottom bar — surfaced via the
   // sheet that opens when the center FAB is tapped.
@@ -1156,7 +1160,9 @@ export default function OrgLayout() {
             </div>
           }
         >
-          <Outlet />
+          <SwipeNavigator routes={swipeRoutes}>
+            <Outlet />
+          </SwipeNavigator>
         </Suspense>
       </main>
 
