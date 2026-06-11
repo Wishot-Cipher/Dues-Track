@@ -134,6 +134,10 @@ interface Form {
   password: string;
   passwordConfirm: string;
   userLevel: string;
+  // Model-B "set" identity (used when adding a class) — captured at
+  // creation so the level-timeline works from day one.
+  entryYear: string;
+  courseDuration: string;
 }
 
 const EMPTY: Form = {
@@ -150,6 +154,8 @@ const EMPTY: Form = {
   password: '',
   passwordConfirm: '',
   userLevel: '',
+  entryYear: String(new Date().getFullYear()),
+  courseDuration: '4',
 };
 
 type WizardStep = 'details' | 'class' | 'account' | 'claim' | 'recap';
@@ -247,7 +253,10 @@ export default function AddDepartmentPage() {
   const canAdvance = (s: WizardStep): boolean => {
     switch (s) {
       case 'details':
-        return form.departmentName.trim().length > 1 && form.departmentShortName.trim().length >= 2;
+        // Adding a class also captures the current level on this step.
+        return form.departmentName.trim().length > 1
+          && form.departmentShortName.trim().length >= 2
+          && (!isAddingClass || form.userLevel.trim().length > 0);
       case 'class':
         // Level is now required at class creation. The class shares
         // one level; new members inherit it instead of typing one,
@@ -352,6 +361,23 @@ export default function AddDepartmentPage() {
       setError(res.error || (isAddingClass ? 'Could not create the class.' : 'Could not create the department.') + ' Please try again.');
       setSubmitting(false);
       return;
+    }
+
+    // Persist the class's set identity (entry year + course length) via
+    // the SECURITY DEFINER RPC — the level already went in through the
+    // bootstrap. Best-effort: a hiccup here must not block the signup.
+    if (isAddingClass && res.class_id) {
+      const ey = parseInt(form.entryYear, 10);
+      const cd = parseInt(form.courseDuration, 10);
+      try {
+        await supabase.rpc('set_group_set_fields', {
+          p_group_id: res.class_id,
+          p_caller_member_id: res.member_id,
+          p_entry_year: Number.isFinite(ey) ? ey : null,
+          p_current_level: form.userLevel || null,
+          p_course_duration: Number.isFinite(cd) ? cd : null,
+        });
+      } catch { /* best-effort */ }
     }
 
     // Stash the session locally so the landing page treats them as signed in.
@@ -549,12 +575,17 @@ export default function AddDepartmentPage() {
             : 'Just the name and short code. The department is a container — your personal details go on the next two steps (your class, then your account).'}
           icon={<BookOpen className="w-4 h-4" />}
         >
-          <Field label="Department name" required>
-            <Input value={form.departmentName} onChange={(v) => setF('departmentName', v)} placeholder="Electrical & Computer Engineering" required />
+          <Field label={isAddingClass ? 'Class name' : 'Department name'} required>
+            <Input
+              value={form.departmentName}
+              onChange={(v) => setF('departmentName', v)}
+              placeholder={isAddingClass ? 'e.g. Computer Science (2023 set)' : 'e.g. Electrical & Computer Engineering'}
+              required
+            />
           </Field>
           <Row>
-            <Field label="Short name" hint="e.g. ECE">
-              <Input value={form.departmentShortName} onChange={(v) => setF('departmentShortName', v.toUpperCase())} placeholder="ECE" />
+            <Field label="Short code" hint={isAddingClass ? 'e.g. CSC23' : 'e.g. ECE'}>
+              <Input value={form.departmentShortName} onChange={(v) => setF('departmentShortName', v.toUpperCase())} placeholder={isAddingClass ? 'CSC23' : 'ECE'} />
             </Field>
             {/*
               Kind is fixed by the URL you came from:
@@ -580,6 +611,28 @@ export default function AddDepartmentPage() {
               </div>
             </Field>
           </Row>
+
+          {/* Set identity — only when adding a class. Captures the level
+              + year-group so the level-timeline works from day one. */}
+          {isAddingClass && (
+            <>
+              <Field
+                label="Current level"
+                required
+                hint="The level this set is at NOW (e.g. 200L). It advances later from the class dashboard — never automatically."
+              >
+                <Input value={form.userLevel} onChange={(v) => setF('userLevel', v)} placeholder="e.g. 200L" required />
+              </Field>
+              <Row>
+                <Field label="Year of entry" hint="The set's identity, e.g. 2023">
+                  <Input value={form.entryYear} onChange={(v) => setF('entryYear', v.replace(/\D/g, '').slice(0, 4))} placeholder="2023" />
+                </Field>
+                <Field label="Course length (years)" hint="Estimates graduation">
+                  <Input value={form.courseDuration} onChange={(v) => setF('courseDuration', v.replace(/\D/g, '').slice(0, 1))} placeholder="4" />
+                </Field>
+              </Row>
+            </>
+          )}
         </Panel>
 
         </motion.div>
