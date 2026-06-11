@@ -29,12 +29,29 @@ export default function QRScanner({ onScan, onError, scanning }: QRScannerProps)
   const [cameras, setCameras] = useState<CameraDevice[]>([]);
   const [selectedCamera, setSelectedCamera] = useState<string>('');
   const [isRestarting, setIsRestarting] = useState(false);
-  
+
   const scannerRef = useRef<Html5Qrcode | null>(null);
   const mountedRef = useRef(true);
   const isProcessingRef = useRef(false);
   const lastScanRef = useRef<string>('');
   const lastScanTimeRef = useRef<number>(0);
+
+  // Mutable mirrors. These let startScanner stay a STABLE callback.
+  // The old bug: startScanner depended on `selectedCamera` and lived in
+  // the mount effect's deps, so switching cameras (setSelectedCamera)
+  // recreated startScanner → re-fired the mount effect → the cleanup
+  // stopped + nulled the very camera switchCamera had just started, and
+  // the scanner never came back. Reading these from refs breaks that
+  // feedback loop so the effect only reacts to `scanning`.
+  const selectedCameraRef = useRef<string>('');
+  const scanningRef = useRef(scanning);
+  const onScanRef = useRef(onScan);
+  const onErrorRef = useRef(onError);
+  const startingRef = useRef(false); // guards against concurrent .start() races
+
+  useEffect(() => { scanningRef.current = scanning; }, [scanning]);
+  useEffect(() => { onScanRef.current = onScan; }, [onScan]);
+  useEffect(() => { onErrorRef.current = onError; }, [onError]);
 
   // Detect iOS
   const isIOS = useCallback(() => {
@@ -45,7 +62,7 @@ export default function QRScanner({ onScan, onError, scanning }: QRScannerProps)
   // Stop scanner safely
   const stopScanner = useCallback(async () => {
     if (!scannerRef.current) return;
-    
+
     try {
       const state = scannerRef.current.getState();
       if (state === Html5QrcodeScannerState.SCANNING) {
@@ -59,35 +76,42 @@ export default function QRScanner({ onScan, onError, scanning }: QRScannerProps)
     }
   }, []);
 
-  // Start scanner
-  const startScanner = useCallback(async (cameraId?: string) => {
-    if (!mountedRef.current || !scanning) return;
-    
+  // Start scanner. STABLE callback — no `selectedCamera` / `onScan` /
+  // `scanning` deps (those are read from refs), so its identity never
+  // changes and the mount effect below won't thrash. `explicitId` is
+  // passed when the user consciously picks a camera, so we honor that
+  // exact device instead of falling back to facingMode.
+  const startScanner = useCallback(async (explicitId?: string) => {
+    if (!mountedRef.current || !scanningRef.current) return;
+    if (startingRef.current) return; // a start is already in flight
+    startingRef.current = true;
+
     setCameraLoading(true);
     setCameraError(null);
-    
-    // Wait for container
-    await new Promise(r => setTimeout(r, 300));
-    
-    const container = document.getElementById(CONTAINER_ID);
-    if (!container) {
-      setCameraError('Scanner container not ready. Please refresh.');
-      setCameraLoading(false);
-      return;
-    }
 
     try {
+      // Wait for container
+      await new Promise(r => setTimeout(r, 300));
+      if (!mountedRef.current || !scanningRef.current) return;
+
+      const container = document.getElementById(CONTAINER_ID);
+      if (!container) {
+        setCameraError('Scanner container not ready. Please refresh.');
+        setCameraLoading(false);
+        return;
+      }
+
       // Get available cameras
       let deviceList: CameraDevice[] = [];
       try {
         const cameraDevices = await Html5Qrcode.getCameras();
-        
+
         // Filter out duplicate cameras (same id) and prefer back camera
         const uniqueCameras = new Map<string, CameraDevice>();
         cameraDevices.forEach(d => {
           // Skip if we already have this camera id
           if (uniqueCameras.has(d.id)) return;
-          
+
           const label = d.label?.toLowerCase() || '';
           // Determine friendly label
           let friendlyLabel = d.label || `Camera ${d.id.slice(0, 6)}`;
@@ -96,22 +120,22 @@ export default function QRScanner({ onScan, onError, scanning }: QRScannerProps)
           } else if (label.includes('front') || label.includes('user') || label.includes('selfie')) {
             friendlyLabel = '🤳 Front Camera';
           }
-          
+
           uniqueCameras.set(d.id, {
             id: d.id,
             label: friendlyLabel
           });
         });
-        
+
         deviceList = Array.from(uniqueCameras.values());
-        
+
         // Sort to put back camera first (preferred for QR scanning)
         deviceList.sort((a, b) => {
           if (a.label.includes('Back')) return -1;
           if (b.label.includes('Back')) return 1;
           return 0;
         });
-        
+
         setCameras(deviceList);
       } catch (camErr) {
         console.debug('Get cameras error:', camErr);
@@ -132,11 +156,13 @@ export default function QRScanner({ onScan, onError, scanning }: QRScannerProps)
 
       // Stop existing scanner if any
       await stopScanner();
+      if (!mountedRef.current || !scanningRef.current) return;
 
       // Create new scanner instance
       scannerRef.current = new Html5Qrcode(CONTAINER_ID);
-      
-      const cameraToUse = cameraId || selectedCamera || deviceList[0].id;
+
+      const cameraToUse = explicitId || selectedCameraRef.current || deviceList[0].id;
+      selectedCameraRef.current = cameraToUse;
       setSelectedCamera(cameraToUse);
 
       // Enhanced config for better QR detection
@@ -150,13 +176,20 @@ export default function QRScanner({ onScan, onError, scanning }: QRScannerProps)
         }
       };
 
-      // iOS uses facingMode, Android uses cameraId
-      // For Android, also try facingMode if cameraId doesn't indicate front camera
+      // Resolve the camera source:
+      //   • iOS → facingMode (device ids aren't stable/usable there).
+      //   • Explicit user pick → honor the EXACT device id, so switching
+      //     between multiple back cameras (wide / ultrawide / tele) on
+      //     Android actually changes the lens instead of snapping back
+      //     to the OS default via facingMode.
+      //   • Initial auto-pick on Android → prefer facingMode:'environment'
+      //     for the back camera (better autofocus), else the device id.
       let cameraConfig: string | { facingMode: string };
       if (isIOS()) {
         cameraConfig = { facingMode: 'environment' };
+      } else if (explicitId) {
+        cameraConfig = explicitId;
       } else {
-        // On Android, prefer facingMode for back camera to get better autofocus
         const selectedCameraLabel = deviceList.find(c => c.id === cameraToUse)?.label || '';
         if (selectedCameraLabel.includes('Back') || selectedCameraLabel.includes('environment')) {
           cameraConfig = { facingMode: 'environment' };
@@ -177,13 +210,13 @@ export default function QRScanner({ onScan, onError, scanning }: QRScannerProps)
           ) {
             return;
           }
-          
+
           lastScanRef.current = decodedText;
           lastScanTimeRef.current = now;
-          
+
           if (!isProcessingRef.current) {
             isProcessingRef.current = true;
-            onScan(decodedText);
+            onScanRef.current(decodedText);
             // Reset processing flag after a delay
             setTimeout(() => {
               isProcessingRef.current = false;
@@ -198,16 +231,16 @@ export default function QRScanner({ onScan, onError, scanning }: QRScannerProps)
       }
     } catch (error: unknown) {
       console.error('Camera start error:', error);
-      
+
       if (!mountedRef.current) return;
-      
+
       setCameraLoading(false);
-      
+
       let errorMsg = 'Could not access camera';
-      
+
       if (error instanceof Error) {
         const msg = error.message.toLowerCase();
-        
+
         if (msg.includes('permission') || msg.includes('denied') || msg.includes('notallowed')) {
           errorMsg = isIOS()
             ? 'Camera access denied. Go to Settings > Safari > Camera to allow access.'
@@ -220,15 +253,18 @@ export default function QRScanner({ onScan, onError, scanning }: QRScannerProps)
           errorMsg = 'Camera not supported. Try a different camera.';
         }
       }
-      
-      setCameraError(errorMsg);
-      onError?.(errorMsg);
-    }
-  }, [scanning, selectedCamera, isIOS, stopScanner, onScan, onError]);
 
-  // Handle camera switch
+      setCameraError(errorMsg);
+      onErrorRef.current?.(errorMsg);
+    } finally {
+      startingRef.current = false;
+    }
+  }, [isIOS, stopScanner]);
+
+  // Handle camera switch — explicit user pick, so pass the device id.
   const switchCamera = useCallback(async (newCameraId: string) => {
     setIsRestarting(true);
+    selectedCameraRef.current = newCameraId;
     setSelectedCamera(newCameraId);
     await stopScanner();
     await new Promise(r => setTimeout(r, 500));
@@ -241,35 +277,35 @@ export default function QRScanner({ onScan, onError, scanning }: QRScannerProps)
     setIsRestarting(true);
     await stopScanner();
     await new Promise(r => setTimeout(r, 500));
-    await startScanner(selectedCamera);
+    await startScanner(selectedCameraRef.current || undefined);
     setIsRestarting(false);
-  }, [stopScanner, startScanner, selectedCamera]);
+  }, [stopScanner, startScanner]);
 
-  // Initialize on mount
+  // Start/stop driven ONLY by `scanning`. startScanner + stopScanner are
+  // stable callbacks, so this effect no longer re-fires when the camera
+  // changes — switching a camera can't tear itself down anymore.
   useEffect(() => {
-    mountedRef.current = true;
-    
-    if (scanning) {
-      // Small delay to ensure DOM is ready
-      const timeout = setTimeout(() => {
-        startScanner();
-      }, 500);
-      
-      return () => {
-        clearTimeout(timeout);
-        stopScanner();
-        mountedRef.current = false;
-      };
-    }
-    
-    return () => {
+    if (!scanning) {
       stopScanner();
-      mountedRef.current = false;
+      return;
+    }
+
+    // Small delay to ensure DOM is ready
+    const timeout = setTimeout(() => {
+      startScanner();
+    }, 500);
+
+    return () => {
+      clearTimeout(timeout);
+      stopScanner();
     };
   }, [scanning, startScanner, stopScanner]);
 
-  // Cleanup on unmount
+  // True mount/unmount lifecycle — the ONLY place mountedRef flips. The
+  // scanning-toggle effect above must NOT touch mountedRef, or a restart
+  // scheduled right after a re-render would see mountedRef=false and bail.
   useEffect(() => {
+    mountedRef.current = true;
     return () => {
       mountedRef.current = false;
       stopScanner();
@@ -413,10 +449,10 @@ export default function QRScanner({ onScan, onError, scanning }: QRScannerProps)
 
             {/* Hint text */}
             <div className="absolute bottom-4 left-0 right-0 text-center">
-              <p className="text-xs px-4 py-1.5 rounded-full inline-block" 
-                 style={{ 
+              <p className="text-xs px-4 py-1.5 rounded-full inline-block"
+                 style={{
                    background: 'rgba(0, 0, 0, 0.7)',
-                   color: colors.textSecondary 
+                   color: colors.textSecondary
                  }}>
                 Position QR code within the frame
               </p>

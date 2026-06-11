@@ -96,6 +96,17 @@ export default function ScanQRCodePage() {
   const processingRef = useRef(false);
   const mediaStreamRef = useRef<MediaStream | null>(null);
 
+  // Mirror refs so startScanner can stay a STABLE callback. Depending on
+  // selectedCamera / mode / processQRData made switching cameras recreate
+  // startScanner, which re-fired the mount effect and tore down the very
+  // camera switchCamera had just started — the "switch kills the scanner"
+  // bug. Reading these from refs breaks that feedback loop. (Same fix as
+  // the shared QRScanner component.)
+  const selectedCameraRef = useRef("");
+  const modeRef = useRef(mode);
+  const processQRDataRef = useRef<((decodedText: string) => Promise<boolean>) | undefined>(undefined);
+  const startingRef = useRef(false); // guards against concurrent .start() races
+
   // Check permissions
   useEffect(() => {
     if (!hasPermission?.("can_approve_payments")) {
@@ -357,25 +368,36 @@ export default function ScanQRCodePage() {
     [toast, stopScanner]
   );
 
-  // Start scanner
+  // Keep the mirror refs current so the stable startScanner reads live
+  // values without taking them as deps.
+  useEffect(() => { modeRef.current = mode; }, [mode]);
+  useEffect(() => { processQRDataRef.current = processQRData; }, [processQRData]);
+
+  // Start scanner. STABLE callback — reads mode / selectedCamera /
+  // processQRData from refs so its identity never changes (no camera-
+  // switch thrash). `explicitId` is set when the user consciously picks
+  // a camera, so we honor that exact device id.
   const startScanner = useCallback(
-    async (cameraId?: string) => {
-      if (!mountedRef.current || mode !== "scan") return;
+    async (explicitId?: string) => {
+      if (!mountedRef.current || modeRef.current !== "scan") return;
+      if (startingRef.current) return; // a start is already in flight
+      startingRef.current = true;
 
       setCameraLoading(true);
       setCameraError(null);
 
-      // Wait for container to be ready (increased time for slower devices)
-      await new Promise((r) => setTimeout(r, 800));
-
-      const container = document.getElementById(SCANNER_CONTAINER_ID);
-      if (!container) {
-        setCameraError("Scanner container not ready. Please refresh.");
-        setCameraLoading(false);
-        return;
-      }
-
       try {
+        // Wait for container to be ready (increased time for slower devices)
+        await new Promise((r) => setTimeout(r, 800));
+        if (!mountedRef.current || modeRef.current !== "scan") return;
+
+        const container = document.getElementById(SCANNER_CONTAINER_ID);
+        if (!container) {
+          setCameraError("Scanner container not ready. Please refresh.");
+          setCameraLoading(false);
+          return;
+        }
+
         // Get available cameras
         let deviceList: { id: string; label: string }[] = [];
         try {
@@ -402,11 +424,13 @@ export default function ScanQRCodePage() {
 
         // Stop existing scanner
         await stopScanner();
+        if (!mountedRef.current || modeRef.current !== "scan") return;
 
         // Create new scanner
         scannerRef.current = new Html5Qrcode(SCANNER_CONTAINER_ID);
 
-        const cameraToUse = cameraId || selectedCamera || deviceList[0].id;
+        const cameraToUse = explicitId || selectedCameraRef.current || deviceList[0].id;
+        selectedCameraRef.current = cameraToUse;
         setSelectedCamera(cameraToUse);
 
         const config = {
@@ -415,7 +439,10 @@ export default function ScanQRCodePage() {
           aspectRatio: 1.0,
         };
 
-        const cameraConfig = isIOS()
+        // iOS → facingMode. Otherwise honor the EXACT device id (whether
+        // an explicit user pick or the auto-resolved default) so switching
+        // between back lenses actually changes the camera.
+        const cameraConfig: string | { facingMode: string } = isIOS()
           ? { facingMode: "environment" }
           : cameraToUse;
 
@@ -423,11 +450,11 @@ export default function ScanQRCodePage() {
           cameraConfig,
           config,
           async (decodedText) => {
-            const success = await processQRData(decodedText);
-            if (!success && mountedRef.current && mode === "scan") {
+            const success = await processQRDataRef.current?.(decodedText);
+            if (!success && mountedRef.current && modeRef.current === "scan") {
               // Restart scanner for next attempt
               await new Promise((r) => setTimeout(r, 1500));
-              if (mountedRef.current && mode === "scan") {
+              if (mountedRef.current && modeRef.current === "scan") {
                 startScanner(cameraToUse);
               }
             }
@@ -466,13 +493,16 @@ export default function ScanQRCodePage() {
         }
 
         setCameraError(errorMsg);
+      } finally {
+        startingRef.current = false;
       }
     },
-    [mode, selectedCamera, processQRData, stopScanner]
+    [stopScanner]
   );
 
-  // Switch camera
+  // Switch camera — explicit user pick, so pass the device id through.
   const switchCamera = async (newCameraId: string) => {
+    selectedCameraRef.current = newCameraId;
     setSelectedCamera(newCameraId);
     await stopScanner();
     await new Promise((r) => setTimeout(r, 300));
@@ -512,10 +542,12 @@ export default function ScanQRCodePage() {
     };
   }, [location.pathname, stopScanner]);
 
-  // Initialize scanner when mode is "scan"
+  // Initialize scanner when mode is "scan". startScanner + stopScanner are
+  // now stable callbacks, so this effect only re-fires on a real `mode`
+  // change — switching cameras can no longer tear itself down. mountedRef
+  // is owned solely by the unmount effect below (this effect must not flip
+  // it, or a restart scheduled right after a re-render would bail early).
   useEffect(() => {
-    mountedRef.current = true;
-
     if (mode === "scan") {
       const timeout = setTimeout(() => {
         startScanner();
@@ -525,14 +557,10 @@ export default function ScanQRCodePage() {
         clearTimeout(timeout);
         stopScanner();
       };
-    } else {
-      // When not in scan mode, ensure camera is stopped
-      stopScanner();
     }
 
-    return () => {
-      mountedRef.current = false;
-    };
+    // When not in scan mode, ensure camera is stopped.
+    stopScanner();
   }, [mode, startScanner, stopScanner]);
 
   // Cleanup on unmount - comprehensive cleanup
