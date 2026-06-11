@@ -35,6 +35,7 @@ import {
 import { organizationService } from '@/services/organizationService';
 import { APP_NAME } from '@/config/constants';
 import TrustBadge from '@/components/trust/TrustBadge';
+import ProfessionalDropdown from '@/components/ui/ProfessionalDropdown';
 import { getDashboardTokens, useTheme } from '@/hooks/useTheme';
 import type { SeedInstitution } from '@/types/multiTenant';
 
@@ -239,7 +240,6 @@ function TextInput({
 }
 
 function SelectInput({
-  tk,
   value,
   onChange,
   options,
@@ -249,23 +249,16 @@ function SelectInput({
   onChange: (v: string) => void;
   options: { value: string; label: string }[];
 }) {
+  // Use the app's custom dropdown (not a native <select>) so onboarding
+  // looks consistent + professional and themes correctly in light/dark.
   return (
-    <select
+    <ProfessionalDropdown
       value={value}
-      onChange={(e) => onChange(e.target.value)}
-      className="w-full rounded-xl px-3.5 py-2.5 text-sm outline-none transition-colors appearance-none"
-      style={{
-        background: tk.inputBg,
-        border: `1px solid ${tk.border}`,
-        color: tk.text,
-      }}
-    >
-      {options.map((o) => (
-        <option key={o.value} value={o.value} style={{ background: tk.bg, color: tk.text }}>
-          {o.label}
-        </option>
-      ))}
-    </select>
+      onChange={(v) => onChange(v as string)}
+      options={options}
+      variant="outlined"
+      size="md"
+    />
   );
 }
 

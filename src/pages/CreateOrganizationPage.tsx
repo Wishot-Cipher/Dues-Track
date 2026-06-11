@@ -20,7 +20,6 @@ import {
   Loader2,
   BookOpen,
   School,
-  Calendar,
   Sparkles,
   Search,
 } from 'lucide-react';
@@ -887,19 +886,26 @@ export default function CreateOrganizationPage() {
                   </motion.div>
                 )}
 
-                {/* Academic Year */}
+                {/* Academic Year — custom dropdown of sessions */}
                 {form.academic_scope && (
                   <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}>
-                    <label className="block text-sm font-medium text-white mb-1.5">
-                      <Calendar size={14} className="inline mr-1.5 -mt-0.5" />
-                      Academic Session / Year *
-                    </label>
-                    <input
-                      type="text"
-                      placeholder="e.g. 2024/2025"
+                    <ProfessionalDropdown
+                      label="Academic Session / Year *"
                       value={form.academic_year}
-                      onChange={e => updateForm({ academic_year: e.target.value })}
-                      className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white placeholder-gray-500 outline-none focus:border-[#FF6803] transition-colors"
+                      onChange={(v) => updateForm({ academic_year: v as string })}
+                      options={(() => {
+                        // A rolling window of sessions around now (yr-2 … yr+2)
+                        // covers every realistic case; searchable for the rest.
+                        const yr = new Date().getFullYear();
+                        return [-2, -1, 0, 1, 2].map((d) => {
+                          const s = `${yr + d}/${yr + d + 1}`;
+                          return { value: s, label: d === 0 ? `${s} (current)` : s };
+                        });
+                      })()}
+                      placeholder="Select session"
+                      searchable
+                      variant="outlined"
+                      size="md"
                     />
                   </motion.div>
                 )}
