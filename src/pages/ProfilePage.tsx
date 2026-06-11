@@ -51,8 +51,15 @@ import { supabase } from '@/config/supabase';
 export default function ProfilePage() {
   const t = useThemeTokens();
   const { user, updateProfile, loading: authLoading } = useAuth();
-  const { organization, group, isAnyAdmin, refreshSession } = useMultiTenantAuth();
+  const { organization, group, refreshSession } = useMultiTenantAuth();
   const { go: navigate } = useAppNav();
+
+  // Only an ORG-SCOPE admin (president / treasurer / founder steward)
+  // may touch the org logo — matches the mig 117 RLS that gates the
+  // organizations UPDATE. A class rep or dept exec is an admin, but NOT
+  // for the org's identity, so we don't even show them the control.
+  const isOrgAdmin = ((user as { admin_records?: Array<{ is_active?: boolean; scope_level?: string }> })?.admin_records || [])
+    .some((a) => a.is_active !== false && a.scope_level === 'org');
   const [isEditing, setIsEditing] = useState(false);
   const [loading, setLoading] = useState(false);
   const [pageLoading, setPageLoading] = useState(true);
@@ -533,8 +540,8 @@ export default function ProfilePage() {
               </GlassCard>
             </motion.div>
 
-            {/* Organization Logo - Admin Only */}
-            {isAnyAdmin() && organization && (
+            {/* Organization Logo — ORG-scope admins only (mig 117). */}
+            {isOrgAdmin && organization && (
               <motion.div
                 className="mt-4"
                 initial={{ opacity: 0, y: 20 }}
