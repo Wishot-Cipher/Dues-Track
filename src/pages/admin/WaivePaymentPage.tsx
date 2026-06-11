@@ -531,7 +531,7 @@ export default function WaivePaymentPage() {
 
   return (
     <div
-      className="min-h-screen py-6 px-4 pb-20 relative overflow-hidden"
+      className="min-h-screen py-6 pb-20 relative overflow-hidden"
       style={{ background: tk.bgWash, color: tk.text }}
     >
       {/* Soft brand blobs — matches the exec-dashboard chrome. The
@@ -550,7 +550,7 @@ export default function WaivePaymentPage() {
         style={{ background: tk.blob2, filter: 'blur(110px)' }}
       />
 
-      <div className="relative z-10 max-w-3xl mx-auto space-y-5">
+      <div className="relative z-10 max-w-3xl mx-auto px-4 sm:px-6 lg:px-8 space-y-5">
         {/* ── Header (chip → H1 → subtitle, matches exec dashboards) ── */}
         <motion.header
           initial={{ opacity: 0, y: 12 }}
@@ -593,11 +593,11 @@ export default function WaivePaymentPage() {
               theme-aware and tighter. Each step's chip turns mint
               once that piece is locked in. Connecting lines fill
               in as the user advances. */}
-          <div className="flex items-center gap-2 pt-1 flex-wrap">
+          <div className="flex items-center gap-1.5 sm:gap-2 pt-1 flex-wrap">
             <WaiveStep n={1} label="Pick member"  done={Boolean(selectedStudent)}     tk={tk} theme={theme} />
-            <span className="flex-1 h-0.5 min-w-[12px] rounded-full" style={{ background: selectedStudent ? tk.mint : tk.cardBorder }} />
+            <span className="hidden sm:block flex-1 h-0.5 min-w-[12px] rounded-full" style={{ background: selectedStudent ? tk.mint : tk.cardBorder }} />
             <WaiveStep n={2} label="Pick due"     done={Boolean(selectedPaymentType)} tk={tk} theme={theme} />
-            <span className="flex-1 h-0.5 min-w-[12px] rounded-full" style={{ background: selectedPaymentType ? tk.mint : tk.cardBorder }} />
+            <span className="hidden sm:block flex-1 h-0.5 min-w-[12px] rounded-full" style={{ background: selectedPaymentType ? tk.mint : tk.cardBorder }} />
             <WaiveStep n={3} label="Add reason"   done={Boolean(waiverReason)}        tk={tk} theme={theme} />
           </div>
         </motion.header>
@@ -661,7 +661,7 @@ export default function WaivePaymentPage() {
           shape that was dark-only and read as the old era of the
           app. Each step is its own card, only renders when the
           previous step is satisfied. */}
-      <div className="relative max-w-3xl mx-auto px-4 sm:px-6 lg:px-8 space-y-4">
+      <div className="relative z-10 max-w-3xl mx-auto px-4 sm:px-6 lg:px-8 mt-5 space-y-4">
 
         {/* ── Step 1: Pick the member ────────────────────────── */}
         <motion.section
