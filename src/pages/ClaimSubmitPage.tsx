@@ -16,7 +16,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
-  AlertCircle, ArrowLeft, ArrowRight,
+  AlertCircle, ArrowLeft, ArrowRight, Layers,
   CheckCircle2, Loader2, Mail, Phone, ShieldCheck, Vote,
 } from 'lucide-react';
 import { organizationService } from '@/services/organizationService';
@@ -483,41 +483,40 @@ export default function ClaimSubmitPage() {
             </p>
           </Field>
 
-          {/* Tier-specific target picker — only when scope=dept or faculty. */}
-          {(tierChoice === 'dept' || tierChoice === 'faculty') && (
-            <Field
-              label={tierChoice === 'dept' ? 'Which department?' : 'Which faculty?'}
-              required
-              tk={tk}
-              hint={
-                unitTargetsLoading
-                  ? 'Loading…'
-                  : tierChoice === 'dept'
-                    ? 'Pick the department you\'re claiming for. Members of that department vote.'
-                    : 'Pick the faculty you\'re claiming for. Members of that faculty vote.'
-              }
-            >
-              <ProfessionalDropdown
-                value={claimedGroupId ?? ''}
-                onChange={(v) => setClaimedGroupId((Array.isArray(v) ? v[0] : v) || null)}
-                placeholder={unitTargetsLoading
-                  ? `Loading ${tierChoice === 'dept' ? 'departments' : 'faculties'}…`
-                  : `Select a ${tierChoice === 'dept' ? 'department' : 'faculty'}`}
-                searchable
-                disabled={unitTargetsLoading || unitTargets.length === 0}
-                options={unitTargets.map((g) => ({
-                  value: g.id,
-                  label: g.name,
-                  description: g.short_name || '',
-                }))}
-              />
-              {unitTargets.length === 0 && !unitTargetsLoading && (
-                <p className="text-[11px] mt-2" style={{ color: tk.danger }}>
-                  No {tierChoice === 'dept' ? 'departments' : 'faculties'} exist in this organization yet.
-                </p>
-              )}
-            </Field>
-          )}
+          {/* Tier target is DERIVED, not picked. You can only be an exec
+              of the department/faculty you actually belong to — we read
+              it from your membership (your class → its department → its
+              faculty). No dropdown to get wrong. */}
+          {(tierChoice === 'dept' || tierChoice === 'faculty') && (() => {
+            const tierWord = tierChoice === 'dept' ? 'department' : 'faculty';
+            const derived = unitTargets.find((g) => g.id === claimedGroupId);
+            return (
+              <Field
+                label={`Your ${tierWord}`}
+                tk={tk}
+                hint={`You can only claim a role in your OWN ${tierWord} — taken from the ${tierWord} you belong to. Its members vote.`}
+              >
+                {unitTargetsLoading ? (
+                  <div className="px-3 py-2.5 rounded-xl text-sm" style={{ background: tk.panel, border: `1px solid ${tk.border}`, color: tk.textSec }}>
+                    Finding your {tierWord}…
+                  </div>
+                ) : derived ? (
+                  <div
+                    className="px-3.5 py-3 rounded-xl text-sm flex items-center gap-2 font-semibold"
+                    style={{ background: tk.primarySoft, border: `1px solid ${tk.primary}40`, color: tk.text }}
+                  >
+                    <Layers className="w-4 h-4 shrink-0" style={{ color: tk.primary }} />
+                    {derived.name}{derived.short_name ? ` · ${derived.short_name}` : ''}
+                  </div>
+                ) : (
+                  <p className="text-[12px]" style={{ color: tk.danger }}>
+                    We couldn't find your {tierWord} from your membership. To claim a {tierWord} role you must
+                    belong to a class under a {tierWord}.
+                  </p>
+                )}
+              </Field>
+            );
+          })()}
 
           {/* Contested-role banner. Surfaces ONLY when there's already
               a pending claim for this exact group+role from another
