@@ -624,8 +624,8 @@ export default function MakePaymentPage() {
             >
               {submitting ? (
                 <>
-                  <Loader2 size={18} className="animate-spin" />
-                  Redirecting to Paystack…
+                  <Shield size={17} className="animate-pulse" />
+                  Securing your checkout…
                 </>
               ) : (
                 <>

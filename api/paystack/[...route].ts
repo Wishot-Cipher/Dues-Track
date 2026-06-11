@@ -162,24 +162,27 @@ async function handleInitCore(req: any, res: any, body: any) {
   const isGuestCheckout = !memberId;
   let member: any = null;
 
-  if (!isGuestCheckout) {
-    const auth = await verifyMember(supabase, memberId);
-    if (!auth.valid || !auth.data) {
-      return res.status(auth.status || 401).json({ ok: false, error: auth.error || 'Auth failed' });
-    }
-    member = auth.data;
-  }
-
   if (!paymentTypeId || typeof paymentTypeId !== 'string') {
     return res.status(400).json({ ok: false, error: 'paymentTypeId is required' });
   }
 
-  const { data: pt, error: ptErr } = await supabase
-    .from('payment_types')
-    .select('*')
-    .eq('id', paymentTypeId)
-    .maybeSingle();
+  // Phase 1 — auth + payment-type lookup run in PARALLEL. They're
+  // independent (one keys off memberId, the other off paymentTypeId), so
+  // awaiting them serially just doubled the latency before redirect. This
+  // (and Phase 2 below) is the bulk of why "tap Pay" felt slow.
+  const [auth, ptRes] = await Promise.all([
+    isGuestCheckout ? Promise.resolve(null) : verifyMember(supabase, memberId),
+    supabase.from('payment_types').select('*').eq('id', paymentTypeId).maybeSingle(),
+  ]);
 
+  if (!isGuestCheckout) {
+    if (!auth || !auth.valid || !auth.data) {
+      return res.status(auth?.status || 401).json({ ok: false, error: auth?.error || 'Auth failed' });
+    }
+    member = auth.data;
+  }
+
+  const { data: pt, error: ptErr } = ptRes;
   if (ptErr) {
     console.error('payment_type lookup failed', ptErr);
     return res.status(500).json({ ok: false, error: `Lookup failed: ${ptErr.message || 'unknown'}` });
@@ -208,11 +211,53 @@ async function handleInitCore(req: any, res: any, body: any) {
     return res.status(403).json({ ok: false, error: 'Payment type not found in your organization' });
   }
 
-  const { data: org, error: orgErr } = await supabase
-    .from('organizations')
-    .select('id, slug, name, currency_code, platform_fee_percent, platform_fee_flat, platform_fee_min, platform_fee_cap, platform_fee_mode, paystack_subaccount_code')
-    .eq('id', pt.organization_id)
-    .maybeSingle();
+  const isDue = pt.category !== 'event' && Number(pt.amount) > 0;
+  const isEvent = pt.category === 'event';
+
+  // Dues are never guest-payable (events only) — fail fast before spending
+  // more round-trips.
+  if (isDue && isGuestCheckout) {
+    return res.status(403).json({ ok: false, error: 'Public checkout is only available for event tickets.' });
+  }
+
+  // Phase 2 — everything that only needs `pt` (+ the member) runs in
+  // PARALLEL: resolve the org (for fees), the double-payment guard, the
+  // event tiers, and retiring stale pending inits. Previously four serial
+  // awaits. The retire-update only touches OLD pending rows, never the
+  // fresh one we insert below, so it's safe in the same batch.
+  const [orgRes, priorRes, tiersRes] = await Promise.all([
+    supabase
+      .from('organizations')
+      .select('id, slug, name, currency_code, platform_fee_percent, platform_fee_flat, platform_fee_min, platform_fee_cap, platform_fee_mode, paystack_subaccount_code')
+      .eq('id', pt.organization_id)
+      .maybeSingle(),
+    (isDue && !isGuestCheckout)
+      ? supabase
+          .from('payments')
+          .select('amount')
+          .eq('member_id', member.id)
+          .eq('payment_type_id', pt.id)
+          .in('status', ['approved', 'successful', 'paid'])
+      : Promise.resolve({ data: null as any }),
+    isEvent
+      ? supabase
+          .from('event_ticket_tiers')
+          .select('id, name, price, quantity, sold_count, is_active')
+          .eq('payment_type_id', pt.id)
+          .eq('is_active', true)
+      : Promise.resolve({ data: null as any }),
+    (!isGuestCheckout)
+      ? supabase
+          .from('payments')
+          .update({ status: 'abandoned' })
+          .eq('member_id', member.id)
+          .eq('payment_type_id', pt.id)
+          .eq('status', 'pending')
+          .is('paystack_status', null)
+      : Promise.resolve(null),
+  ]);
+
+  const { data: org, error: orgErr } = orgRes;
   if (orgErr || !org) {
     return res.status(500).json({ ok: false, error: 'Could not resolve organization.' });
   }
@@ -220,44 +265,18 @@ async function handleInitCore(req: any, res: any, body: any) {
   // ── Double-payment guard (dues only) ──
   // A due that's already fully paid must not be payable again. (Events are
   // tickets — a member may legitimately buy more than one, so skip them.)
-  if (pt.category !== 'event' && Number(pt.amount) > 0) {
-    if (isGuestCheckout) {
-      return res.status(403).json({ ok: false, error: 'Public checkout is only available for event tickets.' });
-    }
-    const { data: priorApproved } = await supabase
-      .from('payments')
-      .select('amount')
-      .eq('member_id', member.id)
-      .eq('payment_type_id', pt.id)
-      .in('status', ['approved', 'successful', 'paid']);
-    const alreadyPaid = (priorApproved || []).reduce((s: number, r: any) => s + Number(r.amount || 0), 0);
+  if (isDue) {
+    const alreadyPaid = (priorRes.data || []).reduce((s: number, r: any) => s + Number(r.amount || 0), 0);
     if (alreadyPaid >= Number(pt.amount)) {
       return res.status(409).json({ ok: false, error: 'You have already paid this due.' });
     }
   }
 
-  // Retire stale pending inits for this member+due so abandoned checkouts don't
-  // pile up (and don't make a paid due look "pending"/payable in the UI).
-  if (!isGuestCheckout) {
-    await supabase
-      .from('payments')
-      .update({ status: 'abandoned' })
-      .eq('member_id', member.id)
-      .eq('payment_type_id', pt.id)
-      .eq('status', 'pending')
-      .is('paystack_status', null);
-  }
-
   // Events: the price comes from the chosen ticket tier, not pt.amount.
   let baseNaira = Number(pt.amount);
   let resolvedTierId: string | null = null;
-  if (pt.category === 'event') {
-    const { data: tiers } = await supabase
-      .from('event_ticket_tiers')
-      .select('id, name, price, quantity, sold_count, is_active')
-      .eq('payment_type_id', pt.id)
-      .eq('is_active', true);
-    const tierList = tiers || [];
+  if (isEvent) {
+    const tierList = tiersRes.data || [];
     if (tierList.length > 0) {
       const chosen = tierId ? tierList.find((t: any) => t.id === tierId) : null;
       if (!chosen) {
@@ -291,7 +310,15 @@ async function handleInitCore(req: any, res: any, body: any) {
     ? String(guestName).trim()
     : member.full_name;
 
+  // Pre-generate the row id so the Paystack reference is derived BEFORE the
+  // insert. The old code inserted, then issued a SECOND update purely to
+  // stamp the reference back onto the row — an extra write on the hot path.
+  // Providing the id up front folds it into a single insert.
+  const paymentId = crypto.randomUUID();
+  const reference = genReference(paymentId);
+
   const paymentRow: Record<string, unknown> = {
+    id:                  paymentId,
     organization_id:     pt.organization_id,
     group_id:            isGuestCheckout ? null : member.group_id,
     member_id:           isGuestCheckout ? null : member.id,
@@ -306,6 +333,8 @@ async function handleInitCore(req: any, res: any, body: any) {
     status:              'pending',
     payer_email:         payerEmail,
     payer_name:          payerName,
+    paystack_reference:  reference,
+    transaction_ref:     reference,
   };
 
   const { data: inserted, error: insErr } = await supabase
@@ -318,13 +347,6 @@ async function handleInitCore(req: any, res: any, body: any) {
     console.error('payments insert error', insErr);
     return res.status(500).json({ ok: false, error: 'Could not create payment record.' });
   }
-
-  const reference = genReference(inserted.id);
-
-  await supabase
-    .from('payments')
-    .update({ paystack_reference: reference, transaction_ref: reference })
-    .eq('id', inserted.id);
 
   const orgSlug = org.slug || 'org';
   const callbackBase = appUrl || (req.headers.origin ? String(req.headers.origin).replace(/\/$/, '') : '');
