@@ -67,14 +67,14 @@ class PaymentService {
    * Get the current member's level info.
    * In multi-tenant mode queries organization_members; in legacy mode queries students.
    */
-  private async getMemberLevel(memberId: string): Promise<{ level: string; department: string; group_id?: string } | null> {
+  private async getMemberLevel(memberId: string): Promise<{ level: string; department: string; group_id?: string; graduated?: boolean } | null> {
     const cached = readCache(memberLevelCache, memberId);
     if (cached !== null) return cached;
     const scope = getOrgScope();
     if (scope) {
       const { data } = await supabase
         .from('organization_members')
-        .select('level, section, group_id')
+        .select('level, section, group_id, promotion_status')
         .eq('id', memberId)
         .eq('organization_id', scope.orgId)
         .single();
@@ -82,16 +82,16 @@ class PaymentService {
         writeCache(memberLevelCache, memberId, null);
         return null;
       }
-      const value = { level: data.level || '', department: data.section || '', group_id: data.group_id };
+      const value = { level: data.level || '', department: data.section || '', group_id: data.group_id, graduated: (data as { promotion_status?: string }).promotion_status === 'graduated' };
       writeCache(memberLevelCache, memberId, value);
       return value;
     }
     const { data } = await supabase
       .from('organization_members')
-      .select('level, section, group_id')
+      .select('level, section, group_id, promotion_status')
       .eq('id', memberId)
       .single();
-    const value = data ? { level: data.level || '', department: data.section || '', group_id: data.group_id } : null;
+    const value = data ? { level: data.level || '', department: data.section || '', group_id: data.group_id, graduated: (data as { promotion_status?: string }).promotion_status === 'graduated' } : null;
     writeCache(memberLevelCache, memberId, value);
     return value;
   }
@@ -702,6 +702,10 @@ class PaymentService {
       const student = await this.getMemberLevel(studentId);
 
       if (!student) return [];
+      // Alumni (graduated set) get NO new dues — they keep their payment
+      // history (My Dues still shows past payments via getStudentPayments)
+      // but nothing new is ever assigned to them.
+      if (student.graduated) return [];
 
       const scope = getOrgScope();
       // Multi-group: a member's dues span EVERY group they belong to.
