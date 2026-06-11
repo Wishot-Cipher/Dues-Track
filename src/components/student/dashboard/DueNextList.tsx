@@ -249,16 +249,26 @@ function DueRow({
       initial={{ opacity: 0, y: 8 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.35, delay: 0.04 * index, ease: [0.22, 1, 0.36, 1] }}
-      whileTap={{ scale: 0.985 }}
-      className="w-full text-left rounded-2xl px-3.5 py-3 flex items-center gap-3 group transition-colors"
+      whileHover={{ y: -2 }}
+      whileTap={{ scale: 0.99 }}
+      className="relative w-full text-left rounded-2xl pl-4 pr-3 py-3 flex items-center gap-3 group overflow-hidden"
       style={{
         background: tokens.card,
         border: `1px solid ${tokens.cardBorder}`,
         boxShadow: isLight
-          ? '0 1px 0 rgba(255,255,255,0.7) inset, 0 4px 14px -8px rgba(15,7,3,0.08)'
+          ? '0 1px 0 rgba(255,255,255,0.7) inset, 0 6px 18px -10px rgba(15,7,3,0.12)'
           : '0 1px 0 rgba(255,255,255,0.02) inset',
       }}
     >
+      {/* Left urgency accent bar — colours the card edge by deadline
+          state (red overdue / amber soon / mint settled). The neutral
+          case stays faint so calm cards don't shout. */}
+      <span
+        className="absolute left-0 top-0 bottom-0 w-1"
+        style={{ background: pillColor, opacity: pill.tint === 'neutral' ? 0.25 : 0.9 }}
+        aria-hidden
+      />
+
       {/* Category icon chip */}
       <div
         className="w-11 h-11 rounded-2xl flex items-center justify-center shrink-0"
@@ -304,12 +314,34 @@ function DueRow({
             </span>
           )}
         </div>
+
+        {/* Partial-payment progress — a thin bar so the member sees how
+            much of this due is already settled at a glance. */}
+        {item.status === 'partial' && typeof item.paidAmount === 'number' && item.paidAmount > 0 && item.amount > 0 && (
+          <div className="flex items-center gap-2 mt-2 pr-1">
+            <div
+              className="flex-1 h-1 rounded-full overflow-hidden"
+              style={{ background: isLight ? 'rgba(15,7,3,0.08)' : 'rgba(255,255,255,0.08)' }}
+            >
+              <div
+                className="h-full rounded-full"
+                style={{
+                  width: `${Math.min(100, (item.paidAmount / item.amount) * 100)}%`,
+                  background: tokens.amber,
+                }}
+              />
+            </div>
+            <span className="text-[9.5px] font-extrabold tabular-nums shrink-0" style={{ color: tokens.amber }}>
+              {Math.round((item.paidAmount / item.amount) * 100)}%
+            </span>
+          </div>
+        )}
       </div>
 
       {/* Right: amount + deadline pill */}
-      <div className="flex flex-col items-end gap-1 shrink-0">
+      <div className="flex flex-col items-end gap-1.5 shrink-0">
         <span
-          className="text-[14px] font-extrabold leading-none"
+          className="text-[15px] font-extrabold leading-none"
           style={{
             color: tokens.text,
             fontVariantNumeric: 'tabular-nums',
