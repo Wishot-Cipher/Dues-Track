@@ -26,8 +26,10 @@ import {
   ChevronUp,
   Users,
   Activity,
+  Layers,
 } from 'lucide-react';
 import { organizationService } from '@/services/organizationService';
+import { supabase } from '@/config/supabase';
 import type { Organization } from '@/types/multiTenant';
 import { consoleColors as colors, consoleGradients as gradients } from './consoleTheme';
 import ConsoleStatCard from './ConsoleStatCard';
@@ -369,8 +371,34 @@ function CreateModal({
 }
 
 // ── Org Card (matching OrgRow pattern from PlatformConsolePage) ──
+interface SetRow {
+  id: string; name: string; short_name: string;
+  current_level: string | null; entry_year: number | null;
+  is_graduated: boolean | null; alumni_label: string | null;
+}
+
 function OrgCard({ org }: { org: Organization }) {
   const [expanded, setExpanded] = useState(false);
+  const [sets, setSets] = useState<SetRow[]>([]);
+  const [setsLoaded, setSetsLoaded] = useState(false);
+  const isAcademic = org.organization_type === 'university' || org.organization_type === 'school';
+
+  // Lazy-load the org's sets/levels the first time it's expanded.
+  useEffect(() => {
+    if (!expanded || setsLoaded || !isAcademic) return;
+    let cancelled = false;
+    (async () => {
+      const { data } = await supabase
+        .from('organization_groups')
+        .select('id, name, short_name, current_level, entry_year, is_graduated, alumni_label')
+        .eq('organization_id', org.id)
+        .in('kind', ['class', 'level'])
+        .order('entry_year', { ascending: false })
+        .limit(100);
+      if (!cancelled) { setSets((data as SetRow[]) ?? []); setSetsLoaded(true); }
+    })();
+    return () => { cancelled = true; };
+  }, [expanded, setsLoaded, isAcademic, org.id]);
   const typeColor = ORG_TYPE_COLORS[org.organization_type] || colors.primary;
   const initials = (org.short_name || org.name).substring(0, 2).toUpperCase();
 
@@ -508,6 +536,41 @@ function OrgCard({ org }: { org: Organization }) {
                 </p>
               </div>
             </div>
+
+            {/* Academic sets — levels overview (Stage 4 console) */}
+            {isAcademic && (
+              <div className="px-4 pb-4">
+                <p className="text-[10px] uppercase tracking-wider mb-2 flex items-center gap-1" style={{ color: colors.textSecondary }}>
+                  <Layers className="w-3 h-3" /> Academic sets &amp; levels
+                </p>
+                {!setsLoaded ? (
+                  <p className="text-xs" style={{ color: colors.textSecondary }}>Loading…</p>
+                ) : sets.length === 0 ? (
+                  <p className="text-xs" style={{ color: colors.textSecondary }}>No classes/sets yet.</p>
+                ) : (
+                  <div className="space-y-1.5 max-h-64 overflow-y-auto">
+                    {sets.map((s) => (
+                      <div key={s.id} className="flex items-center gap-2 text-xs rounded-lg px-3 py-2"
+                        style={{ background: 'rgba(255,255,255,0.03)', border: `1px solid ${colors.cardBorder}` }}>
+                        <span className="text-white font-medium truncate">{s.name}</span>
+                        {s.entry_year && <span className="shrink-0" style={{ color: colors.textSecondary }}>· {s.entry_year} set</span>}
+                        <span className="ml-auto shrink-0">
+                          {s.is_graduated ? (
+                            <span className="px-1.5 py-0.5 rounded-full text-[10px] font-bold" style={{ background: 'rgba(16,185,129,0.16)', color: '#10B981' }}>
+                              🎓 {s.alumni_label || 'Alumni'}
+                            </span>
+                          ) : (
+                            <span className="px-1.5 py-0.5 rounded-full text-[10px] font-bold" style={{ background: 'rgba(255,104,3,0.16)', color: '#FF6803' }}>
+                              {s.current_level || '—'}
+                            </span>
+                          )}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
           </motion.div>
         )}
       </AnimatePresence>
