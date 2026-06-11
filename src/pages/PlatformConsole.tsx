@@ -19,8 +19,9 @@ import {
   LayoutDashboard, ShieldCheck, Building2, Banknote, GraduationCap, Siren,
   Megaphone, Settings2, BarChart3, ScrollText, LogOut, Loader2, Mail, KeyRound,
   Check, CheckCircle2, AlertTriangle, RefreshCw, Clock, Vote, Menu, X,
-  MoreHorizontal, XCircle, UserX, ShieldOff, ChevronDown, Users,
+  MoreHorizontal, XCircle, UserX, ShieldOff, ChevronDown, ChevronUp, Layers, Users,
 } from 'lucide-react';
+import { supabase } from '@/config/supabase';
 import {
   platformAdminRequestCode, platformAdminVerifyCode, getPlatformAdmin,
   verifySession, platformAdminLogout, fetchPlatformStats, fetchOrganizations,
@@ -685,6 +686,96 @@ function CommandCenter() {
   );
 }
 
+// ── Org card with an expandable academic "sets & levels" panel.
+// Ported from the (now-removed) standalone ConsoleUniversitiesPage into
+// the live console. organization_groups is publicly readable, so the
+// direct query works without a dedicated platform RPC.
+interface ConsoleSetRow {
+  id: string;
+  name: string;
+  current_level: string | null;
+  entry_year: number | null;
+  is_graduated: boolean | null;
+  alumni_label: string | null;
+}
+
+function OrgCard({ o, busy, onToggle }: { o: OrgOverview; busy: boolean; onToggle: () => void }) {
+  const isAcademic = o.organization_type === 'university' || o.organization_type === 'school';
+  const [expanded, setExpanded]   = useState(false);
+  const [sets, setSets]           = useState<ConsoleSetRow[]>([]);
+  const [setsLoaded, setSetsLoaded] = useState(false);
+
+  useEffect(() => {
+    if (!expanded || setsLoaded || !isAcademic) return;
+    let cancelled = false;
+    void (async () => {
+      const { data } = await supabase
+        .from('organization_groups')
+        .select('id, name, current_level, entry_year, is_graduated, alumni_label')
+        .eq('organization_id', o.id)
+        .in('kind', ['class', 'level'])
+        .order('entry_year', { ascending: false })
+        .limit(80);
+      if (!cancelled) { setSets((data as ConsoleSetRow[]) ?? []); setSetsLoaded(true); }
+    })();
+    return () => { cancelled = true; };
+  }, [expanded, setsLoaded, isAcademic, o.id]);
+
+  return (
+    <div style={{ background: T.card, border: `1px solid ${T.border}`, borderRadius: 12, padding: 16 }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 8 }}>
+        <div style={{ minWidth: 0 }}>
+          <p style={{ margin: 0, fontSize: 14, fontWeight: 700, color: T.text, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{o.name}</p>
+          <p style={{ margin: '2px 0 0', fontSize: 11, color: T.textSec, fontFamily: mono }}>/{o.slug} · {o.organization_type}</p>
+        </div>
+        <Badge color={o.is_active ? T.mint : T.red}>{o.is_active ? 'active' : 'suspended'}</Badge>
+      </div>
+      <div style={{ display: 'flex', gap: 16, margin: '12px 0', fontSize: 12, color: T.textSec }}>
+        <span><b style={{ color: T.text }}>{o.member_count}</b> members</span>
+        <span><b style={{ color: T.text }}>₦{(o.total_collected || 0).toLocaleString()}</b></span>
+      </div>
+      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+        <Btn onClick={onToggle} disabled={busy} color={o.is_active ? T.red : T.mint}>
+          {busy ? <Loader2 size={13} className="animate-spin" /> : null}
+          {o.is_active ? 'Suspend' : 'Reactivate'}
+        </Btn>
+        {isAcademic && (
+          <Btn onClick={() => setExpanded((v) => !v)} color={T.textSec}>
+            {expanded ? <ChevronUp size={13} /> : <ChevronDown size={13} />} Sets
+          </Btn>
+        )}
+      </div>
+
+      {isAcademic && expanded && (
+        <div style={{ marginTop: 12, borderTop: `1px solid ${T.border}`, paddingTop: 12 }}>
+          <p style={{ margin: '0 0 8px', fontSize: 10, textTransform: 'uppercase', letterSpacing: 1, color: T.textSec, display: 'flex', alignItems: 'center', gap: 4 }}>
+            <Layers size={11} /> Academic sets &amp; levels
+          </p>
+          {!setsLoaded ? (
+            <p style={{ fontSize: 12, color: T.textSec }}><Loader2 size={12} className="animate-spin" style={{ verticalAlign: 'middle' }} /> Loading…</p>
+          ) : sets.length === 0 ? (
+            <p style={{ fontSize: 12, color: T.textSec }}>No classes/sets yet.</p>
+          ) : (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 6, maxHeight: 220, overflowY: 'auto' }}>
+              {sets.map((s) => (
+                <div key={s.id} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, background: 'rgba(255,255,255,0.03)', border: `1px solid ${T.border}`, borderRadius: 8, padding: '6px 10px' }}>
+                  <span style={{ color: T.text, fontWeight: 600, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{s.name}</span>
+                  {s.entry_year ? <span style={{ color: T.textSec, flexShrink: 0 }}>· {s.entry_year} set</span> : null}
+                  <span style={{ marginLeft: 'auto', flexShrink: 0 }}>
+                    {s.is_graduated
+                      ? <Badge color={T.mint}>🎓 {s.alumni_label || 'Alumni'}</Badge>
+                      : <Badge color={T.primary}>{s.current_level || '—'}</Badge>}
+                  </span>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function OrgRegistry() {
   const [orgs, setOrgs]     = useState<OrgOverview[]>([]);
   const [loading, setLoading] = useState(true);
@@ -728,23 +819,7 @@ function OrgRegistry() {
           <>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: 12 }}>
             {pageItems.map((o) => (
-              <div key={o.id} style={{ background: T.card, border: `1px solid ${T.border}`, borderRadius: 12, padding: 16 }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 8 }}>
-                  <div style={{ minWidth: 0 }}>
-                    <p style={{ margin: 0, fontSize: 14, fontWeight: 700, color: T.text, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{o.name}</p>
-                    <p style={{ margin: '2px 0 0', fontSize: 11, color: T.textSec, fontFamily: mono }}>/{o.slug} · {o.organization_type}</p>
-                  </div>
-                  <Badge color={o.is_active ? T.mint : T.red}>{o.is_active ? 'active' : 'suspended'}</Badge>
-                </div>
-                <div style={{ display: 'flex', gap: 16, margin: '12px 0', fontSize: 12, color: T.textSec }}>
-                  <span><b style={{ color: T.text }}>{o.member_count}</b> members</span>
-                  <span><b style={{ color: T.text }}>₦{(o.total_collected || 0).toLocaleString()}</b></span>
-                </div>
-                <Btn onClick={() => toggle(o)} disabled={busyId === o.id} color={o.is_active ? T.red : T.mint}>
-                  {busyId === o.id ? <Loader2 size={13} className="animate-spin" /> : null}
-                  {o.is_active ? 'Suspend' : 'Reactivate'}
-                </Btn>
-              </div>
+              <OrgCard key={o.id} o={o} busy={busyId === o.id} onToggle={() => toggle(o)} />
             ))}
           </div>
           <Pagination page={page} pageCount={pageCount} onChange={setPage} range={range} total={total} noun="orgs" />

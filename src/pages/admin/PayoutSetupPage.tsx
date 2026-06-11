@@ -13,7 +13,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { ArrowLeft, Banknote, CheckCircle2, Loader2, ShieldCheck, AlertTriangle, Building2 } from 'lucide-react';
+import { ArrowLeft, Banknote, CheckCircle2, Loader2, ShieldCheck, AlertTriangle, Building2, Clock } from 'lucide-react';
 import { useAppNav } from '@/hooks/useAppNav';
 import { useMultiTenantAuth } from '@/hooks/useMultiTenantAuth';
 import { useActiveRole } from '@/hooks/useActiveRole';
@@ -366,6 +366,25 @@ export default function PayoutSetupPage() {
               <ShieldCheck className="w-3.5 h-3.5" style={{ color: tk.mint }} />
               Dues now settle here automatically; the platform keeps only its fee.
             </p>
+
+            {/* Settlement-timing reassurance — so collectors know money
+                arrives via Paystack on the next working day, not the
+                instant a member pays. Prevents "where's my money?" churn. */}
+            <div
+              className="mt-3 rounded-xl p-3 flex gap-2.5"
+              style={{ background: tk.panel, border: `1px solid ${tk.border}` }}
+            >
+              <Clock className="w-4 h-4 mt-0.5 shrink-0" style={{ color: tk.textSec }} />
+              <div className="text-[11.5px] leading-relaxed" style={{ color: tk.textSec }}>
+                <span className="font-bold" style={{ color: tk.text }}>When does the money arrive?</span>{' '}
+                Paystack settles collected dues into this account on the{' '}
+                <span className="font-semibold" style={{ color: tk.text }}>next working day</span>{' '}
+                (weekends/holidays roll to the next business day) — not the second a member pays.
+                Nothing to withdraw; it lands automatically. Want same-day settlement? You can
+                request it from your Paystack dashboard.
+              </div>
+            </div>
+
             <button
               onClick={() => setEditing(true)}
               className="mt-4 text-xs font-semibold underline"
