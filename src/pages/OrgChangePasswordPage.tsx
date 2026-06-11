@@ -207,8 +207,8 @@ export default function OrgChangePasswordPage() {
 
           <PasswordField
             tt={tt} isLight={isLight}
-            label={isFirstTime ? 'Invite code' : 'Current password'}
-            hint={isFirstTime ? 'The temporary code you were given' : undefined}
+            label={isFirstTime ? 'Current password' : 'Current password'}
+hint={isFirstTime ? 'Your login ID — used as your first password' : undefined}
             value={currentPassword}
             onChange={setCurrentPassword}
             visible={showCurrent}
