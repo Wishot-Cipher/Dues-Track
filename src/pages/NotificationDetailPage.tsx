@@ -122,7 +122,7 @@ export default function NotificationDetailPage() {
                 <Icon className="w-5 h-5" />
               </span>
               <div className="flex-1 min-w-0">
-                <h2 className="text-lg font-extrabold leading-snug" style={{ color: t.text }}>{row.title}</h2>
+                <h2 className="text-lg font-extrabold leading-snug break-words" style={{ color: t.text }}>{row.title}</h2>
                 <div className="flex items-center gap-2 mt-1">
                   <span className="inline-flex items-center gap-1 text-[11px] font-semibold" style={{ color: t.mint }}>
                     <Check className="w-3 h-3" /> Read

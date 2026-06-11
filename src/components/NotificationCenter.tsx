@@ -110,9 +110,16 @@ export const NotificationCenter = () => {
     const onVisible = () => { if (document.visibilityState === 'visible') void refreshCount(); };
     document.addEventListener('visibilitychange', onVisible);
 
+    // Instant in-app sync: mark-as-read on the notifications page fires
+    // this, so the badge drops immediately without waiting on realtime
+    // (which can lag or be disabled) or a page refresh.
+    const onChanged = () => { void refreshCount(); };
+    window.addEventListener('pvx:notifications-changed', onChanged);
+
     return () => {
       supabase.removeChannel(channel);
       document.removeEventListener('visibilitychange', onVisible);
+      window.removeEventListener('pvx:notifications-changed', onChanged);
     };
   }, [user?.id, refreshCount, playNotificationSound]);
 

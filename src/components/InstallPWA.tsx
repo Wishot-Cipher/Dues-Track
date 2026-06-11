@@ -51,6 +51,11 @@ export default function InstallPWA() {
   useEffect(() => {
     if (isStandalone()) return;                       // already installed
     if (sessionStorage.getItem(DISMISS_KEY)) return;  // dismissed this session
+    // Mobile/tablet only — the "add to home screen" prompt makes no
+    // sense on a laptop, and it kept showing on desktop Chrome (which
+    // also fires beforeinstallprompt). Gate on a touch/coarse pointer.
+    const isMobile = window.matchMedia('(pointer: coarse)').matches || window.innerWidth < 820;
+    if (!isMobile) return;
 
     // Android / Chromium path.
     const handler = (e: Event) => {
@@ -99,9 +104,12 @@ export default function InstallPWA() {
           <div
             className="relative rounded-2xl p-4 overflow-hidden"
             style={{
-              background: t.card,
+              // Solid surface — t.card can be translucent in some themes,
+              // which made the prompt look see-through. The toast floats
+              // over page content, so it must be opaque.
+              background: isLight ? '#FFFFFF' : '#1A120C',
               border: `1px solid ${t.cardBorder}`,
-              boxShadow: '0 20px 50px rgba(0,0,0,0.28)',
+              boxShadow: '0 20px 50px rgba(0,0,0,0.35)',
             }}
           >
             {/* soft brand wash */}

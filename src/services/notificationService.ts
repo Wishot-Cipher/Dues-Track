@@ -297,6 +297,10 @@ class NotificationService {
         console.error('Error marking notification as read:', error);
         return false;
       }
+      // Tell the bell (and any open list) to refresh its unread count
+      // instantly — realtime can lag or be disabled, and the user
+      // shouldn't have to refresh the page to see the badge drop.
+      try { window.dispatchEvent(new CustomEvent('pvx:notifications-changed')); } catch { /* noop */ }
       return true;
     } catch (error) {
       console.error('Error marking notification as read:', error);
@@ -327,6 +331,7 @@ class NotificationService {
         console.error('Error marking all notifications as read:', error);
         return false;
       }
+      try { window.dispatchEvent(new CustomEvent('pvx:notifications-changed')); } catch { /* noop */ }
       return true;
     } catch (error) {
       console.error('Error marking all notifications as read:', error);

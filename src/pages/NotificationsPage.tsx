@@ -155,7 +155,7 @@ export default function NotificationsPage() {
                   </span>
                   <div className="flex-1 min-w-0">
                     <div className="flex items-start justify-between gap-2">
-                      <p className="text-sm font-bold" style={{ color: t.text }}>{n.title}</p>
+                      <p className="text-sm font-bold min-w-0 break-words" style={{ color: t.text }}>{n.title}</p>
                       {!n.is_read && <span className="mt-1 w-2 h-2 rounded-full shrink-0" style={{ background: t.primary }} />}
                     </div>
                     {/* Preview — clamped to 2 lines so a long message
