@@ -246,6 +246,13 @@ export default function VerificationStatusBanner() {
     // Fully verified — banner not needed at all
     if (adminRow && adminRow.verification_layer >= 4) return 'hidden';
     if (pendingClaim)  return 'in_progress';
+    // A founder's 'org_setup' row is a money-locked SETUP STEWARD (mig
+    // 111), NOT a claimed governance role. Without this branch they'd be
+    // read as an "unverified_admin awaiting verification" and the banner
+    // would suppress itself — leaving the founder with no path to claim
+    // their real role (class rep / president / etc.). Treat them like a
+    // not_admin so the "Claim a role" CTA shows.
+    if (adminRow && adminRow.role === 'org_setup') return 'not_admin';
     if (adminRow && adminRow.verification_layer < 4) return 'unverified_admin';
     return 'not_admin'; // covers both regular students and non-exec org creators
   }, [loading, adminRow, pendingClaim]);

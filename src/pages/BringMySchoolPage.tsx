@@ -481,7 +481,12 @@ export default function BringMySchoolPage() {
       // ignore — session keys are best-effort; user can still log in manually
     }
 
-    navigate(`/${res.slug}/overview`);
+    // Land the founder on their member dashboard — where the "Claim your
+    // role" banner and the invite/share card live — not the org overview.
+    // Founding makes them a money-locked setup steward (mig 111), not an
+    // owner; the dashboard is where they claim their real role and start
+    // inviting. (Matches the generic CreateOrganizationPage path.)
+    navigate(`/${res.slug}/dashboard`);
   };
 
   return (
