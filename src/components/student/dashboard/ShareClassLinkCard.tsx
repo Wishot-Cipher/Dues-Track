@@ -22,12 +22,9 @@
 
 import { useEffect, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Share2, Copy, Check, Loader2, X, Link as LinkIcon, Info, ShieldCheck, Users, ArrowRight } from 'lucide-react';
-import { useNavigate } from 'react-router-dom';
+import { Share2, Copy, Check, Loader2, X, Link as LinkIcon, Info, ShieldCheck } from 'lucide-react';
 import { supabase } from '@/config/supabase';
 import { getDashboardTokens, type ResolvedTheme } from '@/hooks/useTheme';
-import { useActiveRole } from '@/hooks/useActiveRole';
-import { useMultiTenantAuth } from '@/hooks/useMultiTenantAuth';
 
 export interface ShareClassLinkCardProps {
   theme: ResolvedTheme;
@@ -78,44 +75,22 @@ export default function ShareClassLinkCard({
 }: ShareClassLinkCardProps) {
   const t = getDashboardTokens(theme);
   const isLight = theme === 'light';
-  const navigate = useNavigate();
-  const { user, organization } = useMultiTenantAuth();
-  const { setActiveRole } = useActiveRole({ orgId: organization?.id, memberId });
+  // Dark-mode t.card is rgba(255,255,255,0.03) — only 3% opaque, so this
+  // card read as see-through over the page. Use a solid surface so the
+  // invite card is grounded and legible (light mode is already solid).
+  const cardBg = isLight ? t.card : '#1C150F';
   const [loading, setLoading] = useState(false);
-
-  // The admin row that makes THIS class member a full class exec.
-  // Needed to switch the active role before routing to /admin/members
-  // (see openMemberTools).
-  const adminForGroup = (user?.admin_records || []).find(
-    (a: { is_active?: boolean; group_id?: string | null }) =>
-      a.is_active !== false && a.group_id === groupId,
-  ) as { id?: string; group_id?: string | null; scope_level?: string } | undefined;
-
-  // A class exec lands here from the STUDENT dashboard, so their active
-  // role is "student". /admin/members has a tier gate (active role must
-  // be an exec at group/org scope) and would bounce them straight back
-  // to /dashboard. So we switch them into their class-exec role FIRST,
-  // then navigate — no more silent reroute to the student layout.
-  function openMemberTools() {
-    if (adminForGroup?.id) {
-      setActiveRole({
-        key: `admin:${adminForGroup.id}`,
-        kind: 'exec',
-        adminId: adminForGroup.id,
-        groupId: groupId ?? null,
-        scopeLevel: (adminForGroup.scope_level as 'org' | 'unit' | 'group') || 'group',
-        label: className,
-        orgId: organization?.id,
-        memberId,
-      });
-    }
-    navigate(`/${orgSlug}/admin/members`);
-  }
   const [error, setError] = useState<string | null>(null);
   const [invite, setInvite] = useState<{ code: string; expiresAt?: string; maxUses?: number } | null>(null);
   const [copied, setCopied] = useState<'code' | 'link' | 'message' | null>(null);
   const [status, setStatus] = useState<InviteStatus | null>(null);
   const [statusLoading, setStatusLoading] = useState(true);
+
+  // Who can mint a join code from this card: the class FOUNDER (bootstrap)
+  // OR a verified class exec (caller_is_full_admin). Execs used to be
+  // routed to /admin/members instead, which kept bouncing — now they just
+  // generate the link right here (mig 136 lets the RPC accept them).
+  const canGenerate = Boolean(status?.is_founder || status?.caller_is_full_admin);
 
   // Resolve the caller's relationship to this class so we know whether
   // to render the share card, the founder hint, or nothing at all.
@@ -159,7 +134,7 @@ export default function ShareClassLinkCard({
     // The RPC is the authority — it will return admin_exists,
     // too_many_active, etc. with a clear message if the action
     // shouldn't go through.
-    if (!status?.is_founder || loading) return;
+    if (!canGenerate || loading) return;
     setLoading(true);
     setError(null);
     try {
@@ -265,7 +240,7 @@ This invite expires in 14 days.`
       <div
         className="w-full rounded-2xl p-4 sm:p-5"
         style={{
-          background: t.card,
+          background: cardBg,
           border: `1px solid ${t.cardBorder}`,
           boxShadow: isLight ? '0 1px 0 rgba(255,255,255,0.85) inset' : 'none',
         }}
@@ -297,7 +272,7 @@ This invite expires in 14 days.`
       <div
         className="w-full rounded-2xl p-4 sm:p-5 flex items-center gap-3"
         style={{
-          background: t.card,
+          background: cardBg,
           border: `1px solid ${t.cardBorder}`,
           boxShadow: isLight ? '0 1px 0 rgba(255,255,255,0.85) inset' : 'none',
         }}
@@ -332,83 +307,19 @@ This invite expires in 14 days.`
     );
   }
 
-  // ── Full-admin override ──
-  // Only when the caller is a FULL admin (Layer 4+, scope covers
-  // this class) do we route them to /admin/members — that page is
-  // gated on requireVerified. An email-verified Layer-2 founder can't
-  // reach it; if we route them there they'd just be bounced back to
-  // /dashboard with nowhere to invite from. So Layer 2 and Layer 3
-  // founders keep the bootstrap share card as their working path.
-  if (status.caller_is_full_admin) {
-    return (
-      <button
-        type="button"
-        onClick={openMemberTools}
-        className="group relative w-full text-left rounded-2xl p-4 sm:p-5 overflow-hidden transition-all active:scale-[0.995]"
-        style={{
-          background: t.card,
-          border: `1px solid ${t.cardBorder}`,
-          boxShadow: isLight
-            ? '0 1px 0 rgba(255,255,255,0.85) inset, 0 6px 18px -10px rgba(15,7,3,0.10)'
-            : '0 1px 0 rgba(255,255,255,0.02) inset',
-        }}
-      >
-        <span
-          aria-hidden
-          className="absolute -right-8 -bottom-8 w-32 h-32 rounded-full pointer-events-none"
-          style={{ background: t.blob1, filter: 'blur(40px)' }}
-        />
-        <div className="relative flex items-center gap-3">
-          <div
-            className="w-11 h-11 rounded-xl flex items-center justify-center shrink-0"
-            style={{
-              background: t.primarySoft,
-              border: `1px solid ${t.primaryRing}`,
-              color: t.primary,
-            }}
-          >
-            <Users size={20} />
-          </div>
-          <div className="flex-1 min-w-0">
-            <div className="flex items-center gap-1.5 flex-wrap">
-              <p className="text-sm font-bold" style={{ color: t.text }}>
-                {className ? `Manage invites · ${className}` : 'Manage invites'}
-              </p>
-              <span
-                className="inline-flex items-center gap-1 text-[10px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded"
-                style={{ background: `${t.primary}18`, color: t.primary }}
-              >
-                <ShieldCheck className="w-3 h-3" /> Admin
-              </span>
-            </div>
-            <p className="text-xs mt-0.5" style={{ color: t.textTer }}>
-              You can invite members, admins, and run bulk codes from the member tools.
-            </p>
-          </div>
-          <ArrowRight
-            size={18}
-            className="shrink-0 transition-transform group-hover:translate-x-0.5"
-            style={{ color: t.primary }}
-          />
-        </div>
-      </button>
-    );
-  }
+  // Class has an admin OTHER than the caller, and the caller can't
+  // generate (not the founder, not a verified exec) — the gatekeeper has
+  // taken over, so a plain member's card hides. A verified exec
+  // (caller_is_full_admin) keeps the generate card and mints codes here.
+  if (status.has_admin && !canGenerate) return null;
 
-  // Class has an admin OTHER than the caller — the gatekeeper has
-  // taken over. Card hides; admin invites flow through /admin/members.
-  if (status.has_admin && !status.is_founder) return null;
-  // Founder + has_admin (their own admin row) is fine — they keep
-  // their share button. The has_admin flag from the server is
-  // specifically "other than the founder" now (mig 083).
-
-  // Non-founders get a quiet hint pointing at the founder, not a CTA.
-  if (!status.can_share && !status.is_founder) {
+  // Non-generators get a quiet hint pointing at whoever can share.
+  if (!status.can_share && !canGenerate) {
     return (
       <div
         className="relative w-full rounded-2xl p-4 sm:p-5 overflow-hidden"
         style={{
-          background: t.card,
+          background: cardBg,
           border: `1px solid ${t.cardBorder}`,
           boxShadow: isLight
             ? '0 1px 0 rgba(255,255,255,0.85) inset, 0 6px 18px -10px rgba(15,7,3,0.10)'
@@ -449,12 +360,12 @@ This invite expires in 14 days.`
       <motion.button
         type="button"
         onClick={generate}
-        disabled={!status?.is_founder || loading}
+        disabled={!canGenerate || loading}
         whileHover={{ y: -1 }}
         whileTap={{ scale: 0.99 }}
         className="relative w-full text-left rounded-2xl p-4 sm:p-5 overflow-hidden disabled:opacity-60 disabled:cursor-not-allowed transition-all"
         style={{
-          background: t.card,
+          background: cardBg,
           border: `1px solid ${t.cardBorder}`,
           boxShadow: isLight
             ? '0 1px 0 rgba(255,255,255,0.85) inset, 0 6px 18px -10px rgba(15,7,3,0.10)'
@@ -488,11 +399,13 @@ This invite expires in 14 days.`
                 className="inline-flex items-center gap-1 text-[10px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded"
                 style={{ background: `${t.primary}18`, color: t.primary }}
               >
-                <ShieldCheck className="w-3 h-3" /> Founder
+                <ShieldCheck className="w-3 h-3" /> {status?.caller_is_full_admin ? 'Exec' : 'Founder'}
               </span>
             </div>
             <p className="text-xs mt-0.5" style={{ color: t.textTer }}>
-              Bootstrap mode — your code, up to 20 uses, 14 days. Stops automatically once your class has an exec.
+              {status?.caller_is_full_admin
+                ? 'Your join code — up to 20 uses, 14 days. Share it with your classmates.'
+                : 'Bootstrap mode — your code, up to 20 uses, 14 days. Stops automatically once your class has an exec.'}
             </p>
           </div>
           <span
@@ -530,7 +443,7 @@ This invite expires in 14 days.`
             <motion.div
               className="relative w-full sm:max-w-md rounded-3xl overflow-hidden"
               style={{
-                background: t.card,
+                background: cardBg,
                 border: `1px solid ${t.cardBorder}`,
                 boxShadow: '0 24px 60px rgba(0,0,0,0.45)',
                 color: t.text,
