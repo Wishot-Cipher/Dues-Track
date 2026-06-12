@@ -30,18 +30,7 @@ import {
 import { organizationService } from '@/services/organizationService';
 import { useToast } from '@/hooks/useToast';
 import { useMultiTenantAuth } from '@/hooks/useMultiTenantAuth';
-
-const tk = {
-  panel:    'rgba(255,255,255,0.03)',
-  border:   'rgba(255,255,255,0.08)',
-  text:     '#FFFFFF',
-  textSec:  'rgba(255,255,255,0.65)',
-  textTer:  'rgba(255,255,255,0.40)',
-  primary:  '#FF6803',
-  amber:    '#F59E0B',
-  mint:     '#30FFAC',
-  danger:   '#ef4444',
-};
+import { useTheme, getDashboardTokens } from '@/hooks/useTheme';
 
 interface Claim {
   id: string;
@@ -61,6 +50,21 @@ export default function VerificationPanel() {
   const { user } = useMultiTenantAuth();
   const memberId = user?.id;
   const toast = useToast();
+  const { theme } = useTheme();
+  const t = getDashboardTokens(theme);
+
+  // All color/surface tokens derived from the live theme — no hardcoded hex.
+  const tk = {
+    panel:    t.card,
+    border:   t.cardBorder,
+    text:     t.text,
+    textSec:  t.textSec,
+    textTer:  t.textTer,
+    primary:  t.primary,
+    amber:    t.amber,
+    mint:     t.mint,
+    danger:   t.danger,
+  };
 
   const [claims, setClaims] = useState<Claim[]>([]);
   const [loading, setLoading] = useState(true);
@@ -150,7 +154,9 @@ export default function VerificationPanel() {
       >
         <div className="flex items-center gap-2">
           <ShieldCheck className="w-4 h-4" style={{ color: tk.amber }} />
-          <h2 className="text-sm font-bold text-white tracking-tight">Verify execs under you</h2>
+          <h2 className="text-sm font-bold tracking-tight" style={{ color: tk.text }}>
+            Verify execs under you
+          </h2>
           <span
             className="text-[10px] font-bold px-1.5 py-0.5 rounded-full"
             style={{ background: `${tk.amber}18`, color: tk.amber }}
@@ -185,7 +191,7 @@ export default function VerificationPanel() {
                 {/* Top row: claimant + role + email badge */}
                 <div className="flex items-start justify-between gap-3 mb-3">
                   <div className="flex-1 min-w-0">
-                    <p className="text-sm font-semibold text-white truncate">
+                    <p className="text-sm font-semibold truncate" style={{ color: tk.text }}>
                       <span style={{ color: tk.amber }}>{c.full_name}</span>
                       <span className="font-normal" style={{ color: tk.textSec }}>
                         {' '}claims to be{' '}
@@ -195,7 +201,7 @@ export default function VerificationPanel() {
                     <div className="flex flex-wrap items-center gap-2 mt-1">
                       <span
                         className="inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded font-mono uppercase"
-                        style={{ background: 'rgba(255,255,255,0.05)', color: tk.textTer }}
+                        style={{ background: `${tk.border}`, color: tk.textTer }}
                       >
                         scope: {c.claimed_scope}
                       </span>
@@ -209,7 +215,7 @@ export default function VerificationPanel() {
                       )}
                       <span
                         className="inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded"
-                        style={{ background: 'rgba(255,255,255,0.04)', color: tk.textTer }}
+                        style={{ background: `${tk.border}`, color: tk.textTer }}
                       >
                         <VoteIcon className="w-2.5 h-2.5" />
                         {c.votes_received}/{c.votes_required} peer votes
@@ -221,7 +227,7 @@ export default function VerificationPanel() {
                 {/* Peer-vote progress (informational only at Layer 4) */}
                 <div
                   className="h-1 rounded-full overflow-hidden mb-3"
-                  style={{ background: 'rgba(255,255,255,0.06)' }}
+                  style={{ background: `${tk.border}` }}
                 >
                   <motion.div
                     className="h-full rounded-full"
@@ -234,7 +240,13 @@ export default function VerificationPanel() {
 
                 {/* Reject form */}
                 {isRejecting ? (
-                  <div className="rounded-xl p-3 mb-2" style={{ background: 'rgba(239,68,68,0.06)', border: '1px solid rgba(239,68,68,0.20)' }}>
+                  <div
+                    className="rounded-xl p-3 mb-2"
+                    style={{
+                      background: `${tk.danger}0F`,
+                      border: `1px solid ${tk.danger}33`,
+                    }}
+                  >
                     <p className="text-[11px] font-semibold mb-2" style={{ color: tk.danger }}>
                       Why are you rejecting?
                     </p>
@@ -243,10 +255,10 @@ export default function VerificationPanel() {
                       onChange={(e) => setRejectReason(e.target.value)}
                       rows={2}
                       placeholder="They aren't actually our class rep / this is fake / etc."
-                      className="w-full rounded-lg px-3 py-2 text-xs outline-none mb-2"
+                      className="w-full rounded-lg px-3 py-2 text-xs outline-none mb-2 resize-none"
                       style={{
-                        background: 'rgba(0,0,0,0.25)',
-                        border: '1px solid rgba(255,255,255,0.08)',
+                        background: `${tk.panel}`,
+                        border: `1px solid ${tk.border}`,
                         color: tk.text,
                       }}
                     />
@@ -255,7 +267,7 @@ export default function VerificationPanel() {
                         onClick={() => handleRejectSubmit(c.id)}
                         disabled={isBusy}
                         className="px-3 py-1.5 rounded-lg text-xs font-bold disabled:opacity-40"
-                        style={{ background: tk.danger, color: 'white' }}
+                        style={{ background: tk.danger, color: tk.text }}
                         whileTap={!isBusy ? { scale: 0.97 } : undefined}
                       >
                         {isBusy && busy?.action === 'reject'
@@ -266,7 +278,7 @@ export default function VerificationPanel() {
                         onClick={handleRejectCancel}
                         className="px-3 py-1.5 rounded-lg text-xs font-bold"
                         style={{
-                          background: 'rgba(255,255,255,0.04)',
+                          background: `${tk.border}`,
                           color: tk.textSec,
                           border: `1px solid ${tk.border}`,
                         }}
@@ -274,7 +286,10 @@ export default function VerificationPanel() {
                       >
                         Cancel
                       </motion.button>
-                      <span className="text-[10px] ml-auto flex items-center gap-1" style={{ color: tk.textTer }}>
+                      <span
+                        className="text-[10px] ml-auto flex items-center gap-1"
+                        style={{ color: tk.textTer }}
+                      >
                         <AlertTriangle className="w-3 h-3" />
                         90-day cooldown applies
                       </span>
@@ -304,9 +319,9 @@ export default function VerificationPanel() {
                       disabled={isBusy}
                       className="inline-flex items-center justify-center gap-1.5 px-3 py-2.5 rounded-xl text-xs font-bold disabled:opacity-40"
                       style={{
-                        background: 'rgba(239,68,68,0.10)',
+                        background: `${tk.danger}1A`,
                         color: tk.danger,
-                        border: '1px solid rgba(239,68,68,0.32)',
+                        border: `1px solid ${tk.danger}52`,
                       }}
                       whileHover={!isBusy ? { scale: 1.02 } : undefined}
                       whileTap={!isBusy ? { scale: 0.98 } : undefined}
@@ -324,7 +339,10 @@ export default function VerificationPanel() {
 
       <footer
         className="px-5 sm:px-6 py-3 flex items-center justify-between"
-        style={{ borderTop: `1px solid ${tk.border}`, background: 'rgba(0,0,0,0.18)' }}
+        style={{
+          borderTop: `1px solid ${tk.border}`,
+          background: `${tk.panel}`,
+        }}
       >
         <p className="text-[10px] flex items-center gap-1.5" style={{ color: tk.textTer }}>
           <CheckCircle2 className="w-3 h-3" style={{ color: tk.amber }} />

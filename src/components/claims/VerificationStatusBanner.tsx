@@ -1,53 +1,81 @@
 /**
- * VerificationStatusBanner — surfaces the user's current verification state
- * and the next clear action they should take.
+ * VerificationStatusBanner
  *
- * Four shapes (the component hides itself in any other state):
+ * Surfaces the user's current verification state and the next clear
+ * action they should take. Handles four distinct audience shapes:
  *
- *  ┌─ REGULAR STUDENT (no exec claim, no admin row) ─────────────┐
- *  │ "You created this org — invite your people"                  │
- *  │ Invite panel with WhatsApp, Copy, Share                      │
- *  │ Dismissable after first view                                 │
- *  └──────────────────────────────────────────────────────────────┘
+ *  ┌─ ORG CREATOR (org_setup role, hasn't claimed a real role yet) ──┐
+ *  │ Amber banner — DISMISSABLE (founder may opt out if not exec)     │
+ *  │ "Email verified — now claim your actual role"                    │
+ *  │ Clear CTA → /claim                                               │
+ *  │ Re-shown on handover events regardless of prior dismiss          │
+ *  └────────────────────────────────────────────────────────────────────┘
  *
- *  ┌─ NOT ADMIN (hasn't claimed yet) ────────────────────────────┐
- *  │ "Want to manage this organization?"                          │
- *  │ Brief explainer + [Claim a role →] button                    │
- *  │ + Invite panel below (always visible even without exec role) │
- *  └──────────────────────────────────────────────────────────────┘
+ *  ┌─ REGULAR MEMBER / NON-EXEC (hasn't claimed) ────────────────────┐
+ *  │ Orange banner — DISMISSABLE                                      │
+ *  │ "Are you an exec? Claim your role."                              │
+ *  │ Dismissed state persists in localStorage.                        │
+ *  │ Re-shown automatically when a handover event is detected         │
+ *  │ (org.claim_banner_version bumps → dismiss key is invalidated)    │
+ *  └────────────────────────────────────────────────────────────────────┘
  *
- *  ┌─ ADMIN, NOT YET VERIFIED (layer 0–2) ───────────────────────┐
- *  │ "Your [Founder / Treasurer / ...] role is pending"           │
- *  │ Progress: Layer X of 4 · "Money unlocks at Layer N"          │
- *  │ [Submit verification →]                                      │
- *  │ + Invite panel                                               │
- *  └──────────────────────────────────────────────────────────────┘
+ *  ┌─ CLAIM IN PROGRESS ─────────────────────────────────────────────┐
+ *  │ Amber banner — shown on first load even with 0 votes             │
+ *  │ Layer 0-1: "Verify your school email → next step"               │
+ *  │ Layer 2+:  Vote progress bar + invite nudge                      │
+ *  │ Suppressed only when votes haven't changed since last view       │
+ *  │ AND the user has already seen this state (lastSeenVotes > 0)    │
+ *  └────────────────────────────────────────────────────────────────────┘
  *
- *  ┌─ ADMIN, PEER-VOTED BUT WAITING FOR PARENT (layer 3) ────────┐
- *  │ "Your role is peer-verified. Waiting for [parent role]."     │
- *  │ + Invite panel (bootstrap path only)                         │
- *  └──────────────────────────────────────────────────────────────┘
+ *  ┌─ CLAIM REJECTED ────────────────────────────────────────────────┐
+ *  │ Danger banner — DISMISSABLE                                      │
+ *  │ "Your claim wasn't approved" + common reasons + "Try again" CTA  │
+ *  │ Shown for most recent rejected claim (status = 'rejected')       │
+ *  │ Re-shown on bannerVersion bump like not_admin                    │
+ *  └────────────────────────────────────────────────────────────────────┘
  *
- * Hidden entirely when the user is layer >= 4 (fully verified).
+ *  ┌─ CLAIM EXPIRED ────────────────────────────────────────────────┐
+ *  │ Muted amber banner — DISMISSABLE                                 │
+ *  │ "Your claim timed out" + soft explanation + "Reapply" CTA        │
+ *  │ Shown for most recent expired claim (status = 'expired')         │
+ *  └────────────────────────────────────────────────────────────────────┘
+ *
+ *  ┌─ FULLY VERIFIED (layer >= 4) ───────────────────────────────────┐
+ *  │ Hidden entirely                                                   │
+ *  └────────────────────────────────────────────────────────────────────┘
+ *
+ * Dismiss contract:
+ *   - All dismiss states are stored as `pvx_claim_banner_dismissed_v{V}_{orgId}_{memberId}`
+ *     where V = org.claim_banner_version (integer). When an exec handover
+ *     happens, the platform bumps claim_banner_version on the org row,
+ *     which invalidates all old dismiss keys automatically — every member
+ *     sees the banner again without any code change.
+ *   - Org creator (org_setup): NOW dismissable. The founder may not be
+ *     the exec and should be able to opt out. Re-shown on next handover event.
  */
 
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { motion } from 'framer-motion';
+import { motion, AnimatePresence } from 'framer-motion';
 import {
   ArrowRight,
   Hourglass,
   PartyPopper,
   Vote as VoteIcon,
   X as XIcon,
+  XCircle,
+  Clock,
+  ShieldCheck,
+  AlertTriangle,
 } from 'lucide-react';
 import { supabase } from '@/config/supabase';
 import { useMultiTenantAuth } from '@/hooks/useMultiTenantAuth';
 import { useTheme, getDashboardTokens } from '@/hooks/useTheme';
 
-// ─────────────────────────────────────────────────────────────────────────
-// Local types
-// ─────────────────────────────────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────────
+// Types
+// ─────────────────────────────────────────────────────────────────
+
 type AdminRow = {
   id: string;
   role_label: string | null;
@@ -67,88 +95,246 @@ type PendingClaim = {
   required_layer: number;
 };
 
+// Rejection record from the claim_rejections table.
+// target_signature is a human-readable position slug (e.g. 'class-rep').
+// reason is nullable -- the reviewer may or may not have left one.
+// expires_at is a hard expiry; lifted_at is an early pardon by an admin.
+// A rejection is active when lifted_at IS NULL and expires_at > now().
+type RejectionRecord = {
+  id: string;
+  target_signature: string;
+  reason: string | null;
+  expires_at: string;
+  lifted_at: string | null;
+};
+
+// Expired claim -- from claim_requests, status = 'expired' (timed out, not rejected).
+type ExpiredClaim = {
+  id: string;
+  position_title: string;
+};
+
 type BannerTokens = {
-  primary:    string;
-  amber:      string;
-  mint:       string;
-  blue:       string;
-  border:     string;
-  text:       string;
-  textSec:    string;
-  textTer:    string;
-  danger:     string;
-  card:       string;
+  primary: string;
+  amber: string;
+  mint: string;
+  blue: string;
+  border: string;
+  text: string;
+  textSec: string;
+  textTer: string;
+  danger: string;
+  card: string;
   gradOrange: string;
   cardBorder: string;
 };
 
-// ─────────────────────────────────────────────────────────────────────────
-// Helpers
-// ─────────────────────────────────────────────────────────────────────────
+type Variant =
+  | 'hidden'
+  | 'org_creator_unclaimed'   // has org_setup role, must claim a real role
+  | 'in_progress'             // active claim awaiting votes / review
+  | 'rejected'                // active rejection record in claim_rejections
+  | 'expired'                 // most recent claim_request timed out
+  | 'not_admin';              // regular member or exec who hasn't claimed
 
-/** Case-insensitive partial keyword match against org type string */
-function orgTypeIs(orgType: string, keywords: string[]): boolean {
-  const lower = orgType.toLowerCase();
-  return keywords.some((k) => lower.includes(k));
-}
+// ─────────────────────────────────────────────────────────────────
+// Helpers
+// ─────────────────────────────────────────────────────────────────
 
 /**
- * Resolves a human-readable label for what was created.
- * e.g. "your 300L Civil Engineering class" or "your Mechanical Engineering department"
+ * Build the versioned dismiss key. When org.claim_banner_version
+ * increments (e.g. after a handover), old keys become stale and the
+ * banner reappears for everyone automatically.
  */
-function resolveOrgLabel({
-  orgName,
-  orgType,
-  level,
-  department,
-  session,
-}: {
-  orgName:    string;
-  orgType:    string;
-  level?:     string | null;
-  department?: string | null;
-  session?:   string | null;
-}): string {
-  const sessionTag = session ? ` (${session})` : '';
-
-  if (orgTypeIs(orgType, ['class', 'set', 'level'])) {
-    const lvl = level ? `${level} ` : '';
-    const dep = department ? `${department} ` : '';
-    return `the *${lvl}${dep}class${sessionTag}*`;
-  }
-  if (orgTypeIs(orgType, ['department', 'dept'])) {
-    return `the *${orgName} department${sessionTag}*`;
-  }
-  if (orgTypeIs(orgType, ['faculty', 'college', 'school', 'university', 'academic'])) {
-    return `the *${orgName}${sessionTag}*`;
-  }
-  if (orgTypeIs(orgType, ['church', 'chapel', 'parish', 'mosque', 'fellowship', 'ministry'])) {
-    return `*${orgName}*`;
-  }
-  if (orgTypeIs(orgType, ['club', 'association', 'society', 'union', 'ngo', 'cooperative'])) {
-    return `*${orgName}*`;
-  }
-  return `*${orgName}*`;
+function dismissKey(orgId: string, memberId: string, version: number): string {
+  return `pvx_claim_banner_dismissed_v${version}_${orgId}_${memberId}`;
 }
 
-// ── DELETED: buildWhatsAppMessage ────────────────────────────────────
-// 200+ line org-type-branching message composer used to live here.
-// ShareClassLinkCard now owns its own (simpler) share template, so
-// this whole helper became dead weight. Removed in the dedup pass.
+function isDismissed(orgId: string, memberId: string, version: number): boolean {
+  try {
+    return localStorage.getItem(dismissKey(orgId, memberId, version)) === '1';
+  } catch {
+    return false;
+  }
+}
 
-// ─────────────────────────────────────────────────────────────────────────
-// Component
-// ─────────────────────────────────────────────────────────────────────────
+function persistDismiss(orgId: string, memberId: string, version: number) {
+  try {
+    localStorage.setItem(dismissKey(orgId, memberId, version), '1');
+  } catch { /* ignore */ }
+}
+
+function orgTypeIs(orgType: string, keywords: string[]): boolean {
+  const lower = orgType.toLowerCase();
+  return keywords.some(k => lower.includes(k));
+}
+
+function resolveOrgLabel(orgName: string, orgType: string): string {
+  if (orgTypeIs(orgType, ['class', 'set', 'level'])) return `this class`;
+  if (orgTypeIs(orgType, ['department', 'dept']))     return `the ${orgName} department`;
+  if (orgTypeIs(orgType, ['faculty', 'college', 'university', 'school'])) return `${orgName}`;
+  return orgName;
+}
+
+// ─────────────────────────────────────────────────────────────────
+// Sub-components
+// ─────────────────────────────────────────────────────────────────
+
+function BannerShell({
+  accent,
+  icon,
+  eyebrow,
+  children,
+  onDismiss,
+  tk,
+}: {
+  accent: string;
+  icon: React.ReactNode;
+  eyebrow: string;
+  children: React.ReactNode;
+  onDismiss?: () => void;
+  tk: BannerTokens;
+}) {
+  return (
+    <motion.section
+      initial={{ opacity: 0, y: 8 }}
+      animate={{ opacity: 1, y: 0 }}
+      exit={{ opacity: 0, y: -6 }}
+      transition={{ duration: 0.3, ease: [0.22, 1, 0.36, 1] }}
+      className="rounded-3xl p-5 sm:p-6 relative overflow-hidden"
+      style={{
+        background: `linear-gradient(135deg, ${accent}12 0%, ${tk.card} 100%)`,
+        border: `1px solid ${accent}35`,
+      }}
+    >
+      {/* Radial glow top-right */}
+      <div
+        className="absolute inset-0 pointer-events-none"
+        style={{
+          background: `radial-gradient(ellipse 55% 65% at 100% 0%, ${accent}22, transparent)`,
+        }}
+      />
+
+      <div className="relative">
+        {/* Dismiss button — only rendered when explicitly provided */}
+        {onDismiss && (
+          <button
+            type="button"
+            onClick={onDismiss}
+            className="absolute right-0 top-0 p-1.5 rounded-lg transition-opacity hover:opacity-60"
+            style={{ color: `${accent}99` }}
+            aria-label="Dismiss banner"
+          >
+            <XIcon className="w-3.5 h-3.5" />
+          </button>
+        )}
+
+        {/* Eyebrow */}
+        <div className="flex items-center gap-2 mb-3">
+          <span
+            className="w-7 h-7 rounded-lg flex items-center justify-center shrink-0"
+            style={{ background: `${accent}20`, color: accent }}
+          >
+            {icon}
+          </span>
+          <p
+            className="text-[10px] uppercase tracking-[0.2em] font-bold"
+            style={{ color: accent }}
+          >
+            {eyebrow}
+          </p>
+        </div>
+
+        {children}
+      </div>
+    </motion.section>
+  );
+}
+
+function CtaButton({
+  label,
+  accent,
+  onClick,
+}: {
+  label: string;
+  accent: string;
+  onClick: () => void;
+}) {
+  return (
+    <motion.button
+      type="button"
+      onClick={onClick}
+      className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-bold transition-all"
+      style={{
+        background: `${accent}18`,
+        color: accent,
+        border: `1px solid ${accent}30`,
+      }}
+      whileHover={{ scale: 1.03, x: 1 }}
+      whileTap={{ scale: 0.97 }}
+    >
+      {label}
+      <ArrowRight className="w-3.5 h-3.5" />
+    </motion.button>
+  );
+}
+
+function VoteProgressBar({
+  received,
+  required,
+  accent,
+  tk,
+}: {
+  received: number;
+  required: number;
+  accent: string;
+  tk: BannerTokens;
+}) {
+  const pct = Math.min(100, Math.round((received / Math.max(1, required)) * 100));
+  return (
+    <div>
+      <div
+        className="h-1.5 rounded-full overflow-hidden mb-1"
+        style={{ background: `${tk.cardBorder}` }}
+      >
+        <motion.div
+          className="h-full rounded-full"
+          style={{ background: `linear-gradient(90deg, ${accent}, ${tk.mint})` }}
+          initial={{ width: 0 }}
+          animate={{ width: `${pct}%` }}
+          transition={{ duration: 0.65, ease: 'easeOut' }}
+        />
+      </div>
+      <p className="text-[10px]" style={{ color: tk.textTer }}>
+        {received} of {required} confirmations received
+      </p>
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────
+// Main component
+// ─────────────────────────────────────────────────────────────────
+
 export default function VerificationStatusBanner() {
-  const navigate   = useNavigate();
+  const navigate = useNavigate();
   const { orgSlug } = useParams<{ orgSlug: string }>();
-  const { user, organization, group } = useMultiTenantAuth();
+  // Fix: removed unused `group` from destructuring (TS6133)
+  const { user, organization } = useMultiTenantAuth();
+
   const memberId = user?.id;
   const orgId    = organization?.id;
 
-  // ── Theme ──────────────────────────────────────────────────────────────
+  // Claim banner version — bumped by platform on handover events.
+  // Defaults to 0 if the column doesn't exist yet.
+  // Fix: double-cast through `unknown` to satisfy TS2352 — Organization type
+  // has no index signature, so direct cast to Record<string, unknown> is rejected.
+  const org = organization as unknown as Record<string, unknown>;
+  const bannerVersion: number = (org?.claim_banner_version as number) ?? 0;
+
+  // ── Theme ──────────────────────────────────────────────────────
   const { theme } = useTheme();
-  const t  = getDashboardTokens(theme);
+  const t = getDashboardTokens(theme);
   const tk: BannerTokens = {
     primary:    t.primary,
     amber:      t.amber,
@@ -164,23 +350,16 @@ export default function VerificationStatusBanner() {
     cardBorder: t.cardBorder,
   };
 
-  const [adminRow,      setAdminRow]      = useState<AdminRow | null>(null);
-  const [pendingClaim,  setPendingClaim]  = useState<PendingClaim | null>(null);
-  const [loading,       setLoading]       = useState(true);
-  const [dismissed,     setDismissed]     = useState(false);
+  // ── State ──────────────────────────────────────────────────────
+  const [adminRow, setAdminRow]         = useState<AdminRow | null>(null);
+  const [pendingClaim, setPendingClaim] = useState<PendingClaim | null>(null);
+  const [rejection, setRejection]       = useState<RejectionRecord | null>(null);
+  const [expiredClaim, setExpiredClaim] = useState<ExpiredClaim | null>(null);
+  const [loading, setLoading]           = useState(true);
+  const [dismissed, setDismissed]       = useState(false);
   const [lastSeenVotes, setLastSeenVotes] = useState<number | null>(null);
-  // Invite state intentionally removed — ShareClassLinkCard owns it now.
 
-  // ── Storage keys ───────────────────────────────────────────────────────
-  const dismissKey = memberId && orgId
-    ? `pvx_claim_banner_dismissed_${orgId}_${memberId}`
-    : null;
-
-  const progressKey = pendingClaim && memberId
-    ? `pvx_claim_progress_${pendingClaim.id}_${memberId}`
-    : null;
-
-  // ── Data fetching ──────────────────────────────────────────────────────
+  // ── Data fetch ─────────────────────────────────────────────────
   useEffect(() => {
     let cancelled = false;
     if (!memberId || !orgId) { setLoading(false); return; }
@@ -188,28 +367,55 @@ export default function VerificationStatusBanner() {
     (async () => {
       setLoading(true);
 
-      const { data: admins } = await supabase
-        .from('member_admins')
-        .select('id, role, role_label, verification_layer, verification_status, scope_level')
-        .eq('member_id', memberId)
-        .eq('organization_id', orgId)
-        .eq('is_active', true)
-        .order('verification_layer', { ascending: false })
-        .order('created_at',         { ascending: false })
-        .limit(1);
+      const [{ data: admins }, { data: claims }, { data: rejections }, { data: expired }] = await Promise.all([
+        supabase
+          .from('member_admins')
+          .select('id, role, role_label, verification_layer, verification_status, scope_level')
+          .eq('member_id', memberId)
+          .eq('organization_id', orgId)
+          .eq('is_active', true)
+          .order('verification_layer', { ascending: false })
+          .order('created_at', { ascending: false })
+          .limit(1),
 
-      const { data: claims } = await supabase
-        .from('claim_requests')
-        .select('id, position_title, bootstrap_path, votes_received, votes_required, current_layer, required_layer')
-        .eq('claimant_user_id', memberId)
-        .eq('organization_id', orgId)
-        .in('status', ['awaiting_votes', 'submitted', 'under_review'])
-        .order('created_at', { ascending: false })
-        .limit(1);
+        supabase
+          .from('claim_requests')
+          .select('id, position_title, bootstrap_path, votes_received, votes_required, current_layer, required_layer')
+          .eq('claimant_user_id', memberId)
+          .eq('organization_id', orgId)
+          .in('status', ['awaiting_votes', 'submitted', 'under_review'])
+          .order('created_at', { ascending: false })
+          .limit(1),
+
+        // Q1 fix (updated): rejections live in claim_rejections, not claim_requests.
+        // Fetch the most recent active rejection (not lifted, not expired) for this
+        // member in this org. We also fetch the most recent expired claim_request
+        // separately so both paths have their own data source.
+        supabase
+          .from('claim_rejections')
+          .select('id, target_signature, reason, expires_at, lifted_at')
+          .eq('member_id', memberId)
+          .eq('organization_id', orgId)
+          .is('lifted_at', null)
+          .gt('expires_at', new Date().toISOString())
+          .order('created_at', { ascending: false })
+          .limit(1),
+
+        supabase
+          .from('claim_requests')
+          .select('id, position_title')
+          .eq('claimant_user_id', memberId)
+          .eq('organization_id', orgId)
+          .eq('status', 'expired')
+          .order('created_at', { ascending: false })
+          .limit(1),
+      ]);
 
       if (!cancelled) {
-        setAdminRow((admins  ?? [])[0] as AdminRow    | null ?? null);
-        setPendingClaim((claims ?? [])[0] as PendingClaim | null ?? null);
+        setAdminRow((admins ?? [])[0] as AdminRow ?? null);
+        setPendingClaim((claims ?? [])[0] as PendingClaim ?? null);
+        setRejection((rejections ?? [])[0] as RejectionRecord ?? null);
+        setExpiredClaim((expired ?? [])[0] as ExpiredClaim ?? null);
         setLoading(false);
       }
     })();
@@ -217,18 +423,22 @@ export default function VerificationStatusBanner() {
     return () => { cancelled = true; };
   }, [memberId, orgId]);
 
-  // ── Persist dismiss ────────────────────────────────────────────────────
+  // ── Dismiss persistence ────────────────────────────────────────
   useEffect(() => {
-    if (!dismissKey) return;
-    try { setDismissed(localStorage.getItem(dismissKey) === '1'); } catch { /* ignore */ }
-  }, [dismissKey]);
+    if (!memberId || !orgId) return;
+    setDismissed(isDismissed(orgId, memberId, bannerVersion));
+  }, [memberId, orgId, bannerVersion]);
 
-  // ── Vote progress tracking ─────────────────────────────────────────────
+  // ── Vote progress tracking ─────────────────────────────────────
+  const progressKey = pendingClaim && memberId
+    ? `pvx_claim_progress_${pendingClaim.id}_${memberId}`
+    : null;
+
   useEffect(() => {
     if (!progressKey) { setLastSeenVotes(null); return; }
     try {
       const stored = localStorage.getItem(progressKey);
-      setLastSeenVotes(stored ? Number(stored) : 0);
+      setLastSeenVotes(stored !== null ? Number(stored) : 0);
     } catch { setLastSeenVotes(0); }
   }, [progressKey]);
 
@@ -240,264 +450,415 @@ export default function VerificationStatusBanner() {
     }
   }, [progressKey, pendingClaim, lastSeenVotes]);
 
-  // ── Variant resolution ─────────────────────────────────────────────────
-  const variant = useMemo(() => {
+  // ── Variant resolution ─────────────────────────────────────────
+  const variant = useMemo((): Variant => {
     if (loading) return 'hidden';
-    // Fully verified — banner not needed at all
+
+    // Fully verified — no banner needed
     if (adminRow && adminRow.verification_layer >= 4) return 'hidden';
-    if (pendingClaim)  return 'in_progress';
-    // A founder's 'org_setup' row is a money-locked SETUP STEWARD (mig
-    // 111), NOT a claimed governance role. Without this branch they'd be
-    // read as an "unverified_admin awaiting verification" and the banner
-    // would suppress itself — leaving the founder with no path to claim
-    // their real role (class rep / president / etc.). Treat them like a
-    // not_admin so the "Claim a role" CTA shows.
-    if (adminRow && adminRow.role === 'org_setup') return 'not_admin';
-    if (adminRow && adminRow.verification_layer < 4) return 'unverified_admin';
-    return 'not_admin'; // covers both regular students and non-exec org creators
-  }, [loading, adminRow, pendingClaim]);
 
-  // Is this person acting as / trying to be an exec?
-  // `isExec` (true if adminRow or pendingClaim exists) was previously
-  // used to branch the not_admin copy, but variant resolution already
-  // siphons those cases off (in_progress / unverified_admin / hidden),
-  // so by the time we render not_admin both are always false. Removed.
+    // Active claim in the pipeline — checked BEFORE org_setup so a founder
+    // who immediately files a claim sees in_progress, not org_creator_unclaimed.
+    // (Q3: this ordering is intentional — do not swap without reviewing both variants.)
+    if (pendingClaim) return 'in_progress';
 
-  // The person who actually created this org may have done so without
-  // claiming a role yet. We still surface the "claim a role" CTA to them
-  // (variant = not_admin) so they aren't stuck. ShareClassLinkCard handles
-  // the invite UX separately, on the dashboard below this banner.
+    // Active rejection in claim_rejections takes priority -- user is in a cooldown
+    // period and cannot reapply until expires_at passes or an admin lifts it.
+    if (rejection) return 'rejected';
+
+    // Expired claim_request -- timed out before gathering enough votes.
+    if (expiredClaim) return 'expired';
+
+    // org_setup = founder who set up the org but hasn't claimed a
+    // governance role yet. Must see the banner — but CAN dismiss it
+    // in case they're not the actual exec.
+    if (adminRow && adminRow.role === 'org_setup') return 'org_creator_unclaimed';
+
+    // Unverified admin (claimed but not yet at layer 4):
+    // Let them fall into not_admin so the claim CTA stays visible.
+    // The dedicated /verify-email page handles the email step.
+    if (adminRow && adminRow.verification_layer < 4) return 'not_admin';
+
+    return 'not_admin';
+  }, [loading, adminRow, pendingClaim, rejection, expiredClaim]);
+
+  // ── Is this person the one who created the org? ────────────────
+  // Fix: reuse already-cast `org` ref to avoid repeated TS2352 casts (lines 412/413)
   const isOrgCreator = Boolean(
-    memberId && (organization?.created_by === memberId || organization?.founded_by_user_id === memberId)
+    memberId && (
+      org?.created_by === memberId ||
+      org?.founded_by_user_id === memberId
+    )
+  );
+
+  const orgLabel = resolveOrgLabel(
+    organization?.name ?? '',
+    organization?.organization_type ?? '',
   );
 
   const goToClaim = () => navigate(`/${orgSlug}/claim`);
 
   const handleDismiss = () => {
-    if (!dismissKey) return;
-    try { localStorage.setItem(dismissKey, '1'); } catch { /* ignore */ }
+    if (!memberId || !orgId) return;
+    persistDismiss(orgId, memberId, bannerVersion);
     setDismissed(true);
   };
 
-  // ── Org display label (human-readable description of what was created) ─
-  const orgDisplayLabel = useMemo(() => resolveOrgLabel({
-    orgName:    organization?.name    || '',
-    orgType:    organization?.organization_type || '',
-    level:      user?.level           || group?.levels?.[0] || null,
-    department: group?.name           || null,
-    session:    null, // wire in academic session when available
-  }), [organization, user?.level, group]);
-
+  // ── Gate renders ───────────────────────────────────────────────
   if (variant === 'hidden') return null;
-  if (variant === 'not_admin' && dismissed) return null;
-  // Previously this branch was suppressed for non-creators — meaning a
-  // new exec who joined via an invite never got nudged to claim their
-  // role. That left every newly-arrived class rep / treasurer / leader
-  // with no on-screen path to verification. We now show the banner to
-  // anyone who isn't a verified admin yet; the dismiss X lets regular
-  // members hide it once if they're just here to pay dues.
 
-  // ── Variant: in-progress claim ─────────────────────────────────────────
-  if (variant === 'in_progress' && pendingClaim) {
-    if (lastSeenVotes === null) return null;
-    if (pendingClaim.votes_received <= lastSeenVotes) return null;
+  // Both org_creator_unclaimed and not_admin are dismissable.
+  // org_creator_unclaimed re-appears on next handover (bannerVersion bump).
+  if (dismissed) return null;
 
-    const pct = Math.min(100, Math.round(
-      (pendingClaim.votes_received / Math.max(1, pendingClaim.votes_required)) * 100,
-    ));
-    const stillNeeds = Math.max(0, pendingClaim.votes_required - pendingClaim.votes_received);
-
+  // ══════════════════════════════════════════════════════════════
+  // VARIANT: org_creator_unclaimed
+  // Founder has org_setup role. Email may or may not be verified.
+  // Dismissable — founder may not be the exec and should be able
+  // to opt out. Will re-appear after the next handover event.
+  // ══════════════════════════════════════════════════════════════
+  if (variant === 'org_creator_unclaimed') {
     return (
-      <BannerShell
-        accent={tk.amber}
-        icon={<Hourglass className="w-4 h-4" />}
-        eyebrow="Verification in progress"
-        tk={tk}
-      >
-        <p className="text-sm font-bold mb-1" style={{ color: tk.text }}>
-          Your claim as{' '}
-          <span style={{ color: tk.amber }}>{pendingClaim.position_title}</span>{' '}
-          is awaiting confirmation
-        </p>
-        <p className="text-xs leading-5 mb-3" style={{ color: tk.textSec }}>
-          {pendingClaim.bootstrap_path ? (
-            <>
-              You need{' '}
-              <span className="font-semibold" style={{ color: tk.text }}>{stillNeeds}</span>{' '}
-              more member {stillNeeds === 1 ? 'confirmation' : 'confirmations'} to unlock
-              admin access. Share the link below to speed this up.
-            </>
-          ) : (
-            <>
-              Peer votes:{' '}
-              <span className="font-semibold" style={{ color: tk.text }}>
-                {pendingClaim.votes_received}
-              </span>
-              /
-              <span className="font-semibold" style={{ color: tk.text }}>
-                {pendingClaim.votes_required}
-              </span>
-              . Your verified parent-org exec will confirm once they review — money unlocks then.
-            </>
-          )}
-        </p>
+      <AnimatePresence>
+        <BannerShell
+          accent={tk.amber}
+          icon={<AlertTriangle className="w-4 h-4" />}
+          eyebrow="Action required — claim your role"
+          onDismiss={handleDismiss}
+          tk={tk}
+        >
+          <p className="text-sm font-bold mb-1.5" style={{ color: tk.text }}>
+            Your organization is set up — now claim your actual role
+          </p>
+          <p className="text-xs leading-6 mb-4" style={{ color: tk.textSec }}>
+            You created {orgLabel} and verified your email — that's step one.
+            Now claim your real position (Class Rep, President, Treasurer, etc.)
+            so your members can confirm you. Until you do, you{' '}
+            <span className="font-semibold" style={{ color: tk.amber }}>
+              cannot publish dues or manage payments.
+            </span>
+            {' '}Not the exec? Dismiss this and share the join link with whoever is.
+          </p>
 
-        {/* Progress bar */}
-        <div className="h-1 rounded-full overflow-hidden mb-1" style={{ background: t.cardBorder }}>
-          <motion.div
-            className="h-full rounded-full"
-            style={{ background: `linear-gradient(90deg, ${tk.amber}, ${tk.mint})` }}
-            initial={{ width: 0 }}
-            animate={{ width: `${pct}%` }}
-            transition={{ duration: 0.6, ease: 'easeOut' }}
-          />
-        </div>
-        <p className="text-[10px] mb-3" style={{ color: tk.textTer }}>
-          {pendingClaim.votes_received} of {pendingClaim.votes_required} confirmations received
-        </p>
+          {/* Step indicators */}
+          <div className="flex items-center gap-2 mb-4">
+            {[
+              { label: 'Org created', done: true },
+              // Fix: null-safe access — adminRow.verification_layer is possibly
+              // undefined at runtime despite the type saying number (TS18048).
+              { label: 'Email verified', done: (adminRow?.verification_layer ?? 0) >= 2 },
+              { label: 'Role claimed', done: false },
+              { label: 'Peers confirm', done: false },
+            ].map((step, i) => (
+              <div key={i} className="flex items-center gap-2">
+                <div className="flex items-center gap-1.5">
+                  <div
+                    className="w-5 h-5 rounded-full flex items-center justify-center shrink-0"
+                    style={{
+                      background: step.done ? `${tk.mint}20` : `${tk.amber}15`,
+                      border: `1.5px solid ${step.done ? tk.mint : tk.amber}40`,
+                    }}
+                  >
+                    {step.done
+                      ? <ShieldCheck className="w-3 h-3" style={{ color: tk.mint }} />
+                      : <span className="text-[9px] font-bold" style={{ color: tk.amber }}>{i + 1}</span>
+                    }
+                  </div>
+                  <span
+                    className="text-[10px] font-semibold hidden sm:block"
+                    style={{ color: step.done ? tk.mint : tk.textTer }}
+                  >
+                    {step.label}
+                  </span>
+                </div>
+                {i < 3 && (
+                  <div
+                    className="w-4 h-px hidden sm:block"
+                    style={{ background: tk.cardBorder }}
+                  />
+                )}
+              </div>
+            ))}
+          </div>
 
-        {/* Invite panel intentionally removed — ShareClassLinkCard
-            (mounted on the dashboard right below this banner) owns the
-            entire invite UX now, so there's no duplicate "Share the
-            link" block. */}
-      </BannerShell>
+          <CtaButton label="Claim my role now" accent={tk.amber} onClick={goToClaim} />
+        </BannerShell>
+      </AnimatePresence>
     );
   }
 
-  // ── Variant: admin but unverified ── REMOVED ─────────────────────────
-  // The legacy "Verify your role / Submit verification" CTA was retired:
-  // school orgs now use the email verification banner mounted at the
-  // top of the page, and other org types reach role verification through
-  // the dedicated /claim page. Surfacing it here a third time was just
-  // noise. We let this variant fall through to null below.
-  if (variant === 'unverified_admin') return null;
+  // ══════════════════════════════════════════════════════════════
+  // VARIANT: in_progress
+  // Active claim. Show on first load even with 0 votes.
+  // Suppress only when votes haven't changed AND user has seen
+  // this state before (lastSeenVotes > 0).
+  // ══════════════════════════════════════════════════════════════
+  if (variant === 'in_progress' && pendingClaim) {
+    if (lastSeenVotes === null) return null;
 
-  // ── Variant: not_admin ───────────────────────────────────────────────
-  // Three audiences share this branch:
-  //   • Org creator who hasn't claimed yet → "you set this up, claim if
-  //     you want admin rights"
-  //   • Fresh exec who just joined via someone's invite → "claim your
-  //     role so members can confirm you"
-  //   • Plain member who just joined → can dismiss; no harm in offering
-  //     the option in case they ARE an exec
-  // All three get one consistent CTA: Claim a role.
-  return (
-    <BannerShell
-      accent={tk.primary}
-      icon={isOrgCreator ? <PartyPopper className="w-4 h-4" /> : <VoteIcon className="w-4 h-4" />}
-      eyebrow={isOrgCreator ? 'You created this org 🎉' : 'Are you an exec here?'}
-      onDismiss={handleDismiss}
-      tk={tk}
-    >
-      {isOrgCreator ? (
-        <>
-          <p className="text-sm font-bold mb-1" style={{ color: tk.text }}>
-            {orgDisplayLabel} is ready — claim your role
-          </p>
-          <p className="text-xs leading-5 mb-3" style={{ color: tk.textSec }}>
-            You don't HAVE to be the exec — but if you are, claim your role and members
-            will confirm you. Once verified, you can publish dues, manage members, and
-            track payments. Not the exec? Dismiss this and share the join code with the
-            person who actually is.
-          </p>
-          <div className="mb-1" onClick={goToClaim} style={{ cursor: 'pointer' }}>
-            <Cta label="Claim a role" accent={tk.primary} />
-          </div>
-        </>
-      ) : (
-        <>
-          <p className="text-sm font-bold mb-1" style={{ color: tk.text }}>
-            Class rep, treasurer, or another exec?
-          </p>
-          <p className="text-xs leading-5 mb-3" style={{ color: tk.textSec }}>
-            Claim your role here and your fellow members will confirm you. Once verified,
-            you can publish dues, manage members, and run payouts. If you're just here to
-            pay your dues, dismiss this — you can always come back later.
-          </p>
-          <div className="mb-1" onClick={goToClaim} style={{ cursor: 'pointer' }}>
-            <Cta label="Claim a role" accent={tk.primary} />
-          </div>
-        </>
-      )}
-    </BannerShell>
-  );
-}
+    // First arrival: lastSeenVotes=0, votes_received=0 → show banner
+    // Returning visit with no new votes → suppress (not a notification)
+    // New votes → always show
+    if (
+      pendingClaim.votes_received > 0 &&
+      pendingClaim.votes_received <= lastSeenVotes
+    ) return null;
 
-// ─────────────────────────────────────────────────────────────────────────
-// BannerShell
-// ─────────────────────────────────────────────────────────────────────────
-function BannerShell({
-  accent, icon, eyebrow, children, onClick, onDismiss, tk,
-}: {
-  accent:     string;
-  icon:       React.ReactNode;
-  eyebrow:    string;
-  children:   React.ReactNode;
-  onClick?:   () => void;
-  onDismiss?: () => void;
-  tk:         BannerTokens;
-}) {
+    const stillNeeds = Math.max(
+      0,
+      pendingClaim.votes_required - pendingClaim.votes_received,
+    );
+    const needsEmailVerification = pendingClaim.current_layer < 2;
+
+    return (
+      <AnimatePresence>
+        <BannerShell
+          accent={tk.amber}
+          icon={<Hourglass className="w-4 h-4" />}
+          eyebrow="Verification in progress"
+          tk={tk}
+        >
+          <p className="text-sm font-bold mb-1.5" style={{ color: tk.text }}>
+            Your claim as{' '}
+            <span style={{ color: tk.amber }}>{pendingClaim.position_title}</span>{' '}
+            is being processed
+          </p>
+
+          {/* Layer 0–1: Email verification is the immediate next step */}
+          {needsEmailVerification && (
+            <div
+              className="mb-3 rounded-xl px-3 py-2.5 flex items-start sm:items-center justify-between gap-3"
+              style={{
+                background: `${tk.primary}10`,
+                border: `1px solid ${tk.primary}28`,
+              }}
+            >
+              <p className="text-xs leading-5" style={{ color: tk.text }}>
+                <span className="font-bold">Next step:</span>{' '}
+                verify your school email to reach Layer 2 and unlock
+                member confirmations.
+              </p>
+              <button
+                type="button"
+                onClick={() => navigate(`/${orgSlug}/verify-email`)}
+                className="shrink-0 inline-flex items-center gap-1 text-xs font-bold"
+                style={{ color: tk.primary }}
+              >
+                Verify email
+                <ArrowRight className="w-3 h-3" />
+              </button>
+            </div>
+          )}
+
+          {/* Layer 2+: Vote progress */}
+          {!needsEmailVerification && (
+            <p className="text-xs leading-5 mb-3" style={{ color: tk.textSec }}>
+              {pendingClaim.bootstrap_path ? (
+                <>
+                  You need{' '}
+                  <span className="font-semibold" style={{ color: tk.text }}>
+                    {stillNeeds}
+                  </span>{' '}
+                  more member{' '}
+                  {stillNeeds === 1 ? 'confirmation' : 'confirmations'} to
+                  unlock admin access. Share your join link to speed this up.
+                </>
+              ) : (
+                <>
+                  Peer votes:{' '}
+                  <span className="font-semibold" style={{ color: tk.text }}>
+                    {pendingClaim.votes_received}
+                  </span>
+                  {' / '}
+                  <span className="font-semibold" style={{ color: tk.text }}>
+                    {pendingClaim.votes_required}
+                  </span>
+                  . A verified exec from your parent org will confirm once
+                  they review — payment access unlocks then.
+                </>
+              )}
+            </p>
+          )}
+
+          <VoteProgressBar
+            received={pendingClaim.votes_received}
+            required={pendingClaim.votes_required}
+            accent={tk.amber}
+            tk={tk}
+          />
+        </BannerShell>
+      </AnimatePresence>
+    );
+  }
+
+  // ══════════════════════════════════════════════════════════════
+  // VARIANT: rejected
+  // Active rejection record in claim_rejections. Shows reviewer
+  // reason when populated, falls back to common-causes guidance.
+  // No CTA while the cooldown is active — expiry date shown instead.
+  // Dismissable — same versioned key as not_admin.
+  // ══════════════════════════════════════════════════════════════
+  if (variant === 'rejected' && rejection) {
+    const expiryDate = new Date(rejection.expires_at).toLocaleDateString(undefined, {
+      day: 'numeric', month: 'short', year: 'numeric',
+    });
+    // Convert slug to title-case label: 'class-rep' → 'Class Rep'
+    const positionLabel = rejection.target_signature
+      .replace(/-/g, ' ')
+      .replace(/\w/g, (c: string) => c.toUpperCase());
+
+    return (
+      <AnimatePresence>
+        <BannerShell
+          accent={tk.danger}
+          icon={<XCircle className="w-4 h-4" />}
+          eyebrow="Claim not approved"
+          onDismiss={handleDismiss}
+          tk={tk}
+        >
+          <p className="text-sm font-bold mb-1.5" style={{ color: tk.text }}>
+            Your claim as{' '}
+            <span style={{ color: tk.danger }}>{positionLabel}</span>{' '}
+            wasn't approved
+          </p>
+
+          {rejection.reason ? (
+            /* Reviewer left a specific reason — surface it directly */
+            <div
+              className="mb-4 rounded-xl px-3 py-2.5"
+              style={{ background: `${tk.danger}0D`, border: `1px solid ${tk.danger}25` }}
+            >
+              <p className="text-[10px] uppercase tracking-widest font-bold mb-1" style={{ color: `${tk.danger}99` }}>
+                Reviewer note
+              </p>
+              <p className="text-xs leading-5" style={{ color: tk.textSec }}>
+                {rejection.reason}
+              </p>
+            </div>
+          ) : (
+            /* No reason stored — show common causes as guidance */
+            <>
+              <p className="text-xs leading-5 mb-3" style={{ color: tk.textSec }}>
+                This usually happens for one of these reasons:
+              </p>
+              <ul className="mb-4 space-y-1.5">
+                {[
+                  "School email wasn't verified before the review",
+                  'Not enough peer confirmations from existing members',
+                  'Another member already holds this position',
+                ].map((reason, i) => (
+                  <li key={i} className="flex items-start gap-2">
+                    <span
+                      className="mt-0.5 w-4 h-4 rounded-full flex items-center justify-center shrink-0 text-[9px] font-bold"
+                      style={{ background: `${tk.danger}18`, color: tk.danger }}
+                    >
+                      {i + 1}
+                    </span>
+                    <span className="text-xs leading-5" style={{ color: tk.textSec }}>
+                      {reason}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            </>
+          )}
+
+          {/* No CTA while cooldown is active — show expiry date instead */}
+          <p className="text-[11px] inline-flex items-center gap-1.5" style={{ color: tk.textTer }}>
+            <Clock className="w-3 h-3" />
+            You can reapply after{' '}
+            <span className="font-semibold" style={{ color: tk.textSec }}>{expiryDate}</span>
+          </p>
+        </BannerShell>
+      </AnimatePresence>
+    );
+  }
+
+  // ══════════════════════════════════════════════════════════════
+  // VARIANT: expired
+  // Most recent claim_request timed out before gathering enough
+  // votes. Softer tone than rejected — no fault implied, no cooldown.
+  // CTA is always shown — user can reapply immediately.
+  // ══════════════════════════════════════════════════════════════
+  if (variant === 'expired' && expiredClaim) {
+    return (
+      <AnimatePresence>
+        <BannerShell
+          accent={tk.amber}
+          icon={<Clock className="w-4 h-4" />}
+          eyebrow="Claim timed out"
+          onDismiss={handleDismiss}
+          tk={tk}
+        >
+          <p className="text-sm font-bold mb-1.5" style={{ color: tk.text }}>
+            Your claim as{' '}
+            <span style={{ color: tk.amber }}>{expiredClaim.position_title}</span>{' '}
+            timed out
+          </p>
+          <p className="text-xs leading-6 mb-4" style={{ color: tk.textSec }}>
+            Claims expire when they don't receive enough peer confirmations
+            within the review window. This isn't a rejection — you can reapply
+            at any time. To move faster, share your join link so more members
+            can confirm you before the window closes.
+          </p>
+          <CtaButton label="Reapply" accent={tk.amber} onClick={goToClaim} />
+        </BannerShell>
+      </AnimatePresence>
+    );
+  }
+
+  // ══════════════════════════════════════════════════════════════
+  // VARIANT: not_admin
+  // ══════════════════════════════════════════════════════════════
+  // VARIANT: not_admin
+  // Regular member or exec who hasn't claimed yet.
+  // Dismissable. Re-appears when bannerVersion bumps (handover).
+  // ══════════════════════════════════════════════════════════════
   return (
-    <motion.section
-      initial={{ opacity: 0, y: 8 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.3 }}
-      onClick={onClick}
-      className="rounded-3xl p-5 sm:p-6 relative overflow-hidden"
-      style={{
-        background: `linear-gradient(135deg, ${accent}14 0%, ${tk.card} 100%)`,
-        border:     `1px solid ${accent}30`,
-        cursor:     onClick ? 'pointer' : 'default',
-      }}
-    >
-      <div
-        className="absolute inset-0 pointer-events-none"
-        style={{
-          background: `radial-gradient(ellipse 50% 60% at 100% 0%, ${accent}28, transparent)`,
-        }}
-      />
-      <div className="relative">
-        {onDismiss && (
-          <button
-            type="button"
-            onClick={(e) => { e.stopPropagation(); onDismiss(); }}
-            className="absolute right-0 top-0 p-1 rounded-lg transition-opacity hover:opacity-70"
-            style={{ color: `${accent}AA` }}
-            aria-label="Dismiss"
-          >
-            <XIcon className="w-4 h-4" />
-          </button>
+    <AnimatePresence>
+      <BannerShell
+        accent={tk.primary}
+        icon={
+          isOrgCreator
+            ? <PartyPopper className="w-4 h-4" />
+            : <VoteIcon className="w-4 h-4" />
+        }
+        eyebrow={
+          isOrgCreator
+            ? 'You created this organization'
+            : 'Are you an exec here?'
+        }
+        onDismiss={handleDismiss}
+        tk={tk}
+      >
+        {isOrgCreator ? (
+          <>
+            <p className="text-sm font-bold mb-1.5" style={{ color: tk.text }}>
+              {orgLabel} is live — want to manage it?
+            </p>
+            <p className="text-xs leading-6 mb-4" style={{ color: tk.textSec }}>
+              If you're the class rep, president, or treasurer, claim your role
+              and your members will confirm you. Once verified, you can publish
+              dues, manage members, and run payouts. Not the exec? Dismiss this
+              and share the join link with whoever is.
+            </p>
+          </>
+        ) : (
+          <>
+            <p className="text-sm font-bold mb-1.5" style={{ color: tk.text }}>
+              Class rep, treasurer, or another exec?
+            </p>
+            <p className="text-xs leading-6 mb-4" style={{ color: tk.textSec }}>
+              Claim your role and your fellow members will confirm you. Once
+              verified, you can publish dues, manage members, and run payouts.
+              Just here to pay your dues? Dismiss this — you can always come
+              back later.
+            </p>
+          </>
         )}
-        <div className="flex items-center gap-2 mb-2">
-          <span
-            className="w-7 h-7 rounded-lg flex items-center justify-center"
-            style={{ background: `${accent}22`, color: accent }}
-          >
-            {icon}
-          </span>
-          <p className="text-[10px] uppercase tracking-[0.18em] font-bold" style={{ color: accent }}>
-            {eyebrow}
-          </p>
-        </div>
-        {children}
-      </div>
-    </motion.section>
+
+        <CtaButton label="Claim a role" accent={tk.primary} onClick={goToClaim} />
+      </BannerShell>
+    </AnimatePresence>
   );
 }
-
-// ─────────────────────────────────────────────────────────────────────────
-// Cta
-// ─────────────────────────────────────────────────────────────────────────
-function Cta({ label, accent }: { label: string; accent: string }) {
-  return (
-    <motion.span
-      className="inline-flex items-center gap-1.5 text-xs font-bold"
-      whileHover={{ x: 2 }}
-      style={{ color: accent }}
-    >
-      {label}
-      <ArrowRight className="w-3.5 h-3.5" />
-    </motion.span>
-  );
-}
-

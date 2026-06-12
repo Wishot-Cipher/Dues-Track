@@ -15,12 +15,7 @@ import { supabase } from '@/config/supabase';
 import { organizationService } from '@/services/organizationService';
 import { useMultiTenantAuth } from '@/hooks/useMultiTenantAuth';
 import { useToast } from '@/hooks/useToast';
-
-const tk = {
-  panel: 'rgba(255,255,255,0.03)', border: 'rgba(255,255,255,0.08)',
-  text: '#FFFFFF', textSec: 'rgba(255,255,255,0.65)', textTer: 'rgba(255,255,255,0.40)',
-  primary: '#FF6803', mint: '#30FFAC', amber: '#F59E0B',
-};
+import { useTheme, getDashboardTokens } from '@/hooks/useTheme';
 
 interface Status {
   ok: boolean;
@@ -41,6 +36,23 @@ interface Status {
 export default function ClaimStatusCard({ claimId }: { claimId: string }) {
   const { user, refreshSession } = useMultiTenantAuth();
   const toast = useToast();
+  const { theme } = useTheme();
+  const t = getDashboardTokens(theme);
+
+  // Theme tokens — derived from the live theme so the card adapts to
+  // light/dark and any custom palette the org has set.
+  const tk = {
+    panel:    t.card,
+    border:   t.cardBorder,
+    text:     t.text,
+    textSec:  t.textSec,
+    textTer:  t.textTer,
+    primary:  t.primary,
+    mint:     t.mint,
+    amber:    t.amber,
+    danger:   t.danger,
+  };
+
   const [s, setS] = useState<Status | null>(null);
   const [loading, setLoading] = useState(true);
   const [requesting, setRequesting] = useState(false);
@@ -143,7 +155,9 @@ export default function ClaimStatusCard({ claimId }: { claimId: string }) {
           ? <CheckCircle2 className="w-4 h-4" style={{ color: tk.mint }} />
           : <ShieldCheck className="w-4 h-4" style={{ color: tk.primary }} />}
         <span className="text-sm font-bold" style={{ color: tk.text }}>
-          {title}{s.position_title ? <span style={{ color: tk.textSec, fontWeight: 400 }}> · {s.position_title}</span> : null}
+          {title}{s.position_title
+            ? <span style={{ color: tk.textSec, fontWeight: 400 }}> · {s.position_title}</span>
+            : null}
         </span>
       </div>
       <p className="text-xs mb-3" style={{ color: tk.textSec }}>{sub}</p>
@@ -151,15 +165,23 @@ export default function ClaimStatusCard({ claimId }: { claimId: string }) {
       {!approved && (
         <>
           <div className="flex items-center justify-between mb-1.5 text-[11px]" style={{ color: tk.textTer }}>
-            <span className="inline-flex items-center gap-1"><Vote className="w-3 h-3" /> {votes}/{need} confirmations</span>
+            <span className="inline-flex items-center gap-1">
+              <Vote className="w-3 h-3" /> {votes}/{need} confirmations
+            </span>
             {s.path === 'bootstrap' && !s.bootstrap_window_over && (s.window_hours_elapsed ?? 0) > 0 && (
-              <span className="inline-flex items-center gap-1"><Clock className="w-3 h-3" /> {Math.round(s.window_hours_elapsed ?? 0)}h / 72h</span>
+              <span className="inline-flex items-center gap-1">
+                <Clock className="w-3 h-3" /> {Math.round(s.window_hours_elapsed ?? 0)}h / 72h
+              </span>
             )}
           </div>
-          <div className="h-1.5 rounded-full overflow-hidden mb-3" style={{ background: 'rgba(255,255,255,0.06)' }}>
-            <motion.div className="h-full rounded-full"
+          <div className="h-1.5 rounded-full overflow-hidden mb-3" style={{ background: `${tk.border}` }}>
+            <motion.div
+              className="h-full rounded-full"
               style={{ background: `linear-gradient(90deg, ${tk.primary}, ${tk.mint})` }}
-              initial={{ width: 0 }} animate={{ width: `${pct}%` }} transition={{ duration: 0.6 }} />
+              initial={{ width: 0 }}
+              animate={{ width: `${pct}%` }}
+              transition={{ duration: 0.6 }}
+            />
           </div>
 
           {s.platform_review_requested ? (
@@ -168,11 +190,19 @@ export default function ClaimStatusCard({ claimId }: { claimId: string }) {
             </p>
           ) : s.can_request_platform_review ? (
             <motion.button
-              onClick={requestReview} disabled={requesting} whileTap={{ scale: 0.98 }}
+              onClick={requestReview}
+              disabled={requesting}
+              whileTap={{ scale: 0.98 }}
               className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-bold disabled:opacity-50"
-              style={{ background: `${tk.amber}1A`, color: tk.amber, border: `1px solid ${tk.amber}40` }}
+              style={{
+                background: `${tk.amber}1A`,
+                color: tk.amber,
+                border: `1px solid ${tk.amber}40`,
+              }}
             >
-              {requesting ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <LifeBuoy className="w-3.5 h-3.5" />}
+              {requesting
+                ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                : <LifeBuoy className="w-3.5 h-3.5" />}
               Request platform review
             </motion.button>
           ) : null}
