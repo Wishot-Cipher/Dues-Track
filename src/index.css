@@ -263,11 +263,11 @@ html {
 /* ── Native-feel scroll containment ────────────────────────────────
  * Prevents the pull-to-refresh gesture from interfering with
  * in-app vertical scroll — important for modals and sheet UIs. */
-@media (pointer: coarse) {
+/* @media (pointer: coarse) {
   body {
     overscroll-behavior-y: contain;
   }
-}
+} */
 
 /* ── Remove iOS tap highlight flash ────────────────────────────────
  * Native apps don't show a grey square on tap. This removes it
