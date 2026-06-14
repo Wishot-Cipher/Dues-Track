@@ -219,3 +219,62 @@ h1 {
     transform: translateX(100%);
   }
 }
+
+
+/* ── iOS input zoom prevention ─────────────────────────────────────
+ * iOS Safari auto-zooms the viewport when the user taps any input
+ * whose computed font-size is below 16px. This makes the layout
+ * shift and forces the user to manually pinch-zoom back out — a
+ * very un-native feeling on a PWA.
+ *
+ * Fix: force font-size: 16px on all interactive inputs on touch
+ * devices. We scope it with the webkit pixel-ratio media query so
+ * it only targets webkit/Safari and leaves desktop unchanged.
+ * The visual difference (16px vs Tailwind text-sm 14px) is
+ * imperceptible on a 3x retina screen. If a component must look
+ * smaller, apply transform: scale(0.875) locally — that shrinks
+ * visually without changing the computed font-size the browser
+ * uses for its zoom threshold.
+ * ────────────────────────────────────────────────────────────────── */
+@media screen and (-webkit-min-device-pixel-ratio: 0) {
+  input,
+  input[type="text"],
+  input[type="email"],
+  input[type="password"],
+  input[type="number"],
+  input[type="tel"],
+  input[type="url"],
+  input[type="search"],
+  input[type="date"],
+  input[type="time"],
+  input[type="datetime-local"],
+  select,
+  textarea {
+    font-size: 16px !important;
+  }
+}
+
+/* ── Prevent iOS font inflation on orientation change ───────────── */
+html {
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+}
+
+/* ── Native-feel scroll containment ────────────────────────────────
+ * Prevents the pull-to-refresh gesture from interfering with
+ * in-app vertical scroll — important for modals and sheet UIs. */
+body {
+  overscroll-behavior-y: contain;
+}
+
+/* ── Remove iOS tap highlight flash ────────────────────────────────
+ * Native apps don't show a grey square on tap. This removes it
+ * globally so every button, card, and link feels instant. */
+* {
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* ── Smooth scroll ──────────────────────────────────────────────── */
+html {
+  scroll-behavior: smooth;
+}
