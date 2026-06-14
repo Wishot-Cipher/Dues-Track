@@ -21,6 +21,13 @@
  *   must never affect the others. The selected role's group_id is
  *   passed explicitly to nominate_successor and searchTierMembers so
  *   the server always scopes to the right tier.
+ *
+ * Real-time update:
+ *   refreshSession() is called when the modal closes after a completed
+ *   handover (step === 'done'). This ensures the outgoing exec's own
+ *   view updates immediately — their admin row is now is_active=FALSE
+ *   on the server but the frontend wouldn't know until next mount
+ *   without this call.
  */
 
 import { useMemo, useState, useCallback, useRef } from 'react';
@@ -45,7 +52,7 @@ import GlassCard from '@/components/ui/GlassCard';
 type Step = 'closed' | 'pick_role' | 'confirm' | 'search' | 'done';
 
 type ExecRole = {
-  id: string;               // member_admins.id
+  id: string;
   role: string;
   role_label: string | null;
   scope_level: string;
@@ -60,10 +67,10 @@ function scopeRank(s?: string) {
 
 export default function HandoverButton() {
   const t = useThemeTokens();
-  const { user } = useMultiTenantAuth();
+  // ── Added refreshSession so closing after 'done' syncs state immediately
+  const { user, refreshSession } = useMultiTenantAuth();
   const toast = useToast();
 
-  // All active verified exec roles this member holds — each is independent.
   const eligibleRoles = useMemo((): ExecRole[] => {
     const rows = (user?.admin_records ?? []) as unknown as Array<Record<string, unknown>>;
     return rows
@@ -80,27 +87,24 @@ export default function HandoverButton() {
       .sort((a, b) => scopeRank(b.scope_level) - scopeRank(a.scope_level));
   }, [user?.admin_records]);
 
-  // The role the exec has selected to hand over. When there's only one
-  // eligible role it is pre-selected — the picker step never shows.
   const [selectedRole, setSelectedRole] = useState<ExecRole | null>(null);
-
-  const [step, setStep]           = useState<Step>('closed');
-  const [reason, setReason]       = useState('');
-  const [query, setQuery]         = useState('');
-  const [results, setResults]     = useState<TierMember[]>([]);
-  const [searching, setSearching] = useState(false);
-  const [submitting, setSubmitting] = useState(false);
-  const debounce = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [step, setStep]                 = useState<Step>('closed');
+  const [reason, setReason]             = useState('');
+  const [query, setQuery]               = useState('');
+  const [results, setResults]           = useState<TierMember[]>([]);
+  const [searching, setSearching]       = useState(false);
+  const [submitting, setSubmitting]     = useState(false);
+  // Track whether the flow reached 'done' so close() knows to refresh
+  const completedHandover               = useRef(false);
+  const debounce                        = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const open = useCallback(() => {
     if (eligibleRoles.length === 0) return;
+    completedHandover.current = false;
     if (eligibleRoles.length === 1) {
-      // Single role — pre-select it and skip straight to confirm.
       setSelectedRole(eligibleRoles[0]);
       setStep('confirm');
     } else {
-      // Multiple roles — show the picker first so the exec explicitly
-      // chooses which role they're handing over.
       setSelectedRole(null);
       setStep('pick_role');
     }
@@ -118,8 +122,6 @@ export default function HandoverButton() {
     debounce.current = setTimeout(async () => {
       if (!user?.id || !selectedRole) return;
       setSearching(true);
-      // Pass the selected role's group_id explicitly — never the highest
-      // scope by default — so the search is always tier-scoped correctly.
       const res = await handoverService.searchTierMembers(
         user.id,
         q,
@@ -137,12 +139,14 @@ export default function HandoverButton() {
     const res = await handoverService.nominate(
       user.id,
       nominee.member_id,
-      selectedRole.group_id,   // explicit — never falls back to highest scope
+      selectedRole.group_id,
       reason,
     );
     setSubmitting(false);
     if (!res.ok) { toast?.error?.(res.error || 'Could not nominate.'); return; }
     toast?.success?.(`${nominee.full_name} was notified to take over.`);
+    // Mark that a handover was completed so close() triggers a refresh
+    completedHandover.current = true;
     setStep('done');
   }, [user?.id, selectedRole, reason, toast]);
 
@@ -152,7 +156,17 @@ export default function HandoverButton() {
     setReason('');
     setQuery('');
     setResults([]);
-  }, []);
+
+    // If the exec reached 'done' and nominated a successor, refresh the
+    // session immediately. Without this the outgoing exec's own view
+    // would still show their admin role as active until the next full
+    // page load, because the server already flipped is_active=FALSE via
+    // the trigger but the frontend has stale state.
+    if (completedHandover.current) {
+      completedHandover.current = false;
+      refreshSession();
+    }
+  }, [refreshSession]);
 
   if (eligibleRoles.length === 0) return null;
 
@@ -178,9 +192,19 @@ export default function HandoverButton() {
               <h3 className="text-sm font-semibold" style={{ color: t.text }}>Stepping down?</h3>
               <p className="text-[11px]" style={{ color: t.textSec }}>
                 {eligibleRoles.length === 1 ? (
-                  <>Hand over <span className="font-semibold" style={{ color: t.text }}>{eligibleRoles[0].role_label || 'your role'}</span> to a successor in your tier.</>
+                  <>Hand over{' '}
+                    <span className="font-semibold" style={{ color: t.text }}>
+                      {eligibleRoles[0].role_label || 'your role'}
+                    </span>{' '}
+                    to a successor in your tier.
+                  </>
                 ) : (
-                  <>You hold <span className="font-semibold" style={{ color: t.text }}>{eligibleRoles.length} roles</span> — choose which one to hand over.</>
+                  <>You hold{' '}
+                    <span className="font-semibold" style={{ color: t.text }}>
+                      {eligibleRoles.length} roles
+                    </span>{' '}
+                    — choose which one to hand over.
+                  </>
                 )}
               </p>
             </div>
@@ -305,8 +329,8 @@ export default function HandoverButton() {
                       <span className="font-semibold" style={{ color: t.text }}>
                         keep your powers
                       </span>{' '}
-                      until your successor is verified by the members. Once they pass, this
-                      role transfers to them and{' '}
+                      until your successor is verified by the members. Once they pass,
+                      this role transfers to them and{' '}
                       <span className="font-semibold" style={{ color: t.text }}>
                         you become a regular member for this role
                       </span>
@@ -462,6 +486,8 @@ export default function HandoverButton() {
                       Your other roles are unaffected.
                     </p>
                   )}
+                  {/* close() will call refreshSession() because
+                      completedHandover.current === true at this point */}
                   <button
                     onClick={close}
                     className="w-full px-4 py-3 rounded-xl text-sm font-bold"

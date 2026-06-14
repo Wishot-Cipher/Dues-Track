@@ -263,8 +263,10 @@ html {
 /* ── Native-feel scroll containment ────────────────────────────────
  * Prevents the pull-to-refresh gesture from interfering with
  * in-app vertical scroll — important for modals and sheet UIs. */
-body {
-  overscroll-behavior-y: contain;
+@media (pointer: coarse) {
+  body {
+    overscroll-behavior-y: contain;
+  }
 }
 
 /* ── Remove iOS tap highlight flash ────────────────────────────────
