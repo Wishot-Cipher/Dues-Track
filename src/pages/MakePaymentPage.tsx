@@ -279,7 +279,7 @@ export default function MakePaymentPage() {
     <div className="min-h-screen relative overflow-x-hidden" style={{ minHeight: '100dvh' }}>
       <PayvexoBackground theme={theme} />
 
-      <main className="relative z-10 max-w-2xl mx-auto px-4 sm:px-6 pt-4 sm:pt-6 pb-40">
+      <main className="relative z-10 max-w-2xl mx-auto px-4 sm:px-6 pt-4 sm:pt-6 pb-72">
 
         {/* ── Top row: back + title ────────────────────────────── */}
         <header className="flex items-center gap-3 mb-5">
@@ -621,22 +621,25 @@ export default function MakePaymentPage() {
       {/* ── Sticky bottom CTA ───────────────────────────────── */}
       {!loading && pt && (isEvent ? !eventClosed : !fullyPaid) && (
         <div
-          className="fixed bottom-0 left-0 right-0 z-40 px-4 sm:px-6 pb-5 pt-3"
+          className="fixed bottom-0 left-0 right-0 z-40 px-4 sm:px-6 pb-5 pt-4"
           style={{
             paddingBottom: 'calc(env(safe-area-inset-bottom, 0px) + 18px)',
+            // Solid almost immediately — a thin top fade then opaque, so the
+            // breakdown + button never sit over see-through, scrolling
+            // content behind them.
             background: isLight
-              ? 'linear-gradient(180deg, rgba(255,251,247,0) 0%, rgba(255,251,247,0.92) 35%, rgba(255,251,247,1) 100%)'
-              : 'linear-gradient(180deg, rgba(15,7,3,0) 0%, rgba(15,7,3,0.92) 35%, rgba(15,7,3,1) 100%)',
+              ? 'linear-gradient(180deg, rgba(255,251,247,0) 0%, rgba(255,251,247,1) 16%, rgba(255,251,247,1) 100%)'
+              : 'linear-gradient(180deg, rgba(15,7,3,0) 0%, rgba(15,7,3,1) 16%, rgba(15,7,3,1) 100%)',
           }}
         >
           <div className="max-w-2xl mx-auto">
-            {/* Transparent breakdown — the org gets `outstanding` exactly;
-                the student also covers a small secure-transfer fee. Exact
-                total is confirmed on the Paystack checkout page. */}
+            {/* Breakdown — the org gets `outstanding` exactly; the student
+                also covers a small secure-transfer fee. Solid surface so it
+                doesn't read as see-through over the page. */}
             {serviceFee > 0 && (
               <div
                 className="rounded-2xl px-4 py-3 mb-3 text-[12.5px]"
-                style={{ background: isLight ? 'rgba(15,7,3,0.04)' : 'rgba(255,255,255,0.05)', border: `1px solid ${t.cardBorder}`, color: t.textSec }}
+                style={{ background: isLight ? '#FFFFFF' : '#1C150F', border: `1px solid ${t.cardBorder}`, color: t.textSec, boxShadow: isLight ? '0 6px 18px -10px rgba(15,7,3,0.18)' : '0 6px 18px -10px rgba(0,0,0,0.5)' }}
               >
                 <div className="flex items-center justify-between">
                   <span>{isEvent ? 'Ticket' : 'Dues'}</span>
@@ -652,6 +655,10 @@ export default function MakePaymentPage() {
                 </div>
                 <p className="text-[10.5px] mt-1.5" style={{ color: t.textTer }}>
                   {isEvent ? 'Organiser' : 'Your group'} receives the full {formatNaira(outstanding)}. Exact total shown on the secure checkout.
+                </p>
+                {/* Steer to card — it skips the ₦100 bank-transfer flat fee. */}
+                <p className="text-[11px] mt-2 inline-flex items-center gap-1 font-semibold" style={{ color: t.primary }}>
+                  <CreditCard size={12} /> Pay by card to skip the ₦100 transfer fee.
                 </p>
               </div>
             )}
