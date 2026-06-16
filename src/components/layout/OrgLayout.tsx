@@ -96,13 +96,14 @@ interface NavItem {
    * nav visually digestible: Overview · Money · Structure · Org-level.
    */
   adminGroup?: 'overview' | 'money' | 'structure' | 'org';
+  isBilling?: boolean;
 }
 
 const ADMIN_GROUP_ORDER: Array<{ id: NonNullable<NavItem['adminGroup']>; label: string }> = [
-  { id: 'overview',  label: 'Overview' },
-  { id: 'money',     label: 'Money' },
+  { id: 'overview', label: 'Overview' },
+  { id: 'money', label: 'Money' },
   { id: 'structure', label: 'Structure' },
-  { id: 'org',       label: 'Organisation' },
+  { id: 'org', label: 'Organisation' },
 ];
 
 /* ─────────────────────── component ─────────────────────── */
@@ -450,7 +451,7 @@ export default function OrgLayout() {
     // it's configuring.
     { path: '/admin/payout', label: 'Payout Account', icon: <Banknote size={20} />, section: 'admin', hideOnMobile: true, permission: 'can_manage_settings', adminGroup: 'org' },
     // Platform subscription — the whole tenant's plan: org-scope owner only.
-    { path: '/admin/billing', label: 'Billing', icon: <Wallet size={20} />, section: 'admin', hideOnMobile: true, permission: 'can_manage_settings', minScope: 'org', adminGroup: 'org' },
+    { path: '/admin/billing', label: 'Upgrade to Pro', icon: <Wallet size={20} />, section: 'admin', permission: 'can_manage_settings', minScope: 'org', adminGroup: 'org', isBilling: true },
   ] : [];
   const adminNav: NavItem[] = adminNavAll.filter((i) => {
     if (i.permission && !perms[i.permission]) return false;
@@ -479,12 +480,12 @@ export default function OrgLayout() {
   // destinations. Tickets uses the dedicated /tickets route that
   // already exists in App.tsx.
   const memberTabs: NavItem[] = [
-    { path: '/dashboard', label: 'Home',                                 icon: <LayoutDashboard size={22} />, section: 'member' },
-    { path: '/payments',  label: organization.payment_label || 'Dues',   icon: <CreditCard size={22} />,      section: 'member' },
+    { path: '/dashboard', label: 'Home', icon: <LayoutDashboard size={22} />, section: 'member' },
+    { path: '/payments', label: organization.payment_label || 'Dues', icon: <CreditCard size={22} />, section: 'member' },
   ];
   const memberTrailingTabs: NavItem[] = [
-    { path: '/tickets',   label: 'Tickets',                              icon: <TicketIcon size={22} />,      section: 'member' },
-    { path: '/profile',   label: 'Profile',                              icon: <UserCog size={22} />,         section: 'member' },
+    { path: '/tickets', label: 'Tickets', icon: <TicketIcon size={22} />, section: 'member' },
+    { path: '/profile', label: 'Profile', icon: <UserCog size={22} />, section: 'member' },
   ];
   // Mobile exec tabs (4 slots around the center FAB). The four picked
   // depend on the active role's tier — a class rep / org owner has
@@ -501,11 +502,11 @@ export default function OrgLayout() {
     { path: '/admin/dashboard', label: 'Overview', icon: <PieChart size={22} />, section: 'admin' },
     showMembersInExecTabs
       ? { path: '/admin/members', label: organization.member_label_plural || 'Members', icon: <Users size={22} />, section: 'admin' }
-      : { path: '/admin/groups',  label: groupNavLabel,                                  icon: <Building2 size={22} />, section: 'admin' },
+      : { path: '/admin/groups', label: groupNavLabel, icon: <Building2 size={22} />, section: 'admin' },
   ];
   const execTabsRight: NavItem[] = [
-    { path: '/admin/review',      label: 'Review',                                      icon: <ClipboardCheck size={22} />, section: 'admin' },
-    { path: '/admin/manage-dues', label: organization.payment_label || 'Dues',          icon: <Receipt size={22} />, section: 'admin' },
+    { path: '/admin/review', label: 'Review', icon: <ClipboardCheck size={22} />, section: 'admin' },
+    { path: '/admin/manage-dues', label: organization.payment_label || 'Dues', icon: <Receipt size={22} />, section: 'admin' },
   ];
   const leftTabs = isExecContext ? execTabsLeft : memberTabs;
   const rightTabs = isExecContext ? execTabsRight : memberTrailingTabs;
@@ -520,12 +521,12 @@ export default function OrgLayout() {
   const moreSheetItems: NavItem[] = showAdmin
     ? adminNav.filter(item => !['/admin/dashboard', '/admin/members', '/admin/review', '/admin/manage-dues'].includes(item.path))
     : [
-        { path: '/groups',          label: organization.group_label_plural || 'Groups', icon: <Users size={20} />,   section: 'member' },
-        { path: '/tickets',         label: 'Tickets',         icon: <TicketIcon size={20} />, section: 'member' },
-        { path: '/profile',         label: 'My Profile',      icon: <Building2 size={20} />,  section: 'member' },
-        { path: '/settings',        label: 'Settings',        icon: <Settings size={20} />,   section: 'member' },
-        { path: '/change-password', label: 'Change Password', icon: <UserCog size={20} />,    section: 'member' },
-      ];
+      { path: '/groups', label: organization.group_label_plural || 'Groups', icon: <Users size={20} />, section: 'member' },
+      { path: '/tickets', label: 'Tickets', icon: <TicketIcon size={20} />, section: 'member' },
+      { path: '/profile', label: 'My Profile', icon: <Building2 size={20} />, section: 'member' },
+      { path: '/settings', label: 'Settings', icon: <Settings size={20} />, section: 'member' },
+      { path: '/change-password', label: 'Change Password', icon: <UserCog size={20} />, section: 'member' },
+    ];
 
   const handleLogout = async () => {
     setShowLogoutModal(false);
@@ -566,10 +567,10 @@ export default function OrgLayout() {
         style={{
           ...(isLight
             ? {
-                background: 'rgba(255, 251, 247, 0.85)',
-                backdropFilter: 'saturate(180%) blur(20px)',
-                WebkitBackdropFilter: 'saturate(180%) blur(20px)',
-              }
+              background: 'rgba(255, 251, 247, 0.85)',
+              backdropFilter: 'saturate(180%) blur(20px)',
+              WebkitBackdropFilter: 'saturate(180%) blur(20px)',
+            }
             : glass.light),
           borderBottom: `1px solid ${isLight ? 'rgba(15, 7, 3, 0.06)' : 'rgba(255, 104, 3, 0.08)'}`,
         }}
@@ -747,15 +748,28 @@ export default function OrgLayout() {
                                         className="flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-sm transition-all"
                                         style={{
                                           color: isActive(item.path) ? tk.text : tk.textSec,
-                                          background: isActive(item.path) ? tk.primarySoft : 'transparent',
+                                          background: item.isBilling
+                                            ? `linear-gradient(135deg, ${tk.amber}14, ${tk.primary}0A)`
+                                            : isActive(item.path) ? tk.primarySoft : 'transparent',
+                                          border: item.isBilling
+                                            ? `1px solid ${tk.amber}28`
+                                            : '1px solid transparent',
                                         }}
                                         onClick={() => setShowAdminSubmenu(false)}
                                       >
-                                        <span style={{ color: isActive(item.path) ? tk.primary : tk.textTer }}>
+                                        <span style={{ color: item.isBilling ? tk.amber : isActive(item.path) ? tk.primary : tk.textTer }}>
                                           {item.icon}
                                         </span>
-                                        {item.label}
-                                        {isActive(item.path) && (
+                                        <span className="flex-1">{item.label}</span>
+                                        {item.isBilling && (
+                                          <span
+                                            className="text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded-full"
+                                            style={{ background: `${tk.amber}20`, color: tk.amber, border: `1px solid ${tk.amber}35` }}
+                                          >
+                                            Pro
+                                          </span>
+                                        )}
+                                        {isActive(item.path) && !item.isBilling && (
                                           <motion.div layoutId="admin-check" className="ml-auto">
                                             <CheckCircle2 size={14} style={{ color: tk.primary }} />
                                           </motion.div>
@@ -1170,94 +1184,94 @@ export default function OrgLayout() {
           Hidden on focused checkout routes so the sticky Pay button
           isn't covered. */}
       {!hideBottomNav && (
-      <nav
-        className="fixed bottom-0 left-0 right-0 z-50 lg:hidden"
-        style={{
-          ...(isLight
-            ? {
+        <nav
+          className="fixed bottom-0 left-0 right-0 z-50 lg:hidden"
+          style={{
+            ...(isLight
+              ? {
                 background: 'rgba(255, 251, 247, 0.92)',
                 backdropFilter: 'saturate(180%) blur(22px)',
                 WebkitBackdropFilter: 'saturate(180%) blur(22px)',
                 boxShadow: '0 -12px 30px -12px rgba(15, 7, 3, 0.08)',
               }
-            : glass.strong),
-          borderTop: `1px solid ${isLight ? 'rgba(15, 7, 3, 0.06)' : 'rgba(255, 104, 3, 0.08)'}`,
-          paddingBottom: 'env(safe-area-inset-bottom, 0px)',
-        }}
-      >
-        {/* Top glow line */}
-        <div
-          className="absolute top-0 left-0 right-0 h-px"
-          style={{
-            background: `linear-gradient(90deg, transparent 0%, ${colors.primary}30 30%, ${colors.primary}50 50%, ${colors.primary}30 70%, transparent 100%)`,
+              : glass.strong),
+            borderTop: `1px solid ${isLight ? 'rgba(15, 7, 3, 0.06)' : 'rgba(255, 104, 3, 0.08)'}`,
+            paddingBottom: 'env(safe-area-inset-bottom, 0px)',
           }}
-        />
+        >
+          {/* Top glow line */}
+          <div
+            className="absolute top-0 left-0 right-0 h-px"
+            style={{
+              background: `linear-gradient(90deg, transparent 0%, ${colors.primary}30 30%, ${colors.primary}50 50%, ${colors.primary}30 70%, transparent 100%)`,
+            }}
+          />
 
-        {/* Layout: 2 tabs left │ center FAB │ 2 tabs right.
+          {/* Layout: 2 tabs left │ center FAB │ 2 tabs right.
             FAB sits ABOVE the bar (slightly raised), grid-icon, brand
             orange, glow halo — matches the Lucy Nwakwo mockup. Tapping
             it opens the "More" sheet which contains secondary routes. */}
-        <div className="relative h-16">
-          {/* Left side tabs */}
-          <div className="absolute inset-y-0 left-0 right-1/2 flex items-center justify-around pr-10">
-            {leftTabs.map((item) => (
-              <BottomTab
-                key={item.path}
-                item={item}
-                basePath={basePath}
-                active={isActive(item.path)}
-                tk={tk}
-              />
-            ))}
-          </div>
-
-          {/* Right side tabs */}
-          <div className="absolute inset-y-0 right-0 left-1/2 flex items-center justify-around pl-10">
-            {rightTabs.map((item) => {
-              const isAdminTab = item.path === '/admin/dashboard';
-              const active = isAdminTab
-                ? isActivePrefix('/admin') && !isActive('/admin/members')
-                : isActive(item.path);
-              return (
+          <div className="relative h-16">
+            {/* Left side tabs */}
+            <div className="absolute inset-y-0 left-0 right-1/2 flex items-center justify-around pr-10">
+              {leftTabs.map((item) => (
                 <BottomTab
                   key={item.path}
                   item={item}
                   basePath={basePath}
-                  active={active}
+                  active={isActive(item.path)}
                   tk={tk}
                 />
-              );
-            })}
-          </div>
+              ))}
+            </div>
 
-          {/* Center FAB — raised, brand orange, opens the More sheet */}
-          <div className="absolute left-1/2 -translate-x-1/2 -top-5 z-10">
-            <motion.button
-              type="button"
-              onClick={() => setShowMoreSheet(true)}
-              whileTap={{ scale: 0.92 }}
-              whileHover={{ scale: 1.04 }}
-              className="w-14 h-14 rounded-full flex items-center justify-center"
-              style={{
-                background: `linear-gradient(135deg, ${colors.primary} 0%, ${colors.primary}dd 100%)`,
-                boxShadow: `0 12px 28px -8px ${colors.primary}, 0 4px 10px -2px rgba(0,0,0,0.35)`,
-                border: '4px solid ' + (isLight ? '#FFFBF7' : '#0F0703'),
-                color: '#FFFFFF',   // always white over the brand-gradient FAB
-              }}
-              aria-label="Open quick actions"
-            >
-              <LayoutGrid size={22} />
-            </motion.button>
-            {/* Tiny dot indicator when sheet is open */}
-            {showMoreSheet && (
-              <span
-                className="absolute -bottom-1 left-1/2 -translate-x-1/2 w-1.5 h-1.5 rounded-full"
-                style={{ background: colors.primary, boxShadow: `0 0 8px ${colors.primary}` }}
-              />
-            )}
+            {/* Right side tabs */}
+            <div className="absolute inset-y-0 right-0 left-1/2 flex items-center justify-around pl-10">
+              {rightTabs.map((item) => {
+                const isAdminTab = item.path === '/admin/dashboard';
+                const active = isAdminTab
+                  ? isActivePrefix('/admin') && !isActive('/admin/members')
+                  : isActive(item.path);
+                return (
+                  <BottomTab
+                    key={item.path}
+                    item={item}
+                    basePath={basePath}
+                    active={active}
+                    tk={tk}
+                  />
+                );
+              })}
+            </div>
+
+            {/* Center FAB — raised, brand orange, opens the More sheet */}
+            <div className="absolute left-1/2 -translate-x-1/2 -top-5 z-10">
+              <motion.button
+                type="button"
+                onClick={() => setShowMoreSheet(true)}
+                whileTap={{ scale: 0.92 }}
+                whileHover={{ scale: 1.04 }}
+                className="w-14 h-14 rounded-full flex items-center justify-center"
+                style={{
+                  background: `linear-gradient(135deg, ${colors.primary} 0%, ${colors.primary}dd 100%)`,
+                  boxShadow: `0 12px 28px -8px ${colors.primary}, 0 4px 10px -2px rgba(0,0,0,0.35)`,
+                  border: '4px solid ' + (isLight ? '#FFFBF7' : '#0F0703'),
+                  color: '#FFFFFF',   // always white over the brand-gradient FAB
+                }}
+                aria-label="Open quick actions"
+              >
+                <LayoutGrid size={22} />
+              </motion.button>
+              {/* Tiny dot indicator when sheet is open */}
+              {showMoreSheet && (
+                <span
+                  className="absolute -bottom-1 left-1/2 -translate-x-1/2 w-1.5 h-1.5 rounded-full"
+                  style={{ background: colors.primary, boxShadow: `0 0 8px ${colors.primary}` }}
+                />
+              )}
+            </div>
           </div>
-        </div>
-      </nav>
+        </nav>
       )}
 
       {/* ═══════════ MOBILE MORE SHEET ═══════════ */}
@@ -1334,37 +1348,37 @@ export default function OrgLayout() {
               <div className="flex-1 min-h-0 overflow-y-auto">
                 <RoleSwitcherSheet onSelect={() => setShowMoreSheet(false)} />
 
-              {/* Items — grouped on the admin side (Overview · Money ·
+                {/* Items — grouped on the admin side (Overview · Money ·
                   Structure · Org); flat on the member side. */}
-              <div className="px-3 pb-3">
-                {showAdmin ? (
-                  ADMIN_GROUP_ORDER.map((g) => {
-                    const items = moreSheetItems.filter((i) => (i.adminGroup ?? 'overview') === g.id);
-                    if (items.length === 0) return null;
-                    return (
-                      <div key={g.id} className="mb-3 last:mb-0">
-                        <p
-                          className="px-1.5 pt-1 pb-1.5 text-[10px] font-bold uppercase tracking-[0.16em]"
-                          style={{ color: tk.textTer }}
-                        >
-                          {g.label}
-                        </p>
-                        <div className="grid grid-cols-2 gap-2">
-                          {items.map(item => (
-                            <MoreSheetTile key={item.path} item={item} basePath={basePath} isActive={isActive(item.path)} onClose={() => setShowMoreSheet(false)} />
-                          ))}
+                <div className="px-3 pb-3">
+                  {showAdmin ? (
+                    ADMIN_GROUP_ORDER.map((g) => {
+                      const items = moreSheetItems.filter((i) => (i.adminGroup ?? 'overview') === g.id);
+                      if (items.length === 0) return null;
+                      return (
+                        <div key={g.id} className="mb-3 last:mb-0">
+                          <p
+                            className="px-1.5 pt-1 pb-1.5 text-[10px] font-bold uppercase tracking-[0.16em]"
+                            style={{ color: tk.textTer }}
+                          >
+                            {g.label}
+                          </p>
+                          <div className="grid grid-cols-2 gap-2">
+                            {items.map(item => (
+                              <MoreSheetTile key={item.path} item={item} basePath={basePath} isActive={isActive(item.path)} onClose={() => setShowMoreSheet(false)} />
+                            ))}
+                          </div>
                         </div>
-                      </div>
-                    );
-                  })
-                ) : (
-                  <div className="grid grid-cols-2 gap-2">
-                    {moreSheetItems.map(item => (
-                      <MoreSheetTile key={item.path} item={item} basePath={basePath} isActive={isActive(item.path)} onClose={() => setShowMoreSheet(false)} />
-                    ))}
-                  </div>
-                )}
-              </div>{/* /tools grid wrapper */}
+                      );
+                    })
+                  ) : (
+                    <div className="grid grid-cols-2 gap-2">
+                      {moreSheetItems.map(item => (
+                        <MoreSheetTile key={item.path} item={item} basePath={basePath} isActive={isActive(item.path)} onClose={() => setShowMoreSheet(false)} />
+                      ))}
+                    </div>
+                  )}
+                </div>{/* /tools grid wrapper */}
               </div>{/* /flex-1 scrollable body */}
             </motion.div>
           </>
@@ -1435,11 +1449,21 @@ function MoreSheetTile({
       >
         {item.icon}
       </span>
-      <span
-        className="text-xs font-semibold truncate"
-        style={{ color: isActive ? tk.text : tk.text }}
-      >
-        {item.label}
+      <span className="flex-1 flex items-center gap-1.5 min-w-0">
+        <span
+          className="text-xs font-semibold truncate"
+          style={{ color: isActive ? tk.text : tk.text }}
+        >
+          {item.label}
+        </span>
+        {item.path === '/admin/billing' && (
+          <span
+            className="shrink-0 text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded-full"
+            style={{ background: `${tk.amber}20`, color: tk.amber, border: `1px solid ${tk.amber}35` }}
+          >
+            Pro
+          </span>
+        )}
       </span>
     </Link>
   );

@@ -45,6 +45,9 @@ import {
   Building2,
   Heart,
   Bell,
+  BellRing,
+  CreditCard,
+  Loader2,
 } from 'lucide-react';
 import Footer from '@/components/Footer';
 import HandoverButton from '@/components/handover/HandoverButton';
@@ -52,6 +55,8 @@ import StudentFeatureSettings from '@/components/admin/StudentFeatureSettings';
 // ExpenseVisibilitySettings import removed — the transparency toggle
 // was retired with the student-facing transparency dashboard.
 import PushNotificationPrompt from '@/components/PushNotificationPrompt';
+import pushNotificationService from '@/services/pushNotificationService';
+import { useToast } from '@/hooks/useToast';
 // ExpenseList removed from dashboard; use dedicated Expenses page instead
 
 interface AdminStats {
@@ -110,6 +115,41 @@ export default function AdminDashboardPage() {
     orgId: organization?.id,
     memberId: user?.id,
   });
+  const dashToast = useToast();
+
+  // ── Push alerts (so execs get a "top of phone" ping the moment a
+  //    member submits a payment to review). The chip self-hides once
+  //    enabled / unsupported / blocked. The detailed toggle still lives
+  //    in the settings section below. ──
+  const [pushReady, setPushReady] = useState(false);
+  const [pushBusy, setPushBusy] = useState(false);
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      const supported = pushNotificationService.isSupported();
+      const subscribed = supported ? await pushNotificationService.isSubscribed() : false;
+      const perm = supported ? pushNotificationService.getPermissionStatus() : 'denied';
+      if (!cancelled) setPushReady(supported && !subscribed && perm !== 'denied');
+    })();
+    return () => { cancelled = true; };
+  }, []);
+  const enablePush = async () => {
+    if (!user?.id) return;
+    setPushBusy(true);
+    try {
+      const ok = await pushNotificationService.subscribe(user.id);
+      if (ok) { setPushReady(false); dashToast.success('Payment alerts enabled 🔔'); }
+      else if (pushNotificationService.getPermissionStatus() === 'denied') {
+        dashToast.error('Notifications are blocked — enable them in your browser settings.');
+      } else {
+        dashToast.error('Could not enable alerts. Please try again.');
+      }
+    } catch {
+      dashToast.error('Could not enable alerts. Please try again.');
+    } finally {
+      setPushBusy(false);
+    }
+  };
 
   // ── Class-rep view resolution ──────────────────────────────────
   // If the caller's active role is class-scoped (group, Layer 4+),
@@ -668,6 +708,39 @@ export default function AdminDashboardPage() {
                     {stats.pendingReview}
                   </span>
                 )}
+              </button>
+            )}
+            {/* Subscription — every admin can see their tier's plan and the
+                upgrade path (billing is per class). */}
+            <button
+              type="button"
+              onClick={() => navigate('/admin/billing')}
+              className="inline-flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-bold transition-all hover:-translate-y-0.5 active:scale-[0.98]"
+              style={{
+                background: tk.card,
+                color: tk.text,
+                border: `1px solid ${tk.cardBorder}`,
+                boxShadow: theme === 'light' ? '0 4px 12px rgba(15,7,3,0.04)' : '0 4px 12px rgba(0,0,0,0.2)',
+              }}
+            >
+              <CreditCard className="w-3.5 h-3.5" style={{ color: tk.primary }} />
+              Subscription
+            </button>
+            {/* Enable payment alerts — self-hides once on / unsupported / blocked. */}
+            {pushReady && (
+              <button
+                type="button"
+                onClick={enablePush}
+                disabled={pushBusy}
+                className="inline-flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-bold transition-all hover:-translate-y-0.5 active:scale-[0.98] disabled:opacity-60"
+                style={{
+                  background: tk.primarySoft,
+                  color: tk.primary,
+                  border: `1px solid ${tk.primaryRing}`,
+                }}
+              >
+                {pushBusy ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <BellRing className="w-3.5 h-3.5" />}
+                Enable alerts
               </button>
             )}
           </div>

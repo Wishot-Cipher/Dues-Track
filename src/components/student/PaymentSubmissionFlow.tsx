@@ -904,7 +904,6 @@ export default function PaymentSubmissionFlow({
             loading={submitting}
             holdDuration={1500}
             label="Hold to Submit Payment"
-            confirmLabel="Submitting..."
             color={t.primary}
             className="flex-1 min-w-0"
           />

@@ -41,6 +41,7 @@ import {
   Receipt,
   ShieldCheck,
   Users,
+  Wallet,
 } from 'lucide-react';
 import { useMultiTenantAuth } from '@/hooks/useMultiTenantAuth';
 import LevelManager from '@/components/admin/LevelManager';
@@ -350,13 +351,21 @@ export default function ClassExecDashboardView({ admin, klass }: ClassExecDashbo
           accent={tk.mint}
           onClick={() => go('/admin/collected')}
         />
-        <ActionCard
+       <ActionCard
           icon={<GraduationCap className="w-5 h-5" />}
           title="Set & level"
           sub="Advance, graduate, history."
           tk={tk}
           accent={tk.blue}
           onClick={() => setShowLevel(true)}
+        />
+        <ActionCard
+          icon={<Wallet className="w-5 h-5" />}
+          title="Upgrade to Pro"
+          sub="Unlock advanced features."
+          tk={tk}
+          accent={tk.amber}
+          onClick={() => navigate(`/${orgSlug}/admin/billing`)}
         />
       </motion.section>
 

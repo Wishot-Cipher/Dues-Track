@@ -272,7 +272,7 @@ export default function GroupBillingPage() {
                 </button>
               </div>
               <a
-                href={`mailto:support@payvexo.com?subject=${encodeURIComponent(`Upgrade ${billing.name} to Pro`)}&body=${encodeURIComponent(`Please enable Pro (online payments) for: ${billing.name} (group id ${billing.groupId}).`)}`}
+                href={`mailto:payvexo.noreply@gmail.com?subject=${encodeURIComponent(`Upgrade ${billing.name} to Pro`)}&body=${encodeURIComponent(`Please enable Pro (online payments) for: ${billing.name} (group id ${billing.groupId}).`)}`}
                 className="mt-4 w-full py-3 rounded-xl text-sm font-bold inline-flex items-center justify-center gap-1.5 text-white"
                 style={{ background: t.gradOrange }}
               >

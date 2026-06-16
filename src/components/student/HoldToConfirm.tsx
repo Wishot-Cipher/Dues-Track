@@ -1,287 +1,363 @@
 /**
- * HoldToConfirm
+ * HoldToConfirm — hold-to-submit confirmation button.
  *
- * A press-and-hold button that requires the user to hold for `holdDuration`ms
- * before firing `onConfirm`. Prevents accidental payment submissions.
- *
- * Features:
- * - SVG ring fills as the user holds
- * - Haptic feedback via Vibration API (mobile)
- * - Cancel animation on release before completion
- * - Disabled state support
- * - Loading state after confirm fires
- *
- * Usage:
- *   <HoldToConfirm
- *     onConfirm={handleSubmit}
- *     loading={submitting}
- *     holdDuration={1500}
- *     label="Hold to Submit Payment"
- *     confirmLabel="Submitting…"
- *   />
+ * Design decisions in this version:
+ *  - No percentage counter mid-hold — it reads as a loading bar
+ *    and breaks the "hold" mental model. Replaced with a smooth
+ *    fill sweep that communicates progress purely visually.
+ *  - Label stays constant while holding — "Hold to confirm" does
+ *    not change to "47%" which felt like a broken UI. Only changes
+ *    on completion: "Hold to confirm" → "Confirmed".
+ *  - Subtle pulse on the icon while holding gives tactile feedback
+ *    without being distracting.
+ *  - Fill uses a softer gradient rather than flat color — feels
+ *    more premium and less like a loading bar.
+ *  - Border transitions from faint to full color as fill progresses.
+ *  - Released state drains with a spring — feels like releasing
+ *    physical pressure, not a digital jump.
+ *  - Complete state holds for 800ms then resets cleanly.
+ *  - Touch and mouse both supported with proper event handling.
  */
 
 import { useState, useRef, useCallback, useEffect } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
-import { Sparkles, Lock } from 'lucide-react';
+import { motion, AnimatePresence, useSpring, useTransform } from 'framer-motion';
+import { ShieldCheck, CheckCircle2, Loader2, Lock } from 'lucide-react';
 
 interface Props {
-  onConfirm: () => void;
-  loading?: boolean;
-  disabled?: boolean;
-  holdDuration?: number;
-  label?: string;
-  confirmLabel?: string;
-  color?: string;
-  className?: string;
+  onConfirm:     () => void;
+  loading?:      boolean;
+  disabled?:     boolean;
+  holdDuration?: number;   // ms to hold before confirming, default 1600
+  label?:        string;   // idle label
+  doneLabel?:    string;   // shown briefly after confirm
+  loadingLabel?: string;   // shown while loading prop is true
+  color?:        string;
+  className?:    string;
+  size?:         'sm' | 'md' | 'lg';
 }
 
-const DEFAULT_COLOR = '#FF6803';
-const RADIUS = 22;
-const CIRCUMFERENCE = 2 * Math.PI * RADIUS;
+const SIZES = {
+  sm: { height: 44, text: 'text-xs',  iconSize: 14, px: 'px-4' },
+  md: { height: 52, text: 'text-sm',  iconSize: 16, px: 'px-5' },
+  lg: { height: 58, text: 'text-base',iconSize: 18, px: 'px-6' },
+};
 
 export default function HoldToConfirm({
   onConfirm,
-  loading = false,
-  disabled = false,
-  holdDuration = 1500,
-  label = 'Hold to Confirm',
-  confirmLabel = 'Processing…',
-  color = DEFAULT_COLOR,
-  className = '',
+  loading      = false,
+  disabled     = false,
+  holdDuration = 1600,
+  label        = 'Hold to confirm',
+  doneLabel    = 'Confirmed',
+  loadingLabel = 'Processing…',
+  color        = '#FF6803',
+  className    = '',
+  size         = 'md',
 }: Props) {
-  const [progress, setProgress] = useState(0);       // 0–1
-  const [holding, setHolding]   = useState(false);
-  const [complete, setComplete] = useState(false);
+  const sz = SIZES[size];
 
-  const startTimeRef  = useRef<number | null>(null);
-  const rafRef        = useRef<number | null>(null);
-  const confirmedRef  = useRef(false);
+  const [phase, setPhase]   = useState<'idle' | 'holding' | 'done'>('idle');
+  const phaseRef            = useRef<'idle' | 'holding' | 'done'>('idle');
+  const startRef            = useRef<number | null>(null);
+  const rafRef              = useRef<number | null>(null);
+  const firedRef            = useRef(false);
 
-  const cancelHold = useCallback(() => {
-    if (rafRef.current) cancelAnimationFrame(rafRef.current);
-    startTimeRef.current = null;
-    setHolding(false);
-    setProgress(0);
+  // Spring-driven fill 0→100. On release, spring drains naturally.
+  const rawFill  = useSpring(0, { stiffness: 220, damping: 26 });
+  const fillPct  = useTransform(rawFill, [0, 100], ['0%', '100%']);
+  // Border opacity tracks fill — starts faint, reaches full at completion
+  // const borderOp = useTransform(rawFill, [0, 100], [0.25, 0.85]);
+
+  useEffect(() => { phaseRef.current = phase; }, [phase]);
+
+  const stopRaf = useCallback(() => {
+    if (rafRef.current) {
+      cancelAnimationFrame(rafRef.current);
+      rafRef.current = null;
+    }
   }, []);
 
-  const tick = useCallback(() => {
-    if (!startTimeRef.current) return;
-    const elapsed = Date.now() - startTimeRef.current;
-    const p = Math.min(elapsed / holdDuration, 1);
-    setProgress(p);
+  const drain = useCallback(() => {
+    if (phaseRef.current !== 'holding') return;
+    stopRaf();
+    startRef.current = null;
+    setPhase('idle');
+    rawFill.set(0);
+  }, [stopRaf, rawFill]);
 
-    if (p >= 1 && !confirmedRef.current) {
-      confirmedRef.current = true;
-      setComplete(true);
-      setHolding(false);
-      // Haptic burst
-      if (navigator.vibrate) navigator.vibrate([30, 10, 50]);
+  const tick = useCallback(() => {
+    if (!startRef.current) return;
+    const elapsed  = Date.now() - startRef.current;
+    const progress = Math.min((elapsed / holdDuration) * 100, 100);
+    rawFill.set(progress);
+
+    if (progress >= 100 && !firedRef.current) {
+      firedRef.current = true;
+      stopRaf();
+      setPhase('done');
+      rawFill.set(100);
+      if (navigator.vibrate) navigator.vibrate(50);
       onConfirm();
       return;
     }
     rafRef.current = requestAnimationFrame(tick);
-  }, [holdDuration, onConfirm]);
+  }, [holdDuration, onConfirm, stopRaf, rawFill]);
 
   const startHold = useCallback(() => {
-    if (disabled || loading || complete) return;
-    confirmedRef.current = false;
-    startTimeRef.current = Date.now();
-    setHolding(true);
-    // Initial haptic pulse
-    if (navigator.vibrate) navigator.vibrate(10);
+    if (disabled || loading || phaseRef.current === 'done') return;
+    firedRef.current  = false;
+    startRef.current  = Date.now();
+    setPhase('holding');
+    rawFill.set(0);
     rafRef.current = requestAnimationFrame(tick);
-  }, [disabled, loading, complete, tick]);
+  }, [disabled, loading, rawFill, tick]);
 
-  // Clean up on unmount
-  useEffect(() => () => { if (rafRef.current) cancelAnimationFrame(rafRef.current); }, []);
+  // Cleanup on unmount
+  useEffect(() => () => stopRaf(), [stopRaf]);
 
-  // Reset after loading finishes
+  // After loading resolves, reset cleanly after a short delay
   useEffect(() => {
-    if (!loading && complete) {
-      const t = setTimeout(() => { setComplete(false); setProgress(0); confirmedRef.current = false; }, 1200);
+    if (!loading && phase === 'done') {
+      const t = setTimeout(() => {
+        setPhase('idle');
+        rawFill.set(0);
+        firedRef.current = false;
+      }, 900);
       return () => clearTimeout(t);
     }
-  }, [loading, complete]);
+  }, [loading, phase, rawFill]);
 
   const isDisabled = disabled || loading;
-  const strokeDashoffset = CIRCUMFERENCE * (1 - progress);
-  const btnSize = 56;   // circle button size px
+  const isHolding  = phase === 'holding';
+  const isDone     = phase === 'done';
+
+  // ── Derived label ─────────────────────────────────────────────
+  const currentLabel = loading
+    ? loadingLabel
+    : isDone
+    ? doneLabel
+    : label;
+
+  // ── Icon ──────────────────────────────────────────────────────
+  const Icon = () => {
+    if (loading) {
+      return (
+        <Loader2
+          width={sz.iconSize}
+          height={sz.iconSize}
+          className="animate-spin"
+          style={{ color }}
+        />
+      );
+    }
+    if (isDone) {
+      return (
+        <motion.div
+          initial={{ scale: 0, rotate: -30 }}
+          animate={{ scale: 1, rotate: 0 }}
+          transition={{ type: 'spring', stiffness: 400, damping: 18 }}
+        >
+          <CheckCircle2
+            width={sz.iconSize}
+            height={sz.iconSize}
+            style={{ color }}
+          />
+        </motion.div>
+      );
+    }
+    if (isHolding) {
+      return (
+        <motion.div
+          animate={{ scale: [1, 1.18, 1] }}
+          transition={{ duration: 0.55, repeat: Infinity, ease: 'easeInOut' }}
+        >
+          <ShieldCheck
+            width={sz.iconSize}
+            height={sz.iconSize}
+            style={{ color }}
+          />
+        </motion.div>
+      );
+    }
+    return (
+      <Lock
+        width={sz.iconSize}
+        height={sz.iconSize}
+        style={{ color: `${color}99` }}
+      />
+    );
+  };
 
   return (
-    <div className={`flex flex-col items-center gap-3 ${className}`}>
-      {/* Instruction text */}
-      <AnimatePresence mode="wait">
-        <motion.p
-          key={holding ? 'holding' : complete ? 'done' : 'idle'}
-          className="text-xs font-semibold uppercase tracking-widest"
-          style={{ color: `${color}90` }}
-          initial={{ opacity: 0, y: -4 }}
-          animate={{ opacity: 1, y: 0 }}
-          exit={{ opacity: 0, y: 4 }}
-          transition={{ duration: 0.18 }}
-        >
-          {holding ? 'Keep holding…' : complete ? 'Confirmed!' : 'Press & hold to submit'}
-        </motion.p>
-      </AnimatePresence>
+    <motion.button
+      type="button"
+      disabled={isDisabled && !isDone}
+      className={`relative overflow-hidden rounded-xl select-none touch-none w-full ${sz.px} ${className}`}
+      style={{
+        height:                   sz.height,
+        background:               isDone
+                                    ? `${color}1a`
+                                    : isHolding
+                                    ? `${color}10`
+                                    : `${color}0c`,
+        border:                   `1.5px solid ${color}`,
+        borderColor:              color,
+        opacity:                  disabled && !loading ? 0.4 : 1,
+        cursor:                   isDisabled ? 'not-allowed' : 'pointer',
+        WebkitUserSelect:         'none',
+        WebkitTapHighlightColor:  'transparent',
+        // Subtle border opacity animation handled inline via motion
+      }}
+      onMouseDown={startHold}
+      onMouseUp={drain}
+      onMouseLeave={drain}
+      onTouchStart={(e) => { e.preventDefault(); startHold(); }}
+      onTouchEnd={drain}
+      onTouchCancel={drain}
+      // Gentle press scale — not too much, just enough to feel physical
+      whileTap={!isDisabled ? { scale: 0.985 } : undefined}
+      animate={{
+        borderColor: isDone
+          ? color
+          : isHolding
+          ? color
+          : `${color}44`,
+      }}
+      transition={{ duration: 0.2 }}
+    >
+      {/* ── Fill sweep ───────────────────────────────────────── */}
+      {/* Gradient rather than flat — more premium, less loading-bar */}
+      <motion.div
+        className="absolute inset-0 pointer-events-none"
+        style={{
+          width:           fillPct,
+          transformOrigin: 'left center',
+          background:      `linear-gradient(90deg, ${color}2a 0%, ${color}18 100%)`,
+          borderRadius:    'inherit',
+        }}
+      />
 
-      <div className="flex items-center gap-4 w-full">
-        {/* Hold button with ring */}
-        <div className="relative shrink-0" style={{ width: btnSize + 16, height: btnSize + 16 }}>
-          {/* SVG ring */}
-          <svg
-            className="absolute inset-0"
-            width={btnSize + 16}
-            height={btnSize + 16}
-            viewBox={`0 0 ${btnSize + 16} ${btnSize + 16}`}
-          >
-            {/* Track */}
-            <circle
-              cx={(btnSize + 16) / 2}
-              cy={(btnSize + 16) / 2}
-              r={RADIUS + 4}
-              fill="none"
-              stroke={`${color}20`}
-              strokeWidth="3"
-            />
-            {/* Progress arc */}
-            <motion.circle
-              cx={(btnSize + 16) / 2}
-              cy={(btnSize + 16) / 2}
-              r={RADIUS + 4}
-              fill="none"
-              stroke={color}
-              strokeWidth="3"
-              strokeLinecap="round"
-              strokeDasharray={CIRCUMFERENCE}
-              strokeDashoffset={strokeDashoffset}
-              style={{ rotate: '-90deg', transformOrigin: '50% 50%' }}
-              animate={{
-                filter: holding ? [`drop-shadow(0 0 4px ${color}80)`, `drop-shadow(0 0 8px ${color}cc)`, `drop-shadow(0 0 4px ${color}80)`] : `drop-shadow(0 0 0px transparent)`,
-              }}
-              transition={{ duration: 0.9, repeat: holding ? Infinity : 0 }}
-            />
-          </svg>
-
-          {/* Button */}
-          <motion.button
-            type="button"
-            disabled={isDisabled}
-            className="absolute inset-2 rounded-full flex items-center justify-center select-none"
-            style={{
-              background: complete
-                ? `linear-gradient(135deg, #22C55E, #16A34A)`
-                : holding
-                ? `linear-gradient(135deg, ${color}, #FF9040)`
-                : `linear-gradient(135deg, ${color}cc, ${color})`,
-              boxShadow: holding
-                ? `0 0 20px ${color}60, 0 8px 24px rgba(0,0,0,0.4)`
-                : `0 4px 16px ${color}30`,
-              cursor: isDisabled ? 'not-allowed' : 'pointer',
-              opacity: isDisabled && !loading ? 0.45 : 1,
-            }}
-            onMouseDown={startHold}
-            onMouseUp={cancelHold}
-            onMouseLeave={cancelHold}
-            onTouchStart={(e) => { e.preventDefault(); startHold(); }}
-            onTouchEnd={cancelHold}
-            onTouchCancel={cancelHold}
-            animate={holding ? { scale: [1, 0.94, 0.94] } : complete ? { scale: [0.94, 1.08, 1] } : { scale: 1 }}
-            transition={{ duration: 0.2 }}
-          >
-            {loading ? (
-              <motion.div
-                className="w-5 h-5 border-2 rounded-full"
-                style={{ borderColor: 'rgba(255,255,255,0.3)', borderTopColor: '#fff' }}
-                animate={{ rotate: 360 }}
-                transition={{ duration: 0.8, repeat: Infinity, ease: 'linear' }}
-              />
-            ) : complete ? (
-              <motion.svg
-                viewBox="0 0 24 24"
-                className="w-6 h-6"
-                fill="none"
-                stroke="white"
-                strokeWidth="2.5"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                initial={{ pathLength: 0 }}
-                animate={{ pathLength: 1 }}
-                transition={{ duration: 0.4 }}
-              >
-                <motion.path d="M5 13l4 4L19 7" />
-              </motion.svg>
-            ) : (
-              <Lock className="w-5 h-5 text-white" />
-            )}
-          </motion.button>
-        </div>
-
-        {/* Text button area — full width, shows progress */}
+      {/* ── Shimmer while holding ─────────────────────────────── */}
+      {isHolding && (
         <motion.div
-          className="flex-1 relative overflow-hidden rounded-2xl py-4 px-5 cursor-pointer select-none"
+          className="absolute inset-0 pointer-events-none"
           style={{
-            background: `${color}10`,
-            border: `1px solid ${complete ? '#22C55E50' : `${color}30`}`,
+            background: `linear-gradient(105deg, transparent 30%, ${color}14 50%, transparent 70%)`,
+            borderRadius: 'inherit',
           }}
-          onMouseDown={startHold}
-          onMouseUp={cancelHold}
-          onMouseLeave={cancelHold}
-          onTouchStart={(e) => { e.preventDefault(); startHold(); }}
-          onTouchEnd={cancelHold}
-          onTouchCancel={cancelHold}
-        >
-          {/* Fill bar */}
-          <motion.div
-            className="absolute inset-0 origin-left"
-            style={{
-              background: complete
-                ? 'linear-gradient(90deg,#22C55E30,#16A34A20)'
-                : `linear-gradient(90deg,${color}25,${color}10)`,
-              scaleX: progress,
-              transformOrigin: 'left',
-            }}
-          />
+          animate={{ x: ['-100%', '200%'] }}
+          transition={{ duration: 1.2, repeat: Infinity, ease: 'linear' }}
+        />
+      )}
 
-          <div className="relative flex items-center justify-between">
-            <div>
-              <p className="text-sm font-bold text-white">
-                {loading ? confirmLabel : complete ? 'Payment Submitted!' : label}
-              </p>
-              {!loading && !complete && (
-                <p className="text-[10px] mt-0.5" style={{ color: `${color}80` }}>
-                  {holding
-                    ? `${Math.round(progress * 100)}% — release to cancel`
-                    : 'Press the lock icon or here to begin'}
-                </p>
-              )}
-            </div>
-            {!loading && !complete && (
-              <motion.div
-                animate={holding ? { rotate: [0, 360] } : { rotate: 0 }}
-                transition={{ duration: holdDuration / 1000, ease: 'linear', repeat: 0 }}
-              >
-                <Sparkles className="w-4 h-4" style={{ color: holding ? color : `${color}60` }} />
-              </motion.div>
-            )}
-          </div>
-        </motion.div>
+      {/* ── Content ───────────────────────────────────────────── */}
+      <div className="relative h-full flex items-center justify-center gap-2.5">
+        {/* Icon slot — fixed width so label never shifts */}
+        <span className="shrink-0 flex items-center justify-center" style={{ width: sz.iconSize + 4 }}>
+          <Icon />
+        </span>
+
+        {/* Label — transitions only on phase change, stays still while holding */}
+        <AnimatePresence mode="wait">
+          <motion.span
+            key={loading ? 'loading' : isDone ? 'done' : 'idle'}
+            className={`${sz.text} font-bold tracking-wide`}
+            style={{ color: isDone ? color : isHolding ? color : `${color}cc` }}
+            initial={{ opacity: 0, y: 4 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -4 }}
+            transition={{ duration: 0.16 }}
+          >
+            {currentLabel}
+          </motion.span>
+        </AnimatePresence>
+
+        {/* Right side: thin arc progress indicator while holding */}
+        <AnimatePresence>
+          {isHolding && (
+            <motion.div
+              initial={{ opacity: 0, scale: 0.7 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.7 }}
+              transition={{ duration: 0.15 }}
+              className="shrink-0"
+            >
+              <ArcProgress
+                size={sz.iconSize + 2}
+                progress={rawFill}
+                color={color}
+              />
+            </motion.div>
+          )}
+        </AnimatePresence>
       </div>
 
-      {/* Progress label */}
-      {holding && (
-        <motion.div
-          className="w-full h-1 rounded-full overflow-hidden"
-          style={{ background: `${color}15` }}
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-        >
+      {/* ── Completion flash ──────────────────────────────────── */}
+      <AnimatePresence>
+        {isDone && (
           <motion.div
-            className="h-full rounded-full"
-            style={{ background: `linear-gradient(90deg, ${color}, #FF9040)`, width: `${progress * 100}%` }}
+            className="absolute inset-0 pointer-events-none rounded-xl"
+            style={{ background: `${color}18` }}
+            initial={{ opacity: 0 }}
+            animate={{ opacity: [0, 1, 0] }}
+            transition={{ duration: 0.5, times: [0, 0.2, 1] }}
           />
-        </motion.div>
-      )}
-    </div>
+        )}
+      </AnimatePresence>
+    </motion.button>
+  );
+}
+
+// ── Arc progress ring ──────────────────────────────────────────────
+// Small SVG arc that shows progress while holding.
+// Separate component so it can use useTransform cleanly.
+import { useTransform as useT } from 'framer-motion';
+
+function ArcProgress({
+  size,
+  progress,
+  color,
+}: {
+  size:     number;
+  progress: ReturnType<typeof useSpring>;
+  color:    string;
+}) {
+  const r          = (size - 2.5) / 2;
+  const circumference = 2 * Math.PI * r;
+  const dashOffset = useT(progress, [0, 100], [circumference, 0]);
+
+  return (
+    <svg
+      width={size}
+      height={size}
+      viewBox={`0 0 ${size} ${size}`}
+      style={{ overflow: 'visible' }}
+    >
+      {/* Track */}
+      <circle
+        cx={size / 2}
+        cy={size / 2}
+        r={r}
+        fill="none"
+        stroke={`${color}25`}
+        strokeWidth={2}
+      />
+      {/* Fill arc */}
+      <motion.circle
+        cx={size / 2}
+        cy={size / 2}
+        r={r}
+        fill="none"
+        stroke={color}
+        strokeWidth={2}
+        strokeLinecap="round"
+        strokeDasharray={circumference}
+        style={{
+          strokeDashoffset: dashOffset,
+          rotate:           '-90deg',
+          transformOrigin: `${size / 2}px ${size / 2}px`,
+        }}
+      />
+    </svg>
   );
 }
