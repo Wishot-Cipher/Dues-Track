@@ -670,3 +670,109 @@ GROUP BY pt.id, pt.title HAVING COUNT(p.id) <> COUNT(et.id);
 - Per-tier scope gating across every admin surface (chunks D + E + expense tier-finishing pass).
 - Tier-aware ticket check-in (mig 102).
 - Onboarding that doesn't conflate structure with identity (chunk G5c).
+
+
+# Payvexo — Development Progress (Addendum II)
+
+> **Date**: June 11, 2026
+> **Theme**: tier-autonomy correctness, governance integrity, the *free + unlimited* monetisation model, structural flexibility (academic **and** non-academic orgs), payments performance, and a balance-first dashboard.
+
+This addendum records the second major hardening + feature pass. Every item states **what** changed and **why** — so the architecture can be explained and defended, not just listed. Migration numbers are under `multi-tenant/migrations/`.
+
+---
+
+## A. Tier autonomy & money correctness
+
+Payvexo is multi-tenant **and** multi-tier: an org contains faculties → departments → classes (labels vary per org type), and **each tier is financially autonomous** — it manages only the dues, expenses and money it created, never the tiers below it.
+
+1. **Expenses scoped to the owning tier.** Expenses were the last money surface still using a subtree walk (`getScopedGroupIds`), which let a department/faculty exec see and spend the classes' money below them. The expense ledger, categories, payment-types, pending queue and **available balance** now use the own-tier rule (`getOwnedTierScope` / `applyOwnedTierScope`) used by dues/finance/audit. A tier's available funds = its own dues collected − its own expenses.
+
+2. **Collected money keys off the DUE, not the payer's group.** A payment row carries the **payer's** group (their class), not the **due's** tier. So a department-due collection is rolled up by `payment_type_id ∈ {this tier's dues}`, never by the payer's `group_id`. Keying by payer-group made a class member's payment toward a department due vanish from the department's balance ("no funds"); fixed across the collected/expense surfaces.
+
+3. **Cascade visibility — ancestor execs can READ the members below them (mig 130 / rollback 131).** A due **cascades down**: a department due bills every class member under it. So the owning exec must be able to *see* those members to waive, review payers (the "Unknown Member" bug), and roll up collections. `organization_members` SELECT now allows a verified ancestor-or-self exec (org-scope sees all) to **read** descendant members; **writes** ("manage students") stay own-tier. This reconciles class autonomy with the dues cascade.
+
+4. **Staged own-tier RLS for payments/expenses (migs 126–129).** Inert, rollback-paired migrations that move `payments` / `expenses` SELECT to the same own-tier rule server-side (defense-in-depth), to be applied + tested after the `payment_types` flip (mig 114) is proven. Application-layer scoping already enforces the boundary; these make the database enforce it too.
+
+---
+
+## B. Governance & anti-abuse
+
+5. **One verified holder per seat — clashing roles resolved (mig 132).** Contested claims are intentional (several people may claim a role; the group votes the real exec up). But two contested claims could *both* cross the threshold and both be granted — a tier with two Class Reps / Presidents who can each collect, approve and waive. Now, at the single grant path (`_finalize_claim_layer4`): a **seat-taken guard** refuses a second grant on a filled seat, and granting one claim **closes the other open claims** for that seat. Voting/contestation untouched; legitimate succession still flows through the handover RPC.
+
+6. **Founding ≠ owning — the setup steward gets a claim path.** A new founder is a money-locked `org_setup` steward (no collecting/payout) who must claim their real role and be peer-verified. Two bugs hid that path: the verification banner read the steward as an "unverified admin awaiting verification" and suppressed itself; and the academic create flow dropped founders on the org overview instead of the dashboard. Both fixed — a founder is now nudged to **Claim your role** and lands where the claim banner + invite card live.
+
+7. **Class exec can invite directly from the dashboard (mig 136).** The "Manage invites" button routed verified class execs to `/admin/members`, which kept bouncing them back (a route-guard race). The redirect is gone: the exec now mints the class join code **on the dashboard card**, exactly like the founder. `create_member_join_invite` now accepts a verified (layer ≥ 4) admin whose scope covers the class, in addition to the bootstrap founder.
+
+8. **Sybil/abuse — the trust model.** See section **H**: we deliberately gate the **money** (verified bank + traceability + transparency), not org creation, rather than relying on gameable peer votes.
+
+---
+
+## C. Monetisation — free + unlimited
+
+9. **No member caps — removed a silent join-blocker.** A pre-existing subscription system capped the Free plan at **50 members / 1 group with online payments off**, and `JoinOrganizationPage` **hard-blocked** new members at the cap. That broke invites and contradicted the model. `billingService.checkLimit` + `useSubscriptionLimits.canCreate` now treat members/groups/admins as **always unlimited**; all plan tiers set size limits to `-1`; the Free plan turns **online payments on** (free orgs must be able to collect — that's how the platform earns). The hidden-input bug in `OrgGroupsPage` (`needsLevel` `true` for non-academic) is fixed too.
+
+10. **Transaction-based monetisation, not subscriptions.** The agreed model: **free + unlimited, the platform earns a small per-transaction fee**, and a paid plan *lowers* that fee for big collectors (paying **saves** money) plus unlocks value-adds (reminders / branding / analytics) — never gates size or core collection. Per-org plan is settable from the **Platform Console** (Organization Registry → Plan selector), so pricing changes need no code edits.
+
+---
+
+## D. Structural flexibility (academic & non-academic)
+
+11. **Academic fields optional for non-academic orgs.** Level / year-of-entry / course-length are an academic concept (university/school). Church / club / association / co-op orgs are **structural only** — they no longer have to enter a level just to add a group. Gated on `isAcademicOrgType` across `AddDepartmentPage` + `OrgGroupsPage`; the level-required validation and set-identity persistence are skipped for non-academic groups.
+
+12. **The same person can build nested structure (mig 137).** The bootstrap RPCs errored `id_taken` on an existing member ID/email and then made a *new* member — so the founder who created a department couldn't reuse their identity to add a class under it (treated as two people). Now, if the member ID/email exists **and the password matches**, the existing member is reused (no duplicate; they keep their own class; the new group is created as structure). Wrong password still rejects, so an ID can't be hijacked.
+
+---
+
+## E. Payments & performance
+
+13. **Checkout init latency cut.** `/api/paystack/init` ran ~7–8 DB round-trips strictly serially, then a Paystack call, before redirect — and inserted the payment only to immediately UPDATE it with the reference. Now: auth + payment-type run in parallel (phase 1); org + double-payment guard + event tiers + stale-pending retire run in one parallel batch (phase 2); the row id is pre-generated so the reference is baked into a **single insert**. Net ≈ 7–8 serial round-trips → 2 parallel phases + 1 insert. Validation order and every error response preserved.
+
+14. **Settlement-timing reassurance.** Money settles directly to each org's KYC-verified Paystack subaccount on the **next working day** (no manual withdrawal). The payout page now explains this on the connected-bank state so collectors don't churn over "where's my money?".
+
+---
+
+## F. Dashboard, UX & reliability
+
+15. **Balance-first hero.** The student dashboard hero buried the balance under ~15 competing layers (a second big number in a donut, holographic stripe, foil, ribbons, thumbprint, vignette, status pill, embossed footer, celebration burst…). Rebuilt balance-first (Revolut/Mercury/Cash App cues): the balance is the single hero, with a slim "dues settled" progress bar and one clear "Pay next due" button. Kept only tasteful finish (gradient, one mount shimmer, cursor highlight).
+
+16. **Required vs Optional dues.** `paymentService` already excludes non-mandatory dues from the outstanding balance; the dashboard now makes that visible — "Due Next" carries only **required** dues with a clear pill, and a calmer **"Optional contributions"** card holds opt-in dues ("won't count toward your balance"), hidden when none. Due cards gained a left urgency accent bar, hover lift and a partial-payment progress bar.
+
+17. **QR scanner camera-switch crash fixed.** Switching cameras stopped the feed and never recovered. Root cause: `startScanner` depended on `selectedCamera` and sat in the mount effect's deps, so picking a camera recreated it → re-fired the effect → its cleanup tore down the camera the switch had just started. Fixed in both scanners by making start/stop **stable** (mode/camera/callbacks read from refs), owning `mountedRef` only on unmount, guarding concurrent starts, and honoring the exact device id on switch.
+
+18. **Other polish.** Waive page made mobile-responsive (aligned containers, no double padding, step-strip wrap); the share-class card surfaced (dark `t.card` was 3% opaque → solid); first-login labels the field "Current password" with a clearer hint; the PDF export was redesigned (editorial-fintech "ledger band").
+
+---
+
+## G. Platform console
+
+19. **One real console; dead one removed.** There were two console implementations — the routed `PlatformConsole` (`/pvx-console`) and an **unrouted** `PlatformConsolePage` + `ConsoleUniversitiesPage` + `ConsoleRoleManagementPage` that edits were silently going into. The dead trio was deleted, and the academic **"sets & levels"** oversight panel was ported into the live console's Organization Registry. The per-org **Plan selector** (section C) lives there too.
+
+---
+
+## H. Trust-model decisions — what we deliberately did NOT do
+
+Defensible security puts the gate where it can't be gamed:
+
+- **We do not gate org creation.** Anyone can found an org (growth), because founding grants **zero money power** — a founder is a money-locked setup steward until they claim a real role and are verified.
+- **We do not rely on peer votes as the security boundary.** Votes are gameable by whoever controls who joins; they're a *social* legitimacy signal. Real legitimacy comes from the **verified-exec confirmation chain** (anchored at the first exec's school email) + bank KYC.
+- **We do not hold honest orgs' money.** Money settles to a **real, bank/BVN-verified Paystack subaccount**, and every transaction is traceable. A blanket first-payout hold (considered) would have stranded honest orgs' funds for days and needed manual release — net-negative. The fraud gate is the verified bank + traceability + **member transparency** (members see every collection and expense) + reporting.
+
+> **One-line defense:** *Trust real-world identity (verified bank + school email + the verified-exec chain) and full money transparency — not gameable votes, not member caps, not held funds.*
+
+---
+
+## Migrations to run (this pass)
+
+| # | File | What it does |
+|---|------|--------------|
+| 130 | `130_member_read_down_cascade.sql` | Ancestor execs can READ descendant members (dues cascade); writes stay own-tier. **Fixes the live "Unknown Member" / empty-waive bug.** |
+| 131 | `131_rollback_member_read_down.sql` | Rollback for 130. |
+| 132 | `132_one_verified_holder_per_seat.sql` | One verified holder per seat; the winner's grant closes the losers. |
+| 136 | `136_class_admin_can_invite.sql` | Verified class admins (not just the founder) can mint a class join code. |
+| 137 | `137_bootstrap_reuse_existing_member.sql` | Same person can reuse their identity (with password) to build nested structure. |
+| 126–129 | `126…129_*.sql` | **Staged, inert** own-tier SELECT RLS for payments/expenses (apply + test after the 114 flip is proven). |
+
+---
+
+*Addendum generated June 11, 2026 — Payvexo Development Team*
+

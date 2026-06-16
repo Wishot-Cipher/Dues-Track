@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { colors, gradients } from '@/config/colors';
+import { useTheme, getDashboardTokens } from '@/hooks/useTheme';
 import {
   Building2,
   Smartphone,
@@ -29,7 +29,16 @@ function PaymentMethodSelector({
   onPayForOthers,
   showPayForOthers = true
 }: PaymentMethodSelectorProps) {
+  const { theme } = useTheme();
+  const t = getDashboardTokens(theme);
+  const isLight = theme === 'light';
+
   const [hoveredMethod, setHoveredMethod] = useState<PaymentMethod | null>(null);
+
+  // Subtle surface for the unselected card — theme-aware so it isn't a
+  // near-invisible white wash on the light background.
+  const restBg = isLight ? '#FBF7F3' : 'rgba(255, 255, 255, 0.03)';
+  const hairline = t.cardBorder;
 
   const paymentMethods = [
     {
@@ -38,15 +47,15 @@ function PaymentMethodSelector({
       description: 'Transfer to class account and upload proof',
       icon: Building2,
       badge: 'Most Popular',
-      badgeColor: colors.primary,
+      badgeColor: t.primary,
       process: [
         'Transfer to provided account',
         'Upload payment receipt',
         'Wait for admin verification',
         'Get confirmation notification'
       ],
-      color: colors.primary,
-      gradient: gradients.primary
+      color: t.primary,
+      gradient: t.gradOrange
     },
     {
       id: 'cash' as PaymentMethod,
@@ -54,15 +63,15 @@ function PaymentMethodSelector({
       description: 'Pay cash and get instant QR confirmation',
       icon: Wallet,
       badge: 'Instant',
-      badgeColor: colors.accentMint,
+      badgeColor: t.mint,
       process: [
         'Generate payment QR code',
         'Show code to class treasurer',
         'Make cash payment',
         'Get instant confirmation'
       ],
-      color: colors.accentMint,
-      gradient: gradients.mint
+      color: t.mint,
+      gradient: t.gradGreen
     },
     {
       id: 'pos' as PaymentMethod,
@@ -70,34 +79,34 @@ function PaymentMethodSelector({
       description: 'Pay via POS and upload receipt',
       icon: CreditCard,
       badge: 'Secure',
-      badgeColor: colors.warning,
+      badgeColor: t.amber,
       process: [
         'Make payment via POS',
         'Upload POS receipt',
         'Wait for admin verification',
         'Get confirmation notification'
       ],
-      color: colors.warning,
-      gradient: gradients.warning
+      color: t.amber,
+      gradient: `linear-gradient(135deg, ${t.amber}, #FBBF24)`
     }
   ];
 
   return (
-    <div className="space-y-6 w-full overflow-hidden px-4 sm:px-0">
+    <div className="space-y-6 w-full overflow-hidden px-4 sm:px-0" style={{ color: t.text }}>
       {/* Header */}
       <motion.div
         initial={{ opacity: 0, y: -20 }}
         animate={{ opacity: 1, y: 0 }}
         className="text-center"
       >
-        <div className="inline-flex items-center justify-center gap-2 px-4 py-1.5 rounded-full mb-4" style={{ background: `${colors.primary}15`, border: `1px solid ${colors.primary}30` }}>
-          <Sparkles className="w-4 h-4" style={{ color: colors.primary }} />
-          <span className="text-xs font-semibold" style={{ color: colors.primary }}>STEP 1 OF 2</span>
+        <div className="inline-flex items-center justify-center gap-2 px-4 py-1.5 rounded-full mb-4" style={{ background: t.primarySoft, border: `1px solid ${t.primaryRing}` }}>
+          <Sparkles className="w-4 h-4" style={{ color: t.primary }} />
+          <span className="text-xs font-semibold" style={{ color: t.primary }}>STEP 1 OF 2</span>
         </div>
-        <h2 className="text-2xl sm:text-3xl font-bold text-white mb-2">
+        <h2 className="text-2xl sm:text-3xl font-bold mb-2" style={{ color: t.text }}>
           Choose Payment Method
         </h2>
-        <p style={{ color: colors.textSecondary }}>
+        <p style={{ color: t.textSec }}>
           Select your preferred way to complete this payment
         </p>
       </motion.div>
@@ -122,25 +131,25 @@ function PaymentMethodSelector({
                 onClick={() => onMethodSelect(method.id)}
                 className="w-full text-left relative group"
               >
-                <div 
+                <div
                   className="relative overflow-hidden rounded-2xl p-5 h-full transition-all duration-300"
-                  style={{ 
-                    background: isSelected 
+                  style={{
+                    background: isSelected
                       ? `linear-gradient(135deg, ${method.color}15 0%, ${method.color}05 100%)`
-                      : 'rgba(255, 255, 255, 0.03)',
-                    border: isSelected 
-                      ? `2px solid ${method.color}60` 
-                      : '1px solid rgba(255, 255, 255, 0.08)',
-                    boxShadow: isSelected 
-                      ? `0 8px 32px ${method.color}20, inset 0 1px 0 rgba(255, 255, 255, 0.05)` 
+                      : restBg,
+                    border: isSelected
+                      ? `2px solid ${method.color}60`
+                      : `1px solid ${hairline}`,
+                    boxShadow: isSelected
+                      ? `0 8px 32px ${method.color}20`
                       : 'none',
                     transform: isHovered && !isSelected ? 'translateY(-2px)' : 'none',
                   }}
                 >
                   {/* Badge */}
-                  <div 
+                  <div
                     className="absolute top-3 right-3 px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wide"
-                    style={{ 
+                    style={{
                       background: `${method.badgeColor}20`,
                       color: method.badgeColor,
                       border: `1px solid ${method.badgeColor}30`
@@ -158,7 +167,7 @@ function PaymentMethodSelector({
                     >
                       <div
                         className="w-8 h-8 rounded-full flex items-center justify-center shadow-lg"
-                        style={{ 
+                        style={{
                           background: method.gradient,
                           boxShadow: `0 4px 15px ${method.color}50`
                         }}
@@ -176,7 +185,7 @@ function PaymentMethodSelector({
                         animate={{ opacity: 1 }}
                         exit={{ opacity: 0 }}
                         className="absolute inset-0 pointer-events-none"
-                        style={{ 
+                        style={{
                           background: `radial-gradient(ellipse at top, ${method.color}15 0%, transparent 70%)`,
                         }}
                       />
@@ -188,7 +197,7 @@ function PaymentMethodSelector({
                     <div className="flex items-start gap-4">
                       <motion.div
                         className="w-14 h-14 rounded-xl flex items-center justify-center shrink-0 relative overflow-hidden"
-                        style={{ 
+                        style={{
                           background: `linear-gradient(135deg, ${method.color}25 0%, ${method.color}10 100%)`,
                           border: `1px solid ${method.color}30`
                         }}
@@ -196,28 +205,28 @@ function PaymentMethodSelector({
                       >
                         <Icon className="w-7 h-7" style={{ color: method.color }} />
                         {/* Shine effect */}
-                        <div 
+                        <div
                           className="absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity"
-                          style={{ 
+                          style={{
                             background: 'linear-gradient(135deg, rgba(255,255,255,0.2) 0%, transparent 50%)'
                           }}
                         />
                       </motion.div>
                       <div className="flex-1 pt-1">
-                        <h3 className="text-lg font-bold text-white mb-1">
+                        <h3 className="text-lg font-bold mb-1" style={{ color: t.text }}>
                           {method.name}
                         </h3>
-                        <p className="text-xs leading-relaxed" style={{ color: colors.textSecondary }}>
+                        <p className="text-xs leading-relaxed" style={{ color: t.textSec }}>
                           {method.description}
                         </p>
                       </div>
                     </div>
 
                     {/* Process Steps */}
-                    <div className="space-y-2 pt-2 border-t" style={{ borderColor: 'rgba(255, 255, 255, 0.06)' }}>
+                    <div className="space-y-2 pt-2 border-t" style={{ borderColor: hairline }}>
                       {method.process.map((step, i) => (
-                        <motion.div 
-                          key={i} 
+                        <motion.div
+                          key={i}
                           className="flex items-center gap-2.5"
                           initial={{ opacity: 0, x: -10 }}
                           animate={{ opacity: 1, x: 0 }}
@@ -233,7 +242,7 @@ function PaymentMethodSelector({
                           >
                             {i + 1}
                           </span>
-                          <span className="text-xs" style={{ color: colors.textSecondary }}>
+                          <span className="text-xs" style={{ color: t.textSec }}>
                             {step}
                           </span>
                         </motion.div>
@@ -241,9 +250,9 @@ function PaymentMethodSelector({
                     </div>
 
                     {/* Method Indicator */}
-                    <div 
+                    <div
                       className="flex items-center gap-2 pt-3 mt-2 border-t"
-                      style={{ borderColor: 'rgba(255, 255, 255, 0.06)' }}
+                      style={{ borderColor: hairline }}
                     >
                       {method.id === 'bank_transfer' && (
                         <Upload className="w-4 h-4" style={{ color: method.color }} />
@@ -260,7 +269,7 @@ function PaymentMethodSelector({
                         {method.id === 'pos' && 'Receipt Required'}
                       </span>
                       {isSelected && (
-                        <motion.div 
+                        <motion.div
                           className="ml-auto"
                           animate={{ x: [0, 3, 0] }}
                           transition={{ repeat: Infinity, duration: 1.2 }}
@@ -288,35 +297,35 @@ function PaymentMethodSelector({
             onClick={onPayForOthers}
             className="w-full group"
           >
-            <div 
+            <div
               className="relative overflow-hidden rounded-2xl p-5 transition-all duration-300 md:hover:scale-[1.01]"
-              style={{ 
-                background: 'linear-gradient(135deg, rgba(255, 107, 53, 0.08) 0%, rgba(255, 172, 95, 0.04) 100%)',
-                border: '1px solid rgba(255, 107, 53, 0.2)',
+              style={{
+                background: t.primarySoft,
+                border: `1px solid ${t.primaryRing}`,
               }}
             >
               {/* Animated gradient background */}
               <motion.div
                 className="absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity"
-                style={{ 
-                  background: `linear-gradient(135deg, ${colors.primary}10 0%, transparent 60%)`,
+                style={{
+                  background: `linear-gradient(135deg, ${t.primary}10 0%, transparent 60%)`,
                 }}
               />
-              
+
               <div className="relative z-10 flex items-center justify-between">
                 <div className="flex items-center gap-4">
                   <motion.div
                     className="w-14 h-14 rounded-xl flex items-center justify-center relative"
-                    style={{ 
-                      background: `linear-gradient(135deg, ${colors.primary}25 0%, ${colors.primary}10 100%)`,
-                      border: `1px solid ${colors.primary}30`
+                    style={{
+                      background: `linear-gradient(135deg, ${t.primary}25 0%, ${t.primary}10 100%)`,
+                      border: `1px solid ${t.primary}30`
                     }}
                     whileHover={{ scale: 1.05, rotate: -3 }}
                   >
-                    <Users className="w-7 h-7" style={{ color: colors.primary }} />
+                    <Users className="w-7 h-7" style={{ color: t.primary }} />
                     <motion.div
                       className="absolute -top-1 -right-1 w-5 h-5 rounded-full flex items-center justify-center"
-                      style={{ background: gradients.primary }}
+                      style={{ background: t.gradOrange }}
                       animate={{ scale: [1, 1.15, 1] }}
                       transition={{ repeat: Infinity, duration: 2 }}
                     >
@@ -325,28 +334,28 @@ function PaymentMethodSelector({
                   </motion.div>
                   <div className="text-left">
                     <div className="flex items-center gap-2 mb-1">
-                      <h3 className="text-lg font-bold text-white">
+                      <h3 className="text-lg font-bold" style={{ color: t.text }}>
                         Pay for Fellow Students
                       </h3>
-                      <span 
+                      <span
                         className="px-2 py-0.5 rounded-full text-[10px] font-bold uppercase"
-                        style={{ background: `${colors.accentMint}20`, color: colors.accentMint }}
+                        style={{ background: `${t.mint}20`, color: t.mint }}
                       >
                         Helpful
                       </span>
                     </div>
-                    <p className="text-sm" style={{ color: colors.textSecondary }}>
+                    <p className="text-sm" style={{ color: t.textSec }}>
                       Make payment for multiple students at once with one transaction
                     </p>
                   </div>
                 </div>
                 <motion.div
                   className="w-10 h-10 rounded-full flex items-center justify-center"
-                  style={{ background: `${colors.primary}15` }}
+                  style={{ background: `${t.primary}15` }}
                   animate={{ x: [0, 5, 0] }}
                   transition={{ repeat: Infinity, duration: 1.5 }}
                 >
-                  <ArrowRight className="w-5 h-5" style={{ color: colors.primary }} />
+                  <ArrowRight className="w-5 h-5" style={{ color: t.primary }} />
                 </motion.div>
               </div>
             </div>
@@ -362,18 +371,18 @@ function PaymentMethodSelector({
             animate={{ opacity: 1, height: 'auto' }}
             exit={{ opacity: 0, height: 0 }}
           >
-            <div 
+            <div
               className="rounded-2xl p-5 flex items-center gap-4"
-              style={{ 
-                background: `linear-gradient(135deg, ${colors.statusPaid}10 0%, ${colors.statusPaid}05 100%)`,
-                border: `1px solid ${colors.statusPaid}30`
+              style={{
+                background: `linear-gradient(135deg, ${t.mint}10 0%, ${t.mint}05 100%)`,
+                border: `1px solid ${t.mint}30`
               }}
             >
               <motion.div
                 className="w-12 h-12 rounded-full flex items-center justify-center"
-                style={{ 
-                  background: gradients.primary,
-                  boxShadow: `0 4px 20px ${colors.primary}40`
+                style={{
+                  background: t.gradOrange,
+                  boxShadow: `0 4px 20px ${t.primary}40`
                 }}
                 initial={{ scale: 0, rotate: -180 }}
                 animate={{ scale: 1, rotate: 0 }}
@@ -382,10 +391,10 @@ function PaymentMethodSelector({
                 <CheckCircle className="w-6 h-6 text-white" />
               </motion.div>
               <div className="flex-1">
-                <p className="text-xs font-medium mb-0.5" style={{ color: colors.textSecondary }}>
+                <p className="text-xs font-medium mb-0.5" style={{ color: t.textSec }}>
                   Selected Payment Method
                 </p>
-                <p className="text-lg font-bold text-white">
+                <p className="text-lg font-bold" style={{ color: t.text }}>
                   {paymentMethods.find(m => m.id === selectedMethod)?.name}
                 </p>
               </div>
@@ -393,7 +402,7 @@ function PaymentMethodSelector({
                 animate={{ x: [0, 5, 0] }}
                 transition={{ repeat: Infinity, duration: 1.2 }}
               >
-                <ArrowRight className="w-5 h-5" style={{ color: colors.statusPaid }} />
+                <ArrowRight className="w-5 h-5" style={{ color: t.mint }} />
               </motion.div>
             </div>
           </motion.div>

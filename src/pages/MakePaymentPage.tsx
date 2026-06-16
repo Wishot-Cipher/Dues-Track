@@ -58,6 +58,11 @@ interface PaymentTypeRow {
   bank_name?: string | null;
   account_number?: string | null;
   account_name?: string | null;
+  // Which rails this due accepts. A free-tier group collects by manual
+  // receipt only (accepts_paystack = false); a Pro group accepts both.
+  // Legacy dues predate the flags → null is treated as "accepted".
+  accepts_paystack?: boolean | null;
+  accepts_manual?: boolean | null;
 }
 
 interface PaymentRow {
@@ -145,7 +150,7 @@ export default function MakePaymentPage() {
         const scope = getOrgScope();
         let ptQ = supabase
           .from('payment_types')
-          .select('id, title, description, amount, deadline, category, is_mandatory, event_date, event_venue, bank_name, account_number, account_name')
+          .select('id, title, description, amount, deadline, category, is_mandatory, event_date, event_venue, bank_name, account_number, account_name, accepts_paystack, accepts_manual')
           .eq('id', id);
         if (scope) ptQ = ptQ.eq('organization_id', scope.orgId);
         const { data: ptRow, error: ptErr } = await ptQ.maybeSingle();
@@ -215,6 +220,14 @@ export default function MakePaymentPage() {
   // service fee that covers the secure-transfer cost. Shown transparently.
   const serviceFee = estimateServiceFeeNaira(outstanding);
   const totalToPay = outstanding + serviceFee;
+
+  // Which rails this due actually accepts. A free-tier group collects by
+  // manual receipt only — so we must NOT show a Paystack "Pay now" button
+  // that goes nowhere. Legacy dues (null flags) default to accepted.
+  // When Paystack is off, the manual receipt flow becomes the primary
+  // action (the card + sticky button below), not a buried fallback.
+  const paystackOn = pt?.accepts_paystack !== false;
+  const manualOn = pt?.accepts_manual !== false;
 
   const Icon = iconForCategory(pt?.category);
 
@@ -459,67 +472,104 @@ export default function MakePaymentPage() {
               </section>
             )}
 
-            {/* Pay with — premium payment-method card. The big visual
-                draw is the credit-card "chip" graphic on the left
-                with the brand-orange gradient — the same finish as
-                physical bank cards. The right side stacks the trusted
-                network logos (Visa · Mastercard · Verve) so the user
-                instantly sees we accept the brands they own. */}
+            {/* Pay with — the card shown depends on what THIS due accepts.
+                Paystack-enabled (Pro) dues lead with the secure-checkout
+                card; manual-only (free-tier) dues lead with a clear
+                bank-transfer / receipt-upload card so the member is never
+                shown a "Pay now" button that can't work. */}
             <section>
               <p
                 className="text-[12px] uppercase tracking-[0.14em] font-bold mb-2 px-1"
                 style={{ color: t.textTer }}
               >
-                Pay with
+                {paystackOn ? 'Pay with' : 'How to pay'}
               </p>
-              <div
-                className="relative rounded-2xl p-4 overflow-hidden"
-                style={{
-                  background: t.card,
-                  border: `1px solid ${t.cardBorder}`,
-                  boxShadow: isLight
-                    ? '0 1px 0 rgba(255,255,255,0.7) inset, 0 6px 22px -10px rgba(15,7,3,0.10)'
-                    : '0 1px 0 rgba(255,255,255,0.02) inset',
-                }}
-              >
-                {/* Top row: brand chip + paystack label + status pill */}
-                <div className="flex items-center gap-3">
-                  <PaymentCardChip theme={theme} />
-                  <div className="flex-1 min-w-0">
-                    <p className="text-[14px] font-extrabold leading-tight" style={{ color: t.text }}>
-                      Paystack secure checkout
-                    </p>
-                    <p className="text-[11px] mt-0.5 leading-snug" style={{ color: t.textSec }}>
-                      Bank transfer, USSD or card — pick on the next screen.
-                    </p>
-                  </div>
-                  <span
-                    className="inline-flex items-center gap-1 text-[10px] font-bold rounded-full px-2 py-0.5 shrink-0"
-                    style={{
-                      background: isLight ? '#E7FAF1' : 'rgba(48,255,172,0.14)',
-                      color: isLight ? '#0E9F62' : t.mint,
-                    }}
-                  >
-                    <Shield size={10} /> Secure
-                  </span>
-                </div>
 
-                {/* Bottom row: card brand logos + small rail pills */}
+              {paystackOn ? (
                 <div
-                  className="mt-3 pt-3 flex items-center justify-between gap-2"
-                  style={{ borderTop: `1px dashed ${t.cardBorder}` }}
+                  className="relative rounded-2xl p-4 overflow-hidden"
+                  style={{
+                    background: t.card,
+                    border: `1px solid ${t.cardBorder}`,
+                    boxShadow: isLight
+                      ? '0 1px 0 rgba(255,255,255,0.7) inset, 0 6px 22px -10px rgba(15,7,3,0.10)'
+                      : '0 1px 0 rgba(255,255,255,0.02) inset',
+                  }}
                 >
-                  <div className="flex items-center gap-2">
-                    <CardBrandVisa theme={theme} />
-                    <CardBrandMastercard />
-                    <CardBrandVerve />
+                  {/* Top row: brand chip + paystack label + status pill */}
+                  <div className="flex items-center gap-3">
+                    <PaymentCardChip theme={theme} />
+                    <div className="flex-1 min-w-0">
+                      <p className="text-[14px] font-extrabold leading-tight" style={{ color: t.text }}>
+                        Paystack secure checkout
+                      </p>
+                      <p className="text-[11px] mt-0.5 leading-snug" style={{ color: t.textSec }}>
+                        Bank transfer, USSD or card — pick on the next screen.
+                      </p>
+                    </div>
+                    <span
+                      className="inline-flex items-center gap-1 text-[10px] font-bold rounded-full px-2 py-0.5 shrink-0"
+                      style={{
+                        background: isLight ? '#E7FAF1' : 'rgba(48,255,172,0.14)',
+                        color: isLight ? '#0E9F62' : t.mint,
+                      }}
+                    >
+                      <Shield size={10} /> Secure
+                    </span>
                   </div>
-                  <div className="flex items-center gap-1">
-                    <RailPill icon={<Smartphone size={11} />} label="USSD" theme={theme} />
-                    <RailPill icon={<CreditCard size={11} />} label="Card" theme={theme} />
+
+                  {/* Bottom row: card brand logos + small rail pills */}
+                  <div
+                    className="mt-3 pt-3 flex items-center justify-between gap-2"
+                    style={{ borderTop: `1px dashed ${t.cardBorder}` }}
+                  >
+                    <div className="flex items-center gap-2">
+                      <CardBrandVisa theme={theme} />
+                      <CardBrandMastercard />
+                      <CardBrandVerve />
+                    </div>
+                    <div className="flex items-center gap-1">
+                      <RailPill icon={<Smartphone size={11} />} label="USSD" theme={theme} />
+                      <RailPill icon={<CreditCard size={11} />} label="Card" theme={theme} />
+                    </div>
                   </div>
                 </div>
-              </div>
+              ) : (
+                <div
+                  className="relative rounded-2xl p-4 overflow-hidden"
+                  style={{
+                    background: t.card,
+                    border: `1px solid ${t.cardBorder}`,
+                    boxShadow: isLight
+                      ? '0 1px 0 rgba(255,255,255,0.7) inset, 0 6px 22px -10px rgba(15,7,3,0.10)'
+                      : '0 1px 0 rgba(255,255,255,0.02) inset',
+                  }}
+                >
+                  <div className="flex items-center gap-3">
+                    <div
+                      className="w-11 h-11 rounded-xl flex items-center justify-center shrink-0"
+                      style={{ background: t.primarySoft, color: t.primary, border: `1px solid ${t.primaryRing}` }}
+                    >
+                      <Wallet size={20} />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-[14px] font-extrabold leading-tight" style={{ color: t.text }}>
+                        Bank transfer or receipt upload
+                      </p>
+                      <p className="text-[11px] mt-0.5 leading-snug" style={{ color: t.textSec }}>
+                        This group collects manually — transfer or pay, then upload your proof. An admin confirms it.
+                      </p>
+                    </div>
+                  </div>
+                  <div
+                    className="mt-3 pt-3 flex items-center gap-2 text-[11px]"
+                    style={{ borderTop: `1px dashed ${t.cardBorder}`, color: t.textSec }}
+                  >
+                    <CheckCircle2 size={13} style={{ color: t.mint }} />
+                    No card fees — you pay exactly {formatNaira(outstanding)}.
+                  </div>
+                </div>
+              )}
             </section>
 
             {/* All-paid notice */}
@@ -566,7 +616,11 @@ export default function MakePaymentPage() {
               </div>
             )}
 
-            {/* Manual fallback — collapsed by default. Paystack-first */}
+            {/* Manual fallback — collapsed by default. Only when Paystack
+                is the primary rail AND manual is also accepted. For a
+                manual-only due the manual flow is already the lead action
+                (the card above + the sticky button), so no fallback here. */}
+            {paystackOn && manualOn && (
             <details className="group">
               <summary
                 className="list-none cursor-pointer flex items-center justify-between rounded-2xl px-4 py-3 text-[12px] font-semibold"
@@ -614,6 +668,7 @@ export default function MakePaymentPage() {
                 </button>
               </div>
             </details>
+            )}
           </div>
         )}
       </main>
@@ -636,7 +691,7 @@ export default function MakePaymentPage() {
             {/* Breakdown — the org gets `outstanding` exactly; the student
                 also covers a small secure-transfer fee. Solid surface so it
                 doesn't read as see-through over the page. */}
-            {serviceFee > 0 && (
+            {paystackOn && serviceFee > 0 && (
               <div
                 className="rounded-2xl px-4 py-3 mb-3 text-[12.5px]"
                 style={{ background: isLight ? '#FFFFFF' : '#1C150F', border: `1px solid ${t.cardBorder}`, color: t.textSec, boxShadow: isLight ? '0 6px 18px -10px rgba(15,7,3,0.18)' : '0 6px 18px -10px rgba(0,0,0,0.5)' }}
@@ -666,32 +721,52 @@ export default function MakePaymentPage() {
                 )}
               </div>
             )}
-            <motion.button
-              type="button"
-              onClick={handlePayWithPaystack}
-              disabled={submitting}
-              whileTap={{ scale: 0.985 }}
-              className="w-full rounded-2xl h-14 flex items-center justify-center gap-2 text-[15px] font-extrabold text-white disabled:opacity-70"
-              style={{
-                background: `linear-gradient(135deg, #FF7A1E 0%, #FF6803 50%, #E55A02 100%)`,
-                boxShadow:
-                  '0 18px 40px -16px rgba(255,104,3,0.55),' +
-                  ' 0 4px 12px -2px rgba(255,104,3,0.32),' +
-                  ' inset 0 1px 0 rgba(255,255,255,0.22)',
-              }}
-            >
-              {submitting ? (
-                <>
-                  <Shield size={17} className="animate-pulse" />
-                  Securing your checkout…
-                </>
-              ) : (
-                <>
-                  {isEvent ? 'Buy ticket · ' : 'Pay '}{formatNaira(serviceFee > 0 ? totalToPay : outstanding)}
-                  <ArrowRight size={16} />
-                </>
-              )}
-            </motion.button>
+            {paystackOn ? (
+              <motion.button
+                type="button"
+                onClick={handlePayWithPaystack}
+                disabled={submitting}
+                whileTap={{ scale: 0.985 }}
+                className="w-full rounded-2xl h-14 flex items-center justify-center gap-2 text-[15px] font-extrabold text-white disabled:opacity-70"
+                style={{
+                  background: `linear-gradient(135deg, #FF7A1E 0%, #FF6803 50%, #E55A02 100%)`,
+                  boxShadow:
+                    '0 18px 40px -16px rgba(255,104,3,0.55),' +
+                    ' 0 4px 12px -2px rgba(255,104,3,0.32),' +
+                    ' inset 0 1px 0 rgba(255,255,255,0.22)',
+                }}
+              >
+                {submitting ? (
+                  <>
+                    <Shield size={17} className="animate-pulse" />
+                    Securing your checkout…
+                  </>
+                ) : (
+                  <>
+                    {isEvent ? 'Buy ticket · ' : 'Pay '}{formatNaira(serviceFee > 0 ? totalToPay : outstanding)}
+                    <ArrowRight size={16} />
+                  </>
+                )}
+              </motion.button>
+            ) : (
+              // Manual-only due: the primary action is the receipt flow.
+              <motion.button
+                type="button"
+                onClick={() => go(`/payment/${pt.id}/manual`)}
+                whileTap={{ scale: 0.985 }}
+                className="w-full rounded-2xl h-14 flex items-center justify-center gap-2 text-[15px] font-extrabold text-white"
+                style={{
+                  background: `linear-gradient(135deg, #FF7A1E 0%, #FF6803 50%, #E55A02 100%)`,
+                  boxShadow:
+                    '0 18px 40px -16px rgba(255,104,3,0.55),' +
+                    ' 0 4px 12px -2px rgba(255,104,3,0.32),' +
+                    ' inset 0 1px 0 rgba(255,255,255,0.22)',
+                }}
+              >
+                Continue · pay {formatNaira(outstanding)}
+                <ArrowRight size={16} />
+              </motion.button>
+            )}
           </div>
         </div>
       )}

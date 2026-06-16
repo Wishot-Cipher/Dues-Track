@@ -62,7 +62,40 @@ const PAYSTACK_PUBLIC_KEY = import.meta.env.VITE_PAYSTACK_PUBLIC_KEY || '';
 // SERVICE
 // ============================================================
 
+export interface GroupBilling {
+  groupId: string;
+  name: string;
+  kind: string;
+  plan: 'free' | 'starter' | 'pro' | 'enterprise';
+  status: 'active' | 'expired' | 'trialing';
+  expiresAt: string | null;
+  onlinePayments: boolean;
+}
+
 export const billingService = {
+  /**
+   * Per-GROUP (class/tier) billing snapshot for the exec subscription
+   * page. Subscription is per class, not per org (mig 141/143).
+   */
+  async getGroupBilling(groupId: string): Promise<GroupBilling | null> {
+    try {
+      const { data, error } = await supabase.rpc('get_group_billing', { p_group_id: groupId });
+      if (error || !data?.ok) return null;
+      return {
+        groupId: data.group_id,
+        name: data.name,
+        kind: data.kind,
+        plan: data.plan,
+        status: data.status,
+        expiresAt: data.expires_at ?? null,
+        onlinePayments: Boolean(data.online_payments),
+      };
+    } catch (e) {
+      console.error('getGroupBilling error', e);
+      return null;
+    }
+  },
+
   /**
    * Get the full subscription status for an organization
    */

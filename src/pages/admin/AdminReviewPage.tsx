@@ -8,7 +8,6 @@ import { useAppNav } from '@/hooks/useAppNav';
 import { supabase } from "@/config/supabase";
 import { getOrgScope } from '@/utils/orgScope';
 import { useToast } from "@/hooks/useToast";
-import { colors, gradients } from "@/config/colors";
 import GlassCard from "@/components/ui/GlassCard";
 import { formatCurrency, formatDate } from "@/utils/formatters";
 import { PrivacyMask } from '@/components/ui/PrivacyMask';
@@ -77,9 +76,14 @@ function ReviewDecisionModal({
   onClose: () => void;
   onConfirm: () => void;
 }) {
+  const { theme } = useTheme();
+  const tk = getDashboardTokens(theme);
+  const isLight = theme === 'light';
+
   if (!open || !payment) return null;
 
   const isReject = kind === 'reject';
+  const fieldBg = isLight ? '#F7F3EF' : 'rgba(255,255,255,0.05)';
 
   return (
     <Modal
@@ -90,22 +94,22 @@ function ReviewDecisionModal({
       closeOnOverlayClick={!loading}
     >
       <div className="space-y-4">
-        <div className="p-4 rounded-lg" style={{ background: 'rgba(255, 255, 255, 0.05)' }}>
-          <p className="text-sm mb-1" style={{ color: colors.textSecondary }}>Student</p>
-          <p className="text-white font-medium mb-3">{payment.member.full_name}</p>
+        <div className="p-4 rounded-lg" style={{ background: fieldBg, border: `1px solid ${tk.cardBorder}` }}>
+          <p className="text-sm mb-1" style={{ color: tk.textSec }}>Student</p>
+          <p className="font-medium mb-3" style={{ color: tk.text }}>{payment.member.full_name}</p>
 
-          <p className="text-sm mb-1" style={{ color: colors.textSecondary }}>Amount</p>
-          <p className="text-white font-semibold text-lg mb-3">
+          <p className="text-sm mb-1" style={{ color: tk.textSec }}>Amount</p>
+          <p className="font-semibold text-lg mb-3" style={{ color: tk.text }}>
             <PrivacyMask>{formatCurrency(payment.amount)}</PrivacyMask>
           </p>
 
-          <p className="text-sm mb-1" style={{ color: colors.textSecondary }}>Payment Type</p>
-          <p className="text-white">{payment.payment_types.title}</p>
+          <p className="text-sm mb-1" style={{ color: tk.textSec }}>Payment Type</p>
+          <p style={{ color: tk.text }}>{payment.payment_types.title}</p>
         </div>
 
         {isReject && (
           <div>
-            <label className="block text-sm font-medium text-white mb-2">
+            <label className="block text-sm font-medium mb-2" style={{ color: tk.text }}>
               Rejection Reason *
             </label>
             <textarea
@@ -113,21 +117,25 @@ function ReviewDecisionModal({
               onChange={(e) => setRejectionReason(e.target.value)}
               placeholder="e.g., Receipt is blurry, wrong amount, invalid transaction reference..."
               rows={4}
-              className="w-full rounded-lg px-4 py-3 text-white placeholder-gray-400 focus:outline-none focus:ring-2"
+              className="w-full rounded-lg px-4 py-3 focus:outline-none focus:ring-2"
               style={{
-                background: 'rgba(255, 255, 255, 0.05)',
-                border: '1px solid rgba(255, 255, 255, 0.1)',
+                background: fieldBg,
+                border: `1px solid ${tk.cardBorder}`,
+                color: tk.text,
               }}
             />
+            <p className="text-xs mt-1.5" style={{ color: tk.textSec }}>
+              The student sees this reason and can fix the issue and resubmit.
+            </p>
           </div>
         )}
       </div>
 
-      <div className="flex gap-3">
+      <div className="flex gap-3 mt-4">
         <button
           onClick={onClose}
-          className="flex-1 py-3 rounded-lg font-medium text-white transition-all"
-          style={{ background: 'rgba(255, 255, 255, 0.1)' }}
+          className="flex-1 py-3 rounded-lg font-medium transition-all"
+          style={{ background: isLight ? 'rgba(15,7,3,0.06)' : 'rgba(255,255,255,0.08)', color: tk.text, border: `1px solid ${tk.cardBorder}` }}
         >
           Cancel
         </button>
@@ -135,7 +143,7 @@ function ReviewDecisionModal({
           onClick={onConfirm}
           disabled={loading || (isReject && !rejectionReason.trim())}
           className="flex-1 flex items-center justify-center gap-2 py-3 rounded-lg font-medium text-white transition-all disabled:opacity-50"
-          style={{ background: isReject ? colors.statusUnpaid : gradients.primary }}
+          style={{ background: isReject ? tk.danger : tk.gradOrange }}
         >
           {loading ? (
             <>
@@ -342,30 +350,22 @@ export default function AdminReviewPage() {
 
     try {
       setProcessingId(selectedPayment.id);
-      const scope = getOrgScope();
-      const { data: adminRec } = await supabase
-        .from('member_admins')
-        .select('id')
-        .eq('member_id', user?.id || '')
-        .eq('organization_id', scope?.orgId || '')
-        .single();
 
-      if (!adminRec) {
-        showError('You are not registered as an admin for this organization');
+      // Approval MUST go through the SECURITY DEFINER RPC (mig 140): a
+      // direct client `status='approved'` update is blocked by mig 019's
+      // restrictive policy. The RPC also re-checks own-tier authorization
+      // server-side (owns_payment_type) and refuses non-pending rows.
+      const { data: result, error } = await supabase.rpc('review_payment', {
+        p_payment_id: selectedPayment.id,
+        p_decision: 'approved',
+      });
+
+      if (error) throw error;
+      if (!result?.ok) {
+        showError(result?.error || 'Could not approve this payment.');
         setProcessingId(null);
         return;
       }
-
-      const { error } = await supabase
-        .from("payments")
-        .update({
-          status: "approved",
-          approved_by: adminRec.id,
-          approved_at: new Date().toISOString(),
-        })
-        .eq("id", selectedPayment.id);
-
-      if (error) throw error;
 
       // Send notification to student using notification service
       await notificationService.sendPaymentApprovedNotification(
@@ -403,8 +403,8 @@ export default function AdminReviewPage() {
     // Check if waived
     if (status === "approved" && transactionRef?.startsWith("WAIVED-")) {
       return {
-        bg: `${colors.accentMint}20`,
-        color: colors.accentMint,
+        bg: `${tk.mint}20`,
+        color: tk.mint,
         label: "WAIVED",
       };
     }
@@ -412,20 +412,20 @@ export default function AdminReviewPage() {
     switch (status) {
       case "approved":
         return {
-          bg: `${colors.statusPaid}20`,
-          color: colors.statusPaid,
+          bg: `${tk.mint}20`,
+          color: tk.mint,
           label: "APPROVED",
         };
       case "rejected":
         return {
-          bg: `${colors.statusUnpaid}20`,
-          color: colors.statusUnpaid,
+          bg: `${tk.danger}20`,
+          color: tk.danger,
           label: "REJECTED",
         };
       default:
         return {
-          bg: `${colors.warning}20`,
-          color: colors.warning,
+          bg: `${tk.amber}20`,
+          color: tk.amber,
           label: "PENDING",
         };
     }
@@ -439,31 +439,21 @@ export default function AdminReviewPage() {
 
     try {
       setProcessingId(selectedPayment.id);
-      const scope = getOrgScope();
-      const { data: adminRec } = await supabase
-        .from('member_admins')
-        .select('id')
-        .eq('member_id', user?.id || '')
-        .eq('organization_id', scope?.orgId || '')
-        .single();
 
-      if (!adminRec) {
-        showError('You are not registered as an admin for this organization');
+      // Same sanctioned path as approve — server re-checks own-tier
+      // authorization and that the row is still pending.
+      const { data: result, error } = await supabase.rpc('review_payment', {
+        p_payment_id: selectedPayment.id,
+        p_decision: 'rejected',
+        p_rejection_reason: rejectionReason.trim(),
+      });
+
+      if (error) throw error;
+      if (!result?.ok) {
+        showError(result?.error || 'Could not reject this payment.');
         setProcessingId(null);
         return;
       }
-
-      const { error } = await supabase
-        .from("payments")
-        .update({
-          status: "rejected",
-          approved_by: adminRec.id,
-          approved_at: new Date().toISOString(),
-          rejection_reason: rejectionReason.trim(),
-        })
-        .eq("id", selectedPayment.id);
-
-      if (error) throw error;
 
       // Send notification to student using notification service
       await notificationService.sendPaymentRejectedNotification(
@@ -683,7 +673,7 @@ export default function AdminReviewPage() {
               <div
                 className="animate-spin rounded-full h-10 w-10 border-3 border-t-transparent"
                 style={{
-                  borderColor: colors.primary,
+                  borderColor: tk.primary,
                   borderTopColor: "transparent",
                 }}
               />
@@ -696,7 +686,7 @@ export default function AdminReviewPage() {
               <div className="text-center py-12">
                 <CheckCircle
                   className="w-16 h-16 mx-auto mb-4"
-                  style={{ color: colors.statusPaid }}
+                  style={{ color: tk.mint }}
                 />
                 <p className="text-xl mb-2" style={{ color: tk.text }}>
                   {filter === "all"
@@ -776,11 +766,11 @@ export default function AdminReviewPage() {
                           <div className="flex items-center gap-3">
                             <div
                               className="w-10 h-10 rounded-full flex items-center justify-center"
-                              style={{ background: `${colors.primary}20` }}
+                              style={{ background: `${tk.primary}20` }}
                             >
                               <User
                                 className="w-5 h-5"
-                                style={{ color: colors.primary }}
+                                style={{ color: tk.primary }}
                               />
                             </div>
                             <div>
@@ -835,8 +825,8 @@ export default function AdminReviewPage() {
                               onClick={() => setSelectedPayment(payment)}
                               className="p-2 rounded-lg transition-all"
                               style={{
-                                background: `${colors.primary}20`,
-                                color: colors.primary,
+                                background: `${tk.primary}20`,
+                                color: tk.primary,
                               }}
                               title="View Receipt"
                             >
@@ -852,8 +842,8 @@ export default function AdminReviewPage() {
                                   disabled={processingId === payment.id}
                                   className="p-2 rounded-lg transition-all disabled:opacity-50"
                                   style={{
-                                    background: `${colors.statusPaid}20`,
-                                    color: colors.statusPaid,
+                                    background: `${tk.mint}20`,
+                                    color: tk.mint,
                                   }}
                                   title="Approve"
                                 >
@@ -861,7 +851,7 @@ export default function AdminReviewPage() {
                                     <div
                                       className="animate-spin rounded-full h-5 w-5 border-2 border-t-transparent"
                                       style={{
-                                        borderColor: colors.statusPaid,
+                                        borderColor: tk.mint,
                                         borderTopColor: "transparent",
                                       }}
                                     />
@@ -877,8 +867,8 @@ export default function AdminReviewPage() {
                                   disabled={processingId === payment.id}
                                   className="p-2 rounded-lg transition-all disabled:opacity-50"
                                   style={{
-                                    background: `${colors.statusUnpaid}20`,
-                                    color: colors.statusUnpaid,
+                                    background: `${tk.danger}20`,
+                                    color: tk.danger,
                                   }}
                                   title="Reject"
                                 >
@@ -979,7 +969,7 @@ export default function AdminReviewPage() {
                 <div className="flex flex-col sm:flex-row items-center justify-between gap-3">
                   <p
                     className="text-xs sm:text-sm text-center sm:text-left"
-                    style={{ color: colors.textSecondary }}
+                    style={{ color: tk.textSec }}
                   >
                     Showing {(currentPage - 1) * itemsPerPage + 1} -{" "}
                     {Math.min(
@@ -1001,13 +991,13 @@ export default function AdminReviewPage() {
                       style={{
                         background:
                           currentPage === 1
-                            ? "rgba(255, 255, 255, 0.05)"
-                            : `linear-gradient(135deg, ${colors.primary}20, ${colors.primary}10)`,
-                        border: `1px solid ${currentPage === 1 ? 'transparent' : colors.primary + '40'}`,
+                            ? (theme === "light" ? "rgba(15,7,3,0.05)" : "rgba(255,255,255,0.05)")
+                            : `linear-gradient(135deg, ${tk.primary}20, ${tk.primary}10)`,
+                        border: `1px solid ${currentPage === 1 ? 'transparent' : tk.primary + '40'}`,
                         color:
                           currentPage === 1
-                            ? colors.textSecondary
-                            : colors.primary,
+                            ? tk.textSec
+                            : tk.primary,
                       }}
                     >
                       <ChevronLeft className="w-4 h-4" />
@@ -1028,13 +1018,13 @@ export default function AdminReviewPage() {
                             style={{
                               background:
                                 currentPage === page
-                                  ? gradients.primary
-                                  : "rgba(255, 255, 255, 0.05)",
+                                  ? tk.gradOrange
+                                  : (theme === "light" ? "rgba(15,7,3,0.05)" : "rgba(255,255,255,0.05)"),
                               color:
                                 currentPage === page
                                   ? "white"
-                                  : colors.textSecondary,
-                              boxShadow: currentPage === page ? `0 2px 10px ${colors.primary}40` : 'none'
+                                  : tk.textSec,
+                              boxShadow: currentPage === page ? `0 2px 10px ${tk.primary}40` : 'none'
                             }}
                           >
                             {page}
@@ -1054,13 +1044,13 @@ export default function AdminReviewPage() {
                       style={{
                         background:
                           currentPage === totalPages
-                            ? "rgba(255, 255, 255, 0.05)"
-                            : `linear-gradient(135deg, ${colors.primary}20, ${colors.primary}10)`,
-                        border: `1px solid ${currentPage === totalPages ? 'transparent' : colors.primary + '40'}`,
+                            ? (theme === "light" ? "rgba(15,7,3,0.05)" : "rgba(255,255,255,0.05)")
+                            : `linear-gradient(135deg, ${tk.primary}20, ${tk.primary}10)`,
+                        border: `1px solid ${currentPage === totalPages ? 'transparent' : tk.primary + '40'}`,
                         color:
                           currentPage === totalPages
-                            ? colors.textSecondary
-                            : colors.primary,
+                            ? tk.textSec
+                            : tk.primary,
                       }}
                     >
                       Next
@@ -1072,7 +1062,7 @@ export default function AdminReviewPage() {
                 <div className="text-center">
                   <p
                     className="text-xs sm:text-sm"
-                    style={{ color: colors.textSecondary }}
+                    style={{ color: tk.textSec }}
                   >
                     Showing all {filteredPayments.length} payment
                     {filteredPayments.length !== 1 ? "s" : ""}

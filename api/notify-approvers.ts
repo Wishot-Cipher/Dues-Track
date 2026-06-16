@@ -75,14 +75,17 @@ export default async function handler(req: any, res: any) {
 
     const organizationId = payment.organization_id;
 
-    // Fetch names for message (multi-tenant: organization_members table)
-    let ptQ = supabaseAdmin
+    // Fetch the DUE's title + OWNING TIER. The approver is the exec who
+    // owns the due's tier (payment_type.group_id) — NOT the payer's group.
+    // A class member can pay a DEPT due; the dept exec must be notified,
+    // not the class rep. (Keying off payment.group_id missed them.)
+    const { data: pt } = await supabaseAdmin
       .from('payment_types')
-      .select('title')
+      .select('title, group_id')
       .eq('id', paymentTypeId)
       .eq('organization_id', organizationId)
-    if (payment.group_id) ptQ = ptQ.eq('group_id', payment.group_id)
-    const { data: pt } = await ptQ.single()
+      .single()
+    const dueGroupId: string | null = (pt as any)?.group_id ?? null
     const { data: member } = await supabaseAdmin
       .from('organization_members')
       .select('full_name, member_id')
@@ -104,8 +107,11 @@ export default async function handler(req: any, res: any) {
     const memberId = member?.member_id || ''
     const formattedAmount = `₦${Number(amount || 0).toLocaleString()}`
 
-    // Find approvers: admins who can approve payments or have role treasurer
-    // Scoped to the same organization as the payment
+    // Find approvers: admins who can approve payments (or treasurer/owner)
+    // who OWN the due's tier. Tier due → admins of that exact group; org-wide
+    // due (no group) → org-scope admins. This mirrors the Review queue's
+    // own-tier rule so the people who actually see the payment are the ones
+    // pinged about it.
     let approverQ = supabaseAdmin
       .from('member_admins')
       .select(`
@@ -120,8 +126,10 @@ export default async function handler(req: any, res: any) {
       .eq('is_active', true)
       .or('can_approve_payments.eq.true,role.eq.treasurer,role.eq.org_owner,role.eq.org_admin')
 
-    if (payment.group_id) {
-      approverQ = approverQ.eq('group_id', payment.group_id)
+    if (dueGroupId) {
+      approverQ = approverQ.eq('group_id', dueGroupId)
+    } else {
+      approverQ = approverQ.eq('scope_level', 'org')
     }
 
     const { data: approvers } = await approverQ
@@ -134,7 +142,7 @@ export default async function handler(req: any, res: any) {
     const inserts = approvers.map((a: any) => ({
       member_id: a.member_id,
       organization_id: organizationId,
-      group_id: payment.group_id || null,
+      group_id: dueGroupId || null,
       type: 'payment_pending',
       title: `💰 New Payment - ${paymentTypeName}`,
       message: `${memberName} (${memberId}) submitted ${formattedAmount} for "${paymentTypeName}". Tap to review.`,

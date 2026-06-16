@@ -297,6 +297,43 @@ export async function setAdminActive(adminId: string, active: boolean, reason?: 
   await callPlatformRpc('platform_set_admin_active', { p_admin_id: adminId, p_active: active, p_reason: reason ?? null });
 }
 
+// ── Per-CLASS subscriptions (billing is per group/tier, not per org) ──
+
+export interface GroupPlanRow {
+  id: string;
+  name: string;
+  kind: string;
+  parent_group_id: string | null;
+  subscription_plan: 'free' | 'starter' | 'pro' | 'enterprise';
+  subscription_status: 'active' | 'expired' | 'trialing';
+  subscription_expires_at: string | null;
+}
+
+/** List an org's groups with their per-class plan (for the console). */
+export async function fetchOrgGroups(orgId: string): Promise<GroupPlanRow[]> {
+  const { data, error } = await supabase
+    .from('organization_groups')
+    .select('id, name, kind, parent_group_id, subscription_plan, subscription_status, subscription_expires_at')
+    .eq('organization_id', orgId)
+    .order('kind', { ascending: true })
+    .order('name', { ascending: true });
+  if (error) throw new Error(error.message);
+  return (data ?? []) as GroupPlanRow[];
+}
+
+/** Platform admin upgrades/downgrades a single class's plan. */
+export async function setGroupPlan(
+  groupId: string,
+  plan: 'free' | 'starter' | 'pro' | 'enterprise',
+  expiresAt?: string | null,
+): Promise<void> {
+  await callPlatformRpc('platform_set_group_plan', {
+    p_group_id: groupId,
+    p_plan: plan,
+    p_expires_at: expiresAt ?? null,
+  });
+}
+
 // ── Financial intelligence / audit / analytics ──────────────────
 
 async function callPlatformRpc<T = Record<string, unknown>>(fn: string, extra: Record<string, unknown> = {}): Promise<T> {

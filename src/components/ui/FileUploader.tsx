@@ -1,6 +1,6 @@
 import React, { useRef, useState } from 'react'
 import { Upload, File, X, CheckCircle, AlertCircle, Image, FileText } from 'lucide-react'
-import { colors } from '../../config/colors'
+import { useTheme, getDashboardTokens } from '@/hooks/useTheme'
 
 interface FileUploaderProps {
   onFileSelect: (file: File | File[] | null) => void
@@ -28,6 +28,10 @@ const FileUploader: React.FC<FileUploaderProps> = ({
   multiple = false,
   disabled = false,
 }) => {
+  const { theme } = useTheme()
+  const t = getDashboardTokens(theme)
+  const isLight = theme === 'light'
+
   const [files, setFiles] = useState<FileWithPreview[]>([])
   const [isDragging, setIsDragging] = useState(false)
   const [error, setError] = useState('')
@@ -138,8 +142,8 @@ const FileUploader: React.FC<FileUploaderProps> = ({
   }
 
   return (
-    <div className="w-full">
-      {label && <label className="block text-sm font-medium mb-2">{label}</label>}
+    <div className="w-full" style={{ color: t.text }}>
+      {label && <label className="block text-sm font-medium mb-2" style={{ color: t.text }}>{label}</label>}
 
       {files.length === 0 ? (
         <div
@@ -151,8 +155,8 @@ const FileUploader: React.FC<FileUploaderProps> = ({
             disabled ? 'cursor-not-allowed opacity-50' : 'cursor-pointer'
           }`}
           style={{
-            borderColor: isDragging ? colors.primary : error ? colors.error : 'rgba(255, 255, 255, 0.2)',
-            background: isDragging ? `${colors.primary}10` : error ? `${colors.error}05` : 'rgba(255, 255, 255, 0.05)',
+            borderColor: isDragging ? t.primary : error ? t.danger : (isLight ? 'rgba(15,7,3,0.18)' : 'rgba(255, 255, 255, 0.2)'),
+            background: isDragging ? `${t.primary}10` : error ? `${t.danger}08` : (isLight ? '#FBF7F3' : 'rgba(255, 255, 255, 0.05)'),
           }}
           role="button"
           tabIndex={disabled ? -1 : 0}
@@ -163,18 +167,18 @@ const FileUploader: React.FC<FileUploaderProps> = ({
             <div
               className="w-16 h-16 rounded-full flex items-center justify-center transition-all duration-300"
               style={{
-                background: `${colors.primary}20`,
-                boxShadow: isDragging ? `0 0 30px ${colors.primary}60` : `0 0 20px ${colors.primary}40`,
+                background: `${t.primary}20`,
+                boxShadow: isDragging ? `0 0 30px ${t.primary}60` : `0 0 20px ${t.primary}40`,
               }}
             >
-              <Upload size={32} style={{ color: colors.primary }} />
+              <Upload size={32} style={{ color: t.primary }} />
             </div>
 
             <div>
               <p className="font-semibold mb-1">
                 {loading ? 'Processing...' : isDragging ? 'Drop file here' : 'Click or drag file to upload'}
               </p>
-              <p className="text-sm" style={{ color: colors.textSecondary }}>
+              <p className="text-sm" style={{ color: t.textSec }}>
                 {description}
               </p>
             </div>
@@ -198,8 +202,8 @@ const FileUploader: React.FC<FileUploaderProps> = ({
               key={`${item.file.name}-${index}`}
               className="rounded-xl border overflow-hidden"
               style={{
-                background: `${colors.accentGreen}10`,
-                borderColor: `${colors.accentGreen}50`,
+                background: `${t.mint}10`,
+                borderColor: `${t.mint}50`,
               }}
             >
               {/* Preview */}
@@ -210,7 +214,7 @@ const FileUploader: React.FC<FileUploaderProps> = ({
                       style={{
                         maxWidth: '100%',
                         maxHeight: '60vh',
-                        background: 'rgba(0,0,0,0.2)',
+                        background: isLight ? 'rgba(15,7,3,0.06)' : 'rgba(0,0,0,0.2)',
                         minHeight: '120px',
                       }}
                     >
@@ -239,10 +243,10 @@ const FileUploader: React.FC<FileUploaderProps> = ({
 
               {/* File Info */}
               <div className="flex items-center gap-4 p-4">
-                <div className="p-3 rounded-lg shrink-0" style={{ background: `${colors.accentGreen}20` }}>
+                <div className="p-3 rounded-lg shrink-0" style={{ background: `${t.mint}20` }}>
                   {React.createElement(getFileIcon(item.file), {
                     size: 24,
-                    style: { color: colors.accentGreen },
+                    style: { color: t.mint },
                   })}
                 </div>
 
@@ -253,12 +257,12 @@ const FileUploader: React.FC<FileUploaderProps> = ({
                   >
                     {item.file.name}
                   </p>
-                  <p className="text-xs" style={{ color: colors.textSecondary }}>
+                  <p className="text-xs" style={{ color: t.textSec }}>
                     {formatFileSize(item.file.size)}
                   </p>
                 </div>
 
-                <CheckCircle size={20} style={{ color: colors.accentGreen }} className="shrink-0" />
+                <CheckCircle size={20} style={{ color: t.mint }} className="shrink-0" />
 
                 <button
                   onClick={() => removeFile(index)}
@@ -276,8 +280,8 @@ const FileUploader: React.FC<FileUploaderProps> = ({
 
       {error && (
         <div className="flex items-center gap-2 mt-2" role="alert">
-          <AlertCircle size={16} style={{ color: colors.error }} />
-          <p className="text-sm" style={{ color: colors.error }}>
+          <AlertCircle size={16} style={{ color: t.danger }} />
+          <p className="text-sm" style={{ color: t.danger }}>
             {error}
           </p>
         </div>

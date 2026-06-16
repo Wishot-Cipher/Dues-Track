@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { colors, gradients } from '@/config/colors';
+import { useTheme, getDashboardTokens } from '@/hooks/useTheme';
 import { formatCurrency } from '@/utils/formatters';
 import GlassCard from '@/components/ui/GlassCard';
 import HoldToConfirm from '@/components/student/HoldToConfirm';
@@ -71,6 +71,17 @@ export default function PaymentSubmissionFlow({
   onSubmit,
   submitting,
 }: PaymentSubmissionFlowProps) {
+  const { theme } = useTheme();
+  const t = getDashboardTokens(theme);
+  const isLight = theme === 'light';
+
+  // Theme-aware surface helpers — replaces the old hardcoded dark glass so
+  // the manual flow reads cleanly in BOTH light and dark mode (it used to be
+  // white-on-white in light mode).
+  const fieldBg = isLight ? '#F7F3EF' : 'rgba(255,255,255,0.05)';
+  const subtleBg = isLight ? 'rgba(15,7,3,0.03)' : 'rgba(255,255,255,0.03)';
+  const hairline = t.cardBorder;
+
   const [currentStep, setCurrentStep] = useState(1);
   const [paymentOption, setPaymentOption] = useState<'full' | 'partial'>('full');
   const [partialAmount, setPartialAmount] = useState(0);
@@ -168,7 +179,7 @@ export default function PaymentSubmissionFlow({
   };
 
   return (
-    <div className="space-y-6 relative">
+    <div className="space-y-6 relative" style={{ color: t.text }}>
       {/* Loading Overlay */}
       <AnimatePresence>
         {submitting && (
@@ -177,23 +188,23 @@ export default function PaymentSubmissionFlow({
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             className="fixed inset-0 z-50 flex items-center justify-center"
-            style={{ background: 'rgba(0, 0, 0, 0.8)', backdropFilter: 'blur(8px)' }}
+            style={{ background: 'rgba(0, 0, 0, 0.55)', backdropFilter: 'blur(8px)' }}
           >
             <motion.div
               initial={{ scale: 0.9, opacity: 0 }}
               animate={{ scale: 1, opacity: 1 }}
               className="flex flex-col items-center gap-4 p-8 rounded-2xl"
-              style={{ background: colors.card, border: `1px solid ${colors.border}` }}
+              style={{ background: t.card, border: `1px solid ${hairline}` }}
             >
               <motion.div
                 className="w-12 h-12 border-3 rounded-full"
-                style={{ borderColor: `${colors.primary}30`, borderTopColor: colors.primary }}
+                style={{ borderColor: `${t.primary}30`, borderTopColor: t.primary }}
                 animate={{ rotate: 360 }}
                 transition={{ duration: 1, repeat: Infinity, ease: 'linear' }}
               />
               <div className="text-center">
-                <p className="font-semibold text-lg" style={{ color: colors.text }}>Processing Payment</p>
-                <p className="text-sm mt-1" style={{ color: colors.textSecondary }}>Please wait while we submit your payment...</p>
+                <p className="font-semibold text-lg" style={{ color: t.text }}>Processing Payment</p>
+                <p className="text-sm mt-1" style={{ color: t.textSec }}>Please wait while we submit your payment...</p>
               </div>
             </motion.div>
           </motion.div>
@@ -206,17 +217,17 @@ export default function PaymentSubmissionFlow({
           onClick={onBack}
           disabled={submitting}
           className="flex items-center justify-center w-10 h-10 rounded-xl disabled:opacity-50 disabled:cursor-not-allowed"
-          style={{ background: 'rgba(255, 255, 255, 0.05)', border: '1px solid rgba(255, 255, 255, 0.1)' }}
+          style={{ background: fieldBg, border: `1px solid ${hairline}` }}
           whileHover={submitting ? {} : { scale: 1.05 }}
           whileTap={submitting ? {} : { scale: 0.95 }}
         >
-          <ArrowLeft className="w-5 h-5" style={{ color: submitting ? colors.textSecondary + '50' : colors.textSecondary }} />
+          <ArrowLeft className="w-5 h-5" style={{ color: t.textSec }} />
         </motion.button>
         <div>
-          <h2 className="text-xl font-bold text-white">
+          <h2 className="text-xl font-bold" style={{ color: t.text }}>
             {isTransfer ? 'Bank Transfer' : 'POS Payment'}
           </h2>
-          <p className="text-sm" style={{ color: colors.textSecondary }}>
+          <p className="text-sm" style={{ color: t.textSec }}>
             {paymentType.title}
           </p>
         </div>
@@ -236,11 +247,11 @@ export default function PaymentSubmissionFlow({
                   className="w-8 h-8 sm:w-10 sm:h-10 rounded-full flex items-center justify-center relative shrink-0"
                   style={{
                     background: isCompleted
-                      ? colors.statusPaid
+                      ? t.mint
                       : isActive
-                      ? gradients.primary
-                      : 'rgba(255, 255, 255, 0.05)',
-                    border: isActive ? 'none' : '1px solid rgba(255, 255, 255, 0.1)',
+                      ? t.gradOrange
+                      : fieldBg,
+                    border: isActive ? 'none' : `1px solid ${hairline}`,
                   }}
                   animate={isActive ? { scale: [1, 1.1, 1] } : {}}
                   transition={{ duration: 0.3 }}
@@ -248,12 +259,12 @@ export default function PaymentSubmissionFlow({
                   {isCompleted ? (
                     <Check className="w-4 h-4 sm:w-5 sm:h-5 text-white" />
                   ) : (
-                    <Icon className="w-4 h-4 sm:w-5 sm:h-5" style={{ color: isActive ? 'white' : colors.textSecondary }} />
+                    <Icon className="w-4 h-4 sm:w-5 sm:h-5" style={{ color: isActive ? 'white' : t.textSec }} />
                   )}
                 </motion.div>
                 <span
                   className="text-[9px] sm:text-[10px] mt-1 sm:mt-1.5 font-medium text-center truncate max-w-[60px] sm:max-w-none"
-                  style={{ color: isActive ? colors.primary : colors.textSecondary }}
+                  style={{ color: isActive ? t.primary : t.textSec }}
                 >
                   {step.title}
                 </span>
@@ -262,7 +273,7 @@ export default function PaymentSubmissionFlow({
                 <div
                   className="w-5 sm:w-12 h-0.5 mx-0.5 sm:mx-1 shrink-0"
                   style={{
-                    background: currentStep > step.id ? colors.statusPaid : 'rgba(255, 255, 255, 0.1)',
+                    background: currentStep > step.id ? t.mint : hairline,
                   }}
                 />
               )}
@@ -275,29 +286,29 @@ export default function PaymentSubmissionFlow({
       <motion.div
         className="p-4 rounded-xl relative overflow-hidden"
         style={{
-          background: `linear-gradient(135deg, ${colors.primary}15 0%, ${colors.warning}10 100%)`,
-          border: `1px solid ${colors.primary}30`,
+          background: t.primarySoft,
+          border: `1px solid ${t.primaryRing}`,
         }}
         initial={{ opacity: 0, y: -10 }}
         animate={{ opacity: 1, y: 0 }}
       >
-        <div className="absolute top-0 left-0 w-full h-1" style={{ background: gradients.primary }} />
+        <div className="absolute top-0 left-0 w-full h-1" style={{ background: t.gradOrange }} />
         <div className="flex items-center justify-between gap-3 min-w-0">
           <div className="min-w-0">
-            <p className="text-xs uppercase tracking-wider" style={{ color: colors.textSecondary }}>
+            <p className="text-xs uppercase tracking-wider" style={{ color: t.textSec }}>
               Total to Pay
             </p>
-            <p className="text-xl sm:text-2xl font-bold text-white truncate">{formatCurrency(totalToPay)}</p>
+            <p className="text-xl sm:text-2xl font-bold truncate" style={{ color: t.text }}>{formatCurrency(totalToPay)}</p>
             {accumulatedLateFees > 0 && (
-              <p className="text-xs mt-1" style={{ color: colors.warning }}>
+              <p className="text-xs mt-1" style={{ color: t.amber }}>
                 Includes {formatCurrency(accumulatedLateFees)} in late fees
               </p>
             )}
           </div>
           <div className="text-right">
             <div className="flex items-center gap-2 justify-end">
-              <Users className="w-4 h-4" style={{ color: colors.accentMint }} />
-              <span className="text-sm font-semibold text-white">
+              <Users className="w-4 h-4" style={{ color: t.mint }} />
+              <span className="text-sm font-semibold" style={{ color: t.text }}>
                 {studentsPayingFor.length} Student{studentsPayingFor.length > 1 ? 's' : ''}
               </span>
             </div>
@@ -321,13 +332,13 @@ export default function PaymentSubmissionFlow({
                   <div className="flex items-center gap-3 mb-6">
                     <div
                       className="w-12 h-12 rounded-xl flex items-center justify-center"
-                      style={{ background: `${colors.primary}20` }}
+                      style={{ background: `${t.primary}20` }}
                     >
-                      <Building2 className="w-6 h-6" style={{ color: colors.primary }} />
+                      <Building2 className="w-6 h-6" style={{ color: t.primary }} />
                     </div>
                     <div>
-                      <h3 className="text-lg font-bold text-white">Transfer to This Account</h3>
-                      <p className="text-sm" style={{ color: colors.textSecondary }}>
+                      <h3 className="text-lg font-bold" style={{ color: t.text }}>Transfer to This Account</h3>
+                      <p className="text-sm" style={{ color: t.textSec }}>
                         Copy the details below and make your transfer
                       </p>
                     </div>
@@ -335,40 +346,40 @@ export default function PaymentSubmissionFlow({
 
                   <div className="space-y-4">
                     {/* Bank Name */}
-                    <div className="p-4 rounded-xl" style={{ background: 'rgba(255, 255, 255, 0.03)' }}>
-                      <p className="text-xs uppercase tracking-wider mb-1" style={{ color: colors.textSecondary }}>
+                    <div className="p-4 rounded-xl" style={{ background: subtleBg }}>
+                      <p className="text-xs uppercase tracking-wider mb-1" style={{ color: t.textSec }}>
                         Bank Name
                       </p>
-                      <p className="text-lg font-semibold text-white">{paymentType.bank_name}</p>
+                      <p className="text-lg font-semibold" style={{ color: t.text }}>{paymentType.bank_name}</p>
                     </div>
 
                     {/* Account Name */}
-                    <div className="p-4 rounded-xl" style={{ background: 'rgba(255, 255, 255, 0.03)' }}>
-                      <p className="text-xs uppercase tracking-wider mb-1" style={{ color: colors.textSecondary }}>
+                    <div className="p-4 rounded-xl" style={{ background: subtleBg }}>
+                      <p className="text-xs uppercase tracking-wider mb-1" style={{ color: t.textSec }}>
                         Account Name
                       </p>
-                      <p className="text-lg font-semibold text-white">{paymentType.account_name}</p>
+                      <p className="text-lg font-semibold" style={{ color: t.text }}>{paymentType.account_name}</p>
                     </div>
 
                     {/* Account Number with Copy */}
                     <div
                       className="p-4 rounded-xl relative overflow-hidden"
-                      style={{ background: `${colors.primary}10`, border: `1px solid ${colors.primary}30` }}
+                      style={{ background: t.primarySoft, border: `1px solid ${t.primaryRing}` }}
                     >
-                      <div className="absolute top-0 left-0 w-1 h-full" style={{ background: colors.primary }} />
-                      <p className="text-xs uppercase tracking-wider mb-1" style={{ color: colors.primary }}>
+                      <div className="absolute top-0 left-0 w-1 h-full" style={{ background: t.primary }} />
+                      <p className="text-xs uppercase tracking-wider mb-1" style={{ color: t.primary }}>
                         Account Number
                       </p>
                       <div className="flex items-center justify-between gap-2 sm:gap-3">
-                        <p className="text-lg sm:text-2xl font-bold tracking-wider text-white truncate min-w-0">
+                        <p className="text-lg sm:text-2xl font-bold tracking-wider truncate min-w-0" style={{ color: t.text }}>
                           {paymentType.account_number}
                         </p>
                         <motion.button
                           onClick={copyAccountNumber}
                           className="flex items-center gap-2 px-4 py-2 rounded-lg font-medium"
                           style={{
-                            background: copied ? colors.statusPaid : `${colors.primary}20`,
-                            color: copied ? 'white' : colors.primary,
+                            background: copied ? t.mint : `${t.primary}20`,
+                            color: copied ? 'white' : t.primary,
                           }}
                           whileHover={{ scale: 1.02 }}
                           whileTap={{ scale: 0.98 }}
@@ -391,12 +402,12 @@ export default function PaymentSubmissionFlow({
                     {/* Amount to Transfer */}
                     <div
                       className="p-4 rounded-xl"
-                      style={{ background: `${colors.accentMint}10`, border: `1px solid ${colors.accentMint}30` }}
+                      style={{ background: isLight ? 'rgba(48,255,172,0.10)' : 'rgba(48,255,172,0.10)', border: `1px solid ${isLight ? '#CCF2DE' : 'rgba(48,255,172,0.30)'}` }}
                     >
-                      <p className="text-xs uppercase tracking-wider mb-1" style={{ color: colors.accentMint }}>
+                      <p className="text-xs uppercase tracking-wider mb-1" style={{ color: t.mint }}>
                         Amount to Transfer
                       </p>
-                      <p className="text-xl sm:text-2xl font-bold" style={{ color: colors.accentMint }}>
+                      <p className="text-xl sm:text-2xl font-bold" style={{ color: t.mint }}>
                         {formatCurrency(totalToPay)}
                       </p>
                     </div>
@@ -407,13 +418,13 @@ export default function PaymentSubmissionFlow({
                   <div className="flex items-center gap-3 mb-6">
                     <div
                       className="w-12 h-12 rounded-xl flex items-center justify-center"
-                      style={{ background: `${colors.primary}20` }}
+                      style={{ background: `${t.primary}20` }}
                     >
-                      <CreditCard className="w-6 h-6" style={{ color: colors.primary }} />
+                      <CreditCard className="w-6 h-6" style={{ color: t.primary }} />
                     </div>
                     <div>
-                      <h3 className="text-lg font-bold text-white">POS Payment</h3>
-                      <p className="text-sm" style={{ color: colors.textSecondary }}>
+                      <h3 className="text-lg font-bold" style={{ color: t.text }}>POS Payment</h3>
+                      <p className="text-sm" style={{ color: t.textSec }}>
                         Pay via POS terminal and upload the receipt
                       </p>
                     </div>
@@ -421,8 +432,8 @@ export default function PaymentSubmissionFlow({
 
                   <div className="space-y-4">
                     {/* Instructions */}
-                    <div className="p-4 rounded-xl" style={{ background: 'rgba(255, 255, 255, 0.03)' }}>
-                      <h4 className="font-semibold text-white mb-3">How to Pay</h4>
+                    <div className="p-4 rounded-xl" style={{ background: subtleBg }}>
+                      <h4 className="font-semibold mb-3" style={{ color: t.text }}>How to Pay</h4>
                       <ol className="space-y-3">
                         {[
                           'Locate a Financial Secretary or Class Rep with POS',
@@ -434,11 +445,11 @@ export default function PaymentSubmissionFlow({
                           <li key={i} className="flex items-start gap-3">
                             <span
                               className="w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold shrink-0"
-                              style={{ background: `${colors.primary}20`, color: colors.primary }}
+                              style={{ background: `${t.primary}20`, color: t.primary }}
                             >
                               {i + 1}
                             </span>
-                            <span className="text-sm" style={{ color: colors.textSecondary }}>
+                            <span className="text-sm" style={{ color: t.textSec }}>
                               {instruction}
                             </span>
                           </li>
@@ -449,12 +460,12 @@ export default function PaymentSubmissionFlow({
                     {/* Amount Box */}
                     <div
                       className="p-4 rounded-xl text-center"
-                      style={{ background: `${colors.accentMint}10`, border: `1px solid ${colors.accentMint}30` }}
+                      style={{ background: 'rgba(48,255,172,0.10)', border: `1px solid ${isLight ? '#CCF2DE' : 'rgba(48,255,172,0.30)'}` }}
                     >
-                      <p className="text-xs uppercase tracking-wider mb-1" style={{ color: colors.accentMint }}>
+                      <p className="text-xs uppercase tracking-wider mb-1" style={{ color: t.mint }}>
                         Amount to Pay
                       </p>
-                      <p className="text-2xl sm:text-3xl font-bold" style={{ color: colors.accentMint }}>
+                      <p className="text-2xl sm:text-3xl font-bold" style={{ color: t.mint }}>
                         {formatCurrency(totalToPay)}
                       </p>
                     </div>
@@ -477,13 +488,13 @@ export default function PaymentSubmissionFlow({
               <div className="flex items-center gap-3 mb-6">
                 <div
                   className="w-12 h-12 rounded-xl flex items-center justify-center"
-                  style={{ background: `${colors.primary}20` }}
+                  style={{ background: `${t.primary}20` }}
                 >
-                  <Banknote className="w-6 h-6" style={{ color: colors.primary }} />
+                  <Banknote className="w-6 h-6" style={{ color: t.primary }} />
                 </div>
                 <div>
-                  <h3 className="text-lg font-bold text-white">Payment Amount</h3>
-                  <p className="text-sm" style={{ color: colors.textSecondary }}>
+                  <h3 className="text-lg font-bold" style={{ color: t.text }}>Payment Amount</h3>
+                  <p className="text-sm" style={{ color: t.textSec }}>
                     {allowPartial && selectedStudents.length === 0 ? 'Choose full or partial payment' : 'Confirm your payment amount'}
                   </p>
                 </div>
@@ -491,8 +502,8 @@ export default function PaymentSubmissionFlow({
 
               {/* Students List */}
               {studentsPayingFor.length > 0 && (
-                <div className="mb-6 p-4 rounded-xl" style={{ background: 'rgba(255, 255, 255, 0.03)' }}>
-                  <p className="text-xs uppercase tracking-wider mb-3" style={{ color: colors.textSecondary }}>
+                <div className="mb-6 p-4 rounded-xl" style={{ background: subtleBg }}>
+                  <p className="text-xs uppercase tracking-wider mb-3" style={{ color: t.textSec }}>
                     Paying for {studentsPayingFor.length} Student{studentsPayingFor.length > 1 ? 's' : ''}
                   </p>
                   <div className="space-y-2">
@@ -500,13 +511,13 @@ export default function PaymentSubmissionFlow({
                       <div
                         key={i}
                         className="flex items-center justify-between p-2 rounded-lg"
-                        style={{ background: 'rgba(255, 255, 255, 0.03)' }}
+                        style={{ background: subtleBg }}
                       >
                         <div className="flex items-center gap-2">
-                          <CheckCircle className="w-4 h-4" style={{ color: colors.accentMint }} />
-                          <span className="text-sm text-white">{s.full_name}</span>
+                          <CheckCircle className="w-4 h-4" style={{ color: t.mint }} />
+                          <span className="text-sm" style={{ color: t.text }}>{s.full_name}</span>
                         </div>
-                        <span className="text-sm font-semibold" style={{ color: colors.primary }}>
+                        <span className="text-sm font-semibold" style={{ color: t.primary }}>
                           {formatCurrency(s.outstanding ?? currentUserOutstanding)}
                         </span>
                       </div>
@@ -520,8 +531,8 @@ export default function PaymentSubmissionFlow({
                 onClick={() => setPaymentOption('full')}
                 className="w-full p-4 rounded-xl mb-3 text-left relative overflow-hidden"
                 style={{
-                  background: paymentOption === 'full' ? `${colors.primary}15` : 'rgba(255, 255, 255, 0.03)',
-                  border: `2px solid ${paymentOption === 'full' ? colors.primary : 'rgba(255, 255, 255, 0.1)'}`,
+                  background: paymentOption === 'full' ? t.primarySoft : subtleBg,
+                  border: `2px solid ${paymentOption === 'full' ? t.primary : hairline}`,
                 }}
                 whileHover={{ scale: 1.01 }}
                 whileTap={{ scale: 0.99 }}
@@ -529,18 +540,18 @@ export default function PaymentSubmissionFlow({
                 {paymentOption === 'full' && (
                   <motion.div
                     className="absolute top-0 left-0 w-1 h-full"
-                    style={{ background: colors.primary }}
+                    style={{ background: t.primary }}
                     layoutId="paymentIndicator"
                   />
                 )}
                 <div className="flex items-center justify-between">
                   <div>
-                    <p className="font-bold text-white">Pay Full Amount</p>
-                    <p className="text-sm mt-1" style={{ color: colors.textSecondary }}>
+                    <p className="font-bold" style={{ color: t.text }}>Pay Full Amount</p>
+                    <p className="text-sm mt-1" style={{ color: t.textSec }}>
                       Complete payment in one transaction
                     </p>
                   </div>
-                  <p className="text-xl font-bold" style={{ color: colors.primary }}>
+                  <p className="text-xl font-bold" style={{ color: t.primary }}>
                     {formatCurrency(totalOutstanding)}
                   </p>
                 </div>
@@ -553,8 +564,8 @@ export default function PaymentSubmissionFlow({
                     onClick={() => setPaymentOption('partial')}
                     className="w-full p-4 rounded-xl text-left relative overflow-hidden"
                     style={{
-                      background: paymentOption === 'partial' ? `${colors.primary}15` : 'rgba(255, 255, 255, 0.03)',
-                      border: `2px solid ${paymentOption === 'partial' ? colors.primary : 'rgba(255, 255, 255, 0.1)'}`,
+                      background: paymentOption === 'partial' ? t.primarySoft : subtleBg,
+                      border: `2px solid ${paymentOption === 'partial' ? t.primary : hairline}`,
                     }}
                     whileHover={{ scale: 1.01 }}
                     whileTap={{ scale: 0.99 }}
@@ -562,18 +573,18 @@ export default function PaymentSubmissionFlow({
                     {paymentOption === 'partial' && (
                       <motion.div
                         className="absolute top-0 left-0 w-1 h-full"
-                        style={{ background: colors.primary }}
+                        style={{ background: t.primary }}
                         layoutId="paymentIndicator"
                       />
                     )}
                     <div className="flex items-center justify-between">
                       <div>
-                        <p className="font-bold text-white">Pay Partial Amount</p>
-                        <p className="text-sm mt-1" style={{ color: colors.textSecondary }}>
+                        <p className="font-bold" style={{ color: t.text }}>Pay Partial Amount</p>
+                        <p className="text-sm mt-1" style={{ color: t.textSec }}>
                           Pay what you can now, complete later
                         </p>
                       </div>
-                      <p className="text-sm" style={{ color: colors.textSecondary }}>
+                      <p className="text-sm" style={{ color: t.textSec }}>
                         Custom
                       </p>
                     </div>
@@ -588,7 +599,7 @@ export default function PaymentSubmissionFlow({
                         exit={{ opacity: 0, height: 0 }}
                         className="mt-4"
                       >
-                        <label className="block text-sm font-medium mb-2 text-white">
+                        <label className="block text-sm font-medium mb-2" style={{ color: t.text }}>
                           Enter Amount (Max: {formatCurrency(totalOutstanding)})
                         </label>
                         <input
@@ -601,15 +612,16 @@ export default function PaymentSubmissionFlow({
                           }
                           max={totalOutstanding}
                           min={0}
-                          className="w-full px-4 py-3 rounded-xl text-white text-lg font-semibold focus:outline-none focus:ring-2"
+                          className="w-full px-4 py-3 rounded-xl text-lg font-semibold focus:outline-none focus:ring-2"
                           style={{
-                            background: 'rgba(255, 255, 255, 0.05)',
-                            border: '1px solid rgba(255, 255, 255, 0.1)',
+                            background: fieldBg,
+                            border: `1px solid ${hairline}`,
+                            color: t.text,
                           }}
                           placeholder="0.00"
                         />
                         {partialAmount > 0 && (
-                          <p className="text-sm mt-2" style={{ color: colors.textSecondary }}>
+                          <p className="text-sm mt-2" style={{ color: t.textSec }}>
                             Remaining after this: {formatCurrency(Math.max(0, totalOutstanding - partialAmount))}
                           </p>
                         )}
@@ -634,13 +646,13 @@ export default function PaymentSubmissionFlow({
               <div className="flex items-center gap-3 mb-6">
                 <div
                   className="w-12 h-12 rounded-xl flex items-center justify-center"
-                  style={{ background: `${colors.primary}20` }}
+                  style={{ background: `${t.primary}20` }}
                 >
-                  <Upload className="w-6 h-6" style={{ color: colors.primary }} />
+                  <Upload className="w-6 h-6" style={{ color: t.primary }} />
                 </div>
                 <div>
-                  <h3 className="text-lg font-bold text-white">Upload Payment Proof</h3>
-                  <p className="text-sm" style={{ color: colors.textSecondary }}>
+                  <h3 className="text-lg font-bold" style={{ color: t.text }}>Upload Payment Proof</h3>
+                  <p className="text-sm" style={{ color: t.textSec }}>
                     Provide your transaction details and receipt
                   </p>
                 </div>
@@ -649,21 +661,22 @@ export default function PaymentSubmissionFlow({
               <div className="space-y-5">
                 {/* Transaction Reference */}
                 <div>
-                  <label className="block text-sm font-medium mb-2 text-white">
-                    Transaction Reference <span style={{ color: colors.statusUnpaid }}>*</span>
+                  <label className="block text-sm font-medium mb-2" style={{ color: t.text }}>
+                    Transaction Reference <span style={{ color: t.danger }}>*</span>
                   </label>
                   <input
                     type="text"
                     value={transactionRef}
                     onChange={(e) => setTransactionRef(e.target.value)}
-                    className="w-full px-4 py-3 rounded-xl text-white focus:outline-none focus:ring-2"
+                    className="w-full px-4 py-3 rounded-xl focus:outline-none focus:ring-2"
                     style={{
-                      background: 'rgba(255, 255, 255, 0.05)',
-                      border: `1px solid ${transactionRef ? colors.accentMint + '50' : 'rgba(255, 255, 255, 0.1)'}`,
+                      background: fieldBg,
+                      border: `1px solid ${transactionRef ? t.mint + '80' : hairline}`,
+                      color: t.text,
                     }}
                     placeholder={isTransfer ? 'e.g., TRF/2024/11/12345' : 'POS receipt number'}
                   />
-                  <p className="text-xs mt-1" style={{ color: colors.textSecondary }}>
+                  <p className="text-xs mt-1" style={{ color: t.textSec }}>
                     {isTransfer
                       ? 'The reference number from your bank transfer confirmation'
                       : 'The transaction ID on your POS receipt'}
@@ -691,15 +704,15 @@ export default function PaymentSubmissionFlow({
                       initial={{ opacity: 0, y: -10 }}
                       animate={{ opacity: 1, y: 0 }}
                       className="mt-3 p-3 rounded-xl flex items-center gap-3"
-                      style={{ 
-                        background: `${colors.accentMint}10`, 
-                        border: `1px solid ${colors.accentMint}30` 
+                      style={{
+                        background: 'rgba(48,255,172,0.10)',
+                        border: `1px solid ${isLight ? '#CCF2DE' : 'rgba(48,255,172,0.30)'}`,
                       }}
                     >
-                      <CheckCircle className="w-5 h-5" style={{ color: colors.accentMint }} />
+                      <CheckCircle className="w-5 h-5" style={{ color: t.mint }} />
                       <div className="flex-1 min-w-0">
-                        <p className="text-sm font-medium text-white truncate">{receiptFile.name}</p>
-                        <p className="text-xs" style={{ color: colors.textSecondary }}>
+                        <p className="text-sm font-medium truncate" style={{ color: t.text }}>{receiptFile.name}</p>
+                        <p className="text-xs" style={{ color: t.textSec }}>
                           {(receiptFile.size / 1024).toFixed(1)} KB • Ready to upload
                         </p>
                       </div>
@@ -709,17 +722,18 @@ export default function PaymentSubmissionFlow({
 
                 {/* Notes */}
                 <div>
-                  <label className="block text-sm font-medium mb-2 text-white">
-                    Additional Notes <span style={{ color: colors.textSecondary }}>(Optional)</span>
+                  <label className="block text-sm font-medium mb-2" style={{ color: t.text }}>
+                    Additional Notes <span style={{ color: t.textSec }}>(Optional)</span>
                   </label>
                   <textarea
                     value={notes}
                     onChange={(e) => setNotes(e.target.value)}
                     rows={3}
-                    className="w-full px-4 py-3 rounded-xl text-white focus:outline-none focus:ring-2"
+                    className="w-full px-4 py-3 rounded-xl focus:outline-none focus:ring-2"
                     style={{
-                      background: 'rgba(255, 255, 255, 0.05)',
-                      border: '1px solid rgba(255, 255, 255, 0.1)',
+                      background: fieldBg,
+                      border: `1px solid ${hairline}`,
+                      color: t.text,
                     }}
                     placeholder="Any additional information for the reviewer..."
                   />
@@ -741,13 +755,13 @@ export default function PaymentSubmissionFlow({
               <div className="flex items-center gap-3 mb-6">
                 <div
                   className="w-12 h-12 rounded-xl flex items-center justify-center"
-                  style={{ background: `${colors.accentMint}20` }}
+                  style={{ background: 'rgba(48,255,172,0.18)' }}
                 >
-                  <CheckCircle className="w-6 h-6" style={{ color: colors.accentMint }} />
+                  <CheckCircle className="w-6 h-6" style={{ color: t.mint }} />
                 </div>
                 <div>
-                  <h3 className="text-lg font-bold text-white">Review & Submit</h3>
-                  <p className="text-sm" style={{ color: colors.textSecondary }}>
+                  <h3 className="text-lg font-bold" style={{ color: t.text }}>Review & Submit</h3>
+                  <p className="text-sm" style={{ color: t.textSec }}>
                     Verify your payment details before submitting
                   </p>
                 </div>
@@ -755,41 +769,41 @@ export default function PaymentSubmissionFlow({
 
               {/* Summary Grid */}
               <div className="grid grid-cols-2 gap-3 mb-6">
-                <div className="p-3 rounded-xl" style={{ background: 'rgba(255, 255, 255, 0.03)' }}>
-                  <p className="text-[10px] uppercase tracking-wider mb-1" style={{ color: colors.textSecondary }}>
+                <div className="p-3 rounded-xl" style={{ background: subtleBg }}>
+                  <p className="text-[10px] uppercase tracking-wider mb-1" style={{ color: t.textSec }}>
                     Payment Method
                   </p>
-                  <p className="text-sm font-semibold text-white">
+                  <p className="text-sm font-semibold" style={{ color: t.text }}>
                     {isTransfer ? 'Bank Transfer' : 'POS'}
                   </p>
                 </div>
-                <div className="p-3 rounded-xl" style={{ background: 'rgba(255, 255, 255, 0.03)' }}>
-                  <p className="text-[10px] uppercase tracking-wider mb-1" style={{ color: colors.textSecondary }}>
+                <div className="p-3 rounded-xl" style={{ background: subtleBg }}>
+                  <p className="text-[10px] uppercase tracking-wider mb-1" style={{ color: t.textSec }}>
                     Amount
                   </p>
-                  <p className="text-sm font-semibold" style={{ color: colors.primary }}>
+                  <p className="text-sm font-semibold" style={{ color: t.primary }}>
                     {formatCurrency(totalToPay)}
                   </p>
                 </div>
-                <div className="p-3 rounded-xl col-span-2" style={{ background: 'rgba(255, 255, 255, 0.03)' }}>
-                  <p className="text-[10px] uppercase tracking-wider mb-1" style={{ color: colors.textSecondary }}>
+                <div className="p-3 rounded-xl col-span-2" style={{ background: subtleBg }}>
+                  <p className="text-[10px] uppercase tracking-wider mb-1" style={{ color: t.textSec }}>
                     Transaction Reference
                   </p>
-                  <p className="text-sm font-semibold text-white break-all">{transactionRef}</p>
+                  <p className="text-sm font-semibold break-all" style={{ color: t.text }}>{transactionRef}</p>
                 </div>
               </div>
 
               {/* Students Summary */}
-              <div className="mb-6 p-4 rounded-xl" style={{ background: `${colors.primary}10` }}>
-                <p className="text-xs uppercase tracking-wider mb-2" style={{ color: colors.primary }}>
+              <div className="mb-6 p-4 rounded-xl" style={{ background: t.primarySoft }}>
+                <p className="text-xs uppercase tracking-wider mb-2" style={{ color: t.primary }}>
                   Payment For
                 </p>
                 <div className="space-y-1">
                   {studentsPayingFor.map((s, i) => (
                     <div key={i} className="flex items-center gap-2">
-                      <CheckCircle className="w-4 h-4" style={{ color: colors.accentMint }} />
-                      <span className="text-sm text-white">{s.full_name}</span>
-                      <span className="text-xs" style={{ color: colors.textSecondary }}>
+                      <CheckCircle className="w-4 h-4" style={{ color: t.mint }} />
+                      <span className="text-sm" style={{ color: t.text }}>{s.full_name}</span>
+                      <span className="text-xs" style={{ color: t.textSec }}>
                         ({s.reg_number})
                       </span>
                     </div>
@@ -799,12 +813,12 @@ export default function PaymentSubmissionFlow({
 
               {/* Receipt Preview */}
               {receiptFile && (
-                <div className="mb-6 p-4 rounded-xl" style={{ background: 'rgba(255, 255, 255, 0.03)' }}>
+                <div className="mb-6 p-4 rounded-xl" style={{ background: subtleBg }}>
                   <div className="flex items-center gap-2 mb-2">
-                    <FileText className="w-4 h-4" style={{ color: colors.accentMint }} />
-                    <p className="text-sm font-medium text-white">Receipt Attached</p>
+                    <FileText className="w-4 h-4" style={{ color: t.mint }} />
+                    <p className="text-sm font-medium" style={{ color: t.text }}>Receipt Attached</p>
                   </div>
-                  <p className="text-xs truncate" style={{ color: colors.textSecondary }}>
+                  <p className="text-xs truncate" style={{ color: t.textSec }}>
                     {receiptFile.name}
                   </p>
                 </div>
@@ -813,12 +827,12 @@ export default function PaymentSubmissionFlow({
               {/* Warning */}
               <div
                 className="p-4 rounded-xl flex items-start gap-3"
-                style={{ background: `${colors.warning}10`, border: `1px solid ${colors.warning}30` }}
+                style={{ background: isLight ? 'rgba(245,158,11,0.10)' : 'rgba(245,158,11,0.10)', border: `1px solid ${isLight ? '#F5D9A8' : 'rgba(245,158,11,0.30)'}` }}
               >
-                <AlertTriangle className="w-5 h-5 shrink-0 mt-0.5" style={{ color: colors.warning }} />
+                <AlertTriangle className="w-5 h-5 shrink-0 mt-0.5" style={{ color: t.amber }} />
                 <div>
-                  <p className="text-sm font-medium text-white">Before Submitting</p>
-                  <p className="text-xs mt-1" style={{ color: colors.textSecondary }}>
+                  <p className="text-sm font-medium" style={{ color: t.text }}>Before Submitting</p>
+                  <p className="text-xs mt-1" style={{ color: t.textSec }}>
                     Ensure your payment proof is clear and the transaction reference matches.
                     Your submission will be reviewed by an admin.
                   </p>
@@ -837,13 +851,13 @@ export default function PaymentSubmissionFlow({
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -10 }}
             className="p-3 rounded-xl flex items-center gap-2"
-            style={{ 
-              background: `${colors.statusUnpaid}15`, 
-              border: `1px solid ${colors.statusUnpaid}30` 
+            style={{
+              background: isLight ? 'rgba(239,68,68,0.08)' : 'rgba(239,68,68,0.12)',
+              border: `1px solid ${t.danger}40`,
             }}
           >
-            <AlertTriangle className="w-4 h-4 shrink-0" style={{ color: colors.statusUnpaid }} />
-            <p className="text-sm" style={{ color: colors.statusUnpaid }}>{validationError}</p>
+            <AlertTriangle className="w-4 h-4 shrink-0" style={{ color: t.danger }} />
+            <p className="text-sm" style={{ color: t.danger }}>{validationError}</p>
           </motion.div>
         )}
       </AnimatePresence>
@@ -859,9 +873,9 @@ export default function PaymentSubmissionFlow({
             disabled={submitting}
             className="flex-1 py-3 px-4 sm:py-4 sm:px-6 rounded-xl font-semibold disabled:opacity-50 disabled:cursor-not-allowed min-w-0"
             style={{
-              background: 'rgba(255, 255, 255, 0.05)',
-              border: '1px solid rgba(255, 255, 255, 0.1)',
-              color: colors.textSecondary,
+              background: fieldBg,
+              border: `1px solid ${hairline}`,
+              color: t.textSec,
             }}
             whileHover={submitting ? {} : { scale: 1.02 }}
             whileTap={submitting ? {} : { scale: 0.98 }}
@@ -875,8 +889,8 @@ export default function PaymentSubmissionFlow({
             onClick={handleContinue}
             className="flex-1 py-3 px-4 sm:py-4 sm:px-6 rounded-xl font-semibold flex items-center justify-center gap-2 min-w-0"
             style={{
-              background: canProceedToNext() ? gradients.primary : 'rgba(255, 255, 255, 0.1)',
-              color: canProceedToNext() ? 'white' : colors.textSecondary,
+              background: canProceedToNext() ? t.gradOrange : fieldBg,
+              color: canProceedToNext() ? 'white' : t.textSec,
             }}
             whileHover={canProceedToNext() ? { scale: 1.02 } : {}}
             whileTap={canProceedToNext() ? { scale: 0.98 } : {}}
@@ -891,7 +905,7 @@ export default function PaymentSubmissionFlow({
             holdDuration={1500}
             label="Hold to Submit Payment"
             confirmLabel="Submitting..."
-            color={colors.primary}
+            color={t.primary}
             className="flex-1 min-w-0"
           />
         )}

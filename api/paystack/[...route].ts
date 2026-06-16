@@ -251,7 +251,7 @@ async function handleInitCore(req: any, res: any, body: any) {
   // event tiers, and retiring stale pending inits. Previously four serial
   // awaits. The retire-update only touches OLD pending rows, never the
   // fresh one we insert below, so it's safe in the same batch.
-  const [orgRes, priorRes, tiersRes] = await Promise.all([
+  const [orgRes, priorRes, tiersRes, groupRes] = await Promise.all([
     supabase
       .from('organizations')
       .select('id, slug, name, currency_code, platform_fee_percent, platform_fee_flat, platform_fee_min, platform_fee_cap, platform_fee_mode, paystack_subaccount_code')
@@ -272,6 +272,17 @@ async function handleInitCore(req: any, res: any, body: any) {
           .eq('payment_type_id', pt.id)
           .eq('is_active', true)
       : Promise.resolve({ data: null as any }),
+    // A tier-scoped due (pt.group_id set) settles to the GROUP's own
+    // subaccount, not the org's. The org-level subaccount is only for
+    // org-wide dues. Resolving the wrong one was zeroing the service fee
+    // AND dropping the split for every class/dept/faculty due.
+    pt.group_id
+      ? supabase
+          .from('organization_groups')
+          .select('paystack_subaccount_code')
+          .eq('id', pt.group_id)
+          .maybeSingle()
+      : Promise.resolve({ data: null as any }),
     (!isGuestCheckout)
       ? supabase
           .from('payments')
@@ -287,6 +298,15 @@ async function handleInitCore(req: any, res: any, body: any) {
   if (orgErr || !org) {
     return res.status(500).json({ ok: false, error: 'Could not resolve organization.' });
   }
+
+  // The subaccount the dues must settle to: the due's OWN tier when it's a
+  // group/faculty/class due, else the org's. This is what gates the service
+  // fee and the Paystack split below — read the wrong one and the org/tier
+  // is shorted (money lands in the platform account) while the student is
+  // charged no fee.
+  const effectiveSubaccount: string | null = pt.group_id
+    ? ((groupRes.data?.paystack_subaccount_code as string | null) ?? null)
+    : ((org.paystack_subaccount_code as string | null) ?? null);
 
   // ── Double-payment guard (dues only) ──
   // A due that's already fully paid must not be payable again. (Events are
@@ -327,7 +347,7 @@ async function handleInitCore(req: any, res: any, body: any) {
   // Cover Paystack's fee so the org nets EXACTLY the dues. This single
   // serviceFee is what the student pays on top. Under ₦2,500 this is just
   // ~1.5% (no ₦100 flat); the ₦100 flat only kicks in above ₦2,500.
-  const coverKobo = org.paystack_subaccount_code ? paystackCoverKobo(duesKobo) : 0;
+  const coverKobo = effectiveSubaccount ? paystackCoverKobo(duesKobo) : 0;
   const serviceFeeKobo = coverKobo + marginKobo;
   const totalKobo = duesKobo + serviceFeeKobo;
 
@@ -408,15 +428,15 @@ async function handleInitCore(req: any, res: any, body: any) {
     },
   };
 
-  if (org.paystack_subaccount_code) {
-    // Split so the ORG NETS EXACTLY THE DUES. transaction_charge (the full
-    // service fee) goes to the platform's main account, which BEARS
-    // Paystack's processing fee out of it (bearer:'account'). The
+  if (effectiveSubaccount) {
+    // Split so the TIER (or org) NETS EXACTLY THE DUES. transaction_charge
+    // (the full service fee) goes to the platform's main account, which
+    // BEARS Paystack's processing fee out of it (bearer:'account'). The
     // subaccount's slice is therefore total − serviceFee = dues, untouched.
     // The platform keeps serviceFee − Paystack's fee (≈ the configured
     // margin; ~0 by default). Without a subaccount the whole charge lands
-    // in the platform account — the org must register its bank to collect.
-    paystackBody.subaccount = org.paystack_subaccount_code;
+    // in the platform account — the tier must register its bank to collect.
+    paystackBody.subaccount = effectiveSubaccount;
     paystackBody.transaction_charge = serviceFeeKobo;
     paystackBody.bearer = 'account';
   }

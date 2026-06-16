@@ -262,6 +262,11 @@ export default function CreateDuePage() {
   const [targetScope, setTargetScope] = useState<'org' | 'faculty' | 'group'>('group');
   const [targetGroupId, setTargetGroupId] = useState<string | null>(null);
 
+  // Whether the due's TARGET (tier or org) is on a plan that includes
+  // online (Paystack) checkout. Free groups collect by manual receipt
+  // only — Paystack is a Pro feature, gated per group (mig 141).
+  const [paystackUnlocked, setPaystackUnlocked] = useState(false);
+
   // Permission guard
   useEffect(() => {
     if (user && !hasPermission?.('can_create_payments')) {
@@ -536,6 +541,35 @@ export default function CreateDuePage() {
   const setField = <K extends keyof FormState>(k: K, v: FormState[K]) =>
     setForm((f) => ({ ...f, [k]: v }));
 
+  // Resolve whether the due's target may collect online (Paystack):
+  // org-wide dues use the org plan; tier dues use the target group's own
+  // plan (mig 141's group_online_payments_enabled). Re-runs whenever the
+  // chosen scope / target changes.
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      if (targetScope === 'org') {
+        const plan = (organization as { subscription_plan?: string } | null)?.subscription_plan ?? 'free';
+        if (!cancelled) setPaystackUnlocked(plan === 'pro' || plan === 'enterprise');
+        return;
+      }
+      if (!targetGroupId) { if (!cancelled) setPaystackUnlocked(false); return; }
+      const { data } = await supabase.rpc('group_online_payments_enabled', { p_group_id: targetGroupId });
+      if (!cancelled) setPaystackUnlocked(Boolean(data));
+    })();
+    return () => { cancelled = true; };
+  }, [targetScope, targetGroupId, organization]);
+
+  // When the target can't collect online, a non-event due must not carry
+  // accepts_paystack — keep the form honest so the preview + submit match
+  // what the plan actually allows. (Events require Paystack to auto-issue
+  // tickets, so they're left untouched here.)
+  useEffect(() => {
+    if (!paystackUnlocked && form.category !== 'event' && form.accepts_paystack) {
+      setField('accepts_paystack', false);
+    }
+  }, [paystackUnlocked, form.category, form.accepts_paystack]);
+
 
   const getImageDimensions = (file: File): Promise<{ width: number; height: number }> =>
     new Promise((resolve, reject) => {
@@ -605,7 +639,7 @@ export default function CreateDuePage() {
 
         setField('event_cover_url', urlData.publicUrl);
         setCoverFileName(file.name);
-      } catch (uploadErr) {
+      } catch {
         setError('Image upload failed. Please try again or paste a URL instead.');
         setCoverFileName(null);
       }
@@ -765,7 +799,7 @@ export default function CreateDuePage() {
               bank_name: !isEvent && form.accepts_manual ? form.bank_name.trim() : null,
               account_name: !isEvent && form.accepts_manual ? form.account_name.trim() : null,
               account_number: !isEvent && form.accepts_manual ? form.account_number.trim() : null,
-              accepts_paystack: isEvent ? true : form.accepts_paystack,
+              accepts_paystack: isEvent ? true : (paystackUnlocked && form.accepts_paystack),
               accepts_manual: isEvent ? false : form.accepts_manual,
               event_date: isEvent ? (form.event_date || null) : null,
               event_venue: isEvent ? (form.event_venue || null) : null,
@@ -1414,6 +1448,8 @@ export default function CreateDuePage() {
                 checked={form.accepts_paystack}
                 onChange={(v) => setField('accepts_paystack', v)}
                 accent={tk.primary}
+                locked={!isEvent && !paystackUnlocked}
+                lockedNote="Online checkout is a Pro feature — upgrade this class to enable it."
               />
               <ToggleCard
                 label="Manual bank transfer"
@@ -1423,6 +1459,22 @@ export default function CreateDuePage() {
                 accent={tk.blue}
               />
             </div>
+
+            {/* Free-tier nudge — explains WHY Paystack is off and points to
+                the upgrade, so it reads as a plan boundary, not a bug. */}
+            {!isEvent && !paystackUnlocked && (
+              <div
+                className="mt-3 rounded-xl px-3 py-2.5 flex items-start gap-2 text-[11px] leading-snug"
+                style={{ background: `${tk.primary}10`, border: `1px solid ${tk.primary}30`, color: tk.textSec }}
+              >
+                <Sparkles className="w-3.5 h-3.5 shrink-0 mt-0.5" style={{ color: tk.primary }} />
+                <span>
+                  This {targetScope === 'org' ? 'organization' : 'class'} is on the free plan, so members pay by
+                  manual bank transfer / receipt upload. Upgrade to <strong style={{ color: tk.primary }}>Pro</strong> to
+                  also accept instant card / USSD payments via Paystack.
+                </span>
+              </div>
+            )}
 
             {form.accepts_manual && (
               <motion.div
@@ -1789,36 +1841,58 @@ function Textarea({
 
 function ToggleCard({
   label, description, checked, onChange, accent = BRAND.primary,
+  locked = false, lockedNote,
 }: {
   label: string;
   description: string;
   checked: boolean;
   onChange: (v: boolean) => void;
   accent?: string;
+  // Locked = the plan doesn't include this rail (e.g. Paystack on a free
+  // group). The card is non-interactive, dimmed, force-unchecked, and
+  // wears a "Pro" badge so the exec sees it's an upgrade, not a bug.
+  locked?: boolean;
+  lockedNote?: string;
 }) {
   const tk = useTokens();
+  const on = checked && !locked;
   return (
     <button
       type="button"
-      onClick={() => onChange(!checked)}
+      onClick={() => { if (!locked) onChange(!checked); }}
+      aria-disabled={locked}
       className="text-left rounded-xl p-3 flex items-start gap-3 transition-all"
       style={{
-        background: checked ? `${accent}12` : tk.panel,
-        border: `1px solid ${checked ? `${accent}40` : tk.border}`,
+        background: on ? `${accent}12` : tk.panel,
+        border: `1px solid ${on ? `${accent}40` : tk.border}`,
+        opacity: locked ? 0.6 : 1,
+        cursor: locked ? 'not-allowed' : 'pointer',
       }}
     >
       <div
         className="w-5 h-5 rounded-md flex items-center justify-center shrink-0 mt-0.5 transition-all"
         style={{
-          background: checked ? accent : 'transparent',
-          border: `1.5px solid ${checked ? accent : 'rgba(255,255,255,0.25)'}`,
+          background: on ? accent : 'transparent',
+          border: `1.5px solid ${on ? accent : 'rgba(255,255,255,0.25)'}`,
         }}
       >
-        {checked && <Check className="w-3 h-3 text-white" strokeWidth={3} />}
+        {on && <Check className="w-3 h-3 text-white" strokeWidth={3} />}
       </div>
       <div className="flex-1 min-w-0">
-        <p className="text-xs font-semibold text-white">{label}</p>
-        <p className="text-[10px] mt-0.5 leading-4" style={{ color: tk.textSec }}>{description}</p>
+        <div className="flex items-center gap-1.5">
+          <p className="text-xs font-semibold text-white">{label}</p>
+          {locked && (
+            <span
+              className="inline-flex items-center text-[8.5px] font-black uppercase tracking-wider px-1.5 py-0.5 rounded-full"
+              style={{ background: `${BRAND.primary}22`, color: BRAND.primary }}
+            >
+              Pro
+            </span>
+          )}
+        </div>
+        <p className="text-[10px] mt-0.5 leading-4" style={{ color: tk.textSec }}>
+          {locked && lockedNote ? lockedNote : description}
+        </p>
       </div>
     </button>
   );

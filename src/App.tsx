@@ -77,7 +77,7 @@ const AdminCollectedPage          = lazy(() => import('@/pages/admin/AdminCollec
 const ExpensesPage                = lazy(() => import('@/pages/admin/ExpensesPage'));
 const PublicContributionsPage     = lazy(() => import('@/pages/admin/PublicContributionsPage'));
 const DonationSettingsPage        = lazy(() => import('@/pages/admin/DonationSettingsPage'));
-const BillingPage                 = lazy(() => import('@/pages/admin/BillingPage'));
+const BillingPage                 = lazy(() => import('@/pages/admin/GroupBillingPage'));
 const PayoutSetupPage             = lazy(() => import('@/pages/admin/PayoutSetupPage'));
 const OrgGroupsPage               = lazy(() => import('@/pages/admin/OrgGroupsPage'));
 const OrgAcademicCalendarPage     = lazy(() => import('@/pages/admin/OrgAcademicCalendarPage'));

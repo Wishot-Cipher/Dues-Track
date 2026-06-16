@@ -17,7 +17,7 @@ import {
 import { supabase, STORAGE_BUCKETS } from "@/config/supabase";
 import { useAuth } from '@/hooks/useAppAuth';
 import { useToast } from "@/hooks/useToast";
-import { colors, gradients } from "@/config/colors";
+import { useTheme, getDashboardTokens } from '@/hooks/useTheme';
 import GlassCard from "@/components/ui/GlassCard";
 import LoadingSpinner from "@/components/ui/LoadingSpinner";
 import { formatCurrency } from "@/utils/formatters";
@@ -92,6 +92,9 @@ export default function PaymentDetailPage() {
   const { go: navigate } = useAppNav();
   const { user } = useAuth();
   const toast = useToast();
+  const { theme } = useTheme();
+  const t = getDashboardTokens(theme);
+  const isLight = theme === 'light';
 
   const [paymentType, setPaymentType] = useState<PaymentType | null>(null);
   const [existingPayments, setExistingPayments] = useState<ExistingPayment[]>([]);
@@ -338,25 +341,25 @@ export default function PaymentDetailPage() {
     return (
       <div
         className="min-h-screen flex items-center justify-center p-6"
-        style={{ background: 'radial-gradient(ellipse at top, #1A0E09 0%, #0F0703 100%)' }}
+        style={{ background: t.bgWash }}
       >
         <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="text-center max-w-md">
           <motion.div
             initial={{ scale: 0.8 }} animate={{ scale: 1 }}
             transition={{ type: 'spring', damping: 15 }}
             className="w-20 h-20 mx-auto mb-6 rounded-2xl flex items-center justify-center"
-            style={{ background: `${colors.statusUnpaid}15`, border: `1px solid ${colors.statusUnpaid}30` }}
+            style={{ background: `${t.danger}15`, border: `1px solid ${t.danger}30` }}
           >
-            <AlertCircle className="w-10 h-10" style={{ color: colors.statusUnpaid }} />
+            <AlertCircle className="w-10 h-10" style={{ color: t.danger }} />
           </motion.div>
-          <h2 className="text-2xl font-bold text-white mb-3">Payment Not Found</h2>
-          <p className="text-sm mb-6" style={{ color: colors.textSecondary }}>
+          <h2 className="text-2xl font-bold mb-3" style={{ color: t.text }}>Payment Not Found</h2>
+          <p className="text-sm mb-6" style={{ color: t.textSec }}>
             This payment type may have been removed or the link is invalid.
           </p>
           <motion.button
             onClick={() => navigate("/dashboard")}
             className="px-6 py-3 rounded-xl font-semibold flex items-center justify-center gap-2 mx-auto"
-            style={{ background: gradients.primary, color: 'white', boxShadow: `0 4px 20px ${colors.primary}40` }}
+            style={{ background: t.gradOrange, color: 'white', boxShadow: `0 4px 20px ${t.primary}40` }}
             whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }}
           >
             <ArrowLeft size={20} /> Back to Dashboard
@@ -367,7 +370,7 @@ export default function PaymentDetailPage() {
   }
 
   return (
-    <PageWrapper noPadding className="py-2 sm:py-6" style={{ background: '#0A0705' }}>
+    <PageWrapper noPadding className="py-2 sm:py-6" style={{ background: t.bgWash }}>
       <SuccessCelebration
         isVisible={showCelebration}
         title="Payment Submitted! 🎉"
@@ -390,9 +393,9 @@ export default function PaymentDetailPage() {
             <button
               onClick={() => navigate("/dashboard")}
               className="flex items-center justify-center sm:justify-start gap-2 mb-4 px-3 py-2 rounded-lg transition-colors w-auto outline outline-orange-500 mt-2"
-              style={{ color: colors.textSecondary }}
-              onMouseEnter={(e) => (e.currentTarget.style.color = colors.primary)}
-              onMouseLeave={(e) => (e.currentTarget.style.color = colors.textSecondary)}
+              style={{ color: t.textSec }}
+              onMouseEnter={(e) => (e.currentTarget.style.color = t.primary)}
+              onMouseLeave={(e) => (e.currentTarget.style.color = t.textSec)}
             >
               <ArrowLeft size={20} />
               <span className="font-medium">Back to Dashboard</span>
@@ -412,14 +415,14 @@ export default function PaymentDetailPage() {
               className="rounded-2xl overflow-hidden"
               style={{
                 background: 'linear-gradient(135deg, rgba(255, 107, 53, 0.08) 0%, rgba(255, 107, 53, 0.02) 100%)',
-                border: `1px solid ${colors.primary}20`,
+                border: `1px solid ${t.primary}20`,
               }}
             >
               <div
                 className="p-5 sm:p-6"
                 style={{
-                  background: `linear-gradient(135deg, ${colors.primary}15 0%, transparent 100%)`,
-                  borderBottom: `1px solid ${colors.primary}15`,
+                  background: `linear-gradient(135deg, ${t.primary}15 0%, transparent 100%)`,
+                  borderBottom: `1px solid ${t.primary}15`,
                 }}
               >
                 <div className="flex flex-col sm:flex-row items-center sm:items-start gap-4 w-full">
@@ -435,7 +438,7 @@ export default function PaymentDetailPage() {
                     {paymentType.icon}
                     <div
                       className="absolute -bottom-1 -right-1 w-6 h-6 rounded-full flex items-center justify-center"
-                      style={{ background: gradients.primary }}
+                      style={{ background: t.gradOrange }}
                     >
                       <Sparkles className="w-3.5 h-3.5 text-white" />
                     </div>
@@ -443,27 +446,27 @@ export default function PaymentDetailPage() {
 
                   <div className="flex-1 text-center sm:text-left">
                     <div className="flex items-center justify-center sm:justify-start gap-2 mb-2 flex-wrap">
-                      <h1 className="text-xl sm:text-3xl font-bold text-white">{paymentType.title}</h1>
+                      <h1 className="text-xl sm:text-3xl font-bold" style={{ color: t.text }}>{paymentType.title}</h1>
                       {paymentType.allow_partial && (
                         <span
                           className="px-2 py-0.5 rounded-full text-[10px] font-semibold"
-                          style={{ background: `${colors.accentMint}20`, color: colors.accentMint }}
+                          style={{ background: `${t.mint}20`, color: t.mint }}
                         >
                           PARTIAL OK
                         </span>
                       )}
                     </div>
-                    <p className="text-sm sm:text-base mb-4" style={{ color: colors.textSecondary }}>
+                    <p className="text-sm sm:text-base mb-4" style={{ color: t.textSec }}>
                       {paymentType.description}
                     </p>
 
                     <div className="flex flex-wrap items-center justify-center sm:justify-start gap-3">
                       <div
                         className="flex items-center gap-2 px-3 py-2 rounded-xl"
-                        style={{ background: `${colors.primary}15`, border: `1px solid ${colors.primary}30` }}
+                        style={{ background: `${t.primary}15`, border: `1px solid ${t.primary}30` }}
                       >
-                        <Banknote className="w-4 h-4" style={{ color: colors.primary }} />
-                        <span className="text-lg sm:text-xl font-bold" style={{ color: colors.primary }}>
+                        <Banknote className="w-4 h-4" style={{ color: t.primary }} />
+                        <span className="text-lg sm:text-xl font-bold" style={{ color: t.primary }}>
                           <PrivacyMask>{formatCurrency(paymentOption === 'full' ? currentUserOutstanding : amount)}</PrivacyMask>
                         </span>
                       </div>
@@ -484,18 +487,18 @@ export default function PaymentDetailPage() {
             <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2 }}>
               <div
                 className="rounded-2xl overflow-hidden"
-                style={{ background: 'rgba(255, 255, 255, 0.02)', border: '1px solid rgba(255, 255, 255, 0.08)' }}
+                style={{ background: t.card, border: `1px solid ${t.cardBorder}` }}
               >
                 <div
                   className="px-5 py-4 flex items-center gap-3"
-                  style={{ borderBottom: '1px solid rgba(255, 255, 255, 0.05)' }}
+                  style={{ borderBottom: `1px solid ${t.cardBorder}` }}
                 >
-                  <div className="w-10 h-10 rounded-xl flex items-center justify-center" style={{ background: `${colors.accentMint}15` }}>
-                    <TrendingUp className="w-5 h-5" style={{ color: colors.accentMint }} />
+                  <div className="w-10 h-10 rounded-xl flex items-center justify-center" style={{ background: `${t.mint}15` }}>
+                    <TrendingUp className="w-5 h-5" style={{ color: t.mint }} />
                   </div>
                   <div>
-                    <h3 className="text-base font-bold text-white">Payment Progress</h3>
-                    <p className="text-xs" style={{ color: colors.textSecondary }}>Track your payment status</p>
+                    <h3 className="text-base font-bold" style={{ color: t.text }}>Payment Progress</h3>
+                    <p className="text-xs" style={{ color: t.textSec }}>Track your payment status</p>
                   </div>
                 </div>
 
@@ -505,15 +508,15 @@ export default function PaymentDetailPage() {
                       {
                         label: currentUserAccumulatedLate > 0 ? 'BASE DUE' : 'TOTAL DUE',
                         value: paymentTypeAmount,
-                        color: colors.primary,
-                        gradient: gradients.primary,
+                        color: t.primary,
+                        gradient: t.gradOrange,
                       },
-                      { label: 'PAID', value: totalPaid, color: colors.statusPaid, gradient: colors.statusPaid },
+                      { label: 'PAID', value: totalPaid, color: t.mint, gradient: t.mint },
                       {
                         label: 'REMAINING',
                         value: Math.max(0, currentUserOutstanding),
-                        color: currentUserOutstanding <= 0 ? colors.statusPaid : colors.warning,
-                        gradient: currentUserOutstanding <= 0 ? colors.statusPaid : colors.warning,
+                        color: currentUserOutstanding <= 0 ? t.mint : t.amber,
+                        gradient: currentUserOutstanding <= 0 ? t.mint : t.amber,
                       },
                     ].map((card) => (
                       <motion.div
@@ -526,7 +529,7 @@ export default function PaymentDetailPage() {
                         whileHover={{ scale: 1.02 }}
                       >
                         <div className="absolute top-0 left-0 right-0 h-1" style={{ background: card.gradient }} />
-                        <p className="text-[10px] sm:text-xs mb-1 font-medium" style={{ color: colors.textSecondary }}>{card.label}</p>
+                        <p className="text-[10px] sm:text-xs mb-1 font-medium" style={{ color: t.textSec }}>{card.label}</p>
                         <p className="text-sm sm:text-xl font-bold truncate" style={{ color: card.color }}>
                           <PrivacyMask>{formatCurrency(card.value)}</PrivacyMask>
                         </p>
@@ -541,37 +544,37 @@ export default function PaymentDetailPage() {
                       animate={{ opacity: 1, height: 'auto' }}
                       className="mb-5 p-4 rounded-xl"
                       style={{
-                        background: `linear-gradient(135deg, ${colors.statusUnpaid}08 0%, transparent 100%)`,
-                        border: `1px solid ${colors.statusUnpaid}20`,
+                        background: `linear-gradient(135deg, ${t.danger}08 0%, transparent 100%)`,
+                        border: `1px solid ${t.danger}20`,
                       }}
                     >
                       <div className="flex items-center gap-2 mb-2">
-                        <AlertCircle className="w-4 h-4" style={{ color: colors.statusUnpaid }} />
-                        <span className="text-sm font-semibold" style={{ color: colors.statusUnpaid }}>
+                        <AlertCircle className="w-4 h-4" style={{ color: t.danger }} />
+                        <span className="text-sm font-semibold" style={{ color: t.danger }}>
                           Late Payment Fees Applied
                         </span>
                       </div>
                       <div className="grid grid-cols-2 gap-3 text-sm">
                         <div>
-                          <p className="text-xs" style={{ color: colors.textSecondary }}>Base Amount</p>
-                          <p className="font-semibold text-white"><PrivacyMask>{formatCurrency(paymentTypeAmount)}</PrivacyMask></p>
+                          <p className="text-xs" style={{ color: t.textSec }}>Base Amount</p>
+                          <p className="font-semibold" style={{ color: t.text }}><PrivacyMask>{formatCurrency(paymentTypeAmount)}</PrivacyMask></p>
                         </div>
                         <div>
-                          <p className="text-xs" style={{ color: colors.textSecondary }}>Late Fees</p>
-                          <p className="font-semibold" style={{ color: colors.statusUnpaid }}>
+                          <p className="text-xs" style={{ color: t.textSec }}>Late Fees</p>
+                          <p className="font-semibold" style={{ color: t.danger }}>
                             +<PrivacyMask>{formatCurrency(currentUserAccumulatedLate)}</PrivacyMask>
                           </p>
                         </div>
-                        <div className="col-span-2 pt-2 mt-2" style={{ borderTop: '1px solid rgba(255,255,255,0.1)' }}>
+                        <div className="col-span-2 pt-2 mt-2" style={{ borderTop: `1px solid ${t.cardBorder}` }}>
                           <div className="flex justify-between items-center">
-                            <p className="text-xs" style={{ color: colors.textSecondary }}>Total Due (incl. late fees)</p>
-                            <p className="font-bold text-white">
+                            <p className="text-xs" style={{ color: t.textSec }}>Total Due (incl. late fees)</p>
+                            <p className="font-bold" style={{ color: t.text }}>
                               <PrivacyMask>{formatCurrency(paymentTypeAmount + currentUserAccumulatedLate)}</PrivacyMask>
                             </p>
                           </div>
                         </div>
                       </div>
-                      <p className="text-xs mt-3" style={{ color: colors.textSecondary }}>
+                      <p className="text-xs mt-3" style={{ color: t.textSec }}>
                         Late fee: <PrivacyMask>{formatCurrency(perDayLate)}</PrivacyMask>/day ×{' '}
                         {Math.floor((Date.now() - (paymentDeadline?.getTime() || 0)) / (1000 * 60 * 60 * 24))} days overdue
                       </p>
@@ -592,13 +595,13 @@ export default function PaymentDetailPage() {
 
                   {/* ── Progress bar ── */}
                   <div className="relative">
-                    <div className="w-full h-4 rounded-full overflow-hidden" style={{ background: "rgba(255, 255, 255, 0.1)" }}>
+                    <div className="w-full h-4 rounded-full overflow-hidden" style={{ background: isLight ? 'rgba(15,7,3,0.08)' : 'rgba(255, 255, 255, 0.1)' }}>
                       <motion.div
                         initial={{ width: 0 }}
                         animate={{ width: `${Math.min(100, progressPercentage)}%` }}
                         transition={{ duration: 1, delay: 0.5, ease: "easeOut" }}
                         className="h-full rounded-full relative"
-                        style={{ background: gradients.primary }}
+                        style={{ background: t.gradOrange }}
                       >
                         <div
                           className="absolute inset-0 opacity-50"
@@ -610,11 +613,11 @@ export default function PaymentDetailPage() {
                       </motion.div>
                     </div>
                     <div className="flex justify-between items-center mt-2">
-                      <p className="text-xs font-medium" style={{ color: colors.textSecondary }}>
+                      <p className="text-xs font-medium" style={{ color: t.textSec }}>
                         {progressPercentage.toFixed(0)}% Complete
                       </p>
                       {isFullyPaid && (
-                        <div className="flex items-center gap-1.5 text-xs font-semibold" style={{ color: colors.statusPaid }}>
+                        <div className="flex items-center gap-1.5 text-xs font-semibold" style={{ color: t.mint }}>
                           <CheckCircle className="w-4 h-4" /> Fully Paid
                         </div>
                       )}
@@ -635,11 +638,11 @@ export default function PaymentDetailPage() {
                 />
                 {/* Resubmit button for rejected payments */}
                 {existingPayments.some(p => p.status === 'rejected') && (
-                  <div className="mt-5 pt-4" style={{ borderTop: '1px solid rgba(255,255,255,0.06)' }}>
+                  <div className="mt-5 pt-4" style={{ borderTop: `1px solid ${t.cardBorder}` }}>
                     <motion.button
                       onClick={() => handleResubmitRejected(existingPayments.find(p => p.status === 'rejected')!)}
                       className="flex items-center gap-2 px-4 py-2.5 rounded-xl font-medium text-white transition-all"
-                      style={{ background: gradients.primary, boxShadow: `0 4px 16px ${colors.primary}30` }}
+                      style={{ background: t.gradOrange, boxShadow: `0 4px 16px ${t.primary}30` }}
                       whileHover={{ scale: 1.02 }}
                       whileTap={{ scale: 0.98 }}
                     >
@@ -657,11 +660,11 @@ export default function PaymentDetailPage() {
             <motion.div initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} transition={{ delay: 0.4 }}>
               <GlassCard className="w-full">
                 <div className="text-center p-8">
-                  <CheckCircle className="w-16 h-16 mx-auto mb-4" style={{ color: isWaived ? '#6366F1' : colors.statusPaid }} />
-                  <h2 className="text-2xl font-bold text-white mb-2">
+                  <CheckCircle className="w-16 h-16 mx-auto mb-4" style={{ color: isWaived ? '#6366F1' : t.mint }} />
+                  <h2 className="text-2xl font-bold mb-2" style={{ color: t.text }}>
                     {isWaived ? 'Payment Waived! 🔓' : 'Payment Complete! 🎉'}
                   </h2>
-                  <p style={{ color: colors.textSecondary }}>
+                  <p style={{ color: t.textSec }}>
                     {isWaived
                       ? 'This payment has been waived by the class administration.'
                       : 'You have fully paid for this requirement.'}
@@ -675,13 +678,44 @@ export default function PaymentDetailPage() {
           {!isFullyPaid && hasPendingPayment && (
             <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.4 }}>
               <GlassCard className="w-full">
-                <div className="flex items-start gap-4 p-4" style={{ background: `${colors.warning}10` }}>
-                  <Info className="w-6 h-6 shrink-0 mt-1" style={{ color: colors.warning }} />
-                  <div>
-                    <p className="font-bold text-white mb-1">Payment Pending Review</p>
-                    <p className="text-sm" style={{ color: colors.textSecondary }}>
-                      You have a payment awaiting approval. Please wait for the admin to review before making another payment.
-                    </p>
+                <div className="flex items-start gap-4 p-4" style={{ background: `${t.amber}10` }}>
+                  <Info className="w-6 h-6 shrink-0 mt-1" style={{ color: t.amber }} />
+                  <div className="min-w-0">
+                    <p className="font-bold mb-1" style={{ color: t.text }}>Payment Pending Review</p>
+                    {(() => {
+                      // Surface the installment in flight: what they've SUBMITTED
+                      // (pending, not yet approved) against the full due, so a
+                      // part-payer sees "₦X of ₦Y submitted" instead of a bare
+                      // "awaiting approval" with no sense of where they stand.
+                      const pendingSubmitted = existingPayments
+                        .filter((p) => p.status === 'pending')
+                        .reduce((sum, p) => sum + (Number(p.amount) || 0), 0);
+                      const settledPlusPending = totalPaid + pendingSubmitted;
+                      const stillRemaining = Math.max(0, paymentTypeAmount - settledPlusPending);
+                      return (
+                        <>
+                          <p className="text-sm" style={{ color: t.textSec }}>
+                            You've submitted{' '}
+                            <span className="font-bold" style={{ color: t.text }}>
+                              <PrivacyMask>{formatCurrency(pendingSubmitted)}</PrivacyMask>
+                            </span>{' '}
+                            of{' '}
+                            <span className="font-bold" style={{ color: t.text }}>
+                              <PrivacyMask>{formatCurrency(paymentTypeAmount)}</PrivacyMask>
+                            </span>
+                            {totalPaid > 0 && (
+                              <> (after a prior <PrivacyMask>{formatCurrency(totalPaid)}</PrivacyMask> already approved)</>
+                            )}
+                            . An admin will review it shortly.
+                          </p>
+                          {stillRemaining > 0 && (
+                            <p className="text-xs mt-1.5" style={{ color: t.amber }}>
+                              Once approved, <PrivacyMask>{formatCurrency(stillRemaining)}</PrivacyMask> will remain on this due — you can pay the rest in another installment.
+                            </p>
+                          )}
+                        </>
+                      );
+                    })()}
                   </div>
                 </div>
               </GlassCard>

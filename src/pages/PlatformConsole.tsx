@@ -28,7 +28,7 @@ import {
   toggleOrganizationStatus, listPendingClaims, grantClaimOverride, rejectClaim,
   getFinancialSummary, getAuditFeed, getGrowthFunnel,
   getPlatformSettings, updatePlatformSettings, getUniversityMap, broadcast,
-  listOrgAdmins, setAdminActive, updateOrgSubscription,
+  listOrgAdmins, setAdminActive, updateOrgSubscription, setGroupPlan,
   type PlatformAdmin, type PlatformStats, type OrgOverview, type PendingClaim,
   type FinancialSummary, type AuditEntry, type FunnelStage,
   type PlatformSettings, type UniRow, type OrgAdminRow,
@@ -693,10 +693,45 @@ function CommandCenter() {
 interface ConsoleSetRow {
   id: string;
   name: string;
+  kind: string | null;
   current_level: string | null;
   entry_year: number | null;
   is_graduated: boolean | null;
   alumni_label: string | null;
+  subscription_plan: string | null;
+}
+
+// Per-CLASS plan control for the console. Billing is per class/tier, so
+// each class gets its own plan — pro/enterprise unlocks Paystack online
+// checkout for that class only (mig 141/143). Pro defaults to a ~1-semester
+// expiry so it lapses unless renewed.
+function ClassPlanSelect({ groupId, initial }: { groupId: string; initial: string }) {
+  const [plan, setPlan] = useState(initial);
+  const [saving, setSaving] = useState(false);
+  const toast = useToast();
+  async function change(next: string) {
+    setSaving(true);
+    try {
+      const expires = (next === 'pro' || next === 'enterprise')
+        ? new Date(Date.now() + 1000 * 60 * 60 * 24 * 183).toISOString()
+        : null;
+      await setGroupPlan(groupId, next as 'free' | 'starter' | 'pro' | 'enterprise', expires);
+      setPlan(next);
+      toast.success(`Class plan → ${next}`);
+    } catch (e) { toast.error(e instanceof Error ? e.message : 'Failed to set plan'); }
+    setSaving(false);
+  }
+  return (
+    <select
+      value={plan}
+      disabled={saving}
+      onChange={(e) => change(e.target.value)}
+      title="This class's plan"
+      style={{ marginLeft: 'auto', flexShrink: 0, padding: '3px 6px', background: 'rgba(255,255,255,0.04)', border: `1px solid ${T.border}`, borderRadius: 6, color: T.text, fontSize: 11, textTransform: 'capitalize' }}
+    >
+      {['free', 'starter', 'pro', 'enterprise'].map((p) => <option key={p} value={p}>{p}</option>)}
+    </select>
+  );
 }
 
 function OrgCard({ o, busy, onToggle }: { o: OrgOverview; busy: boolean; onToggle: () => void }) {
@@ -706,16 +741,20 @@ function OrgCard({ o, busy, onToggle }: { o: OrgOverview; busy: boolean; onToggl
   const [setsLoaded, setSetsLoaded] = useState(false);
 
   useEffect(() => {
-    if (!expanded || setsLoaded || !isAcademic) return;
+    if (!expanded || setsLoaded) return;
     let cancelled = false;
     void (async () => {
-      const { data } = await supabase
+      // Academic orgs list their classes/levels; non-academic orgs list
+      // ALL their groups (clubs, committees, units…) so each group's plan
+      // can be managed — billing is per group either way.
+      let q = supabase
         .from('organization_groups')
-        .select('id, name, current_level, entry_year, is_graduated, alumni_label')
-        .eq('organization_id', o.id)
-        .in('kind', ['class', 'level'])
-        .order('entry_year', { ascending: false })
-        .limit(80);
+        .select('id, name, kind, current_level, entry_year, is_graduated, alumni_label, subscription_plan')
+        .eq('organization_id', o.id);
+      q = isAcademic
+        ? q.in('kind', ['class', 'level']).order('entry_year', { ascending: false })
+        : q.order('name', { ascending: true });
+      const { data } = await q.limit(80);
       if (!cancelled) { setSets((data as ConsoleSetRow[]) ?? []); setSetsLoaded(true); }
     })();
     return () => { cancelled = true; };
@@ -755,11 +794,9 @@ function OrgCard({ o, busy, onToggle }: { o: OrgOverview; busy: boolean; onToggl
           {busy ? <Loader2 size={13} className="animate-spin" /> : null}
           {o.is_active ? 'Suspend' : 'Reactivate'}
         </Btn>
-        {isAcademic && (
-          <Btn onClick={() => setExpanded((v) => !v)} color={T.textSec}>
-            {expanded ? <ChevronUp size={13} /> : <ChevronDown size={13} />} Sets
-          </Btn>
-        )}
+        <Btn onClick={() => setExpanded((v) => !v)} color={T.textSec}>
+          {expanded ? <ChevronUp size={13} /> : <ChevronDown size={13} />} {isAcademic ? 'Sets' : 'Groups'}
+        </Btn>
       </div>
 
       {/* Billing plan — change without touching code. */}
@@ -778,26 +815,34 @@ function OrgCard({ o, busy, onToggle }: { o: OrgOverview; busy: boolean; onToggl
         {savingPlan && <Loader2 size={12} className="animate-spin" style={{ color: T.textSec, flexShrink: 0 }} />}
       </div>
 
-      {isAcademic && expanded && (
+      {expanded && (
         <div style={{ marginTop: 12, borderTop: `1px solid ${T.border}`, paddingTop: 12 }}>
           <p style={{ margin: '0 0 8px', fontSize: 10, textTransform: 'uppercase', letterSpacing: 1, color: T.textSec, display: 'flex', alignItems: 'center', gap: 4 }}>
-            <Layers size={11} /> Academic sets &amp; levels
+            <Layers size={11} /> {isAcademic ? 'Academic sets & levels' : 'Groups & plans'}
           </p>
           {!setsLoaded ? (
             <p style={{ fontSize: 12, color: T.textSec }}><Loader2 size={12} className="animate-spin" style={{ verticalAlign: 'middle' }} /> Loading…</p>
           ) : sets.length === 0 ? (
-            <p style={{ fontSize: 12, color: T.textSec }}>No classes/sets yet.</p>
+            <p style={{ fontSize: 12, color: T.textSec }}>{isAcademic ? 'No classes/sets yet.' : 'No groups yet.'}</p>
           ) : (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 6, maxHeight: 220, overflowY: 'auto' }}>
               {sets.map((s) => (
                 <div key={s.id} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, background: 'rgba(255,255,255,0.03)', border: `1px solid ${T.border}`, borderRadius: 8, padding: '6px 10px' }}>
-                  <span style={{ color: T.text, fontWeight: 600, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{s.name}</span>
-                  {s.entry_year ? <span style={{ color: T.textSec, flexShrink: 0 }}>· {s.entry_year} set</span> : null}
-                  <span style={{ marginLeft: 'auto', flexShrink: 0 }}>
-                    {s.is_graduated
-                      ? <Badge color={T.mint}>🎓 {s.alumni_label || 'Alumni'}</Badge>
-                      : <Badge color={T.primary}>{s.current_level || '—'}</Badge>}
+                  <span style={{ color: T.text, fontWeight: 600, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', minWidth: 0 }}>{s.name}</span>
+                  {isAcademic && s.entry_year ? <span style={{ color: T.textSec, flexShrink: 0 }}>· {s.entry_year}</span> : null}
+                  <span style={{ flexShrink: 0 }}>
+                    {isAcademic
+                      ? (s.is_graduated
+                          ? <Badge color={T.mint}>🎓 {s.alumni_label || 'Alumni'}</Badge>
+                          : <Badge color={T.primary}>{s.current_level || '—'}</Badge>)
+                      : <Badge color={T.textSec}>{s.kind || 'group'}</Badge>}
                   </span>
+                  {/* Per-GROUP plan — billing is per group/tier, not the org.
+                      pro/enterprise unlocks Paystack for this group only. */}
+                  <ClassPlanSelect
+                    groupId={s.id}
+                    initial={s.subscription_plan || 'free'}
+                  />
                 </div>
               ))}
             </div>
