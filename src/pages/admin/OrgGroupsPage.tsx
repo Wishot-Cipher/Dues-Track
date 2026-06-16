@@ -695,15 +695,11 @@ export default function OrgGroupsPage() {
     finally { setSaving(false) }
   }
 
-  if (!organization) return null
-
-  const tabOptions: { value: GroupTab; label: string }[] = isAcademicOrg
-    ? [{ value: 'all', label: 'All' }, { value: 'faculty', label: 'Faculties' }, { value: 'class', label: classLabelPlural }]
-    : [{ value: 'all', label: groupLabelPlural }]
-
   // Aggregate counts for the stats strip. memberTotal sums every
   // group's member_count in scope — the page-level "people in your
   // subtree" tile users see in dept/faculty exec dashboards.
+  // NOTE: declared BEFORE the `!organization` early return — a hook must
+  // run on every render, never after a conditional return (rules-of-hooks).
   const stats = useMemo(() => {
     const faculties = scopedGroups.filter(g => g.kind === 'faculty' || g.kind === 'college').length
     const departments = scopedGroups.filter(g => g.kind === 'department').length
@@ -713,6 +709,12 @@ export default function OrgGroupsPage() {
     const memberTotal = scopedGroups.reduce((sum, g) => sum + (g.member_count || 0), 0)
     return { faculties, departments, classes, memberTotal }
   }, [scopedGroups])
+
+  if (!organization) return null
+
+  const tabOptions: { value: GroupTab; label: string }[] = isAcademicOrg
+    ? [{ value: 'all', label: 'All' }, { value: 'faculty', label: 'Faculties' }, { value: 'class', label: classLabelPlural }]
+    : [{ value: 'all', label: groupLabelPlural }]
 
   return (
     <div
