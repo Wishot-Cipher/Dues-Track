@@ -243,8 +243,8 @@ export default function ReceiptPage() {
       const itemsHtml = feeBreakdown
         ? `
           <tr><td>${escapeHtml(receipt.payment_type?.title || 'Payment')}</td><td class="r">${escapeHtml(formatNaira(feeBreakdown.dues))}</td></tr>
-          <tr><td>Platform fee</td><td class="r">${escapeHtml(formatNaira(feeBreakdown.fee))}</td></tr>
-          <tr class="total"><td>Total</td><td class="r">${escapeHtml(formatNaira(feeBreakdown.total))}</td></tr>
+          <tr><td>Service fee</td><td class="r">${escapeHtml(formatNaira(feeBreakdown.fee))}</td></tr>
+          <tr class="total"><td>Total paid</td><td class="r">${escapeHtml(formatNaira(feeBreakdown.total))}</td></tr>
         `
         : `
           <tr><td>${escapeHtml(receipt.payment_type?.title || 'Payment')}</td><td class="r">${escapeHtml(amountDisplay)}</td></tr>
@@ -602,14 +602,17 @@ export default function ReceiptPage() {
   // We only show the breakdown when there's an actual fee row.
   const feeBreakdown = useMemo(() => {
     if (!receipt) return null;
-    const dues = receipt.dues_amount_kobo ? receipt.dues_amount_kobo / 100 : null;
-    const fee  = receipt.platform_fee_kobo ? receipt.platform_fee_kobo / 100 : null;
-    if (!fee || fee <= 0) return null;
-    return {
-      dues: dues ?? Number(receipt.amount || 0),
-      fee,
-      total: receipt.total_charged_kobo ? receipt.total_charged_kobo / 100 : (dues ?? 0) + fee,
-    };
+    // The SERVICE fee the student actually paid on top of the dues =
+    // total charged − dues. (platform_fee_kobo is only OUR margin, which is
+    // 0 by default — the bulk of the fee is Paystack's processing cost the
+    // student covers so the org nets exactly the dues.) Show the breakdown
+    // whenever a fee was added; otherwise collapse to a single total.
+    const dues  = receipt.dues_amount_kobo ? receipt.dues_amount_kobo / 100 : null;
+    const total = receipt.total_charged_kobo ? receipt.total_charged_kobo / 100 : null;
+    if (dues == null || total == null) return null;
+    const fee = Math.max(0, Math.round((total - dues) * 100) / 100);
+    if (fee <= 0) return null;
+    return { dues, fee, total };
   }, [receipt]);
 
   return (
@@ -840,8 +843,8 @@ export default function ReceiptPage() {
               {feeBreakdown && (
                 <Section title="Breakdown" icon={<FileText size={11} />} t={t} brand={brandColor}>
                   <KV label="Dues"          value={formatNaira(feeBreakdown.dues)}  theme={theme} small />
-                  <KV label="Platform fee"  value={formatNaira(feeBreakdown.fee)}   theme={theme} small />
-                  <KV label="Total charged" value={formatNaira(feeBreakdown.total)} theme={theme} highlight />
+                  <KV label="Service fee"   value={formatNaira(feeBreakdown.fee)}   theme={theme} small />
+                  <KV label="Total paid"    value={formatNaira(feeBreakdown.total)} theme={theme} highlight />
                 </Section>
               )}
 
