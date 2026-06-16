@@ -104,30 +104,12 @@ function paystackCoverKobo(duesKobo: number): number {
   return cover;
 }
 
-// Optional platform margin ON TOP of the Paystack cover. Defaults to 0 —
-// the org nets the dues and the student pays only Paystack's true cost
-// until a margin is configured per-org from the console.
-const DEFAULT_FEE_PERCENT = 0;
-const DEFAULT_FEE_FLAT_KOBO = 0;
-const DEFAULT_FEE_MIN_KOBO = 0;
-const DEFAULT_FEE_CAP_KOBO = 200000; // ₦2,000 — sane upper bound on margin
-
-function computeMarginKobo(
-  duesKobo: number,
-  cfg: { percent?: number; flat?: number; min?: number; cap?: number; mode?: string },
-): number {
-  const mode = (cfg.mode || 'percent').toLowerCase();
-  const percent = typeof cfg.percent === 'number' ? cfg.percent : DEFAULT_FEE_PERCENT;
-  const flat    = typeof cfg.flat    === 'number' ? cfg.flat    : DEFAULT_FEE_FLAT_KOBO;
-  const min     = typeof cfg.min     === 'number' ? cfg.min     : DEFAULT_FEE_MIN_KOBO;
-  const cap     = typeof cfg.cap     === 'number' ? cfg.cap     : DEFAULT_FEE_CAP_KOBO;
-
-  let raw = 0;
-  if (mode === 'flat')    raw = flat;
-  else if (mode === 'percent') raw = Math.round((duesKobo * percent) / 100);
-  else                    raw = Math.round((duesKobo * percent) / 100) + flat;
-  return Math.max(min, Math.min(cap, raw));
-}
+// Platform margin is DISABLED at launch: the org nets exactly the dues and
+// the student pays only Paystack's true cost (the cover above). The old
+// per-org platform_fee_* fields are NOT read here — they carried stale
+// defaults (a ₦50 floor / 2%) that forced a surprise fee even on tiny
+// payments. Re-introduce a margin later via a dedicated, clean per-org
+// field; until then marginKobo is hard-zero in the handler.
 
 function genReference(paymentId: string): string {
   const short = paymentId.replace(/-/g, '').slice(0, 16);
@@ -338,19 +320,13 @@ async function handleInitCore(req: any, res: any, body: any) {
   if (!duesKobo || duesKobo < 100) {
     return res.status(400).json({ ok: false, error: 'Invalid payment amount.' });
   }
-  // Per-org fee (set from the Platform Console — a 'pro'/'enterprise' org
-  // simply has a lower platform_fee_percent/cap). Falls back to the system
-  // default when the org hasn't been configured.
-  // Optional platform margin (default 0). Set per-org from the console.
-  const marginKobo = computeMarginKobo(duesKobo, {
-    percent: org.platform_fee_percent ?? undefined,
-    flat:    org.platform_fee_flat ?? undefined,
-    min:     org.platform_fee_min ?? undefined,
-    cap:     org.platform_fee_cap ?? undefined,
-    mode:    org.platform_fee_mode ?? undefined,
-  });
-  // Cover Paystack's fee so the org nets EXACTLY the dues, then add the
-  // margin. This single serviceFee is what the student pays on top.
+  // Platform margin disabled at launch (see note above) — the org nets the
+  // dues and the student pays ONLY Paystack's true cost. No stale per-org
+  // floor/percent is applied.
+  const marginKobo = 0;
+  // Cover Paystack's fee so the org nets EXACTLY the dues. This single
+  // serviceFee is what the student pays on top. Under ₦2,500 this is just
+  // ~1.5% (no ₦100 flat); the ₦100 flat only kicks in above ₦2,500.
   const coverKobo = org.paystack_subaccount_code ? paystackCoverKobo(duesKobo) : 0;
   const serviceFeeKobo = coverKobo + marginKobo;
   const totalKobo = duesKobo + serviceFeeKobo;

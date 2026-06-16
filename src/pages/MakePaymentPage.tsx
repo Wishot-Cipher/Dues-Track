@@ -656,10 +656,14 @@ export default function MakePaymentPage() {
                 <p className="text-[10.5px] mt-1.5" style={{ color: t.textTer }}>
                   {isEvent ? 'Organiser' : 'Your group'} receives the full {formatNaira(outstanding)}. Exact total shown on the secure checkout.
                 </p>
-                {/* Steer to card — it skips the ₦100 bank-transfer flat fee. */}
-                <p className="text-[11px] mt-2 inline-flex items-center gap-1 font-semibold" style={{ color: t.primary }}>
-                  <CreditCard size={12} /> Pay by card to skip the ₦100 transfer fee.
-                </p>
+                {/* Steer to card ONLY above ₦2,500 — that's where Paystack's
+                    ₦100 bank-transfer flat fee kicks in. Below it, transfer
+                    and card cost the same (~1.5%), so the hint would mislead. */}
+                {totalToPay > 2500 && (
+                  <p className="text-[11px] mt-2 inline-flex items-center gap-1 font-semibold" style={{ color: t.primary }}>
+                    <CreditCard size={12} /> Pay by card to skip the ₦100 transfer fee.
+                  </p>
+                )}
               </div>
             )}
             <motion.button
