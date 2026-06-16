@@ -34,6 +34,8 @@ interface NotificationRow {
   link?: string | null;
   is_read: boolean;
   created_at: string;
+  related_type?: string | null;
+  related_id?: string | null;
 }
 
 function normalizeLink(link: string | null | undefined): string | null {
@@ -55,9 +57,11 @@ function iconFor(type: string) {
 // "confirm" ping about a CLASS *below* their tier, which reads as "why is
 // another class messaging me?". Spell out WHY they got it so the message
 // isn't a flat, contextless line.
-function claimContext(type: string): string | null {
-  if (type === 'claim_confirm_requested')
-    return "You're seeing this because you're a verified exec of the tier above. Someone in a group below you is claiming a role — confirm whether it's really them before their access unlocks.";
+function claimContext(type: string, groupName: string | null): string | null {
+  if (type === 'claim_confirm_requested') {
+    const where = groupName ? `${groupName} — a group below you` : 'a group below you';
+    return `You're seeing this because you're a verified exec of the tier above. Someone in ${where} is claiming a role — confirm whether it's really them before their access unlocks.`;
+  }
   if (type === 'claim_vote_requested' || type === 'claim_contested_vote')
     return "You're a member of this group, so your vote helps confirm who the real exec is.";
   if (type === 'claim_contested')
@@ -75,15 +79,20 @@ export default function NotificationDetailPage() {
   const [row, setRow] = useState<NotificationRow | null>(null);
   const [loading, setLoading] = useState(true);
   const [notFound, setNotFound] = useState(false);
+  // For claim "confirm" pings, name the group the claim is FOR so the exec
+  // sees exactly which class/dept below them is asking (not just "a group
+  // below you"). Resolved from the linked claim → its target group.
+  const [claimGroupName, setClaimGroupName] = useState<string | null>(null);
 
   const fetchOne = useCallback(async () => {
     if (!id) return;
     setLoading(true);
+    setClaimGroupName(null);
     try {
       const scope = getOrgScope();
       let q = supabase
         .from('notifications')
-        .select('id, type, title, message, link, is_read, created_at')
+        .select('id, type, title, message, link, is_read, created_at, related_type, related_id')
         .eq('id', id)
         .limit(1);
       if (scope) q = q.eq('organization_id', scope.orgId);
@@ -92,6 +101,24 @@ export default function NotificationDetailPage() {
       if (!n) { setNotFound(true); return; }
       setRow(n);
       if (!n.is_read) void notificationService.markAsRead(n.id);
+
+      // Name the claimed group for confirm-request notifications.
+      if (n.type === 'claim_confirm_requested' && n.related_type === 'claim_request' && n.related_id) {
+        const { data: cr } = await supabase
+          .from('claim_requests')
+          .select('claimed_group_id, claimed_unit_group_id')
+          .eq('id', n.related_id)
+          .maybeSingle();
+        const gid = (cr?.claimed_group_id ?? cr?.claimed_unit_group_id) as string | null | undefined;
+        if (gid) {
+          const { data: g } = await supabase
+            .from('organization_groups')
+            .select('name')
+            .eq('id', gid)
+            .maybeSingle();
+          if (g?.name) setClaimGroupName(g.name as string);
+        }
+      }
     } finally {
       setLoading(false);
     }
@@ -154,7 +181,7 @@ export default function NotificationDetailPage() {
 
             {/* Why you're seeing this — context for claim notifications so
                 an exec understands a ping about a tier below them. */}
-            {claimContext(row.type) && (
+            {claimContext(row.type, claimGroupName) && (
               <div
                 className="mt-4 rounded-xl p-3 flex gap-2.5"
                 style={{ background: isLight ? 'rgba(255,104,3,0.06)' : 'rgba(255,104,3,0.10)', border: `1px solid ${t.primary}33` }}
@@ -165,7 +192,7 @@ export default function NotificationDetailPage() {
                     Why you're seeing this
                   </p>
                   <p className="text-[12.5px] leading-relaxed mt-0.5" style={{ color: t.textSec }}>
-                    {claimContext(row.type)}
+                    {claimContext(row.type, claimGroupName)}
                   </p>
                 </div>
               </div>

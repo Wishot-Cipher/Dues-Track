@@ -164,6 +164,17 @@ export default function NotificationsPage() {
                     <p className="text-[13px] mt-1 leading-relaxed line-clamp-2" style={{ color: t.textSec }}>
                       {n.message}
                     </p>
+                    {/* At-a-glance reason for a confirm ping — an exec gets
+                        asked about a group BELOW their tier, which is
+                        otherwise confusing. */}
+                    {n.type === 'claim_confirm_requested' && (
+                      <span
+                        className="inline-flex items-center gap-1 mt-1.5 text-[10px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded"
+                        style={{ background: `${t.primary}14`, color: t.primary }}
+                      >
+                        Confirm · you're the exec above
+                      </span>
+                    )}
                     <p className="text-[11px] mt-1.5 flex items-center gap-1" style={{ color: t.textTer }}>
                       {formatDate(n.created_at, 'short')}
                       {n.message.length > 90 && <span style={{ color: t.primary }}>· Tap to read</span>}
