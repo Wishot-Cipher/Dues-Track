@@ -17,7 +17,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import {
-  ArrowLeft, Bell, CheckCircle, AlertCircle, DollarSign, Ticket, ShieldCheck, Loader2, ArrowRight, Check,
+  ArrowLeft, Bell, CheckCircle, AlertCircle, DollarSign, Ticket, ShieldCheck, Loader2, ArrowRight, Check, Info,
 } from 'lucide-react';
 import { useAppNav } from '@/hooks/useAppNav';
 import { useTheme, getDashboardTokens } from '@/hooks/useTheme';
@@ -48,6 +48,21 @@ function iconFor(type: string) {
   if (type.includes('ticket')) return Ticket;
   if (type.includes('role') || type.includes('claim') || type.includes('handover')) return ShieldCheck;
   return Bell;
+}
+
+// Claim notifications reach people in roles they may not realise they're
+// acting in — most confusingly, a department/faculty exec gets a
+// "confirm" ping about a CLASS *below* their tier, which reads as "why is
+// another class messaging me?". Spell out WHY they got it so the message
+// isn't a flat, contextless line.
+function claimContext(type: string): string | null {
+  if (type === 'claim_confirm_requested')
+    return "You're seeing this because you're a verified exec of the tier above. Someone in a group below you is claiming a role — confirm whether it's really them before their access unlocks.";
+  if (type === 'claim_vote_requested' || type === 'claim_contested_vote')
+    return "You're a member of this group, so your vote helps confirm who the real exec is.";
+  if (type === 'claim_contested')
+    return "Someone else claimed the same role. The group's members vote — whoever they confirm wins.";
+  return null;
 }
 
 export default function NotificationDetailPage() {
@@ -136,6 +151,25 @@ export default function NotificationDetailPage() {
             <p className="text-[15px] mt-4 leading-relaxed whitespace-pre-wrap break-words" style={{ color: t.textSec }}>
               {row.message}
             </p>
+
+            {/* Why you're seeing this — context for claim notifications so
+                an exec understands a ping about a tier below them. */}
+            {claimContext(row.type) && (
+              <div
+                className="mt-4 rounded-xl p-3 flex gap-2.5"
+                style={{ background: isLight ? 'rgba(255,104,3,0.06)' : 'rgba(255,104,3,0.10)', border: `1px solid ${t.primary}33` }}
+              >
+                <Info className="w-4 h-4 mt-0.5 shrink-0" style={{ color: t.primary }} />
+                <div className="min-w-0">
+                  <p className="text-[10px] font-bold uppercase tracking-wider" style={{ color: t.primary }}>
+                    Why you're seeing this
+                  </p>
+                  <p className="text-[12.5px] leading-relaxed mt-0.5" style={{ color: t.textSec }}>
+                    {claimContext(row.type)}
+                  </p>
+                </div>
+              </div>
+            )}
 
             {actionLink && (
               <button
