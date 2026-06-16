@@ -92,6 +92,23 @@ function formatNaira(amount: number): string {
   return `₦${amount.toLocaleString('en-NG', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 }
 
+// Estimate of the service fee the student pays on top of the dues, so the
+// ORG receives EXACTLY the amount it set. Mirrors the server gross-up
+// (api/paystack): covers Paystack's worst-case (bank transfer) fee — 1.5%
+// + ₦100 over ₦2,500, capped at ₦2,000. Card is cheaper, so this is an
+// upper bound; the exact total is shown on the secure checkout page. Does
+// not include any per-org platform margin (0 by default).
+function estimateServiceFeeNaira(duesNaira: number): number {
+  if (!duesNaira || duesNaira <= 0) return 0;
+  const D = Math.round(duesNaira * 100); // kobo
+  const PERCENT = 0.015, FLAT = 10000, THRESHOLD = 250000, CAP = 200000;
+  let total = (D + FLAT) / (1 - PERCENT);
+  if (total <= THRESHOLD) total = D / (1 - PERCENT);
+  let cover = Math.ceil(total - D);
+  if (cover > CAP) cover = CAP;
+  return cover / 100;
+}
+
 function daysFromNow(iso: string | null): number | null {
   if (!iso) return null;
   return Math.ceil((new Date(iso).getTime() - Date.now()) / (1000 * 60 * 60 * 24));
@@ -193,6 +210,11 @@ export default function MakePaymentPage() {
   const fullyPaid = isEvent ? false : approvedOutstanding <= 0;
   const hasPending = myPayments.some(p => p.status === 'pending');
   const daysLeft = daysFromNow(pt?.deadline ?? null);
+
+  // The org receives `outstanding` exactly; the student also pays a small
+  // service fee that covers the secure-transfer cost. Shown transparently.
+  const serviceFee = estimateServiceFeeNaira(outstanding);
+  const totalToPay = outstanding + serviceFee;
 
   const Icon = iconForCategory(pt?.category);
 
@@ -608,6 +630,31 @@ export default function MakePaymentPage() {
           }}
         >
           <div className="max-w-2xl mx-auto">
+            {/* Transparent breakdown — the org gets `outstanding` exactly;
+                the student also covers a small secure-transfer fee. Exact
+                total is confirmed on the Paystack checkout page. */}
+            {serviceFee > 0 && (
+              <div
+                className="rounded-2xl px-4 py-3 mb-3 text-[12.5px]"
+                style={{ background: isLight ? 'rgba(15,7,3,0.04)' : 'rgba(255,255,255,0.05)', border: `1px solid ${t.cardBorder}`, color: t.textSec }}
+              >
+                <div className="flex items-center justify-between">
+                  <span>{isEvent ? 'Ticket' : 'Dues'}</span>
+                  <span className="tabular-nums" style={{ color: t.text }}>{formatNaira(outstanding)}</span>
+                </div>
+                <div className="flex items-center justify-between mt-1">
+                  <span>Service fee <span style={{ color: t.textTer }}>· secure transfer</span></span>
+                  <span className="tabular-nums">~{formatNaira(serviceFee)}</span>
+                </div>
+                <div className="flex items-center justify-between mt-2 pt-2 font-bold" style={{ borderTop: `1px solid ${t.cardBorder}`, color: t.text }}>
+                  <span>You pay</span>
+                  <span className="tabular-nums">~{formatNaira(totalToPay)}</span>
+                </div>
+                <p className="text-[10.5px] mt-1.5" style={{ color: t.textTer }}>
+                  {isEvent ? 'Organiser' : 'Your group'} receives the full {formatNaira(outstanding)}. Exact total shown on the secure checkout.
+                </p>
+              </div>
+            )}
             <motion.button
               type="button"
               onClick={handlePayWithPaystack}
@@ -629,7 +676,7 @@ export default function MakePaymentPage() {
                 </>
               ) : (
                 <>
-                  {isEvent ? 'Buy ticket · ' : 'Pay '}{formatNaira(outstanding)}
+                  {isEvent ? 'Buy ticket · ' : 'Pay '}{formatNaira(serviceFee > 0 ? totalToPay : outstanding)}
                   <ArrowRight size={16} />
                 </>
               )}

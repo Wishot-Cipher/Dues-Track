@@ -61,15 +61,58 @@ function parseJson(raw: string): any {
 }
 
 // ── Fee math ─────────────────────────────────────────────────
-// Model B: flat 2% of dues, floored at ₦50, capped at ₦500. Simple to explain
-// to students ("2% service fee") and fair across due sizes. Org config on the
-// organizations row overrides these per-org; these are the system fallback.
-const DEFAULT_FEE_PERCENT = 2.0;    // 2%
-const DEFAULT_FEE_FLAT_KOBO = 0;    // no flat component
-const DEFAULT_FEE_MIN_KOBO = 5000;  // ₦50 floor
-const DEFAULT_FEE_CAP_KOBO = 50000; // ₦500 cap
+// Model: the ORG always nets EXACTLY the dues it set. We add a single,
+// transparent SERVICE FEE on top (the student pays it), sized to:
+//   (a) COVER Paystack's processing cost so the org is never shorted, and
+//   (b) an optional platform MARGIN (default 0 — set per-org from the
+//       console once trust is built).
+// The split is configured (transaction_charge = serviceFee, bearer =
+// 'account') so the subaccount's slice (total − serviceFee = dues) is
+// never touched by Paystack's fee.
 
-function computeFeeKobo(
+// Paystack NGN local pricing, WORST case = bank transfer: 1.5% + ₦100 flat
+// on amounts over ₦2,500, capped at ₦2,000. Card has no ₦100 flat — so
+// grossing up for transfer means the org is never shorted on ANY channel
+// (a card payer's lower fee just leaves a few naira in the platform
+// account). Ref: paystack.com/pricing.
+const PS_PERCENT = 0.015;
+const PS_FLAT_KOBO = 10000;            // ₦100
+const PS_FLAT_THRESHOLD_KOBO = 250000; // ₦2,500
+const PS_CAP_KOBO = 200000;            // ₦2,000
+
+// Paystack's fee on a charged amount (worst-case transfer).
+function paystackFeeKobo(amountKobo: number): number {
+  let fee = Math.ceil(amountKobo * PS_PERCENT);
+  if (amountKobo > PS_FLAT_THRESHOLD_KOBO) fee += PS_FLAT_KOBO;
+  return Math.min(fee, PS_CAP_KOBO);
+}
+
+// The "cover" — the amount that, added to the dues, lets Paystack take its
+// (worst-case) fee while the org still nets EXACTLY the dues. Grossed up so
+// the fee is computed on the total, the ₦2,000 cap respected, rounded up a
+// hair so the platform's main account is never short when it bears the fee.
+function paystackCoverKobo(duesKobo: number): number {
+  // T = (D + flat) / (1 − percent); cover = T − D. Drop the flat if the
+  // grossed-up total stays under the ₦2,500 threshold.
+  let total = (duesKobo + PS_FLAT_KOBO) / (1 - PS_PERCENT);
+  if (total <= PS_FLAT_THRESHOLD_KOBO) total = duesKobo / (1 - PS_PERCENT);
+  let cover = Math.ceil(total - duesKobo);
+  if (cover > PS_CAP_KOBO) cover = PS_CAP_KOBO;
+  // Never below the actual fee on (dues + cover).
+  const actual = paystackFeeKobo(duesKobo + cover);
+  if (cover < actual) cover = actual;
+  return cover;
+}
+
+// Optional platform margin ON TOP of the Paystack cover. Defaults to 0 —
+// the org nets the dues and the student pays only Paystack's true cost
+// until a margin is configured per-org from the console.
+const DEFAULT_FEE_PERCENT = 0;
+const DEFAULT_FEE_FLAT_KOBO = 0;
+const DEFAULT_FEE_MIN_KOBO = 0;
+const DEFAULT_FEE_CAP_KOBO = 200000; // ₦2,000 — sane upper bound on margin
+
+function computeMarginKobo(
   duesKobo: number,
   cfg: { percent?: number; flat?: number; min?: number; cap?: number; mode?: string },
 ): number {
@@ -159,7 +202,7 @@ async function handleInitCore(req: any, res: any, body: any) {
 
   const supabase = createClient(supabaseUrl, serviceRole);
 
-  const { memberId, paymentTypeId, callbackPath, tierId, guestName, guestEmail, guestPhone } = body || {};
+  const { memberId, paymentTypeId, callbackPath, tierId, guestName, guestEmail } = body || {};
   const isGuestCheckout = !memberId;
   let member: any = null;
 
@@ -298,14 +341,19 @@ async function handleInitCore(req: any, res: any, body: any) {
   // Per-org fee (set from the Platform Console — a 'pro'/'enterprise' org
   // simply has a lower platform_fee_percent/cap). Falls back to the system
   // default when the org hasn't been configured.
-  const feeKobo = computeFeeKobo(duesKobo, {
+  // Optional platform margin (default 0). Set per-org from the console.
+  const marginKobo = computeMarginKobo(duesKobo, {
     percent: org.platform_fee_percent ?? undefined,
     flat:    org.platform_fee_flat ?? undefined,
     min:     org.platform_fee_min ?? undefined,
     cap:     org.platform_fee_cap ?? undefined,
     mode:    org.platform_fee_mode ?? undefined,
   });
-  const totalKobo = duesKobo + feeKobo;
+  // Cover Paystack's fee so the org nets EXACTLY the dues, then add the
+  // margin. This single serviceFee is what the student pays on top.
+  const coverKobo = org.paystack_subaccount_code ? paystackCoverKobo(duesKobo) : 0;
+  const serviceFeeKobo = coverKobo + marginKobo;
+  const totalKobo = duesKobo + serviceFeeKobo;
 
   const payerEmail = isGuestCheckout
     ? String(guestEmail).trim()
@@ -330,7 +378,7 @@ async function handleInitCore(req: any, res: any, body: any) {
     event_tier_id:       resolvedTierId,
     amount:              baseNaira,
     dues_amount_kobo:    duesKobo,
-    platform_fee_kobo:   feeKobo,
+    platform_fee_kobo:   marginKobo,
     total_charged_kobo:  totalKobo,
     currency_code:       (pt.currency_code || org.currency_code || 'NGN').toUpperCase(),
     payment_method:      'paystack',
@@ -374,7 +422,8 @@ async function handleInitCore(req: any, res: any, body: any) {
         member_id:        isGuestCheckout ? null : member.id,
         group_id:         isGuestCheckout ? null : member.group_id,
       dues_kobo:        duesKobo,
-      platform_fee_kobo: feeKobo,
+      platform_fee_kobo: marginKobo,
+      service_fee_kobo: serviceFeeKobo,
       total_kobo:       totalKobo,
       currency_code:    paymentRow.currency_code,
         payer_name:       payerName,
@@ -384,14 +433,16 @@ async function handleInitCore(req: any, res: any, body: any) {
   };
 
   if (org.paystack_subaccount_code) {
-    // Split payment: the org's dues settle to THEIR bank (subaccount); the
-    // platform keeps exactly the service fee via transaction_charge. The org
-    // bears Paystack's own processing cost out of their slice (bearer).
-    // Without a subaccount the whole charge lands in the platform account —
-    // so an org must register its bank before it can truly collect.
+    // Split so the ORG NETS EXACTLY THE DUES. transaction_charge (the full
+    // service fee) goes to the platform's main account, which BEARS
+    // Paystack's processing fee out of it (bearer:'account'). The
+    // subaccount's slice is therefore total − serviceFee = dues, untouched.
+    // The platform keeps serviceFee − Paystack's fee (≈ the configured
+    // margin; ~0 by default). Without a subaccount the whole charge lands
+    // in the platform account — the org must register its bank to collect.
     paystackBody.subaccount = org.paystack_subaccount_code;
-    paystackBody.transaction_charge = feeKobo;
-    paystackBody.bearer = 'subaccount';
+    paystackBody.transaction_charge = serviceFeeKobo;
+    paystackBody.bearer = 'account';
   }
 
   let psRes: Response;
