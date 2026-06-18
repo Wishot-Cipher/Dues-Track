@@ -77,7 +77,7 @@ export default async function handler(req: any, res: any) {
 
     const orgName = escapeHtml(org?.name) || 'Payvexo'
     const verifiedSlug = org?.slug || orgSlug || ''
-    const appUrl = process.env.NEXT_PUBLIC_APP_URL || process.env.VITE_APP_URL || 'https://payvexo.com'
+    const appUrl = process.env.NEXT_PUBLIC_APP_URL || process.env.VITE_APP_URL || 'https://payvexo.ng'
     const loginUrl = `${appUrl}/${verifiedSlug}/login`
 
     const subject = `Welcome to ${orgName}! 🎉`

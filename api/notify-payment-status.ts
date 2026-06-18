@@ -109,7 +109,7 @@ export default async function handler(req: any, res: any) {
 
     const orgName = escapeHtml(org?.name) || 'Payvexo'
     const orgSlug = org?.slug || ''
-    const appUrl = process.env.NEXT_PUBLIC_APP_URL || process.env.VITE_APP_URL || 'https://payvexo.com'
+    const appUrl = process.env.NEXT_PUBLIC_APP_URL || process.env.VITE_APP_URL || 'https://payvexo.ng'
     const dashboardUrl = `${appUrl}/${orgSlug}/dashboard`
 
     // ── Use server-verified admin name ──
