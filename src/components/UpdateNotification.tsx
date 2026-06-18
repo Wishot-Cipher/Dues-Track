@@ -4,7 +4,7 @@ import { RefreshCw, X } from 'lucide-react'
 import { colors } from '@/config/colors'
 
 // Current app version - update this when you make changes
-const APP_VERSION = '1.0.1'
+const APP_VERSION = '1.0.2'
 
 export default function UpdateNotification() {
   const [showUpdate, setShowUpdate] = useState(false)
@@ -41,6 +41,32 @@ export default function UpdateNotification() {
       localStorage.setItem('app_version', APP_VERSION)
     }
   }, [])
+
+  // iOS Safari doesn't automatically check for SW updates when a
+  // standalone PWA is reopened from the home screen. Force a check
+  // every time the app becomes visible so updates surface immediately
+  // instead of requiring the user to delete and re-add the app.
+  useEffect(() => {
+    if (!('serviceWorker' in navigator)) return;
+
+    const checkForUpdate = () => {
+      navigator.serviceWorker.ready.then(reg => {
+        reg.update().catch(() => { /* ignore network errors */ });
+      });
+    };
+
+    // Check immediately on mount
+    checkForUpdate();
+
+    // Check every time the app comes back into focus
+    // (covers switching back to the PWA from another app on iOS)
+    const onVisibilityChange = () => {
+      if (document.visibilityState === 'visible') checkForUpdate();
+    };
+
+    document.addEventListener('visibilitychange', onVisibilityChange);
+    return () => document.removeEventListener('visibilitychange', onVisibilityChange);
+  }, []);
 
   const handleUpdate = () => {
     setIsUpdating(true)
