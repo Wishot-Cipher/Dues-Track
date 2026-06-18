@@ -1,57 +1,32 @@
 /**
- * ClassExecDashboardView — focused dashboard for a verified class rep.
+ * ClassExecDashboardPage — standalone page for group-scoped execs.
  *
- * Mounted by AdminDashboardPage at /:orgSlug/admin/dashboard when the
- * caller's active role is class-scoped (scope_level='group'). Sister
- * to DepartmentExecDashboardPage and FacultyExecDashboardPage — same
- * visual language, scoped one tier lower.
+ * Previously mounted as a child component inside AdminDashboardPage.
+ * Now lives at /:orgSlug/admin/class as its own route.
  *
- * What a class rep actually does (the only person with full power
- * over the class):
- *   • Manage class members (add / remove / edit / suspend)
- *   • Publish dues and events for THEIR class
- *   • Approve / reject pending payments
- *   • See receipts + financial detail for THIS class
- *
- * Everything in this view is filtered to the active group_id. We
- * NEVER show cross-class data here — that's the dept/faculty exec's
- * job. Cross-class data leaking into a class-rep view was the bug
- * that triggered this refactor.
- *
- * Data fetch: a single useEffect pulls counts and recent rows in
- * parallel. Heavier "view all" interactions hand off to the existing
- * Members, ManageDues, Review, Receipts pages — this view is a
- * dashboard, not a workbench.
+ * Reads activeRole.adminId to resolve the specific admin row and
+ * class the user switched to via the role switcher — no props needed.
  */
 
 import { useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import {
-  ArrowRight,
-  Banknote,
-  CalendarClock,
-  CheckCircle2,
-  Clock,
-  GraduationCap,
-  Layers,
-  Loader2,
-  PieChart,
-  Plus,
-  Receipt,
-  ShieldCheck,
-  Users,
-  Wallet,
+  ArrowRight, Banknote, CalendarClock, CheckCircle2, Clock,
+  GraduationCap, Layers, Loader2, PieChart, Plus, Receipt,
+  ShieldCheck, Users, Wallet,
 } from 'lucide-react';
 import { useMultiTenantAuth } from '@/hooks/useMultiTenantAuth';
-import LevelManager from '@/components/admin/LevelManager';
-import { useThemeTokens } from '@/hooks/useThemeTokens';
+import { useActiveRole } from '@/hooks/useActiveRole';
 import { useAppNav } from '@/hooks/useAppNav';
+import { useThemeTokens } from '@/hooks/useThemeTokens';
 import { supabase } from '@/config/supabase';
-import type { MemberAdmin, OrganizationGroup } from '@/types/multiTenant';
+import { organizationService } from '@/services/organizationService';
+import LevelManager from '@/components/admin/LevelManager';
 import HandoverButton from '@/components/handover/HandoverButton';
+import type { MemberAdmin, OrganizationGroup } from '@/types/multiTenant';
 
-// ── Local types ───────────────────────────────────────────────────────
+// ── Local types ───────────────────────────────────────────────────
 interface PaymentRow {
   id: string;
   amount: number;
@@ -73,50 +48,26 @@ interface DueRow {
 }
 
 interface DashStats {
-  members:      number;
-  activeDues:   number;
-  pending:      number;
-  collected:    number;  // total approved naira this term
+  members:    number;
+  activeDues: number;
+  pending:    number;
+  collected:  number;
 }
 
-/**
- * Resolves the caller's class-rep record + the class it points at.
- * Returns null when the caller isn't a verified group-scope admin —
- * AdminDashboardPage uses that null signal to fall back to its
- * org-wide widgets.
- */
-function pickClassAdmin(records: MemberAdmin[], groups: OrganizationGroup[]):
-  { admin: MemberAdmin; klass: OrganizationGroup } | null
-{
-  for (const a of records) {
-    if (!a.is_active) continue;
-    if ((a.verification_layer ?? 0) < 4) continue;
-    if (a.scope_level !== 'group') continue;
-    if (!a.group_id) continue;
-    const group = groups.find((g) => g.id === a.group_id);
-    if (!group) continue;
-    return { admin: a, klass: group };
-  }
-  return null;
-}
-
-export interface ClassExecDashboardViewProps {
-  /** Pass through so the parent can render this conditionally with
-   *  the resolver result it already computed (avoids a second fetch). */
-  admin: MemberAdmin;
-  klass: OrganizationGroup;
-}
-
-/** Standalone resolver used by AdminDashboardPage to decide whether
- *  to mount this view at all. Exported so the parent doesn't need
- *  to duplicate the picking logic. */
-export { pickClassAdmin };
-
-export default function ClassExecDashboardView({ admin, klass }: ClassExecDashboardViewProps) {
+export default function ClassExecDashboardPage() {
   const tk = useThemeTokens();
   const { organization, user } = useMultiTenantAuth();
+  const { activeRole } = useActiveRole({
+    orgId: organization?.id,
+    memberId: user?.id,
+  });
   const { go, orgSlug } = useAppNav();
   const navigate = useNavigate();
+
+  // Resolved from activeRole.adminId
+  const [admin, setAdmin] = useState<MemberAdmin | null>(null);
+  const [klass, setKlass] = useState<OrganizationGroup | null>(null);
+  const [resolving, setResolving] = useState(true);
 
   const [showLevel, setShowLevel] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -126,7 +77,34 @@ export default function ClassExecDashboardView({ admin, klass }: ClassExecDashbo
   const [recentPayments, setRecentPayments] = useState<PaymentRow[]>([]);
   const [recentDues, setRecentDues] = useState<DueRow[]>([]);
 
-  // ── Data load — every query scoped to this class. ─────────────
+  // ── Step 1: resolve admin row + class from activeRole ─────────
+  useEffect(() => {
+    if (!user || !organization || !activeRole?.adminId) {
+      setResolving(false);
+      return;
+    }
+    let cancelled = false;
+    (async () => {
+      try {
+        const groups = await organizationService.getGroups(organization.id);
+        if (cancelled) return;
+        const records = (user.admin_records ?? []) as MemberAdmin[];
+        const targetAdmin = records.find(
+          (r) => r.id === activeRole.adminId && r.is_active !== false,
+        );
+        const targetKlass = groups.find((g) => g.id === targetAdmin?.group_id);
+        if (targetAdmin && targetKlass) {
+          setAdmin(targetAdmin);
+          setKlass(targetKlass);
+        }
+      } finally {
+        if (!cancelled) setResolving(false);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [user, organization, activeRole?.adminId]);
+
+  // ── Step 2: load dashboard data once class is resolved ────────
   useEffect(() => {
     if (!organization || !klass) return;
     let cancelled = false;
@@ -134,14 +112,12 @@ export default function ClassExecDashboardView({ admin, klass }: ClassExecDashbo
     (async () => {
       setLoading(true);
 
-      // 1. Members count (class only)
       const { count: memberCount } = await supabase
         .from('organization_members')
         .select('id', { count: 'exact', head: true })
         .eq('organization_id', organization.id)
         .eq('group_id', klass.id);
 
-      // 2. Active dues for this class + recent 6 published
       const { data: dueRows } = await supabase
         .from('payment_types')
         .select('id, title, amount, target_levels, created_at, is_active')
@@ -149,16 +125,16 @@ export default function ClassExecDashboardView({ admin, klass }: ClassExecDashbo
         .eq('group_id', klass.id)
         .order('created_at', { ascending: false })
         .limit(20);
+
       const allDues = (dueRows as DueRow[]) || [];
       const activeDuesCount = allDues.filter((d) => d.is_active).length;
       const top6Dues = allDues.slice(0, 6);
-
-      // 3. Recent payments — last 6 across THIS class's members.
-      //    We pull by payment_type_id to keep the filter tight.
       const dueIds = allDues.map((d) => d.id);
+
       let payments: PaymentRow[] = [];
       let pendingCount = 0;
-      let collectedKobo = 0;
+      let collectedTotal = 0;
+
       if (dueIds.length > 0) {
         const { data: payRows } = await supabase
           .from('payments')
@@ -185,13 +161,12 @@ export default function ClassExecDashboardView({ admin, klass }: ClassExecDashbo
         } as PaymentRow));
 
         payments = all.slice(0, 6);
-        pendingCount  = all.filter((p) => p.status === 'pending').length;
-        collectedKobo = all
+        pendingCount = all.filter((p) => p.status === 'pending').length;
+        collectedTotal = all
           .filter((p) => p.status === 'approved')
           .reduce((s, p) => s + p.amount, 0);
       }
 
-      // 4. Per-due paid counts (for the recent dues list bars)
       const paidByDue = new Map<string, number>();
       if (dueIds.length > 0) {
         const { data: paidRows } = await supabase
@@ -203,6 +178,7 @@ export default function ClassExecDashboardView({ admin, klass }: ClassExecDashbo
           paidByDue.set(r.payment_type_id, (paidByDue.get(r.payment_type_id) || 0) + 1);
         });
       }
+
       const recent: DueRow[] = top6Dues.map((d) => ({
         ...d,
         paid_count: paidByDue.get(d.id) || 0,
@@ -213,7 +189,7 @@ export default function ClassExecDashboardView({ admin, klass }: ClassExecDashbo
         members:    memberCount ?? 0,
         activeDues: activeDuesCount,
         pending:    pendingCount,
-        collected:  collectedKobo,
+        collected:  collectedTotal,
       });
       setRecentPayments(payments);
       setRecentDues(recent);
@@ -226,7 +202,37 @@ export default function ClassExecDashboardView({ admin, klass }: ClassExecDashbo
   const currencySymbol = organization?.currency_symbol || '₦';
   const memberCount = useMemo(() => stats.members, [stats.members]);
 
-  // ── Loading skeleton ──────────────────────────────────────────
+  // ── Loading states ─────────────────────────────────────────────
+  if (resolving) {
+    return (
+      <div className="max-w-5xl mx-auto px-4 py-10" style={{ color: tk.text }}>
+        <div className="flex items-center gap-2" style={{ color: tk.textSec }}>
+          <Loader2 className="w-4 h-4 animate-spin" />
+          <span className="text-sm">Loading your dashboard…</span>
+        </div>
+      </div>
+    );
+  }
+
+  // Couldn't resolve — activeRole might be stale or missing
+  if (!admin || !klass) {
+    return (
+      <div className="max-w-5xl mx-auto px-4 py-10 text-center" style={{ color: tk.text }}>
+        <p className="text-sm font-semibold mb-2">Couldn't load your class.</p>
+        <p className="text-xs mb-4" style={{ color: tk.textSec }}>
+          Your role may have changed. Please switch roles and try again.
+        </p>
+        <button
+          onClick={() => go('/dashboard')}
+          className="px-4 py-2 rounded-xl text-sm font-semibold"
+          style={{ background: tk.primarySoft, color: tk.primary }}
+        >
+          Back to dashboard
+        </button>
+      </div>
+    );
+  }
+
   if (loading) {
     return (
       <div className="max-w-5xl mx-auto px-4 py-10" style={{ color: tk.text }}>
@@ -241,7 +247,7 @@ export default function ClassExecDashboardView({ admin, klass }: ClassExecDashbo
   return (
     <div className="max-w-5xl mx-auto px-4 py-6 space-y-6" style={{ color: tk.text }}>
 
-      {/* ── Header ─────────────────────────────────────────────── */}
+      {/* ── Header ──────────────────────────────────────────────── */}
       <motion.header
         initial={{ opacity: 0, y: 12 }}
         animate={{ opacity: 1, y: 0 }}
@@ -274,16 +280,16 @@ export default function ClassExecDashboardView({ admin, klass }: ClassExecDashbo
         </p>
       </motion.header>
 
-      {/* ── Quick stats ────────────────────────────────────────── */}
+      {/* ── Quick stats ─────────────────────────────────────────── */}
       <motion.div
         initial={{ opacity: 0, y: 12 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ delay: 0.05 }}
         className="grid grid-cols-2 sm:grid-cols-4 gap-3"
       >
-        <Stat label="Members"     value={memberCount}        icon={<Users className="w-3.5 h-3.5" />}        tk={tk} color={tk.blue} />
-        <Stat label="Active dues" value={stats.activeDues}   icon={<Receipt className="w-3.5 h-3.5" />}      tk={tk} color={tk.primary} />
-        <Stat label="Pending"     value={stats.pending}      icon={<Clock className="w-3.5 h-3.5" />}        tk={tk} color={tk.amber} />
+        <Stat label="Members"     value={memberCount}      icon={<Users className="w-3.5 h-3.5" />}     tk={tk} color={tk.blue} />
+        <Stat label="Active dues" value={stats.activeDues} icon={<Receipt className="w-3.5 h-3.5" />}   tk={tk} color={tk.primary} />
+        <Stat label="Pending"     value={stats.pending}    icon={<Clock className="w-3.5 h-3.5" />}     tk={tk} color={tk.amber} />
         <Stat
           label="Collected"
           value={`${currencySymbol}${stats.collected.toLocaleString('en-NG')}`}
@@ -293,80 +299,21 @@ export default function ClassExecDashboardView({ admin, klass }: ClassExecDashbo
         />
       </motion.div>
 
-      {/* ── Quick actions ──────────────────────────────────────── */}
-      {/* 5 actions on wide screens, wraps to 2-col on mobile. Payout
-          is intentionally first now — without it, "Publish a due"
-          will be gated by the no-payout modal. */}
+      {/* ── Quick actions ───────────────────────────────────────── */}
       <motion.section
         initial={{ opacity: 0, y: 12 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ delay: 0.1 }}
         className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3"
       >
-        <ActionCard
-          icon={<Banknote className="w-5 h-5" />}
-          title="Payout account"
-          sub="Where your class collects."
-          tk={tk}
-          accent={tk.mint}
-          onClick={() => navigate(`/${orgSlug}/admin/payout?groupId=${klass.id}`)}
-        />
-        <ActionCard
-          icon={<Plus className="w-5 h-5" />}
-          title="Publish a due"
-          sub="For this class only."
-          tk={tk}
-          accent={tk.primary}
-          onClick={() => navigate(`/${orgSlug}/admin/create-payment?scope=group&groupId=${klass.id}`)}
-        />
-        <ActionCard
-          icon={<Users className="w-5 h-5" />}
-          title="Manage members"
-          sub="Add, edit, suspend."
-          tk={tk}
-          accent={tk.blue}
-          onClick={() => go('/admin/members')}
-        />
-        <ActionCard
-          icon={<Clock className="w-5 h-5" />}
-          title="Review payments"
-          sub="Approve or reject pending."
-          tk={tk}
-          accent={tk.amber}
-          onClick={() => go('/admin/review')}
-        />
-        <ActionCard
-          icon={<Receipt className="w-5 h-5" />}
-          title="Manage dues"
-          sub="Edit, end, archive."
-          tk={tk}
-          accent={tk.purple}
-          onClick={() => go('/admin/manage-dues')}
-        />
-        <ActionCard
-          icon={<PieChart className="w-5 h-5" />}
-          title="Audit & finance"
-          sub="Collected, expenses, balance."
-          tk={tk}
-          accent={tk.mint}
-          onClick={() => go('/admin/collected')}
-        />
-       <ActionCard
-          icon={<GraduationCap className="w-5 h-5" />}
-          title="Set & level"
-          sub="Advance, graduate, history."
-          tk={tk}
-          accent={tk.blue}
-          onClick={() => setShowLevel(true)}
-        />
-        <ActionCard
-          icon={<Wallet className="w-5 h-5" />}
-          title="Upgrade to Pro"
-          sub="Unlock advanced features."
-          tk={tk}
-          accent={tk.amber}
-          onClick={() => navigate(`/${orgSlug}/admin/billing`)}
-        />
+        <ActionCard icon={<Banknote className="w-5 h-5" />}      title="Payout account"  sub="Where your class collects."    tk={tk} accent={tk.mint}    onClick={() => navigate(`/${orgSlug}/admin/payout?groupId=${klass.id}`)} />
+        <ActionCard icon={<Plus className="w-5 h-5" />}           title="Publish a due"   sub="For this class only."          tk={tk} accent={tk.primary} onClick={() => navigate(`/${orgSlug}/admin/create-payment?scope=group&groupId=${klass.id}`)} />
+        <ActionCard icon={<Users className="w-5 h-5" />}          title="Manage members"  sub="Add, edit, suspend."           tk={tk} accent={tk.blue}    onClick={() => go('/admin/members')} />
+        <ActionCard icon={<Clock className="w-5 h-5" />}          title="Review payments" sub="Approve or reject pending."    tk={tk} accent={tk.amber}   onClick={() => go('/admin/review')} />
+        <ActionCard icon={<Receipt className="w-5 h-5" />}        title="Manage dues"     sub="Edit, end, archive."           tk={tk} accent={tk.purple}  onClick={() => go('/admin/manage-dues')} />
+        <ActionCard icon={<PieChart className="w-5 h-5" />}       title="Audit & finance" sub="Collected, expenses, balance." tk={tk} accent={tk.mint}    onClick={() => go('/admin/collected')} />
+        <ActionCard icon={<GraduationCap className="w-5 h-5" />}  title="Set & level"     sub="Advance, graduate, history."  tk={tk} accent={tk.blue}    onClick={() => setShowLevel(true)} />
+        <ActionCard icon={<Wallet className="w-5 h-5" />}         title="Upgrade to Pro"  sub="Unlock advanced features."    tk={tk} accent={tk.amber}   onClick={() => navigate(`/${orgSlug}/admin/billing`)} />
       </motion.section>
 
       {showLevel && user?.id && (
@@ -377,7 +324,7 @@ export default function ClassExecDashboardView({ admin, klass }: ClassExecDashbo
         />
       )}
 
-      {/* ── Recent dues published ─────────────────────────────── */}
+      {/* ── Recent dues ─────────────────────────────────────────── */}
       <motion.section
         initial={{ opacity: 0, y: 12 }}
         animate={{ opacity: 1, y: 0 }}
@@ -385,32 +332,19 @@ export default function ClassExecDashboardView({ admin, klass }: ClassExecDashbo
       >
         <header className="flex items-end justify-between mb-3">
           <div>
-            <h2 className="text-lg font-extrabold tracking-tight">
-              Recent dues you've published
-            </h2>
-            <p className="text-[11px] mt-0.5" style={{ color: tk.textTer }}>
-              Tap a row to manage it — edit, end, or archive.
-            </p>
+            <h2 className="text-lg font-extrabold tracking-tight">Recent dues you've published</h2>
+            <p className="text-[11px] mt-0.5" style={{ color: tk.textTer }}>Tap a row to manage it.</p>
           </div>
-          <Link
-            to={`/${orgSlug}/admin/manage-dues`}
-            className="text-xs font-semibold inline-flex items-center gap-1"
-            style={{ color: tk.primary }}
-          >
+          <Link to={`/${orgSlug}/admin/manage-dues`} className="text-xs font-semibold inline-flex items-center gap-1" style={{ color: tk.primary }}>
             View all <ArrowRight className="w-3 h-3" />
           </Link>
         </header>
 
         {recentDues.length === 0 ? (
-          <div
-            className="rounded-2xl p-6 text-center"
-            style={{ background: tk.card, border: `1px solid ${tk.cardBorder}` }}
-          >
+          <div className="rounded-2xl p-6 text-center" style={{ background: tk.card, border: `1px solid ${tk.cardBorder}` }}>
             <Receipt className="w-7 h-7 mx-auto mb-2" style={{ color: tk.textTer }} />
             <p className="font-semibold text-sm">No dues yet</p>
-            <p className="text-xs mt-1" style={{ color: tk.textSec }}>
-              Publish your class's first due — members will see it on their dashboard instantly.
-            </p>
+            <p className="text-xs mt-1" style={{ color: tk.textSec }}>Publish your class's first due.</p>
             <button
               type="button"
               onClick={() => navigate(`/${orgSlug}/admin/create-payment?scope=group&groupId=${klass.id}`)}
@@ -421,15 +355,10 @@ export default function ClassExecDashboardView({ admin, klass }: ClassExecDashbo
             </button>
           </div>
         ) : (
-          <div
-            className="rounded-2xl overflow-hidden"
-            style={{ background: tk.card, border: `1px solid ${tk.cardBorder}`, boxShadow: tk.shadow }}
-          >
+          <div className="rounded-2xl overflow-hidden" style={{ background: tk.card, border: `1px solid ${tk.cardBorder}` }}>
             <div className="divide-y" style={{ borderColor: tk.cardBorder }}>
               {recentDues.map((d) => {
-                const pct = memberCount > 0
-                  ? Math.min(100, Math.round((d.paid_count / memberCount) * 100))
-                  : 0;
+                const pct = memberCount > 0 ? Math.min(100, Math.round((d.paid_count / memberCount) * 100)) : 0;
                 return (
                   <Link
                     key={d.id}
@@ -437,35 +366,19 @@ export default function ClassExecDashboardView({ admin, klass }: ClassExecDashbo
                     className="px-4 py-3.5 flex items-center gap-3 transition-colors hover:bg-black/[0.02]"
                     style={{ borderColor: tk.cardBorder, color: tk.text }}
                   >
-                    <div
-                      className="w-9 h-9 rounded-xl flex items-center justify-center shrink-0"
-                      style={{
-                        background: `${tk.primary}14`,
-                        color: tk.primary,
-                        border: `1px solid ${tk.primaryRing}`,
-                      }}
-                    >
+                    <div className="w-9 h-9 rounded-xl flex items-center justify-center shrink-0" style={{ background: `${tk.primary}14`, color: tk.primary, border: `1px solid ${tk.primaryRing}` }}>
                       <Receipt className="w-4 h-4" />
                     </div>
                     <div className="flex-1 min-w-0">
                       <p className="text-sm font-semibold truncate">{d.title}</p>
                       <p className="text-[11px] mt-0.5" style={{ color: tk.textTer }}>
-                        {currencySymbol}{Number(d.amount).toLocaleString('en-NG')}
-                        {d.is_active ? '' : ' · ended'}
+                        {currencySymbol}{Number(d.amount).toLocaleString('en-NG')}{d.is_active ? '' : ' · ended'}
                       </p>
                     </div>
                     <div className="text-right min-w-[80px]">
-                      <p className="text-[11px] font-bold tabular-nums" style={{ color: tk.text }}>
-                        {d.paid_count}/{memberCount || '—'}
-                      </p>
-                      <div
-                        className="h-1 rounded-full mt-1 overflow-hidden"
-                        style={{ background: tk.isLight ? 'rgba(15,7,3,0.06)' : 'rgba(255,255,255,0.07)' }}
-                      >
-                        <div
-                          className="h-full"
-                          style={{ width: `${pct}%`, background: tk.gradOrange }}
-                        />
+                      <p className="text-[11px] font-bold tabular-nums" style={{ color: tk.text }}>{d.paid_count}/{memberCount || '—'}</p>
+                      <div className="h-1 rounded-full mt-1 overflow-hidden" style={{ background: tk.isLight ? 'rgba(15,7,3,0.06)' : 'rgba(255,255,255,0.07)' }}>
+                        <div className="h-full" style={{ width: `${pct}%`, background: tk.gradOrange }} />
                       </div>
                     </div>
                     <ArrowRight className="w-4 h-4 shrink-0" style={{ color: tk.textTer }} />
@@ -477,7 +390,7 @@ export default function ClassExecDashboardView({ admin, klass }: ClassExecDashbo
         )}
       </motion.section>
 
-      {/* ── Recent payments ───────────────────────────────────── */}
+      {/* ── Recent payments ─────────────────────────────────────── */}
       <motion.section
         initial={{ opacity: 0, y: 12 }}
         animate={{ opacity: 1, y: 0 }}
@@ -485,63 +398,34 @@ export default function ClassExecDashboardView({ admin, klass }: ClassExecDashbo
       >
         <header className="flex items-end justify-between mb-3">
           <div>
-            <h2 className="text-lg font-extrabold tracking-tight">
-              Recent payments
-            </h2>
-            <p className="text-[11px] mt-0.5" style={{ color: tk.textTer }}>
-              Only your class's submissions.
-            </p>
+            <h2 className="text-lg font-extrabold tracking-tight">Recent payments</h2>
+            <p className="text-[11px] mt-0.5" style={{ color: tk.textTer }}>Only your class's submissions.</p>
           </div>
-          <Link
-            to={`/${orgSlug}/admin/review`}
-            className="text-xs font-semibold inline-flex items-center gap-1"
-            style={{ color: tk.primary }}
-          >
+          <Link to={`/${orgSlug}/admin/review`} className="text-xs font-semibold inline-flex items-center gap-1" style={{ color: tk.primary }}>
             Open Review <ArrowRight className="w-3 h-3" />
           </Link>
         </header>
 
         {recentPayments.length === 0 ? (
-          <div
-            className="rounded-2xl p-6 text-center"
-            style={{ background: tk.card, border: `1px solid ${tk.cardBorder}` }}
-          >
+          <div className="rounded-2xl p-6 text-center" style={{ background: tk.card, border: `1px solid ${tk.cardBorder}` }}>
             <Receipt className="w-7 h-7 mx-auto mb-2" style={{ color: tk.textTer }} />
             <p className="font-semibold text-sm">No payments yet</p>
-            <p className="text-xs mt-1" style={{ color: tk.textSec }}>
-              Submissions will show up here once members start paying.
-            </p>
+            <p className="text-xs mt-1" style={{ color: tk.textSec }}>Submissions will show up here once members start paying.</p>
           </div>
         ) : (
-          <div
-            className="rounded-2xl overflow-hidden"
-            style={{ background: tk.card, border: `1px solid ${tk.cardBorder}`, boxShadow: tk.shadow }}
-          >
+          <div className="rounded-2xl overflow-hidden" style={{ background: tk.card, border: `1px solid ${tk.cardBorder}` }}>
             <div className="divide-y" style={{ borderColor: tk.cardBorder }}>
               {recentPayments.map((p) => {
                 const isPending = p.status === 'pending';
                 const isApproved = p.status === 'approved';
                 const accent = isApproved ? tk.mint : isPending ? tk.amber : tk.danger;
                 return (
-                  <div
-                    key={p.id}
-                    className="px-4 py-3.5 flex items-center gap-3"
-                    style={{ borderColor: tk.cardBorder, color: tk.text }}
-                  >
-                    <div
-                      className="w-9 h-9 rounded-xl flex items-center justify-center shrink-0"
-                      style={{
-                        background: `${accent}18`,
-                        color: accent,
-                        border: `1px solid ${accent}30`,
-                      }}
-                    >
+                  <div key={p.id} className="px-4 py-3.5 flex items-center gap-3" style={{ borderColor: tk.cardBorder, color: tk.text }}>
+                    <div className="w-9 h-9 rounded-xl flex items-center justify-center shrink-0" style={{ background: `${accent}18`, color: accent, border: `1px solid ${accent}30` }}>
                       {isApproved ? <CheckCircle2 className="w-4 h-4" /> : <Clock className="w-4 h-4" />}
                     </div>
                     <div className="flex-1 min-w-0">
-                      <p className="text-sm font-semibold truncate">
-                        {p.payer_name || 'Member'}
-                      </p>
+                      <p className="text-sm font-semibold truncate">{p.payer_name || 'Member'}</p>
                       <p className="text-[11px] mt-0.5" style={{ color: tk.textTer }}>
                         {p.payment_type_title || 'Payment'} · {new Date(p.created_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}
                       </p>
@@ -550,12 +434,7 @@ export default function ClassExecDashboardView({ admin, klass }: ClassExecDashbo
                       <p className="text-sm font-bold tabular-nums" style={{ color: tk.text }}>
                         {currencySymbol}{Number(p.amount).toLocaleString('en-NG')}
                       </p>
-                      <span
-                        className="text-[10px] font-bold uppercase tracking-wider"
-                        style={{ color: accent }}
-                      >
-                        {p.status}
-                      </span>
+                      <span className="text-[10px] font-bold uppercase tracking-wider" style={{ color: accent }}>{p.status}</span>
                     </div>
                   </div>
                 );
@@ -565,93 +444,54 @@ export default function ClassExecDashboardView({ admin, klass }: ClassExecDashbo
         )}
       </motion.section>
 
-      {/* ── Footer note about session lifecycle ─────────────────── */}
       {admin.tenure_start && (
         <p className="text-[11px] flex items-center gap-1.5" style={{ color: tk.textTer }}>
           <CalendarClock className="w-3 h-3" />
-          Acting since {new Date(admin.tenure_start as unknown as string).toLocaleDateString('en-GB', {
-            day: 'numeric', month: 'short', year: 'numeric',
-          })}.
+          Acting since {new Date(admin.tenure_start as unknown as string).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}.
         </p>
       )}
 
-      {/* Discoverable exec handover — self-hides for non-execs. */}
       <HandoverButton />
     </div>
   );
 }
 
-// ── Sub-components — same shape as the dept/faculty dashboards ────
+// ── Sub-components ────────────────────────────────────────────────
 
-function Stat({
-  label, value, icon, color, tk,
-}: {
-  label: string;
-  value: number | string;
-  icon: React.ReactNode;
-  color: string;
-  tk: ReturnType<typeof useThemeTokens>;
+function Stat({ label, value, icon, color, tk }: {
+  label: string; value: number | string; icon: React.ReactNode;
+  color: string; tk: ReturnType<typeof useThemeTokens>;
 }) {
   return (
-    <div
-      className="rounded-2xl p-3 sm:p-4"
-      style={{ background: tk.card, border: `1px solid ${tk.cardBorder}`, boxShadow: tk.shadow }}
-    >
+    <div className="rounded-2xl p-3 sm:p-4" style={{ background: tk.card, border: `1px solid ${tk.cardBorder}`, boxShadow: tk.shadow }}>
       <div className="flex items-center gap-2">
-        <span
-          className="w-7 h-7 rounded-lg flex items-center justify-center"
-          style={{ background: `${color}18`, color }}
-        >
+        <span className="w-7 h-7 rounded-lg flex items-center justify-center" style={{ background: `${color}18`, color }}>
           {icon}
         </span>
-        <p className="text-[10px] uppercase tracking-[0.14em] font-bold" style={{ color: tk.textTer }}>
-          {label}
-        </p>
+        <p className="text-[10px] uppercase tracking-[0.14em] font-bold" style={{ color: tk.textTer }}>{label}</p>
       </div>
-      <p className="text-xl font-extrabold tabular-nums mt-2" style={{ color: tk.text }}>
-        {value}
-      </p>
+      <p className="text-xl font-extrabold tabular-nums mt-2" style={{ color: tk.text }}>{value}</p>
     </div>
   );
 }
 
-function ActionCard({
-  icon, title, sub, accent, tk, onClick,
-}: {
-  icon: React.ReactNode;
-  title: string;
-  sub: string;
-  accent: string;
-  tk: ReturnType<typeof useThemeTokens>;
-  onClick: () => void;
+function ActionCard({ icon, title, sub, accent, tk, onClick }: {
+  icon: React.ReactNode; title: string; sub: string;
+  accent: string; tk: ReturnType<typeof useThemeTokens>; onClick: () => void;
 }) {
   return (
     <button
       type="button"
       onClick={onClick}
       className="group text-left rounded-2xl p-4 transition-all hover:-translate-y-0.5 active:scale-[0.99]"
-      style={{
-        background: tk.isLight ? '#FFFFFF' : 'rgba(255,255,255,0.03)',
-        border: `1px solid ${tk.cardBorder}`,
-        boxShadow: tk.shadow,
-      }}
+      style={{ background: tk.isLight ? '#FFFFFF' : 'rgba(255,255,255,0.03)', border: `1px solid ${tk.cardBorder}`, boxShadow: tk.shadow }}
     >
-      <span
-        className="inline-flex w-10 h-10 rounded-xl items-center justify-center mb-2.5"
-        style={{ background: `${accent}14`, color: accent, border: `1px solid ${accent}30` }}
-      >
+      <span className="inline-flex w-10 h-10 rounded-xl items-center justify-center mb-2.5" style={{ background: `${accent}14`, color: accent, border: `1px solid ${accent}30` }}>
         {icon}
       </span>
-      <p className="text-sm font-bold" style={{ color: tk.text }}>
-        {title}
-      </p>
-      <p className="text-[11px] mt-1" style={{ color: tk.textTer }}>
-        {sub}
-      </p>
-      <span
-        className="inline-flex items-center gap-1 text-[11px] font-semibold mt-2 transition-transform group-hover:translate-x-0.5"
-        style={{ color: accent }}
-      >
+      <p className="text-sm font-bold" style={{ color: tk.text }}>{title}</p>
+      <p className="text-[11px] mt-1" style={{ color: tk.textTer }}>{sub}</p>
+      <span className="inline-flex items-center gap-1 text-[11px] font-semibold mt-2 transition-transform group-hover:translate-x-0.5" style={{ color: accent }}>
         Open <ArrowRight className="w-3 h-3" />
       </span>
     </button>

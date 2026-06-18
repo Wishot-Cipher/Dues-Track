@@ -137,7 +137,9 @@ export default async function handler(req: any, res: any) {
       return res.status(500).json({ error: 'Failed to create reset token: ' + insertError.message })
     }
 
-    const resetUrl = `${appUrl.replace(/\/$/, '')}/reset-password?token=${resetToken}`
+    const resetUrl = orgSlug
+  ? `${appUrl.replace(/\/$/, '')}/${orgSlug}/reset-password?token=${resetToken}`
+  : `${appUrl.replace(/\/$/, '')}/reset-password?token=${resetToken}`
 
     // Send email via Gmail SMTP
     if (!isEmailConfigured()) {

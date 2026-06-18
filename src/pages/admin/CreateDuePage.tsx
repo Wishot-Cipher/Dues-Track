@@ -77,23 +77,23 @@ function buildCreateDueTokens(theme: 'light' | 'dark'): CreateDueTokens {
   const dt = getDashboardTokens(theme);
   const isLight = theme === 'light';
   return {
-    bg:        dt.bg,
-    panel:     dt.card,
-    panelHov:  dt.cardHover,
-    border:    dt.cardBorder,
+    bg: dt.bg,
+    panel: dt.card,
+    panelHov: dt.cardHover,
+    border: dt.cardBorder,
     borderHov: dt.primaryRing,
-    text:      dt.text,
-    textSec:   dt.textSec,
-    textTer:   dt.textTer,
-    textQuat:  isLight ? 'rgba(15,7,3,0.22)' : 'rgba(255,255,255,0.22)',
-    primary:   dt.primary,
+    text: dt.text,
+    textSec: dt.textSec,
+    textTer: dt.textTer,
+    textQuat: isLight ? 'rgba(15,7,3,0.22)' : 'rgba(255,255,255,0.22)',
+    primary: dt.primary,
     primaryHi: dt.primaryHi,
-    mint:      dt.mint,
-    blue:      dt.blue,
-    purple:    dt.purple,
-    pink:      '#ec4899',
-    amber:     dt.amber,
-    danger:    dt.danger,
+    mint: dt.mint,
+    blue: dt.blue,
+    purple: dt.purple,
+    pink: '#ec4899',
+    amber: dt.amber,
+    danger: dt.danger,
   };
 }
 const TokensContext = createContext<CreateDueTokens | null>(null);
@@ -119,18 +119,18 @@ const BRAND = {
 // to rebuild this list. Component-level chrome still derives from
 // the theme-aware `tk` via useTokens().
 const CATEGORIES = [
-  { value: 'dues', label: 'Dues', icon: '🎓', color: BRAND.primary },
-  { value: 'fees', label: 'Fees', icon: '📚', color: BRAND.blue },
-  { value: 'levy', label: 'Levy', icon: '📋', color: BRAND.amber },
-  { value: 'event', label: 'Event ticket', icon: '🎟️', color: BRAND.purple },
-  { value: 'contribution', label: 'Contribution', icon: '🤝', color: BRAND.mint },
-  { value: 'welfare', label: 'Welfare', icon: '❤️', color: BRAND.pink },
-  { value: 'project', label: 'Project', icon: '📘', color: BRAND.blue },
-  { value: 'donation', label: 'Donation', icon: '💝', color: BRAND.pink },
-  { value: 'subscription', label: 'Subscription', icon: '🔄', color: BRAND.amber },
-  { value: 'savings', label: 'Savings', icon: '💰', color: BRAND.mint },
-  { value: 'custom', label: 'Custom', icon: '📦', color: BRAND.primary },
-] as const;
+  { value: 'dues', label: 'Dues', icon: '🎓', color: BRAND.primary, description: 'Regular membership dues', isPro: false },
+  { value: 'fees', label: 'Fees', icon: '📚', color: BRAND.blue, description: 'Academic or admin fees', isPro: false },
+  { value: 'levy', label: 'Levy', icon: '📋', color: BRAND.amber, description: 'Special levies', isPro: false },
+  { value: 'event', label: 'Event ticket', icon: '🎟️', color: BRAND.purple, description: 'Sell tickets to an event', isPro: true },
+  { value: 'contribution', label: 'Contribution', icon: '🤝', color: BRAND.mint, description: 'Group contributions', isPro: false },
+  { value: 'welfare', label: 'Welfare', icon: '❤️', color: BRAND.pink, description: 'Welfare fund collections', isPro: false },
+  { value: 'project', label: 'Project', icon: '📘', color: BRAND.blue, description: 'Project funding', isPro: false },
+  { value: 'donation', label: 'Donation', icon: '💝', color: BRAND.pink, description: 'Open donations', isPro: false },
+  { value: 'subscription', label: 'Subscription', icon: '🔄', color: BRAND.amber, description: 'Recurring subscriptions', isPro: false },
+  { value: 'savings', label: 'Savings', icon: '💰', color: BRAND.mint, description: 'Group savings', isPro: false },
+  { value: 'custom', label: 'Custom', icon: '📦', color: BRAND.primary, description: 'Any other payment type', isPro: false },
+];
 
 const ICONS = ['🎓', '📚', '🎉', '📘', '❤️', '📦', '💰', '🏆', '⚽', '🎨', '🎟️', '🎵', '🍕'];
 const COLOR_PALETTE = [
@@ -139,11 +139,43 @@ const COLOR_PALETTE = [
 ];
 
 const NIGERIAN_BANKS = [
-  'Access Bank', 'Zenith Bank', 'GTBank', 'First Bank',
-  'UBA', 'Fidelity Bank', 'Union Bank', 'Sterling Bank',
-  'Stanbic IBTC', 'Ecobank', 'FCMB', 'Wema Bank',
-  'Polaris Bank', 'Keystone Bank', 'Heritage Bank',
-  'Opay', 'Palmpay', 'MoniePoint',
+  'Access Bank',
+  'Citibank Nigeria',
+  'Ecobank Nigeria',
+  'Fidelity Bank',
+  'First Bank of Nigeria',
+  'First City Monument Bank (FCMB)',
+  'Globus Bank',
+  'Guaranty Trust Bank (GTBank)',
+  'Heritage Bank',
+  'Jaiz Bank',
+  'Keystone Bank',
+  'Lotus Bank',
+  'Optimus Bank',
+  'Parallex Bank',
+  'Polaris Bank',
+  'Premium Trust Bank',
+  'Providus Bank',
+  'Stanbic IBTC Bank',
+  'Standard Chartered Bank',
+  'Sterling Bank',
+  'SunTrust Bank',
+  'Titan Trust Bank',
+  'Union Bank of Nigeria',
+  'United Bank for Africa (UBA)',
+  'Unity Bank',
+  'Wema Bank',
+  'Zenith Bank',
+  'Carbon (One Finance)',
+  'Eyowo',
+  'Kuda Bank',
+  'MoniePoint',
+  'Opay',
+  'PalmPay',
+  'Paga',
+  'Sparkle Microfinance Bank',
+  'VFD Microfinance Bank',
+  'Other (type manually)',
 ];
 
 const AMOUNT_CHIPS = [500, 1000, 2000, 5000, 10000];
@@ -252,6 +284,7 @@ export default function CreateDuePage() {
   const [coverUploading, setCoverUploading] = useState(false);
   const [coverFileName, setCoverFileName] = useState<string | null>(null);
   const [coverWarning, setCoverWarning] = useState<string | null>(null);
+  const [bankIsOther, setBankIsOther] = useState(false);
   const coverInputRef = useRef<HTMLInputElement>(null);
 
   // Scope-aware context loaded from mig 035 RPC
@@ -938,744 +971,793 @@ export default function CreateDuePage() {
 
   return (
     <TokensContext.Provider value={tk}>
-    <div className="min-h-screen relative overflow-x-hidden" style={{ minHeight: '100dvh', background: tk.bg }}>
-      {/* Ambient glow */}
-      <div className="fixed inset-0 pointer-events-none overflow-hidden">
-        <div
-          className="absolute rounded-full blur-[160px]"
-          style={{
-            width: 560, height: 560,
-            background: `radial-gradient(circle, ${form.color} 0%, transparent 70%)`,
-            top: '-12%', right: '-10%', opacity: 0.12,
-            transition: 'background 0.4s ease',
-          }}
-        />
-      </div>
-
-      {/* Top bar */}
-      <nav className="relative z-10 max-w-6xl mx-auto px-4 sm:px-6 py-5 flex items-center justify-between">
-        <button
-          onClick={() => navigate(-1)}
-          className="flex items-center gap-2 text-sm font-medium transition-colors"
-          style={{ color: tk.textSec }}
-        >
-          <ArrowLeft className="w-4 h-4" />
-          Back
-        </button>
-        <span className="text-xs uppercase tracking-[0.18em] font-semibold" style={{ color: tk.textTer }}>
-          New {isEvent ? 'event' : 'due'}
-        </span>
-      </nav>
-
-      <header className="relative z-10 max-w-6xl mx-auto px-4 sm:px-6 pt-2 pb-6">
-        <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-semibold mb-4"
-          style={{ background: `${form.color}14`, color: form.color, border: `1px solid ${form.color}28` }}>
-          <Sparkles className="w-3.5 h-3.5" />
-          {isEditMode ? (isEvent ? 'Editing event' : 'Editing due') : (isEvent ? 'Event ticketing' : 'New due')}
+      <div className="min-h-screen relative overflow-x-hidden" style={{ minHeight: '100dvh', background: tk.bg }}>
+        {/* Ambient glow */}
+        <div className="fixed inset-0 pointer-events-none overflow-hidden">
+          <div
+            className="absolute rounded-full blur-[160px]"
+            style={{
+              width: 560, height: 560,
+              background: `radial-gradient(circle, ${form.color} 0%, transparent 70%)`,
+              top: '-12%', right: '-10%', opacity: 0.12,
+              transition: 'background 0.4s ease',
+            }}
+          />
         </div>
-        <h1 className="text-3xl sm:text-4xl font-extrabold text-white tracking-tight leading-tight">
-          {isEditMode
-            ? (isEvent ? 'Edit event details' : 'Edit due details')
-            : (isEvent ? 'Sell tickets to an event' : 'Create a new due')}
-        </h1>
-        <p className="text-sm sm:text-base max-w-2xl leading-7 mt-2" style={{ color: tk.textSec }}>
-          {isEditMode
-            ? "Changes apply to every reference to this due. Members who already paid keep their payments — the new title, amount, and deadline are what they'll see going forward."
-            : 'Members get notified the moment you publish. The preview on the right shows exactly what they\'ll see.'}
-        </p>
-      </header>
 
-      <form
-        onSubmit={handleSubmit}
-        className="relative z-10 max-w-6xl mx-auto px-4 sm:px-6 pb-24 grid lg:grid-cols-[1fr_360px] gap-6"
-      >
-        {/* ╭───────── LEFT: FORM ─────────╮ */}
-        <div className="space-y-5">
-          {/* ── SCOPE / STATUS BANNER ── */}
-          {!ctxLoading && ctx?.ok && (
-            <motion.div
-              initial={{ opacity: 0, y: -6 }}
-              animate={{ opacity: 1, y: 0 }}
-              className="rounded-2xl px-4 py-3 flex items-start gap-3"
-              style={{
-                background: ctx.caller?.can_publish
-                  ? `${tk.mint}0E`
-                  : 'rgba(245,158,11,0.08)',
-                border: `1px solid ${ctx.caller?.can_publish ? `${tk.mint}30` : 'rgba(245,158,11,0.30)'}`,
-              }}
-            >
-              <Sparkles className="w-4 h-4 shrink-0 mt-0.5"
-                style={{ color: ctx.caller?.can_publish ? tk.mint : tk.amber }} />
-              <div className="flex-1 min-w-0 text-xs leading-5" style={{ color: tk.textSec }}>
-                <p className="font-semibold text-white">
-                  {ctx.org?.name} · {scopeLabel(ctx.caller?.scope)}
-                  {ctx.session?.label ? ` · ${ctx.session.label}` : ''}
-                </p>
-                {!ctx.caller?.can_publish && (
-                  <p className="mt-1" style={{ color: 'rgba(255,224,170,0.9)' }}>
-                    {ctx.org?.state !== 'active'
-                      ? `Your organization is in "${ctx.org?.state}" state — dues can't be published until it's Active.`
-                      : ctx.caller?.verification_status &&
-                        !['email_verified', 'document_verified', 'admin_verified', 'member_confirmed'].includes(ctx.caller.verification_status)
-                        ? `Your exec role is "${ctx.caller.verification_status}". Complete verification before publishing.`
-                        : 'You do not have permission to publish dues here.'}
+        {/* Top bar */}
+        <nav className="relative z-10 max-w-6xl mx-auto px-4 sm:px-6 py-5 flex items-center justify-between">
+          <button
+            onClick={() => navigate(-1)}
+            className="flex items-center gap-2 text-sm font-medium transition-colors"
+            style={{ color: tk.textSec }}
+          >
+            <ArrowLeft className="w-4 h-4" />
+            Back
+          </button>
+          <span className="text-xs uppercase tracking-[0.18em] font-semibold" style={{ color: tk.textTer }}>
+            New {isEvent ? 'event' : 'due'}
+          </span>
+        </nav>
+
+        <header className="relative z-10 max-w-6xl mx-auto px-4 sm:px-6 pt-2 pb-6">
+          <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-semibold mb-4"
+            style={{ background: `${form.color}14`, color: form.color, border: `1px solid ${form.color}28` }}>
+            <Sparkles className="w-3.5 h-3.5" />
+            {isEditMode ? (isEvent ? 'Editing event' : 'Editing due') : (isEvent ? 'Event ticketing' : 'New due')}
+          </div>
+          <h1 className="text-3xl sm:text-4xl font-extrabold text-white tracking-tight leading-tight">
+            {isEditMode
+              ? (isEvent ? 'Edit event details' : 'Edit due details')
+              : (isEvent ? 'Sell tickets to an event' : 'Create a new due')}
+          </h1>
+          <p className="text-sm sm:text-base max-w-2xl leading-7 mt-2" style={{ color: tk.textSec }}>
+            {isEditMode
+              ? "Changes apply to every reference to this due. Members who already paid keep their payments — the new title, amount, and deadline are what they'll see going forward."
+              : 'Members get notified the moment you publish. The preview on the right shows exactly what they\'ll see.'}
+          </p>
+        </header>
+
+        <form
+          onSubmit={handleSubmit}
+          className="relative z-10 max-w-6xl mx-auto px-4 sm:px-6 pb-24 grid lg:grid-cols-[1fr_360px] gap-6"
+        >
+          {/* ╭───────── LEFT: FORM ─────────╮ */}
+          <div className="space-y-5">
+            {/* ── SCOPE / STATUS BANNER ── */}
+            {!ctxLoading && ctx?.ok && (
+              <motion.div
+                initial={{ opacity: 0, y: -6 }}
+                animate={{ opacity: 1, y: 0 }}
+                className="rounded-2xl px-4 py-3 flex items-start gap-3"
+                style={{
+                  background: ctx.caller?.can_publish
+                    ? `${tk.mint}0E`
+                    : 'rgba(245,158,11,0.08)',
+                  border: `1px solid ${ctx.caller?.can_publish ? `${tk.mint}30` : 'rgba(245,158,11,0.30)'}`,
+                }}
+              >
+                <Sparkles className="w-4 h-4 shrink-0 mt-0.5"
+                  style={{ color: ctx.caller?.can_publish ? tk.mint : tk.amber }} />
+                <div className="flex-1 min-w-0 text-xs leading-5" style={{ color: tk.textSec }}>
+                  <p className="font-semibold text-white">
+                    {ctx.org?.name} · {scopeLabel(ctx.caller?.scope)}
+                    {ctx.session?.label ? ` · ${ctx.session.label}` : ''}
                   </p>
-                )}
-              </div>
-            </motion.div>
-          )}
-
-          {/* ── BASICS ── */}
-          <Panel title="Basics" icon={<Tag className="w-4 h-4" />}>
-            <Field label="Title" required>
-              <Input value={form.title} onChange={(v) => setField('title', v)} placeholder={isEvent ? 'Dept Dinner 2026' : 'Semester Dues'} required />
-            </Field>
-
-            <Field label="Description" hint="optional, shown to members">
-              <Textarea value={form.description} onChange={(v) => setField('description', v)} placeholder="What's this payment for?" />
-            </Field>
-
-            <Field label="Category" required>
-              <div className="flex flex-wrap gap-2">
-                {CATEGORIES.map((c) => {
-                  const active = form.category === c.value;
-                  return (
-                    <button
-                      key={c.value}
-                      type="button"
-                      onClick={() => setCategory(c.value)}
-                      className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold transition-all"
-                      style={{
-                        background: active ? `${c.color}18` : 'rgba(255,255,255,0.04)',
-                        color: active ? c.color : tk.textSec,
-                        border: `1px solid ${active ? `${c.color}40` : tk.border}`,
-                      }}
-                    >
-                      <span>{c.icon}</span>
-                      {c.label}
-                    </button>
-                  );
-                })}
-              </div>
-            </Field>
-
-            <Row>
-              <Field label="Icon">
-                <div className="flex flex-wrap gap-1.5">
-                  {ICONS.map((ic) => (
-                    <button
-                      key={ic}
-                      type="button"
-                      onClick={() => setField('icon', ic)}
-                      className="w-9 h-9 rounded-lg text-base transition-all"
-                      style={{
-                        background: form.icon === ic ? `${form.color}20` : 'rgba(255,255,255,0.04)',
-                        border: `1px solid ${form.icon === ic ? `${form.color}50` : tk.border}`,
-                      }}
-                    >
-                      {ic}
-                    </button>
-                  ))}
-                </div>
-              </Field>
-              <Field label="Accent color">
-                <div className="flex flex-wrap gap-1.5">
-                  {COLOR_PALETTE.map((c) => (
-                    <button
-                      key={c}
-                      type="button"
-                      onClick={() => setField('color', c)}
-                      className="w-7 h-7 rounded-full transition-all"
-                      style={{
-                        background: c,
-                        outline: form.color === c ? `2px solid ${tk.text}` : 'none',
-                        outlineOffset: 2,
-                      }}
-                    />
-                  ))}
-                </div>
-              </Field>
-            </Row>
-
-            {!isEvent && (
-              <Field label="Amount" required hint="in your org currency">
-                <div className="space-y-2">
-                  <Input
-                    value={form.amount}
-                    onChange={(v) => setField('amount', v.replace(/[^0-9.]/g, ''))}
-                    placeholder="5000"
-                    type="text"
-                    inputMode="decimal"
-                  />
-                  <div className="flex flex-wrap gap-1.5">
-                    {AMOUNT_CHIPS.map((amt) => (
-                      <button
-                        key={amt}
-                        type="button"
-                        onClick={() => setField('amount', String(amt))}
-                        className="px-2.5 py-1 rounded-lg text-[11px] font-semibold transition-all"
-                        style={{
-                          background: form.amount === String(amt) ? `${form.color}18` : 'rgba(255,255,255,0.04)',
-                          color: form.amount === String(amt) ? form.color : tk.textSec,
-                          border: `1px solid ${form.amount === String(amt) ? `${form.color}40` : tk.border}`,
-                        }}
-                      >
-                        ₦{amt.toLocaleString()}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              </Field>
-            )}
-
-            <Row>
-              <Field label="Deadline" hint="optional">
-                <ProfessionalDateTimePicker
-                  mode="datetime"
-                  value={form.deadline}
-                  onChange={(iso) => setField('deadline', iso)}
-                  placeholder="Pick a date and time"
-                  fullWidth
-                />
-              </Field>
-              <Field label="Late fee per day" hint="₦, optional">
-                <Input value={form.late_fee_per_day} onChange={(v) => setField('late_fee_per_day', v.replace(/[^0-9.]/g, ''))} placeholder="0" />
-              </Field>
-            </Row>
-
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
-              {!isEvent && (
-                <ToggleCard
-                  label="Mandatory"
-                  description="Members must pay"
-                  checked={form.is_mandatory}
-                  onChange={(v) => setField('is_mandatory', v)}
-                />
-              )}
-              {!isEvent && (
-                <ToggleCard
-                  label="Allow partial"
-                  description="Pay in installments"
-                  checked={form.allow_partial}
-                  onChange={(v) => setField('allow_partial', v)}
-                />
-              )}
-              <ToggleCard
-                label={isEvent ? 'Public sale' : 'Public link'}
-                description={isEvent ? 'Anyone can buy via link' : 'Shareable URL'}
-                checked={form.is_public}
-                onChange={(v) => setField('is_public', v)}
-              />
-            </div>
-
-            {!isEvent && form.allow_partial && (
-              <Field label="Minimum partial amount" required>
-                <Input value={form.minimum_partial_amount} onChange={(v) => setField('minimum_partial_amount', v.replace(/[^0-9.]/g, ''))} placeholder="1000" />
-              </Field>
-            )}
-          </Panel>
-
-          {/* ── EVENT SECTION (reveals when category=event) ── */}
-          <AnimatePresence>
-            {isEvent && (
-              <motion.div
-                initial={{ opacity: 0, height: 0 }}
-                animate={{ opacity: 1, height: 'auto' }}
-                exit={{ opacity: 0, height: 0 }}
-                className="overflow-hidden"
-              >
-                <Panel title="Event details" icon={<Ticket className="w-4 h-4" />} accent={tk.purple}>
-                  <Row>
-                    <Field label="Event date" required icon={<Calendar className="w-3 h-3" />}>
-                      <ProfessionalDateTimePicker
-                        mode="datetime"
-                        value={form.event_date}
-                        onChange={(iso) => setField('event_date', iso)}
-                        placeholder="Pick event date & time"
-                        fullWidth
-                      />
-                    </Field>
-                    <Field label="Venue" required icon={<MapPin className="w-3 h-3" />}>
-                      <Input value={form.event_venue} onChange={(v) => setField('event_venue', v)} placeholder="Engineering Auditorium" required />
-                    </Field>
-                  </Row>
-                  <Row>
-                    <Field label="Cover image" hint="upload or paste a URL" icon={<ImageIcon className="w-3 h-3" />}>
-                      <div className="space-y-2">
-                        <input
-                          ref={coverInputRef}
-                          type="file"
-                          accept="image/*"
-                          className="hidden"
-                          onChange={(e) => {
-                            void handleCoverUpload(e.target.files?.[0] ?? null);
-                            e.currentTarget.value = '';
-                          }}
-                        />
-                        <div className="flex flex-wrap items-center gap-2">
-                          <button
-                            type="button"
-                            onClick={() => coverInputRef.current?.click()}
-                            disabled={coverUploading}
-                            className="inline-flex items-center gap-2 rounded-xl px-3 py-2 text-xs font-bold transition disabled:cursor-not-allowed disabled:opacity-60"
-                            style={{ background: tk.panelHov, color: tk.text }}
-                          >
-                            <Upload className="w-3.5 h-3.5" />
-                            {coverUploading ? 'Uploading…' : 'Upload image'}
-                          </button>
-                          {coverFileName && (
-                            <span className="text-[11px]" style={{ color: tk.textTer }}>
-                              {coverFileName}
-                            </span>
-                          )}
-                        </div>
-                        {coverWarning && (
-                          <p className="text-[11px] leading-5" style={{ color: tk.amber }}>
-                            {coverWarning}
-                          </p>
-                        )}
-                        <Input value={form.event_cover_url} onChange={(v) => setField('event_cover_url', v)} placeholder="https://..." />
-                      </div>
-                    </Field>
-                    <Field label="Max attendees" hint="optional">
-                      <Input value={form.event_max_attendees} onChange={(v) => setField('event_max_attendees', v.replace(/[^0-9]/g, ''))} placeholder="200" />
-                    </Field>
-                  </Row>
-
-                  {/* ── Ticket types (tiers) ── */}
-                  <div className="mt-1">
-                    <div className="flex items-center justify-between mb-2">
-                      <label className="text-xs font-semibold" style={{ color: tk.textSec }}>Ticket types</label>
-                      <button type="button" onClick={addTier} className="text-xs font-bold" style={{ color: tk.purple }}>
-                        + Add type
-                      </button>
-                    </div>
-                    <div className="space-y-2">
-                      {form.tiers.map((t, i) => (
-                        <div
-                          key={i}
-                          className="flex flex-wrap items-end gap-2 rounded-xl p-2.5"
-                          style={{ background: 'rgba(255,255,255,0.03)', border: `1px solid ${tk.border}` }}
-                        >
-                          <div className="flex-1 min-w-[120px]">
-                            <label className="block text-[10px] mb-1" style={{ color: tk.textTer }}>Name</label>
-                            <Input value={t.name} onChange={(v) => setTier(i, 'name', v)} placeholder="Regular / VIP" />
-                          </div>
-                          <div className="w-24">
-                            <label className="block text-[10px] mb-1" style={{ color: tk.textTer }}>Price ₦</label>
-                            <Input value={t.price} onChange={(v) => setTier(i, 'price', v.replace(/[^0-9.]/g, ''))} placeholder="2000" />
-                          </div>
-                          <div className="w-20">
-                            <label className="block text-[10px] mb-1" style={{ color: tk.textTer }}>Qty</label>
-                            <Input value={t.quantity} onChange={(v) => setTier(i, 'quantity', v.replace(/[^0-9]/g, ''))} placeholder="∞" />
-                          </div>
-                          {form.tiers.length > 1 && (
-                            <button
-                              type="button"
-                              onClick={() => removeTier(i)}
-                              className="text-xs font-semibold px-2 py-2.5"
-                              style={{ color: tk.danger }}
-                            >
-                              Remove
-                            </button>
-                          )}
-                        </div>
-                      ))}
-                    </div>
-                    <p className="text-[10px] mt-2" style={{ color: tk.textTer }}>
-                      Leave Qty empty for unlimited. Buyers choose a type at checkout and get a QR ticket.
+                  {!ctx.caller?.can_publish && (
+                    <p className="mt-1" style={{ color: 'rgba(255,224,170,0.9)' }}>
+                      {ctx.org?.state !== 'active'
+                        ? `Your organization is in "${ctx.org?.state}" state — dues can't be published until it's Active.`
+                        : ctx.caller?.verification_status &&
+                          !['email_verified', 'document_verified', 'admin_verified', 'member_confirmed'].includes(ctx.caller.verification_status)
+                          ? `Your exec role is "${ctx.caller.verification_status}". Complete verification before publishing.`
+                          : 'You do not have permission to publish dues here.'}
                     </p>
-                  </div>
-                </Panel>
-              </motion.div>
-            )}
-          </AnimatePresence>
-
-          {/* ── TARGETING (scope-aware) ── */}
-          <Panel title="Who pays" icon={<Users className="w-4 h-4" />}>
-            {ctxLoading ? (
-              <p className="text-xs" style={{ color: tk.textTer }}>Loading your scope…</p>
-            ) : !ctx?.ok ? (
-              <p className="text-xs" style={{ color: tk.danger }}>
-                {ctx?.error || 'Could not load your admin scope.'}
-              </p>
-            ) : (
-              <>
-                {/* Prefill banner — shown when the page was opened from a
-                    dept/faculty targeting card. Reassures the user the
-                    selection isn't locked: change anything below. */}
-                {(qpScope || qpByLevel) && (
-                  <div
-                    className="mb-3 rounded-xl px-3 py-2 flex items-start gap-2 text-[11px]"
-                    style={{
-                      // tk in this file is a hardcoded dark-theme const
-                      // (no primarySoft/primaryRing tokens). Compose the
-                      // tints inline from the primary brand colour.
-                      background: `${tk.primary}18`,
-                      border: `1px solid ${tk.primary}38`,
-                      color: tk.textSec,
-                    }}
-                  >
-                    <span className="w-4 h-4 rounded-full flex items-center justify-center shrink-0"
-                      style={{ background: tk.primary, color: '#FFFFFF', fontSize: 10, fontWeight: 800 }}>i</span>
-                    <span>
-                      <span className="font-semibold" style={{ color: tk.text }}>
-                        Targeting prefilled
-                      </span>
-                      {' '}from your dashboard. You can change scope, target group, or level below at any time before publishing.
-                    </span>
-                  </div>
-                )}
-                {/* Scope tabs — only show options the caller can actually do */}
-                <Field label="Scope" required>
-                  <div className="flex flex-wrap gap-2">
-                    {canChooseOrgScope && (
-                      <ScopeTab
-                        active={targetScope === 'org'}
-                        onClick={() => { setTargetScope('org'); setTargetGroupId(null); }}
-                        label="Whole organization"
-                        sublabel="Every active member is billed"
-                        color={form.color}
-                      />
-                    )}
-                    {canChooseFacultyScope && facultyTargets.length > 0 && (
-                      <ScopeTab
-                        active={targetScope === 'faculty'}
-                        onClick={() => {
-                          setTargetScope('faculty');
-                          // pick caller's own unit if they're unit scope
-                          const def = ctx.caller?.scope === 'unit' ? ctx.caller.group_id : facultyTargets[0]?.id ?? null;
-                          setTargetGroupId(def);
-                        }}
-                        label="Whole faculty / dept"
-                        sublabel="Bills everyone in the classes below"
-                        color={form.color}
-                      />
-                    )}
-                    {leafTargets.length > 0 && (
-                      <ScopeTab
-                        active={targetScope === 'group'}
-                        onClick={() => {
-                          setTargetScope('group');
-                          const def = ctx.caller?.scope === 'group' ? ctx.caller.group_id : leafTargets[0]?.id ?? null;
-                          setTargetGroupId(def);
-                          // a single class is always one level — wipe the
-                          // per-level filter so it doesn't sneak through
-                          setField('target_levels', []);
-                        }}
-                        label="One class / dept"
-                        sublabel="Just that group's members"
-                        color={form.color}
-                      />
-                    )}
-                  </div>
-                </Field>
-
-                {/* Specific picker when scope=faculty or scope=group */}
-                {targetScope === 'faculty' && facultyTargets.length > 1 && (
-                  <Field label="Faculty / Department">
-                    <ProfessionalDropdown
-                      value={targetGroupId ?? ''}
-                      onChange={(v) => setTargetGroupId((Array.isArray(v) ? v[0] : v) || null)}
-                      placeholder="Select a faculty or department…"
-                      searchable
-                      options={facultyTargets.map((g) => ({
-                        value: g.id,
-                        label: g.name,
-                        description: g.short_name ?? g.kind,
-                      }))}
-                    />
-                  </Field>
-                )}
-                {targetScope === 'group' && leafTargets.length > 1 && (
-                  <Field label="Class / Department">
-                    <ProfessionalDropdown
-                      value={targetGroupId ?? ''}
-                      onChange={(v) => setTargetGroupId((Array.isArray(v) ? v[0] : v) || null)}
-                      placeholder="Select a class / department…"
-                      searchable
-                      options={leafTargets.map((g) => ({
-                        value: g.id,
-                        label: g.name,
-                        description: `${g.kind} · ${g.member_count} ${g.member_count === 1 ? 'member' : 'members'}`,
-                      }))}
-                    />
-                  </Field>
-                )}
-
-                {/* Optional level filter — only meaningful when targeting multiple
-                    classes. A class rep ('group' scope) targets one class, so all
-                    members are the same level by definition; we hide it for them. */}
-                {targetScope !== 'group' && (
-                  <Field label="Filter by level" hint="optional — leave blank for everyone in scope">
-                    <div ref={levelPickerRef} className="flex flex-wrap gap-1.5 rounded-lg p-1 -m-1">
-                      {LEVEL_OPTIONS.map((lvl) => {
-                        const on = form.target_levels.includes(lvl);
-                        return (
-                          <button
-                            key={lvl}
-                            type="button"
-                            onClick={() =>
-                              setField('target_levels', on
-                                ? form.target_levels.filter((l) => l !== lvl)
-                                : [...form.target_levels, lvl]
-                              )
-                            }
-                            className="px-3 py-1.5 rounded-lg text-xs font-bold transition-all"
-                            style={{
-                              background: on ? `${form.color}20` : 'rgba(255,255,255,0.04)',
-                              color: on ? form.color : tk.textSec,
-                              border: `1px solid ${on ? `${form.color}50` : tk.border}`,
-                            }}
-                          >
-                            {lvl}L
-                          </button>
-                        );
-                      })}
-                    </div>
-                  </Field>
-                )}
-              </>
-            )}
-          </Panel>
-
-          {/* ── PAYMENT METHOD ── */}
-          <Panel title="How members pay" icon={<CreditCard className="w-4 h-4" />}>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              <ToggleCard
-                label="Card / Bank / USSD"
-                description="Paystack checkout, auto-confirmed"
-                checked={form.accepts_paystack}
-                onChange={(v) => setField('accepts_paystack', v)}
-                accent={tk.primary}
-                locked={!isEvent && !paystackUnlocked}
-                lockedNote="Online checkout is a Pro feature — upgrade this class to enable it."
-              />
-              <ToggleCard
-                label="Manual bank transfer"
-                description="Member uploads receipt, you approve"
-                checked={form.accepts_manual}
-                onChange={(v) => setField('accepts_manual', v)}
-                accent={tk.blue}
-              />
-            </div>
-
-            {/* Free-tier nudge — explains WHY Paystack is off and points to
-                the upgrade, so it reads as a plan boundary, not a bug. */}
-            {!isEvent && !paystackUnlocked && (
-              <div
-                className="mt-3 rounded-xl px-3 py-2.5 flex items-start gap-2 text-[11px] leading-snug"
-                style={{ background: `${tk.primary}10`, border: `1px solid ${tk.primary}30`, color: tk.textSec }}
-              >
-                <Sparkles className="w-3.5 h-3.5 shrink-0 mt-0.5" style={{ color: tk.primary }} />
-                <span>
-                  This {targetScope === 'org' ? 'organization' : 'class'} is on the free plan, so members pay by
-                  manual bank transfer / receipt upload. Upgrade to <strong style={{ color: tk.primary }}>Pro</strong> to
-                  also accept instant card / USSD payments via Paystack.
-                </span>
-              </div>
-            )}
-
-            {form.accepts_manual && (
-              <motion.div
-                initial={{ opacity: 0, y: -6 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.22 }}
-                className="space-y-3"
-              >
-                {/* IMPORTANT: do NOT add overflow-hidden here — the ProfessionalDropdown
-                    used below renders its menu with position:absolute, and an overflow-hidden
-                    parent would clip it (even though the menu has z-index 9999). */}
-                <p className="text-[11px] uppercase tracking-wider font-semibold pt-2" style={{ color: tk.textTer }}>
-                  Bank details (shown to members who pick manual)
-                </p>
-                <Row>
-                  <Field label="Bank" required={form.accepts_manual}>
-                    <ProfessionalDropdown
-                      value={form.bank_name}
-                      onChange={(v) => setField('bank_name', Array.isArray(v) ? v[0] : v)}
-                      placeholder="Select bank"
-                      searchable
-                      options={NIGERIAN_BANKS.map((b) => ({ value: b, label: b }))}
-                    />
-                  </Field>
-                  <Field label="Account number" required={form.accepts_manual}>
-                    <Input value={form.account_number} onChange={(v) => setField('account_number', v.replace(/[^0-9]/g, ''))} placeholder="0123456789" />
-                  </Field>
-                </Row>
-                <Field label="Account name">
-                  <Input value={form.account_name} onChange={(v) => setField('account_name', v)} placeholder="Class of 2026" />
-                </Field>
-              </motion.div>
-            )}
-          </Panel>
-
-          {/* ── Notifications (info card — actual fan-out wired in next migration) ── */}
-          <Panel title="Notifications" icon={<Megaphone className="w-4 h-4" />} accent={tk.mint}>
-            <p className="text-xs leading-5" style={{ color: tk.textSec }}>
-              When you publish, members will receive an in-app notification and push (if enabled).
-              Email goes out to members who've opted in. Each member can override their own notification
-              preferences in their settings.
-            </p>
-          </Panel>
-
-          {/* Validation list */}
-          <AnimatePresence>
-            {(error || validation.length > 0) && (
-              <motion.div
-                initial={{ opacity: 0, y: -6 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: -6 }}
-                className="rounded-xl px-4 py-3 flex items-start gap-3"
-                style={{ background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.25)' }}
-              >
-                <AlertCircle className="w-5 h-5 shrink-0" style={{ color: tk.danger, marginTop: 1 }} />
-                <div className="text-sm leading-6" style={{ color: 'rgba(254,202,202,0.95)' }}>
-                  {error ? error : (
-                    <ul className="space-y-0.5 text-xs">
-                      {validation.map((v) => <li key={v}>· {v}</li>)}
-                    </ul>
                   )}
                 </div>
               </motion.div>
             )}
-          </AnimatePresence>
 
-          {/* Submit */}
-          <div className="pt-1 flex items-center justify-between gap-4 flex-wrap">
-            <p className="text-xs leading-5" style={{ color: tk.textTer, maxWidth: 380 }}>
-              You can edit or deactivate this {isEvent ? 'event' : 'due'} later from Manage Dues.
-            </p>
-            <motion.button
-              type="submit"
-              disabled={!canSubmit || submitting}
-              className="px-6 py-3 rounded-2xl text-white font-bold text-sm flex items-center gap-2 disabled:opacity-40 disabled:cursor-not-allowed"
-              style={{
-                background: canSubmit
-                  ? `linear-gradient(135deg, ${form.color} 0%, ${form.color}CC 100%)`
-                  : 'rgba(255,255,255,0.06)',
-                boxShadow: canSubmit ? `0 8px 28px ${form.color}40` : 'none',
-              }}
-              whileHover={canSubmit && !submitting ? { scale: 1.03 } : undefined}
-              whileTap={canSubmit && !submitting ? { scale: 0.97 } : undefined}
-            >
-              {submitting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
-              {isEditMode
-                ? (submitting ? 'Saving…' : 'Save changes')
-                : `Publish ${isEvent ? 'event' : 'due'}`}
-              {!isEditMode && <ArrowRight className="w-4 h-4" />}
-            </motion.button>
+            {/* ── BASICS ── */}
+            <Panel title="Basics" icon={<Tag className="w-4 h-4" />}>
+              <Field label="Title" required>
+                <Input value={form.title} onChange={(v) => setField('title', v)} placeholder={isEvent ? 'Dept Dinner 2026' : 'Semester Dues'} required />
+              </Field>
+
+              <Field label="Description" hint="optional, shown to members">
+                <Textarea value={form.description} onChange={(v) => setField('description', v)} placeholder="What's this payment for?" />
+              </Field>
+
+              <Field label="Category" required>
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                  {CATEGORIES.map((c) => {
+                    const active = form.category === c.value;
+                    const locked = c.isPro && !paystackUnlocked;
+                    return (
+                      <button
+                        key={c.value}
+                        type="button"
+                        onClick={() => { if (!locked) setCategory(c.value); }}
+                        aria-disabled={locked}
+                        className="relative text-left rounded-2xl p-3.5 transition-all"
+                        style={{
+                          background: active ? `${c.color}18` : 'rgba(255,255,255,0.03)',
+                          border: `1px solid ${active ? `${c.color}50` : tk.border}`,
+                          opacity: locked ? 0.6 : 1,
+                          cursor: locked ? 'not-allowed' : 'pointer',
+                          boxShadow: active ? `0 4px 18px -6px ${c.color}40` : 'none',
+                        }}
+                      >
+                        {locked && (
+                          <span
+                            className="absolute top-2 right-2 text-[8px] font-black uppercase tracking-wider px-1.5 py-0.5 rounded-full"
+                            style={{ background: `${BRAND.primary}22`, color: BRAND.primary }}
+                          >
+                            Pro
+                          </span>
+                        )}
+                        {active && !locked && (
+                          <span
+                            className="absolute top-2 right-2 w-2 h-2 rounded-full"
+                            style={{ background: c.color, boxShadow: `0 0 6px ${c.color}` }}
+                          />
+                        )}
+                        <span className="text-2xl block mb-2 leading-none">{c.icon}</span>
+                        <p className="text-xs font-bold leading-tight"
+                          style={{ color: active ? c.color : tk.text }}>
+                          {c.label}
+                        </p>
+                        <p className="text-[10px] mt-0.5 leading-4" style={{ color: tk.textTer }}>
+                          {locked ? 'Upgrade to Pro' : c.description}
+                        </p>
+                      </button>
+                    );
+                  })}
+                </div>
+              </Field>
+
+              <Row>
+                <Field label="Icon">
+                  <div className="flex flex-wrap gap-1.5">
+                    {ICONS.map((ic) => (
+                      <button
+                        key={ic}
+                        type="button"
+                        onClick={() => setField('icon', ic)}
+                        className="w-9 h-9 rounded-lg text-base transition-all"
+                        style={{
+                          background: form.icon === ic ? `${form.color}20` : 'rgba(255,255,255,0.04)',
+                          border: `1px solid ${form.icon === ic ? `${form.color}50` : tk.border}`,
+                        }}
+                      >
+                        {ic}
+                      </button>
+                    ))}
+                  </div>
+                </Field>
+                <Field label="Accent color">
+                  <div className="flex flex-wrap gap-1.5">
+                    {COLOR_PALETTE.map((c) => (
+                      <button
+                        key={c}
+                        type="button"
+                        onClick={() => setField('color', c)}
+                        className="w-7 h-7 rounded-full transition-all"
+                        style={{
+                          background: c,
+                          outline: form.color === c ? `2px solid ${tk.text}` : 'none',
+                          outlineOffset: 2,
+                        }}
+                      />
+                    ))}
+                  </div>
+                </Field>
+              </Row>
+
+              {!isEvent && (
+                <Field label="Amount" required hint="in your org currency">
+                  <div className="space-y-2">
+                    <Input
+                      value={form.amount}
+                      onChange={(v) => setField('amount', v.replace(/[^0-9.]/g, ''))}
+                      placeholder="5000"
+                      type="text"
+                      inputMode="decimal"
+                    />
+                    <div className="flex flex-wrap gap-1.5">
+                      {AMOUNT_CHIPS.map((amt) => (
+                        <button
+                          key={amt}
+                          type="button"
+                          onClick={() => setField('amount', String(amt))}
+                          className="px-2.5 py-1 rounded-lg text-[11px] font-semibold transition-all"
+                          style={{
+                            background: form.amount === String(amt) ? `${form.color}18` : 'rgba(255,255,255,0.04)',
+                            color: form.amount === String(amt) ? form.color : tk.textSec,
+                            border: `1px solid ${form.amount === String(amt) ? `${form.color}40` : tk.border}`,
+                          }}
+                        >
+                          ₦{amt.toLocaleString()}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                </Field>
+              )}
+
+              <Row>
+                <Field label="Deadline" hint="optional">
+                  <ProfessionalDateTimePicker
+                    mode="datetime"
+                    value={form.deadline}
+                    onChange={(iso) => setField('deadline', iso)}
+                    placeholder="Pick a date and time"
+                    fullWidth
+                  />
+                </Field>
+                <Field label="Late fee per day" hint="₦, optional">
+                  <Input value={form.late_fee_per_day} onChange={(v) => setField('late_fee_per_day', v.replace(/[^0-9.]/g, ''))} placeholder="0" />
+                </Field>
+              </Row>
+
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                {!isEvent && (
+                  <ToggleCard
+                    label="Mandatory"
+                    description="Members must pay"
+                    checked={form.is_mandatory}
+                    onChange={(v) => setField('is_mandatory', v)}
+                  />
+                )}
+                {!isEvent && (
+                  <ToggleCard
+                    label="Allow partial"
+                    description="Pay in installments"
+                    checked={form.allow_partial}
+                    onChange={(v) => setField('allow_partial', v)}
+                  />
+                )}
+                <ToggleCard
+                  label={isEvent ? 'Public sale' : 'Public link'}
+                  description={isEvent ? 'Anyone can buy via link' : 'Shareable URL'}
+                  checked={form.is_public}
+                  onChange={(v) => setField('is_public', v)}
+                />
+              </div>
+
+              {!isEvent && form.allow_partial && (
+                <Field label="Minimum partial amount" required>
+                  <Input value={form.minimum_partial_amount} onChange={(v) => setField('minimum_partial_amount', v.replace(/[^0-9.]/g, ''))} placeholder="1000" />
+                </Field>
+              )}
+            </Panel>
+
+            {/* ── EVENT SECTION (reveals when category=event) ── */}
+            <AnimatePresence>
+              {isEvent && (
+                <motion.div
+                  initial={{ opacity: 0, height: 0 }}
+                  animate={{ opacity: 1, height: 'auto' }}
+                  exit={{ opacity: 0, height: 0 }}
+                  className="overflow-hidden"
+                >
+                  <Panel title="Event details" icon={<Ticket className="w-4 h-4" />} accent={tk.purple}>
+                    <Row>
+                      <Field label="Event date" required icon={<Calendar className="w-3 h-3" />}>
+                        <ProfessionalDateTimePicker
+                          mode="datetime"
+                          value={form.event_date}
+                          onChange={(iso) => setField('event_date', iso)}
+                          placeholder="Pick event date & time"
+                          fullWidth
+                        />
+                      </Field>
+                      <Field label="Venue" required icon={<MapPin className="w-3 h-3" />}>
+                        <Input value={form.event_venue} onChange={(v) => setField('event_venue', v)} placeholder="Engineering Auditorium" required />
+                      </Field>
+                    </Row>
+                    <Row>
+                      <Field label="Cover image" hint="upload or paste a URL" icon={<ImageIcon className="w-3 h-3" />}>
+                        <div className="space-y-2">
+                          <input
+                            ref={coverInputRef}
+                            type="file"
+                            accept="image/*"
+                            className="hidden"
+                            onChange={(e) => {
+                              void handleCoverUpload(e.target.files?.[0] ?? null);
+                              e.currentTarget.value = '';
+                            }}
+                          />
+                          <div className="flex flex-wrap items-center gap-2">
+                            <button
+                              type="button"
+                              onClick={() => coverInputRef.current?.click()}
+                              disabled={coverUploading}
+                              className="inline-flex items-center gap-2 rounded-xl px-3 py-2 text-xs font-bold transition disabled:cursor-not-allowed disabled:opacity-60"
+                              style={{ background: tk.panelHov, color: tk.text }}
+                            >
+                              <Upload className="w-3.5 h-3.5" />
+                              {coverUploading ? 'Uploading…' : 'Upload image'}
+                            </button>
+                            {coverFileName && (
+                              <span className="text-[11px]" style={{ color: tk.textTer }}>
+                                {coverFileName}
+                              </span>
+                            )}
+                          </div>
+                          {coverWarning && (
+                            <p className="text-[11px] leading-5" style={{ color: tk.amber }}>
+                              {coverWarning}
+                            </p>
+                          )}
+                          <Input value={form.event_cover_url} onChange={(v) => setField('event_cover_url', v)} placeholder="https://..." />
+                        </div>
+                      </Field>
+                      <Field label="Max attendees" hint="optional">
+                        <Input value={form.event_max_attendees} onChange={(v) => setField('event_max_attendees', v.replace(/[^0-9]/g, ''))} placeholder="200" />
+                      </Field>
+                    </Row>
+
+                    {/* ── Ticket types (tiers) ── */}
+                    <div className="mt-1">
+                      <div className="flex items-center justify-between mb-2">
+                        <label className="text-xs font-semibold" style={{ color: tk.textSec }}>Ticket types</label>
+                        <button type="button" onClick={addTier} className="text-xs font-bold" style={{ color: tk.purple }}>
+                          + Add type
+                        </button>
+                      </div>
+                      <div className="space-y-2">
+                        {form.tiers.map((t, i) => (
+                          <div
+                            key={i}
+                            className="flex flex-wrap items-end gap-2 rounded-xl p-2.5"
+                            style={{ background: 'rgba(255,255,255,0.03)', border: `1px solid ${tk.border}` }}
+                          >
+                            <div className="flex-1 min-w-[120px]">
+                              <label className="block text-[10px] mb-1" style={{ color: tk.textTer }}>Name</label>
+                              <Input value={t.name} onChange={(v) => setTier(i, 'name', v)} placeholder="Regular / VIP" />
+                            </div>
+                            <div className="w-24">
+                              <label className="block text-[10px] mb-1" style={{ color: tk.textTer }}>Price ₦</label>
+                              <Input value={t.price} onChange={(v) => setTier(i, 'price', v.replace(/[^0-9.]/g, ''))} placeholder="2000" />
+                            </div>
+                            <div className="w-20">
+                              <label className="block text-[10px] mb-1" style={{ color: tk.textTer }}>Qty</label>
+                              <Input value={t.quantity} onChange={(v) => setTier(i, 'quantity', v.replace(/[^0-9]/g, ''))} placeholder="∞" />
+                            </div>
+                            {form.tiers.length > 1 && (
+                              <button
+                                type="button"
+                                onClick={() => removeTier(i)}
+                                className="text-xs font-semibold px-2 py-2.5"
+                                style={{ color: tk.danger }}
+                              >
+                                Remove
+                              </button>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                      <p className="text-[10px] mt-2" style={{ color: tk.textTer }}>
+                        Leave Qty empty for unlimited. Buyers choose a type at checkout and get a QR ticket.
+                      </p>
+                    </div>
+                  </Panel>
+                </motion.div>
+              )}
+            </AnimatePresence>
+
+            {/* ── TARGETING (scope-aware) ── */}
+            <Panel title="Who pays" icon={<Users className="w-4 h-4" />}>
+              {ctxLoading ? (
+                <p className="text-xs" style={{ color: tk.textTer }}>Loading your scope…</p>
+              ) : !ctx?.ok ? (
+                <p className="text-xs" style={{ color: tk.danger }}>
+                  {ctx?.error || 'Could not load your admin scope.'}
+                </p>
+              ) : (
+                <>
+                  {/* Prefill banner — shown when the page was opened from a
+                    dept/faculty targeting card. Reassures the user the
+                    selection isn't locked: change anything below. */}
+                  {(qpScope || qpByLevel) && (
+                    <div
+                      className="mb-3 rounded-xl px-3 py-2 flex items-start gap-2 text-[11px]"
+                      style={{
+                        // tk in this file is a hardcoded dark-theme const
+                        // (no primarySoft/primaryRing tokens). Compose the
+                        // tints inline from the primary brand colour.
+                        background: `${tk.primary}18`,
+                        border: `1px solid ${tk.primary}38`,
+                        color: tk.textSec,
+                      }}
+                    >
+                      <span className="w-4 h-4 rounded-full flex items-center justify-center shrink-0"
+                        style={{ background: tk.primary, color: '#FFFFFF', fontSize: 10, fontWeight: 800 }}>i</span>
+                      <span>
+                        <span className="font-semibold" style={{ color: tk.text }}>
+                          Targeting prefilled
+                        </span>
+                        {' '}from your dashboard. You can change scope, target group, or level below at any time before publishing.
+                      </span>
+                    </div>
+                  )}
+                  {/* Scope tabs — only show options the caller can actually do */}
+                  <Field label="Scope" required>
+                    <div className="flex flex-wrap gap-2">
+                      {canChooseOrgScope && (
+                        <ScopeTab
+                          active={targetScope === 'org'}
+                          onClick={() => { setTargetScope('org'); setTargetGroupId(null); }}
+                          label="Whole organization"
+                          sublabel="Every active member is billed"
+                          color={form.color}
+                        />
+                      )}
+                      {canChooseFacultyScope && facultyTargets.length > 0 && (
+                        <ScopeTab
+                          active={targetScope === 'faculty'}
+                          onClick={() => {
+                            setTargetScope('faculty');
+                            // pick caller's own unit if they're unit scope
+                            const def = ctx.caller?.scope === 'unit' ? ctx.caller.group_id : facultyTargets[0]?.id ?? null;
+                            setTargetGroupId(def);
+                          }}
+                          label="Whole faculty / dept"
+                          sublabel="Bills everyone in the classes below"
+                          color={form.color}
+                        />
+                      )}
+                      {leafTargets.length > 0 && (
+                        <ScopeTab
+                          active={targetScope === 'group'}
+                          onClick={() => {
+                            setTargetScope('group');
+                            const def = ctx.caller?.scope === 'group' ? ctx.caller.group_id : leafTargets[0]?.id ?? null;
+                            setTargetGroupId(def);
+                            // a single class is always one level — wipe the
+                            // per-level filter so it doesn't sneak through
+                            setField('target_levels', []);
+                          }}
+                          label="One class / dept"
+                          sublabel="Just that group's members"
+                          color={form.color}
+                        />
+                      )}
+                    </div>
+                  </Field>
+
+                  {/* Specific picker when scope=faculty or scope=group */}
+                  {targetScope === 'faculty' && facultyTargets.length > 1 && (
+                    <Field label="Faculty / Department">
+                      <ProfessionalDropdown
+                        value={targetGroupId ?? ''}
+                        onChange={(v) => setTargetGroupId((Array.isArray(v) ? v[0] : v) || null)}
+                        placeholder="Select a faculty or department…"
+                        searchable
+                        options={facultyTargets.map((g) => ({
+                          value: g.id,
+                          label: g.name,
+                          description: g.short_name ?? g.kind,
+                        }))}
+                      />
+                    </Field>
+                  )}
+                  {targetScope === 'group' && leafTargets.length > 1 && (
+                    <Field label="Class / Department">
+                      <ProfessionalDropdown
+                        value={targetGroupId ?? ''}
+                        onChange={(v) => setTargetGroupId((Array.isArray(v) ? v[0] : v) || null)}
+                        placeholder="Select a class / department…"
+                        searchable
+                        options={leafTargets.map((g) => ({
+                          value: g.id,
+                          label: g.name,
+                          description: `${g.kind} · ${g.member_count} ${g.member_count === 1 ? 'member' : 'members'}`,
+                        }))}
+                      />
+                    </Field>
+                  )}
+
+                  {/* Optional level filter — only meaningful when targeting multiple
+                    classes. A class rep ('group' scope) targets one class, so all
+                    members are the same level by definition; we hide it for them. */}
+                  {targetScope !== 'group' && (
+                    <Field label="Filter by level" hint="optional — leave blank for everyone in scope">
+                      <div ref={levelPickerRef} className="flex flex-wrap gap-1.5 rounded-lg p-1 -m-1">
+                        {LEVEL_OPTIONS.map((lvl) => {
+                          const on = form.target_levels.includes(lvl);
+                          return (
+                            <button
+                              key={lvl}
+                              type="button"
+                              onClick={() =>
+                                setField('target_levels', on
+                                  ? form.target_levels.filter((l) => l !== lvl)
+                                  : [...form.target_levels, lvl]
+                                )
+                              }
+                              className="px-3 py-1.5 rounded-lg text-xs font-bold transition-all"
+                              style={{
+                                background: on ? `${form.color}20` : 'rgba(255,255,255,0.04)',
+                                color: on ? form.color : tk.textSec,
+                                border: `1px solid ${on ? `${form.color}50` : tk.border}`,
+                              }}
+                            >
+                              {lvl}L
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </Field>
+                  )}
+                </>
+              )}
+            </Panel>
+
+            {/* ── PAYMENT METHOD ── */}
+            <Panel title="How members pay" icon={<CreditCard className="w-4 h-4" />}>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <ToggleCard
+                  label="Card / Bank / USSD"
+                  description="Paystack checkout, auto-confirmed"
+                  checked={form.accepts_paystack}
+                  onChange={(v) => setField('accepts_paystack', v)}
+                  accent={tk.primary}
+                  locked={!isEvent && !paystackUnlocked}
+                  lockedNote="Online checkout is a Pro feature — upgrade this class to enable it."
+                />
+                <ToggleCard
+                  label="Manual bank transfer"
+                  description="Member uploads receipt, you approve"
+                  checked={form.accepts_manual}
+                  onChange={(v) => setField('accepts_manual', v)}
+                  accent={tk.blue}
+                />
+              </div>
+
+              {/* Free-tier nudge — explains WHY Paystack is off and points to
+                the upgrade, so it reads as a plan boundary, not a bug. */}
+              {!isEvent && !paystackUnlocked && (
+                <div
+                  className="mt-3 rounded-xl px-3 py-2.5 flex items-start gap-2 text-[11px] leading-snug"
+                  style={{ background: `${tk.primary}10`, border: `1px solid ${tk.primary}30`, color: tk.textSec }}
+                >
+                  <Sparkles className="w-3.5 h-3.5 shrink-0 mt-0.5" style={{ color: tk.primary }} />
+                  <span>
+                    This {targetScope === 'org' ? 'organization' : 'class'} is on the free plan, so members pay by
+                    manual bank transfer / receipt upload. Upgrade to <strong style={{ color: tk.primary }}>Pro</strong> to
+                    also accept instant card / USSD payments via Paystack.
+                  </span>
+                </div>
+              )}
+
+              {form.accepts_manual && (
+                <motion.div
+                  initial={{ opacity: 0, y: -6 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ duration: 0.22 }}
+                  className="space-y-3"
+                >
+                  {/* IMPORTANT: do NOT add overflow-hidden here — the ProfessionalDropdown
+                    used below renders its menu with position:absolute, and an overflow-hidden
+                    parent would clip it (even though the menu has z-index 9999). */}
+                  <p className="text-[11px] uppercase tracking-wider font-semibold pt-2" style={{ color: tk.textTer }}>
+                    Bank details (shown to members who pick manual)
+                  </p>
+                  <Row>
+                    <Field label="Bank" required={form.accepts_manual}>
+                      <ProfessionalDropdown
+                        value={bankIsOther ? 'Other (type manually)' : form.bank_name}
+                        onChange={(v) => {
+                          const val = Array.isArray(v) ? v[0] : v;
+                          if (val === 'Other (type manually)') {
+                            setBankIsOther(true);
+                            setField('bank_name', '');
+                          } else {
+                            setBankIsOther(false);
+                            setField('bank_name', val);
+                          }
+                        }}
+                        placeholder="Search and select your bank"
+                        searchable
+                        options={NIGERIAN_BANKS.map((b) => ({ value: b, label: b }))}
+                      />
+                      {bankIsOther && (
+                        <input
+                          type="text"
+                          value={form.bank_name}
+                          onChange={(e) => setField('bank_name', e.target.value)}
+                          placeholder="Type your bank name"
+                          className="mt-2 w-full rounded-xl px-3.5 py-2.5 text-sm outline-none transition-colors"
+                          style={{
+                            background: tk.panel,
+                            border: `1px solid ${tk.border}`,
+                            color: tk.text,
+                          }}
+                          onFocus={(e) => { e.currentTarget.style.borderColor = tk.borderHov; }}
+                          onBlur={(e) => { e.currentTarget.style.borderColor = tk.border; }}
+                        />
+                      )}
+                    </Field>
+                    <Field label="Account number" required={form.accepts_manual}>
+                      <Input value={form.account_number} onChange={(v) => setField('account_number', v.replace(/[^0-9]/g, ''))} placeholder="0123456789" />
+                    </Field>
+                  </Row>
+                  <Field label="Account name">
+                    <Input value={form.account_name} onChange={(v) => setField('account_name', v)} placeholder="Class of 2026" />
+                  </Field>
+                </motion.div>
+              )}
+            </Panel>
+
+            {/* ── Notifications (info card — actual fan-out wired in next migration) ── */}
+            <Panel title="Notifications" icon={<Megaphone className="w-4 h-4" />} accent={tk.mint}>
+              <p className="text-xs leading-5" style={{ color: tk.textSec }}>
+                When you publish, members will receive an in-app notification and push (if enabled).
+                Email goes out to members who've opted in. Each member can override their own notification
+                preferences in their settings.
+              </p>
+            </Panel>
+
+            {/* Validation list */}
+            <AnimatePresence>
+              {(error || validation.length > 0) && (
+                <motion.div
+                  initial={{ opacity: 0, y: -6 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -6 }}
+                  className="rounded-xl px-4 py-3 flex items-start gap-3"
+                  style={{ background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.25)' }}
+                >
+                  <AlertCircle className="w-5 h-5 shrink-0" style={{ color: tk.danger, marginTop: 1 }} />
+                  <div className="text-sm leading-6" style={{ color: 'rgba(254,202,202,0.95)' }}>
+                    {error ? error : (
+                      <ul className="space-y-0.5 text-xs">
+                        {validation.map((v) => <li key={v}>· {v}</li>)}
+                      </ul>
+                    )}
+                  </div>
+                </motion.div>
+              )}
+            </AnimatePresence>
+
+            {/* Submit */}
+            <div className="pt-1 flex items-center justify-between gap-4 flex-wrap">
+              <p className="text-xs leading-5" style={{ color: tk.textTer, maxWidth: 380 }}>
+                You can edit or deactivate this {isEvent ? 'event' : 'due'} later from Manage Dues.
+              </p>
+              <motion.button
+                type="submit"
+                disabled={!canSubmit || submitting}
+                className="px-6 py-3 rounded-2xl text-white font-bold text-sm flex items-center gap-2 disabled:opacity-40 disabled:cursor-not-allowed"
+                style={{
+                  background: canSubmit
+                    ? `linear-gradient(135deg, ${form.color} 0%, ${form.color}CC 100%)`
+                    : 'rgba(255,255,255,0.06)',
+                  boxShadow: canSubmit ? `0 8px 28px ${form.color}40` : 'none',
+                }}
+                whileHover={canSubmit && !submitting ? { scale: 1.03 } : undefined}
+                whileTap={canSubmit && !submitting ? { scale: 0.97 } : undefined}
+              >
+                {submitting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
+                {isEditMode
+                  ? (submitting ? 'Saving…' : 'Save changes')
+                  : `Publish ${isEvent ? 'event' : 'due'}`}
+                {!isEditMode && <ArrowRight className="w-4 h-4" />}
+              </motion.button>
+            </div>
           </div>
-        </div>
 
-        {/* ╭───────── RIGHT: LIVE PREVIEW ─────────╮ */}
-        <aside className="space-y-3 lg:sticky lg:top-6 self-start">
-          <div className="flex items-center gap-2 px-1">
-            <Eye className="w-3.5 h-3.5" style={{ color: tk.textTer }} />
-            <span className="text-[10px] uppercase tracking-[0.18em] font-semibold" style={{ color: tk.textTer }}>
-              Live preview — student view
-            </span>
-          </div>
-          <StudentCardPreview form={form} />
-          {form.accepts_manual && form.bank_name && (
-            <BankPreview form={form} />
-          )}
-        </aside>
-      </form>
+          {/* ╭───────── RIGHT: LIVE PREVIEW ─────────╮ */}
+          <aside className="space-y-3 lg:sticky lg:top-6 self-start">
+            <div className="flex items-center gap-2 px-1">
+              <Eye className="w-3.5 h-3.5" style={{ color: tk.textTer }} />
+              <span className="text-[10px] uppercase tracking-[0.18em] font-semibold" style={{ color: tk.textTer }}>
+                Live preview — student view
+              </span>
+            </div>
+            <StudentCardPreview form={form} />
+            {form.accepts_manual && form.bank_name && (
+              <BankPreview form={form} />
+            )}
+          </aside>
+        </form>
 
-      {/* ── PAYOUT-GATE MODAL ────────────────────────────────────
+        {/* ── PAYOUT-GATE MODAL ────────────────────────────────────
           Shown when the dues-creation RPC returns code='no_payout'.
           The target tier (class / dept / faculty / org) hasn't set
           their subaccount yet, so we can't route the money. Members
           would pay into nothing. Send the user to the right payout
           page rather than letting them publish blindly. */}
-      <AnimatePresence>
-        {payoutGate && (
-          <motion.div
-            className="fixed inset-0 z-[120] flex items-center justify-center p-4"
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-          >
+        <AnimatePresence>
+          {payoutGate && (
             <motion.div
-              className="absolute inset-0"
-              style={{ background: 'rgba(0,0,0,0.55)', backdropFilter: 'blur(6px)' }}
-              onClick={() => setPayoutGate(null)}
-              initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-            />
-            <motion.div
-              className="relative w-full max-w-md rounded-3xl overflow-hidden"
-              style={{
-                // Modal surface — use the page's own panel tint over a
-                // dark base. tk has no `card` token; this matches the
-                // visual weight of other modals on the page.
-                background: `linear-gradient(180deg, ${tk.panel} 0%, #1A0E09 100%)`,
-                border: `1px solid ${tk.border}`,
-                boxShadow: '0 24px 60px rgba(0,0,0,0.45)',
-                color: tk.text,
-              }}
-              initial={{ y: 18, opacity: 0, scale: 0.97 }}
-              animate={{ y: 0, opacity: 1, scale: 1 }}
-              exit={{ y: 12, opacity: 0, scale: 0.98 }}
-              transition={{ type: 'spring', stiffness: 380, damping: 32 }}
+              className="fixed inset-0 z-[120] flex items-center justify-center p-4"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
             >
-              <div className="h-1.5" style={{ background: `linear-gradient(90deg, ${tk.primary}, ${tk.primary}80)` }} />
-              <div className="p-6">
-                <div
-                  className="w-12 h-12 rounded-2xl flex items-center justify-center mb-3"
-                  style={{ background: `${tk.primary}18`, color: tk.primary, border: `1px solid ${tk.primary}40` }}
-                >
-                  <CreditCard className="w-6 h-6" />
-                </div>
-                <h3 className="text-lg font-extrabold tracking-tight" style={{ color: tk.text }}>
-                  Set up your payout first
-                </h3>
-                <p className="text-sm leading-relaxed mt-2" style={{ color: tk.textSec }}>
-                  {payoutGate.detail}
-                </p>
-                <p className="text-[12px] leading-relaxed mt-3" style={{ color: tk.textTer }}>
-                  Each tier collects to its OWN bank account — no cascading. The{' '}
-                  <span className="font-bold" style={{ color: tk.text }}>{payoutGate.scope}</span>{' '}
-                  tier needs an account on file before anyone can pay this due.
-                </p>
-                <div className="mt-5 flex gap-2">
-                  <button
-                    type="button"
-                    onClick={() => setPayoutGate(null)}
-                    className="flex-1 py-2.5 rounded-xl text-sm font-semibold"
-                    style={{
-                      background: 'rgba(255,255,255,0.04)',
-                      color: tk.textSec,
-                      border: `1px solid ${tk.border}`,
-                    }}
+              <motion.div
+                className="absolute inset-0"
+                style={{ background: 'rgba(0,0,0,0.55)', backdropFilter: 'blur(6px)' }}
+                onClick={() => setPayoutGate(null)}
+                initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+              />
+              <motion.div
+                className="relative w-full max-w-md rounded-3xl overflow-hidden"
+                style={{
+                  // Modal surface — use the page's own panel tint over a
+                  // dark base. tk has no `card` token; this matches the
+                  // visual weight of other modals on the page.
+                  background: `linear-gradient(180deg, ${tk.panel} 0%, #1A0E09 100%)`,
+                  border: `1px solid ${tk.border}`,
+                  boxShadow: '0 24px 60px rgba(0,0,0,0.45)',
+                  color: tk.text,
+                }}
+                initial={{ y: 18, opacity: 0, scale: 0.97 }}
+                animate={{ y: 0, opacity: 1, scale: 1 }}
+                exit={{ y: 12, opacity: 0, scale: 0.98 }}
+                transition={{ type: 'spring', stiffness: 380, damping: 32 }}
+              >
+                <div className="h-1.5" style={{ background: `linear-gradient(90deg, ${tk.primary}, ${tk.primary}80)` }} />
+                <div className="p-6">
+                  <div
+                    className="w-12 h-12 rounded-2xl flex items-center justify-center mb-3"
+                    style={{ background: `${tk.primary}18`, color: tk.primary, border: `1px solid ${tk.primary}40` }}
                   >
-                    Not now
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      const path = payoutGate.groupId
-                        ? `/admin/payout?groupId=${payoutGate.groupId}`
-                        : '/admin/payout';
-                      setPayoutGate(null);
-                      go(path);
-                    }}
-                    className="flex-1 py-2.5 rounded-xl text-sm font-bold inline-flex items-center justify-center gap-1.5"
-                    style={{
-                      background: `linear-gradient(135deg, ${tk.primary} 0%, ${tk.primary}cc 100%)`,
-                      color: '#FFFFFF',
-                      boxShadow: `0 8px 22px -8px ${tk.primary}`,
-                    }}
-                  >
-                    Set up payout <ArrowRight className="w-4 h-4" />
-                  </button>
+                    <CreditCard className="w-6 h-6" />
+                  </div>
+                  <h3 className="text-lg font-extrabold tracking-tight" style={{ color: tk.text }}>
+                    Set up your payout first
+                  </h3>
+                  <p className="text-sm leading-relaxed mt-2" style={{ color: tk.textSec }}>
+                    {payoutGate.detail}
+                  </p>
+                  <p className="text-[12px] leading-relaxed mt-3" style={{ color: tk.textTer }}>
+                    Each tier collects to its OWN bank account — no cascading. The{' '}
+                    <span className="font-bold" style={{ color: tk.text }}>{payoutGate.scope}</span>{' '}
+                    tier needs an account on file before anyone can pay this due.
+                  </p>
+                  <div className="mt-5 flex gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setPayoutGate(null)}
+                      className="flex-1 py-2.5 rounded-xl text-sm font-semibold"
+                      style={{
+                        background: 'rgba(255,255,255,0.04)',
+                        color: tk.textSec,
+                        border: `1px solid ${tk.border}`,
+                      }}
+                    >
+                      Not now
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const path = payoutGate.groupId
+                          ? `/admin/payout?groupId=${payoutGate.groupId}`
+                          : '/admin/payout';
+                        setPayoutGate(null);
+                        go(path);
+                      }}
+                      className="flex-1 py-2.5 rounded-xl text-sm font-bold inline-flex items-center justify-center gap-1.5"
+                      style={{
+                        background: `linear-gradient(135deg, ${tk.primary} 0%, ${tk.primary}cc 100%)`,
+                        color: '#FFFFFF',
+                        boxShadow: `0 8px 22px -8px ${tk.primary}`,
+                      }}
+                    >
+                      Set up payout <ArrowRight className="w-4 h-4" />
+                    </button>
+                  </div>
                 </div>
-              </div>
+              </motion.div>
             </motion.div>
-          </motion.div>
-        )}
-      </AnimatePresence>
-    </div>
+          )}
+        </AnimatePresence>
+      </div>
     </TokensContext.Provider>
   );
 }

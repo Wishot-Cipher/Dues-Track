@@ -86,9 +86,9 @@ export default function RoleSwitcher() {
 
   const selectableRoles = useMemo(() => roles.filter(isSelectableRole), [roles]);
 
+  // REMOVE THIS ENTIRE EFFECT
   useEffect(() => {
     if (loading || selectableRoles.length === 0) return;
-
     const activeKey = activeRole?.key;
     const hasActive = activeKey && selectableRoles.some((r) => r.key === activeKey);
     if (!hasActive) {

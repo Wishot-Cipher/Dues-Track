@@ -51,6 +51,7 @@ const ProtectedRoute = ({
     const isAdmin =
       user.roles?.includes("admin") ||
       user.roles?.includes("finsec") ||
+      user.roles?.includes("treasurer") ||
       user.roles?.includes("class_rep");
 
     if (!isAdmin) {

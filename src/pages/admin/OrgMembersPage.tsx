@@ -875,9 +875,39 @@ export default function OrgMembersPage() {
         // is actually org-tier — the active-role gate routes off
         // scope_level, not the legacy role name.
         const permissions = {
-          admin: { scope_level: 'org' as const, can_create_payments: true, can_approve_payments: true, can_manage_members: true, can_view_analytics: true },
-          finsec: { scope_level: 'group' as const, can_create_payments: true, can_approve_payments: true, can_manage_members: false, can_view_analytics: true },
-          class_rep: { scope_level: 'group' as const, can_create_payments: true, can_approve_payments: true, can_manage_members: true, can_view_analytics: true },
+          admin: {
+            scope_level: 'org' as const,
+            can_create_payments: true,
+            can_approve_payments: true,
+            can_manage_members: true,
+            can_manage_admins: true,
+            can_manage_expenses: true,
+            can_view_analytics: true,
+            can_export_data: true,
+            can_manage_settings: true,
+          },
+          finsec: {
+            scope_level: 'group' as const,
+            can_create_payments: true,
+            can_approve_payments: true,
+            can_manage_members: false,
+            can_manage_admins: false,
+            can_manage_expenses: true,
+            can_view_analytics: true,
+            can_export_data: true,
+            can_manage_settings: false,
+          },
+          class_rep: {
+            scope_level: 'group' as const,
+            can_create_payments: true,
+            can_approve_payments: true,
+            can_manage_members: true,
+            can_manage_admins: true,   // ← class owner, full control
+            can_manage_expenses: true,
+            can_view_analytics: true,
+            can_export_data: true,
+            can_manage_settings: true,
+          },
         };
 
         await supabase.from('member_admins').insert({
@@ -1195,7 +1225,7 @@ export default function OrgMembersPage() {
                 </div>
                 <div className="p-3 rounded-xl text-center" style={{ background: `${tk.mint}10`, border: `1px solid ${tk.mint}20` }}>
                   <p className="text-2xl font-bold" style={{ color: tk.mint }}><AnimatedCounter value={finsecCount} /></p>
-                  <p className="text-xs" style={{ color: tk.textSec }}>FinSecs</p>
+                  <p className="text-xs" style={{ color: tk.textSec }}>Treasurers</p>
                 </div>
                 <div className="p-3 rounded-xl text-center" style={{ background: `${tk.amber}10`, border: `1px solid ${tk.amber}20` }}>
                   <p className="text-2xl font-bold" style={{ color: tk.amber }}><AnimatedCounter value={classRepCount} /></p>
@@ -1339,7 +1369,7 @@ export default function OrgMembersPage() {
                   {[
                     { value: 'all' as const, label: 'All Roles', count: members.length },
                     { value: 'admin' as const, label: 'Admins', count: adminCount },
-                    { value: 'finsec' as const, label: 'FinSecs', count: finsecCount },
+                    { value: 'finsec' as const, label: 'Treasurer / FinSec', count: finsecCount },
                     { value: 'class_rep' as const, label: 'Class Reps', count: classRepCount },
                     { value: 'member' as const, label: `${memberLabelPlural} Only`, count: memberOnlyCount },
                   ].map(({ value, label, count }) => (
@@ -1574,7 +1604,7 @@ export default function OrgMembersPage() {
                                 {isFinsec && (
                                   <span className="px-2 py-1 rounded text-xs font-medium whitespace-nowrap" style={{ background: `${colors.accentMint}20`, color: colors.accentMint }}>
                                     <Shield className="w-3 h-3 inline mr-1" />
-                                    FinSec
+                                    Treasurer / FinSec
                                   </span>
                                 )}
                                 {isClassRep && (
@@ -1720,7 +1750,7 @@ export default function OrgMembersPage() {
                             {isFinsec && (
                               <span className="px-3 py-1.5 rounded-full text-xs font-semibold flex items-center gap-1.5" style={{ background: `${tk.mint}18`, color: tk.mint, border: `1px solid ${tk.mint}30` }}>
                                 <Shield className="w-3.5 h-3.5" />
-                                Financial Sec
+                                Treasurer / FinSec
                               </span>
                             )}
                             {isClassRep && (
@@ -2989,7 +3019,7 @@ export default function OrgMembersPage() {
                   <div className="space-y-2">
                     {([
                       { role: 'admin' as const, label: 'Admin', desc: 'Full access to manage organization', color: colors.accentPurple, icon: <Shield size={16} /> },
-                      { role: 'finsec' as const, label: 'Financial Secretary', desc: 'Manage payments & finances', color: colors.success, icon: <Crown size={16} /> },
+                      { role: 'finsec' as const, label: 'Treasurer / FinSec', desc: 'Manage payments & finances', color: colors.success, icon: <Crown size={16} /> },
                       { role: 'class_rep' as const, label: 'Class Representative', desc: 'Manage group members', color: colors.primary, icon: <Users size={16} /> },
                     ]).map(r => {
                       const isActive = r.role === 'admin' ? currentRoles.isAdmin : r.role === 'finsec' ? currentRoles.isFinsec : currentRoles.isClassRep;
