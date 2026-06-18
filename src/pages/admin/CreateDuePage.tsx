@@ -62,6 +62,7 @@ import { organizationService, type DueCreationContext } from '@/services/organiz
 import { STORAGE_BUCKETS, supabase, getStoredAccessToken } from '@/config/supabase';
 import ProfessionalDropdown from '@/components/ui/ProfessionalDropdown';
 import ProfessionalDateTimePicker from '@/components/ui/ProfessionalDateTimePicker';
+import { compressImage, validateFile } from '@/utils/compressImage';
 
 // ────────────────────────────────────────────────────────────────────────────
 // Tokens — theme-aware. The previous module-level constant was dark
@@ -623,15 +624,10 @@ export default function CreateDuePage() {
     });
 
   const handleCoverUpload = async (file: File | null) => {
-    if (!file) return;
-    if (!file.type.startsWith('image/')) {
-      setError('Please select an image file for the event cover.');
-      return;
-    }
-    if (file.size > 5 * 1024 * 1024) {
-      setError('Cover image must be smaller than 5MB.');
-      return;
-    }
+  if (!file) return;
+  const validationError = validateFile(file);
+  if (validationError) { setError(validationError); return; }
+  file = await compressImage(file);
 
     const scope = getOrgScope();
     if (!scope?.memberId) {
