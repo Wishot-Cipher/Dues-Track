@@ -34,18 +34,22 @@ export function useAppAuth(): AuthContextType {
 
     // Build an admin array from multi-tenant admin_permissions
     const perms = m.admin_permissions;
-    const adminRecords = perms
-      ? [
-          {
-            id: m.id,
-            role: 'admin',
-            can_create_payments: perms.can_create_payments ?? false,
-            can_approve_payments: perms.can_approve_payments ?? false,
-            can_manage_students: perms.can_manage_members ?? false,
-            can_view_analytics: perms.can_view_analytics ?? false,
-          },
-        ]
-      : [];
+    // Build an admin array from the REAL member_admins rows (m.admin_records),
+// not a synthetic record. Each row's own `id` is the actual member_admins.id
+// — required by RPCs like approve_expense/reset_member_password that look
+// up admin permissions by that exact ID. Using m.id here (the member's own
+// organization_members.id) was the bug: it passed member-level lookups but
+// failed any check against member_admins.
+const adminRecords = (m.admin_records && m.admin_records.length > 0)
+  ? m.admin_records.map((ar) => ({
+      id: ar.id,
+      role: ar.role,
+      can_create_payments: ar.can_create_payments ?? false,
+      can_approve_payments: ar.can_approve_payments ?? false,
+      can_manage_students: ar.can_manage_members ?? false,
+      can_view_analytics: ar.can_view_analytics ?? false,
+    }))
+  : [];
 
     // Map role names for compatibility
     const roles: string[] = [];

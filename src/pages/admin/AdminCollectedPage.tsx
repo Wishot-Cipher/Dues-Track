@@ -178,8 +178,8 @@ export default function AdminCollectedPage() {
       let expQ = supabase
         .from('expenses')
         .select(`
-          id, amount, payment_type_id, funded_by, status, title, description,
-          payment_types!expenses_payment_type_id_fkey ( id, category, title ),
+          id, amount, funded_by, status, title, description,
+          payment_types!expenses_funded_by_fkey ( id, category, title ),
           category:expense_categories(id, name)
         `)
         .eq('status', 'approved');
@@ -188,7 +188,11 @@ export default function AdminCollectedPage() {
         expQ = applyOwnedTierScope(expQ, ownedScope);
       }
       const { data: expensesData, error: expensesError } = await expQ;
-      if (expensesError) console.warn('Error fetching expenses:', expensesError);
+      if (expensesError) {
+        // Surface properly — silent warn was hiding this entire class of bug
+        console.error('Error fetching expenses:', expensesError);
+        throw expensesError;
+      }
       const expenses = expensesData || [];
 
       // Build student map
@@ -315,12 +319,12 @@ export default function AdminCollectedPage() {
       } catch (e) { console.warn('Failed to fetch payment types:', e); }
 
       interface ExpenseRecord {
-        id?: string; amount?: number | string; payment_type_id?: string;
+        id?: string; amount?: number | string; funded_by?: string;
         payment_types?: { id?: string; category?: string; title?: string }[] | { id?: string; category?: string; title?: string } | null;
       }
 
       expenses.forEach((expense: ExpenseRecord) => {
-        const fundId   = (expense as any).funded_by || (expense as any).payment_type_id;
+        const fundId   = (expense as any).funded_by;
         let category   = 'Other';
         if (fundId && paymentTypesMap.has(fundId)) {
           category = paymentTypesMap.get(fundId)!.category || 'Other';

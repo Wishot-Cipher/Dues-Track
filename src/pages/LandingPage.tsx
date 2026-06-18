@@ -26,7 +26,7 @@ import {
 import {
   Search, Building2, Church, GraduationCap, Users, ArrowRight,
   Shield, Zap, Globe, ChevronRight, Plus, CheckCircle,
-  TrendingUp, DollarSign, Sparkles,
+  Sparkles, Lock, Rocket, Layers,
 } from 'lucide-react';
 import { APP_NAME, APP_TAGLINE } from '@/config/constants';
 import { organizationService } from '@/services/organizationService';
@@ -37,14 +37,14 @@ import { useTheme, getDashboardTokens, type DashboardTokens } from '@/hooks/useT
 
 /* ── Org type icons ───────────────────────────────────────────────────────── */
 const ORG_TYPE_ICONS: Record<string, React.ReactNode> = {
-  university:  <GraduationCap className="w-5 h-5" />,
-  school:      <GraduationCap className="w-5 h-5" />,
-  church:      <Church className="w-5 h-5" />,
-  club:        <Users className="w-5 h-5" />,
+  university: <GraduationCap className="w-5 h-5" />,
+  school: <GraduationCap className="w-5 h-5" />,
+  church: <Church className="w-5 h-5" />,
+  club: <Users className="w-5 h-5" />,
   association: <Users className="w-5 h-5" />,
   cooperative: <Building2 className="w-5 h-5" />,
-  ngo:         <Globe className="w-5 h-5" />,
-  other:       <Building2 className="w-5 h-5" />,
+  ngo: <Globe className="w-5 h-5" />,
+  other: <Building2 className="w-5 h-5" />,
 };
 
 /* ── Cycling headline words ───────────────────────────────────────────────── */
@@ -68,8 +68,8 @@ function CyclingWord({ primary }: { primary: string }) {
           className="block"
           style={{ color: primary }}
           initial={{ y: 32, opacity: 0, filter: 'blur(6px)' }}
-          animate={{ y: 0,  opacity: 1, filter: 'blur(0px)' }}
-          exit={{   y: -32, opacity: 0, filter: 'blur(6px)' }}
+          animate={{ y: 0, opacity: 1, filter: 'blur(0px)' }}
+          exit={{ y: -32, opacity: 0, filter: 'blur(6px)' }}
           transition={{ duration: 0.42, ease: [0.22, 1, 0.36, 1] }}
         >
           {CYCLE_WORDS[index]}
@@ -101,20 +101,20 @@ function FloatingNodes({ isLight }: { isLight: boolean }) {
           key={n.id}
           className="absolute flex items-center justify-center rounded-xl text-sm font-bold select-none"
           style={{
-            left:            `${n.x}%`,
-            bottom:          '-60px',
-            width:           n.size,
-            height:          n.size,
-            background:      isLight ? 'rgba(255,104,3,0.06)' : 'rgba(255,104,3,0.07)',
-            border:          `1px solid ${isLight ? 'rgba(255,104,3,0.10)' : 'rgba(255,104,3,0.12)'}`,
-            color:           isLight ? 'rgba(255,104,3,0.40)' : 'rgba(255,104,3,0.50)',
-            backdropFilter:  'blur(2px)',
+            left: `${n.x}%`,
+            bottom: '-60px',
+            width: n.size,
+            height: n.size,
+            background: isLight ? 'rgba(255,104,3,0.06)' : 'rgba(255,104,3,0.07)',
+            border: `1px solid ${isLight ? 'rgba(255,104,3,0.10)' : 'rgba(255,104,3,0.12)'}`,
+            color: isLight ? 'rgba(255,104,3,0.40)' : 'rgba(255,104,3,0.50)',
+            backdropFilter: 'blur(2px)',
           }}
           initial={{ y: 0, opacity: 0 }}
           animate={{
-            y:       [0, -(Math.random() * 300 + 500)],
+            y: [0, -(Math.random() * 300 + 500)],
             opacity: [0, 0.7, 0.7, 0],
-            rotate:  [0, Math.random() * 20 - 10],
+            rotate: [0, Math.random() * 20 - 10],
           }}
           transition={{ duration: n.duration, delay: n.delay, repeat: Infinity, ease: 'linear' }}
         >
@@ -125,34 +125,6 @@ function FloatingNodes({ isLight }: { isLight: boolean }) {
   );
 }
 
-/* ── Animated stat counter ────────────────────────────────────────────────── */
-function CountUp({ to, suffix = '' }: { to: number; suffix?: string }) {
-  const [val, setVal] = useState(0);
-  const ref           = useRef<HTMLSpanElement>(null);
-  const started       = useRef(false);
-
-  useEffect(() => {
-    const observer = new IntersectionObserver(([entry]) => {
-      if (entry.isIntersecting && !started.current) {
-        started.current = true;
-        const start    = Date.now();
-        const duration = 1600;
-        const tick = () => {
-          const elapsed  = Date.now() - start;
-          const progress = Math.min(elapsed / duration, 1);
-          const eased    = 1 - Math.pow(1 - progress, 3);
-          setVal(Math.round(eased * to));
-          if (progress < 1) requestAnimationFrame(tick);
-        };
-        requestAnimationFrame(tick);
-      }
-    }, { threshold: 0.5 });
-    if (ref.current) observer.observe(ref.current);
-    return () => observer.disconnect();
-  }, [to]);
-
-  return <span ref={ref}>{val.toLocaleString()}{suffix}</span>;
-}
 
 /* ── 3-D Tilt Feature Card ────────────────────────────────────────────────── */
 function TiltCard({
@@ -166,20 +138,20 @@ function TiltCard({
   t: DashboardTokens;
   isLight: boolean;
 }) {
-  const ref        = useRef<HTMLDivElement>(null);
-  const x          = useMotionValue(0);
-  const y          = useMotionValue(0);
-  const rotateX    = useTransform(y, [-0.5, 0.5], ['8deg', '-8deg']);
-  const rotateY    = useTransform(x, [-0.5, 0.5], ['-8deg', '8deg']);
-  const sc         = { stiffness: 300, damping: 30 };
-  const sRotateX   = useSpring(rotateX, sc);
-  const sRotateY   = useSpring(rotateY, sc);
+  const ref = useRef<HTMLDivElement>(null);
+  const x = useMotionValue(0);
+  const y = useMotionValue(0);
+  const rotateX = useTransform(y, [-0.5, 0.5], ['8deg', '-8deg']);
+  const rotateY = useTransform(x, [-0.5, 0.5], ['-8deg', '8deg']);
+  const sc = { stiffness: 300, damping: 30 };
+  const sRotateX = useSpring(rotateX, sc);
+  const sRotateY = useSpring(rotateY, sc);
 
   const onMove = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
     const rect = ref.current?.getBoundingClientRect();
     if (!rect) return;
     x.set((e.clientX - rect.left) / rect.width - 0.5);
-    y.set((e.clientY - rect.top)  / rect.height - 0.5);
+    y.set((e.clientY - rect.top) / rect.height - 0.5);
   }, [x, y]);
 
   return (
@@ -188,9 +160,9 @@ function TiltCard({
       onMouseMove={onMove}
       onMouseLeave={() => { x.set(0); y.set(0); }}
       style={{
-        perspective:    800,
-        rotateX:        sRotateX,
-        rotateY:        sRotateY,
+        perspective: 800,
+        rotateX: sRotateX,
+        rotateY: sRotateY,
         transformStyle: 'preserve-3d',
       }}
       className="relative p-6 rounded-2xl cursor-default"
@@ -204,8 +176,8 @@ function TiltCard({
         className="absolute inset-0 rounded-2xl"
         style={{
           background: t.card,
-          border:     `1px solid ${t.cardBorder}`,
-          boxShadow:  isLight ? '0 4px 24px -8px rgba(15,7,3,0.10)' : 'none',
+          border: `1px solid ${t.cardBorder}`,
+          boxShadow: isLight ? '0 4px 24px -8px rgba(15,7,3,0.10)' : 'none',
         }}
       />
       {/* Top colour accent */}
@@ -241,15 +213,15 @@ function TiltCard({
 function SearchResultItem({
   result, index, onClick, t,
 }: {
-  result:  SearchResult;
-  index:   number;
+  result: SearchResult;
+  index: number;
   onClick: () => void;
-  t:       DashboardTokens;
+  t: DashboardTokens;
 }) {
   const [hovered, setHovered] = useState(false);
   const isSeed = result.kind === 'seed';
 
-  const subtitleLeft  = result.short_name ? `${result.type} · ${result.short_name}` : result.type;
+  const subtitleLeft = result.short_name ? `${result.type} · ${result.short_name}` : result.type;
   const subtitleRight = isSeed
     ? [result.ownership, result.state].filter(Boolean).join(' · ')
     : typeof result.member_count === 'number' && result.member_count > 0
@@ -263,7 +235,7 @@ function SearchResultItem({
       transition={{ delay: index * 0.06, duration: 0.28, ease: [0.22, 1, 0.36, 1] }}
       onClick={onClick}
       onHoverStart={() => setHovered(true)}
-      onHoverEnd={()   => setHovered(false)}
+      onHoverEnd={() => setHovered(false)}
       className="w-full flex items-center gap-4 px-5 py-3.5 transition-colors text-left"
       style={{
         background: hovered
@@ -276,7 +248,7 @@ function SearchResultItem({
         style={{
           background: isSeed
             ? (hovered ? 'rgba(156,163,175,0.18)' : 'rgba(156,163,175,0.10)')
-            : (hovered ? `${t.primary}25`          : `${t.primary}15`),
+            : (hovered ? `${t.primary}25` : `${t.primary}15`),
           color: isSeed ? '#9CA3AF' : t.primary,
         }}
       >
@@ -307,18 +279,18 @@ function SearchResultItem({
 ═══════════════════════════════════════════════════════════ */
 export default function LandingPage() {
   /* ── Theme ── */
-  const { theme }   = useTheme();
-  const isLight     = theme === 'light';
-  const t           = getDashboardTokens(theme);
+  const { theme } = useTheme();
+  const isLight = theme === 'light';
+  const t = getDashboardTokens(theme);
 
   /* ── State ── */
-  const [searchQuery,   setSearchQuery]   = useState('');
+  const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState<SearchResult[]>([]);
-  const [searching,     setSearching]     = useState(false);
-  const [hasSearched,   setHasSearched]   = useState(false);
+  const [searching, setSearching] = useState(false);
+  const [hasSearched, setHasSearched] = useState(false);
   const [searchFocused, setSearchFocused] = useState(false);
-  const [slugInput,     setSlugInput]     = useState('');
-  const [slugValid,     setSlugValid]     = useState<boolean | null>(null);
+  const [slugInput, setSlugInput] = useState('');
+  const [slugValid, setSlugValid] = useState<boolean | null>(null);
   const navigate = useNavigate();
 
   /* ── Search ── */
@@ -357,33 +329,33 @@ export default function LandingPage() {
   /* ── Derived search-box styles (theme-aware) ── */
   const searchSurface = isLight
     ? {
-        background:  'rgba(255, 255, 255, 0.90)',
-        border:      `1px solid ${searchFocused ? t.primary + '70' : 'rgba(15,7,3,0.12)'}`,
-        boxShadow:   searchFocused
-          ? `0 8px 40px rgba(255,104,3,0.16)`
-          : '0 4px 20px rgba(15,7,3,0.08)',
-      }
+      background: 'rgba(255, 255, 255, 0.90)',
+      border: `1px solid ${searchFocused ? t.primary + '70' : 'rgba(15,7,3,0.12)'}`,
+      boxShadow: searchFocused
+        ? `0 8px 40px rgba(255,104,3,0.16)`
+        : '0 4px 20px rgba(15,7,3,0.08)',
+    }
     : {
-        background:  'rgba(26,14,9,0.85)',
-        border:      `1px solid ${searchFocused ? t.primary + '60' : t.cardBorder}`,
-        boxShadow:   searchFocused
-          ? `0 8px 40px rgba(255,104,3,0.20)`
-          : '0 4px 20px rgba(0,0,0,0.30)',
-      };
+      background: 'rgba(26,14,9,0.85)',
+      border: `1px solid ${searchFocused ? t.primary + '60' : t.cardBorder}`,
+      boxShadow: searchFocused
+        ? `0 8px 40px rgba(255,104,3,0.20)`
+        : '0 4px 20px rgba(0,0,0,0.30)',
+    };
 
   const dropdownSurface = isLight
     ? {
-        background:   'rgba(255,255,255,0.98)',
-        border:       `1px solid rgba(15,7,3,0.09)`,
-        boxShadow:    '0 16px 48px rgba(15,7,3,0.14)',
-        backdropFilter: 'blur(16px)',
-      }
+      background: 'rgba(255,255,255,0.98)',
+      border: `1px solid rgba(15,7,3,0.09)`,
+      boxShadow: '0 16px 48px rgba(15,7,3,0.14)',
+      backdropFilter: 'blur(16px)',
+    }
     : {
-        background:   'rgba(18,8,4,0.97)',
-        border:       `1px solid ${t.cardBorder}`,
-        boxShadow:    '0 16px 48px rgba(0,0,0,0.5)',
-        backdropFilter: 'blur(16px)',
-      };
+      background: 'rgba(18,8,4,0.97)',
+      border: `1px solid ${t.cardBorder}`,
+      boxShadow: '0 16px 48px rgba(0,0,0,0.5)',
+      backdropFilter: 'blur(16px)',
+    };
 
   /* ═══════════════════════════════════════════════════════════
      RENDER
@@ -412,24 +384,24 @@ export default function LandingPage() {
         <div
           className="absolute rounded-full blur-[160px]"
           style={{
-            width:      640,
-            height:     640,
+            width: 640,
+            height: 640,
             background: `radial-gradient(circle, ${t.primary} 0%, transparent 70%)`,
-            top:        '-18%',
-            right:      '-12%',
-            opacity:    isLight ? 0.10 : 0.18,
+            top: '-18%',
+            right: '-12%',
+            opacity: isLight ? 0.10 : 0.18,
           }}
         />
         {/* Lower-left accent glow */}
         <div
           className="absolute rounded-full blur-[130px]"
           style={{
-            width:      420,
-            height:     420,
+            width: 420,
+            height: 420,
             background: `radial-gradient(circle, ${t.mint} 0%, transparent 70%)`,
-            bottom:     '8%',
-            left:       '-10%',
-            opacity:    isLight ? 0.14 : 0.10,
+            bottom: '8%',
+            left: '-10%',
+            opacity: isLight ? 0.14 : 0.10,
           }}
         />
         {/* Light mode: warm cream wash overlay */}
@@ -473,7 +445,7 @@ export default function LandingPage() {
             className="w-10 h-10 rounded-xl flex items-center justify-center font-extrabold text-white text-lg"
             style={{
               background: 'linear-gradient(135deg, #FF6803 0%, #FFAC5F 100%)',
-              boxShadow:  '0 4px 16px rgba(255,104,3,0.40)',
+              boxShadow: '0 4px 16px rgba(255,104,3,0.40)',
             }}
             whileHover={{ rotate: [0, -5, 5, 0], scale: 1.1 }}
             transition={{ duration: 0.4 }}
@@ -495,8 +467,8 @@ export default function LandingPage() {
             className="hidden sm:flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-semibold"
             style={{
               background: `${t.mint}14`,
-              color:      t.mint,
-              border:     `1px solid ${t.mint}28`,
+              color: t.mint,
+              border: `1px solid ${t.mint}28`,
             }}
           >
             <motion.span
@@ -521,8 +493,8 @@ export default function LandingPage() {
           className="mb-6 inline-flex items-center gap-2 px-4 py-2 rounded-full text-xs font-semibold"
           style={{
             background: `${t.primary}14`,
-            color:      t.primary,
-            border:     `1px solid ${t.primary}25`,
+            color: t.primary,
+            border: `1px solid ${t.primary}25`,
           }}
           initial={{ opacity: 0, y: 12 }}
           animate={{ opacity: 1, y: 0 }}
@@ -608,10 +580,10 @@ export default function LandingPage() {
                 value={searchQuery}
                 onChange={e => handleSearch(e.target.value)}
                 onFocus={() => setSearchFocused(true)}
-                onBlur={()  => setSearchFocused(false)}
+                onBlur={() => setSearchFocused(false)}
                 className="pvx-search-input flex-1 bg-transparent pl-3 pr-4 py-4 text-base outline-none"
                 style={{
-                  color:      t.text,
+                  color: t.text,
                   caretColor: t.primary,
                 }}
               />
@@ -639,8 +611,8 @@ export default function LandingPage() {
                   className="absolute top-full left-0 right-0 mt-2 rounded-2xl overflow-hidden z-30"
                   style={{ ...dropdownSurface, transformOrigin: 'top' }}
                   initial={{ opacity: 0, y: -8, scaleY: 0.95 }}
-                  animate={{ opacity: 1, y: 0,  scaleY: 1 }}
-                  exit={{   opacity: 0, y: -8,  scaleY: 0.95 }}
+                  animate={{ opacity: 1, y: 0, scaleY: 1 }}
+                  exit={{ opacity: 0, y: -8, scaleY: 0.95 }}
                   transition={{ duration: 0.22, ease: [0.22, 1, 0.36, 1] }}
                 >
                   {searching ? (
@@ -688,9 +660,9 @@ export default function LandingPage() {
                         onClick={() => navigate(`/bring-school?name=${encodeURIComponent(searchQuery)}`)}
                         className="inline-flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold"
                         style={{
-                          color:      t.primary,
+                          color: t.primary,
                           background: `${t.primary}15`,
-                          border:     `1px solid ${t.primary}30`,
+                          border: `1px solid ${t.primary}30`,
                         }}
                         whileHover={{ scale: 1.04 }}
                         whileTap={{ scale: 0.97 }}
@@ -733,14 +705,13 @@ export default function LandingPage() {
               className="flex-1 flex items-center rounded-xl overflow-hidden transition-all"
               style={{
                 background: isLight ? 'rgba(255,255,255,0.90)' : 'rgba(26,14,9,0.90)',
-                border:     `1px solid ${
-                  slugInput.length > 0
+                border: `1px solid ${slugInput.length > 0
                     ? slugValid
                       ? isLight ? 'rgba(0,194,119,0.55)' : 'rgba(48,255,172,0.40)'
                       : 'rgba(239,68,68,0.40)'
                     : t.cardBorder
-                }`,
-                boxShadow:  isLight ? '0 2px 12px rgba(15,7,3,0.06)' : 'none',
+                  }`,
+                boxShadow: isLight ? '0 2px 12px rgba(15,7,3,0.06)' : 'none',
               }}
             >
               <span
@@ -763,7 +734,7 @@ export default function LandingPage() {
                   <motion.span
                     initial={{ opacity: 0, scale: 0.6 }}
                     animate={{ opacity: 1, scale: 1 }}
-                    exit={{   opacity: 0, scale: 0.6 }}
+                    exit={{ opacity: 0, scale: 0.6 }}
                     className="pr-3"
                   >
                     {slugValid
@@ -799,25 +770,64 @@ export default function LandingPage() {
           )}
         </motion.form>
 
-        {/* ── Stats strip ── */}
+        {/* ── Early-access banner ──────────────────────────────────────
+            Replaces the old fabricated stats strip (12,400+ members,
+            ₦3.8M+ collected, 420+ orgs — none of which existed). Day
+            one, this is honest: we just launched, and instead of
+            hiding that, we frame it as a reason to join now — direct
+            founder access, input on the roadmap, founding-member
+            status. No invented numbers anywhere in this section. */}
         <motion.div
-          className="w-full max-w-xl mt-10 grid grid-cols-3 gap-3"
+          className="w-full max-w-xl mt-10 rounded-2xl p-5 relative overflow-hidden"
+          style={{
+            background: `linear-gradient(135deg, ${t.primary}10, ${t.card})`,
+            border: `1px solid ${t.primaryRing ?? t.cardBorder}`,
+          }}
           initial={{ opacity: 0, y: 16 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.65 }}
         >
+          <div className="flex items-start gap-3">
+            <div
+              className="w-9 h-9 rounded-xl flex items-center justify-center shrink-0"
+              style={{ background: `${t.primary}18`, color: t.primary }}
+            >
+              <Rocket className="w-4.5 h-4.5" />
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-bold" style={{ color: t.text }}>
+                We just launched — be one of our first organizations
+              </p>
+              <p className="text-xs mt-1 leading-5" style={{ color: t.textSec }}>
+                Early organizations get direct access to the founder, a say in
+                what we build next, and founding-member pricing for life.
+              </p>
+            </div>
+          </div>
+        </motion.div>
+
+        {/* ── Mechanism trust strip ────────────────────────────────────
+            What's verifiably true right now, instead of adoption
+            numbers that don't exist yet. Each claim here is something
+            the product actually does — not a vanity metric. */}
+        <motion.div
+          className="w-full max-w-xl mt-3 grid grid-cols-3 gap-3"
+          initial={{ opacity: 0, y: 16 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.72 }}
+        >
           {[
-            { icon: <Users className="w-4 h-4" />,      label: 'Members tracked',   to: 12400, suffix: '+',  color: t.primary                       },
-            { icon: <DollarSign className="w-4 h-4" />, label: 'Dues collected',     to: 3800,  suffix: 'M+', color: t.mint,    prefix: '₦'           },
-            { icon: <TrendingUp className="w-4 h-4" />, label: 'Organizations live', to: 420,   suffix: '+',  color: t.primary                       },
-          ].map(({ icon, label, to, suffix, color, prefix }) => (
+            { icon: <Lock className="w-4 h-4" />, label: 'Paystack-secured payments', color: t.mint },
+            { icon: <Shield className="w-4 h-4" />, label: 'Row-level access control', color: t.primary },
+            { icon: <Layers className="w-4 h-4" />, label: 'Built for real org structure', color: t.primary },
+          ].map(({ icon, label, color }) => (
             <div
               key={label}
               className="rounded-2xl p-4 text-center relative overflow-hidden"
               style={{
                 background: t.card,
-                border:     `1px solid ${t.cardBorder}`,
-                boxShadow:  isLight ? '0 2px 16px rgba(15,7,3,0.06)' : 'none',
+                border: `1px solid ${t.cardBorder}`,
+                boxShadow: isLight ? '0 2px 16px rgba(15,7,3,0.06)' : 'none',
               }}
             >
               <div className="absolute top-0 left-0 right-0 h-0.5" style={{ background: color }} />
@@ -827,10 +837,7 @@ export default function LandingPage() {
               >
                 {icon}
               </div>
-              <p className="text-lg font-extrabold" style={{ color: t.text }}>
-                {prefix}<CountUp to={to} suffix={suffix} />
-              </p>
-              <p className="text-[10px] mt-0.5" style={{ color: t.textTer }}>{label}</p>
+              <p className="text-[11px] font-semibold leading-snug" style={{ color: t.text }}>{label}</p>
             </div>
           ))}
         </motion.div>
@@ -882,7 +889,7 @@ export default function LandingPage() {
             className="px-8 py-4 rounded-2xl text-white font-bold text-base relative overflow-hidden"
             style={{
               background: t.gradOrange,
-              boxShadow:  '0 10px 40px rgba(255,104,3,0.40)',
+              boxShadow: '0 10px 40px rgba(255,104,3,0.40)',
             }}
             whileHover={{ scale: 1.05, boxShadow: '0 14px 50px rgba(255,104,3,0.55)' }}
             whileTap={{ scale: 0.97 }}

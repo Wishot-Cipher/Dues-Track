@@ -30,6 +30,7 @@ import Footer from "@/components/Footer";
 import notificationService from "@/services/notificationService";
 import { SuccessCelebration } from "@/components/ui/Confetti";
 import PageWrapper from "@/components/ui/PageWrapper";
+import { compressImage, validateFile } from '@/utils/compressImage';
 import { getOrgScope } from "@/utils/orgScope";
 
 // ── NEW IMPORTS ───────────────────────────────────────────────────────────────
@@ -118,18 +119,18 @@ export default function PaymentDetailPage() {
     .filter((p) => p.status === "approved")
     .reduce((sum, p) => sum + (Number(p.amount) || 0), 0);
 
-  const paymentTypeAmount   = Number(paymentType?.amount) || 0;
-  const remainingAmount     = paymentTypeAmount - totalPaid;
-  const isFullyPaid         = remainingAmount <= 0;
-  const hasPendingPayment   = existingPayments.some((p) => p.status === "pending");
-  const isWaived            = existingPayments.some(
+  const paymentTypeAmount = Number(paymentType?.amount) || 0;
+  const remainingAmount = paymentTypeAmount - totalPaid;
+  const isFullyPaid = remainingAmount <= 0;
+  const hasPendingPayment = existingPayments.some((p) => p.status === "pending");
+  const isWaived = existingPayments.some(
     (p) => p.status === "approved" && p.transaction_ref?.startsWith("WAIVED-")
   );
-  const progressPercentage  = paymentTypeAmount > 0 ? (totalPaid / paymentTypeAmount) * 100 : 0;
+  const progressPercentage = paymentTypeAmount > 0 ? (totalPaid / paymentTypeAmount) * 100 : 0;
 
   // ── Late fee calculation ────────────────────────────────────────────────
   const paymentDeadline = paymentType?.deadline ? new Date(paymentType.deadline) : null;
-  const perDayLate      = Number((paymentType as any)?.late_fee_per_day || 0);
+  const perDayLate = Number((paymentType as any)?.late_fee_per_day || 0);
   let currentUserAccumulatedLate = 0;
   try {
     if (paymentDeadline && new Date() > paymentDeadline && perDayLate > 0) {
@@ -138,7 +139,7 @@ export default function PaymentDetailPage() {
         .reduce((sum, p) => {
           try {
             const submittedStr = p.submitted_at || (p as any).created_at || p.reviewed_at;
-            const submitted    = submittedStr ? new Date(submittedStr) : null;
+            const submitted = submittedStr ? new Date(submittedStr) : null;
             if (submitted && submitted.getTime() <= paymentDeadline.getTime()) {
               return sum + (Number(p.amount) || 0);
             }
@@ -231,14 +232,20 @@ export default function PaymentDetailPage() {
 
       for (const student of students) {
         let receiptUrl = "";
+
         if (method !== "cash" && receiptFileValue) {
-          const fileExt  = receiptFileValue.name.split(".").pop();
+          // Validate and compress before upload — reduces storage ~10x
+          const validationError = validateFile(receiptFileValue);
+          if (validationError) { toast.error(validationError); return false; }
+          const fileToUpload = await compressImage(receiptFileValue);
+
+          const fileExt = fileToUpload.name.split(".").pop();
           const fileName = `${student.id}_${Date.now()}_${Math.random().toString(36).substring(7)}.${fileExt}`;
           const filePath = `receipts/${fileName}`;
 
           const { error: uploadError } = await supabase.storage
             .from(STORAGE_BUCKETS.RECEIPTS)
-            .upload(filePath, receiptFileValue);
+            .upload(filePath, fileToUpload);
           if (uploadError) { toast.error(`Failed to upload receipt: ${uploadError.message}`); throw uploadError; }
 
           const { data: urlData } = supabase.storage.from(STORAGE_BUCKETS.RECEIPTS).getPublicUrl(filePath);
@@ -274,7 +281,7 @@ export default function PaymentDetailPage() {
           status: "pending", payment_method: method,
           paid_by: student.id !== user.id ? user.id : null,
         };
-        if (orgId)   paymentInsert.organization_id = orgId;
+        if (orgId) paymentInsert.organization_id = orgId;
         if (groupId) paymentInsert.group_id = groupId;
 
         const { data: insertedPayment, error: insertError } = await supabase
@@ -790,10 +797,10 @@ export default function PaymentDetailPage() {
                     await wrappedSubmit({
                       method: selectedMethod as PaymentMethod,
                       transactionRefValue: data.transactionRef,
-                      receiptFileValue:    data.receiptFile,
-                      notesValue:          data.notes,
-                      paymentOptionValue:  data.paymentOption,
-                      amountValue:         data.amount,
+                      receiptFileValue: data.receiptFile,
+                      notesValue: data.notes,
+                      paymentOptionValue: data.paymentOption,
+                      amountValue: data.amount,
                     });
                   }}
                   submitting={submitting}

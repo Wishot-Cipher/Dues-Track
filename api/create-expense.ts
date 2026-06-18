@@ -44,10 +44,10 @@ export default async function handler(req: any, res: any) {
     const callerOrgId = auth.data.organization_id
 
     const {
-      payment_type_id = null,
       title,
       description = null,
-      category = null,
+      category_id = null,
+      funded_by = null,
       amount,
       expense_date = new Date().toISOString(),
       receipt = null,
@@ -64,12 +64,12 @@ export default async function handler(req: any, res: any) {
       return res.status(400).json({ error: 'Amount must be a positive number' })
     }
 
-    // If payment_type_id is provided, verify it belongs to the caller's org
-    if (payment_type_id) {
+    // If funded_by is provided, verify it belongs to the caller's org
+    if (funded_by) {
       const { data: pt } = await supabaseAdmin
         .from('payment_types')
         .select('id')
-        .eq('id', payment_type_id)
+        .eq('id', funded_by)
         .eq('organization_id', callerOrgId)
         .single()
 
@@ -108,18 +108,21 @@ export default async function handler(req: any, res: any) {
     }
 
     // Force recorded_by from verified admin — NEVER from client
+    // Force created_by from verified admin — NEVER from client
+    // Force created_by from verified admin — NEVER from client
     const insertPayload = {
-      payment_type_id,
       title,
       description,
-      category,
+      category_id,
+      funded_by,
       amount: numAmount,
       expense_date,
-      recorded_by: callerId,
+      created_by: auth.data.adminRecordId,
       receipt_url,
+      status: 'pending',
       organization_id: callerOrgId,
+      group_id: auth.data.group_id ?? null,
     }
-
     const { data: inserted, error: insertError } = await supabaseAdmin
       .from('expenses')
       .insert([insertPayload])

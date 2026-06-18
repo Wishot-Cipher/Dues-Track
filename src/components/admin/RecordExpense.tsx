@@ -49,9 +49,18 @@ interface PaymentType {
 }
 
 // ── Category icon renderer ─────────────────────────────────────────────────
+// ── Category icon renderer ─────────────────────────────────────────────────
+function kebabToPascal(name: string): string {
+  return name
+    .split('-')
+    .map(part => part.charAt(0).toUpperCase() + part.slice(1))
+    .join('')
+}
+
 function CategoryIcon({ iconName, className = 'w-4 h-4' }: { iconName: string | null; className?: string }) {
   if (!iconName) return <span>📦</span>
-  const IconComponent = (LucideIcons as unknown as Record<string, React.ComponentType<{ className?: string }>>)[iconName]
+  const pascalName = kebabToPascal(iconName)
+  const IconComponent = (LucideIcons as unknown as Record<string, React.ComponentType<{ className?: string }>>)[pascalName]
   if (IconComponent) return <IconComponent className={className} />
   return <span>{iconName}</span>
 }

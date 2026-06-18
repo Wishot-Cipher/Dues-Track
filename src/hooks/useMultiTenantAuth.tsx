@@ -97,8 +97,25 @@ export function MultiTenantAuthProvider({ children }: MultiTenantAuthProviderPro
   }, [checkSession]);
 
   // ── Login ──
+  // ── Login ──
   const login = useCallback(async (memberId: string, password: string, orgSlug?: string, groupId?: string) => {
     if (!orgSlug) throw new Error('Organization is required');
+
+    // Clear all stale org-scoped keys before setting the new session.
+    // Without this, switching orgs or reinstalling the PWA shows the
+    // previous org's data until a refresh — localStorage persists across
+    // PWA reinstalls on both iOS and Android.
+    const STALE_KEYS = [
+      'pvx_active_role',
+      'pvx_group_id',
+      'pvx_org_slug',
+      'pvx_org_id',
+      'pvx_member_id',
+      'org_scope',
+    ];
+    STALE_KEYS.forEach(key => {
+      try { localStorage.removeItem(key); } catch { /* ignore */ }
+    });
 
     const result = await multiTenantAuthService.login(memberId, password, orgSlug, groupId);
 
@@ -117,6 +134,19 @@ export function MultiTenantAuthProvider({ children }: MultiTenantAuthProviderPro
   const logout = useCallback(async () => {
     await multiTenantAuthService.logout();
     clearState();
+    // Clear all org-scoped localStorage keys on logout so the next
+    // login (same or different org) always starts from a clean slate.
+    const STALE_KEYS = [
+      'pvx_active_role',
+      'pvx_group_id',
+      'pvx_org_slug',
+      'pvx_org_id',
+      'pvx_member_id',
+      'org_scope',
+    ];
+    STALE_KEYS.forEach(key => {
+      try { localStorage.removeItem(key); } catch { /* ignore */ }
+    });
   }, []);
 
   // ── Change Password ──

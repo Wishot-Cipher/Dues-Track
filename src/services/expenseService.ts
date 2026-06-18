@@ -2,6 +2,7 @@ import { supabase, STORAGE_BUCKETS, getPublicUrl } from '../config/supabase'
 import type { PostgrestError } from '@supabase/supabase-js'
 import { getOrgScope } from '@/utils/orgScope'
 import { applyOwnedTierScope, type OwnedTierScope } from '@/utils/scopedGroups'
+import { compressImage, validateFile } from '@/utils/compressImage';
 
 export interface Expense {
   id: string
@@ -61,21 +62,21 @@ export async function uploadExpenseReceipt(file: File, key: string) {
     const { error } = await supabase.storage
       .from(bucket)
       .upload(path, file, { cacheControl: '3600', upsert: false })
-      // If the initial upload failed, try uploading into an "expense-receipts" folder
-      if (error) {
-        try {
-          const altPath = `expense-receipts/${path}`
-          const { error: altError } = await supabase.storage
-            .from(bucket)
-            .upload(altPath, file, { cacheControl: '3600', upsert: false })
+    // If the initial upload failed, try uploading into an "expense-receipts" folder
+    if (error) {
+      try {
+        const altPath = `expense-receipts/${path}`
+        const { error: altError } = await supabase.storage
+          .from(bucket)
+          .upload(altPath, file, { cacheControl: '3600', upsert: false })
 
-          if (!altError) {
-            return getPublicUrl(bucket, altPath)
-          }
-        } catch {
-          // ignore and fall through to throw the original error below
+        if (!altError) {
+          return getPublicUrl(bucket, altPath)
         }
+      } catch {
+        // ignore and fall through to throw the original error below
       }
+    }
     if (error) throw error
 
     return getPublicUrl(bucket, path)
@@ -130,40 +131,37 @@ export async function createExpense(payload: CreateExpensePayload) {
       // Convert file to base64 if present
       let receipt: { name: string; type: string; base64: string } | null = null
       if (payload.receiptFile) {
+        const validationError = validateFile(payload.receiptFile);
+        if (validationError) throw new Error(validationError);
+        const fileToUpload = await compressImage(payload.receiptFile);
         receipt = {
-          name: payload.receiptFile.name,
-          type: payload.receiptFile.type || 'application/octet-stream',
+          name: fileToUpload.name,
+          type: fileToUpload.type || 'application/octet-stream',
           base64: await new Promise<string>((resolve, reject) => {
-            const reader = new FileReader()
+            const reader = new FileReader();
             reader.onload = () => {
-              const result = reader.result as string
-              // result is like 'data:<type>;base64,<data>' if using readAsDataURL,
-              // but we'll use readAsArrayBuffer then convert to base64 for smaller memory
+              const result = reader.result as string;
               try {
-                // If readAsDataURL was used, strip prefix
                 if (result.startsWith('data:')) {
-                  const comma = result.indexOf(',')
-                  resolve(result.slice(comma + 1))
+                  const comma = result.indexOf(',');
+                  resolve(result.slice(comma + 1));
                 } else {
-                  // Fallback
-                  resolve(btoa(result))
+                  resolve(btoa(result));
                 }
-              } catch (e) {
-                reject(e)
-              }
-            }
-            reader.onerror = () => reject(reader.error)
-            reader.readAsDataURL(payload.receiptFile as Blob)
+              } catch (e) { reject(e); }
+            };
+            reader.onerror = () => reject(reader.error);
+            reader.readAsDataURL(fileToUpload);
           }),
         }
       }
 
       const body = {
         callerId: payload.recorded_by || localStorage.getItem('pvx_member_id') || localStorage.getItem('current_user_id'),
-        payment_type_id: payload.payment_type_id ?? null,
         title: payload.title,
         description: payload.description ?? null,
-        category: payload.category ?? null,
+        category_id: payload.category_id ?? null,
+        funded_by: payload.funded_by ?? null,
         amount: payload.amount,
         expense_date: payload.expense_date ?? new Date().toISOString(),
         receipt,
@@ -186,8 +184,11 @@ export async function createExpense(payload: CreateExpensePayload) {
 
     // Default (client) flow: upload receipt directly from client then insert
     if (payload.receiptFile) {
-      const key = `expense_${Date.now()}_${payload.receiptFile.name}`
-      receipt_url = await uploadExpenseReceipt(payload.receiptFile, key)
+      const validationError = validateFile(payload.receiptFile);
+      if (validationError) throw new Error(validationError);
+      const fileToUpload = await compressImage(payload.receiptFile);
+      const key = `expense_${Date.now()}_${fileToUpload.name}`;
+      receipt_url = await uploadExpenseReceipt(fileToUpload, key);
     }
 
     type ExpenseInsert = {
@@ -326,13 +327,27 @@ export async function fetchExpenseCategories(
   if (!includeInactive) {
     query = query.eq('is_active', true)
   }
+
   if (scope) {
     query = query.eq('organization_id', scope.orgId)
+
+    // Categories are a SHARED taxonomy, not tier-owned like dues/expenses.
+    // applyOwnedTierScope's 'group' mode does .eq('group_id', X), which
+    // would exclude every org-wide default (group_id IS NULL). Every tier
+    // should see the org's shared categories, plus any custom ones scoped
+    // to their own group.
     if (ownedScope === undefined) {
-      query = query.eq('group_id', scope.groupId)
-    } else {
-      query = applyOwnedTierScope(query, ownedScope)
+      if (scope.groupId) {
+        query = query.or(`group_id.eq.${scope.groupId},group_id.is.null`)
+      } else {
+        query = query.is('group_id', null)
+      }
+    } else if (ownedScope.mode === 'group') {
+      query = query.or(`group_id.eq.${ownedScope.groupId},group_id.is.null`)
+    } else if (ownedScope.mode === 'org-wide') {
+      query = query.is('group_id', null)
     }
+    // 'unscoped' → no group filter; show every category in the org
   }
 
   const { data, error } = await query

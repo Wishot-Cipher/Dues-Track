@@ -43,17 +43,17 @@ import {
 
 // ── Design tokens ──────────────────────────────────────────────────────────
 const tk = {
-  primary:    '#FF6803',
-  mint:       '#30FFAC',
-  danger:     '#EF4444',
-  warning:    '#FBBF24',
-  success:    '#22C55E',
-  bg:         '#0F0703',
-  cardBg:     'rgba(255,255,255,0.03)',
+  primary: '#FF6803',
+  mint: '#30FFAC',
+  danger: '#EF4444',
+  warning: '#FBBF24',
+  success: '#22C55E',
+  bg: '#0F0703',
+  cardBg: 'rgba(255,255,255,0.03)',
   cardBorder: 'rgba(255,255,255,0.07)',
-  hoverBorder:'rgba(255,104,3,0.28)',
-  textSec:    'rgba(255,255,255,0.5)',
-  textTer:    'rgba(255,255,255,0.28)',
+  hoverBorder: 'rgba(255,104,3,0.28)',
+  textSec: 'rgba(255,255,255,0.5)',
+  textTer: 'rgba(255,255,255,0.28)',
 }
 
 // ── Util ───────────────────────────────────────────────────────────────────
@@ -88,7 +88,7 @@ const listVariants: Variants = {
 }
 const itemVariants: Variants = {
   hidden: { opacity: 0, y: 16 },
-  show:   { opacity: 1, y: 0, transition: { duration: 0.38, ease: EASE } },
+  show: { opacity: 1, y: 0, transition: { duration: 0.38, ease: EASE } },
 }
 
 // ── Stat pill ──────────────────────────────────────────────────────────────
@@ -134,12 +134,12 @@ function ExpenseCard({
 }) {
   const [hovered, setHovered] = useState(false)
   const categoryData = (expense as any).category as { name?: string; icon?: string; color?: string } | undefined
-  const categoryName  = categoryData?.name  || 'Uncategorized'
-  const categoryIcon  = categoryData?.icon  || '📦'
+  const categoryName = categoryData?.name || 'Uncategorized'
+  const categoryIcon = categoryData?.icon || '📦'
   const categoryColor = categoryData?.color || tk.primary
   const currentBalance = balanceMap.get(expense.funded_by || '') || 0
-  const balanceAfter   = currentBalance - (expense.amount || 0)
-  const isBeingLoaded  = approvalLoading && selectedExpense?.id === expense.id
+  const balanceAfter = currentBalance - (expense.amount || 0)
+  const isBeingLoaded = approvalLoading && selectedExpense?.id === expense.id
 
   return (
     <motion.div
@@ -399,31 +399,31 @@ export default function ExpenseApprovalQueue() {
   })
   const { success, error: showError } = useToast()
 
-  const [pendingExpenses, setPendingExpenses]   = useState<Expense[]>([])
-  const [loading, setLoading]                   = useState(true)
-  const [selectedExpense, setSelectedExpense]   = useState<Expense | null>(null)
-  const [approvalLoading, setApprovalLoading]   = useState(false)
-  const [rejectionReason, setRejectionReason]   = useState('')
-  const [balanceMap, setBalanceMap]             = useState<Map<string, number>>(new Map())
-  const [imageModal, setImageModal]             = useState<string | null>(null)
-  const [showRejectModal, setShowRejectModal]   = useState(false)
-  const [showEditModal, setShowEditModal]       = useState(false)
+  const [pendingExpenses, setPendingExpenses] = useState<Expense[]>([])
+  const [loading, setLoading] = useState(true)
+  const [selectedExpense, setSelectedExpense] = useState<Expense | null>(null)
+  const [approvalLoading, setApprovalLoading] = useState(false)
+  const [rejectionReason, setRejectionReason] = useState('')
+  const [balanceMap, setBalanceMap] = useState<Map<string, number>>(new Map())
+  const [imageModal, setImageModal] = useState<string | null>(null)
+  const [showRejectModal, setShowRejectModal] = useState(false)
+  const [showEditModal, setShowEditModal] = useState(false)
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
-  const [editingExpense, setEditingExpense]     = useState<Partial<Expense> | null>(null)
-  const [categories, setCategories]             = useState<ExpenseCategory[]>([])
-  const [paymentTypes, setPaymentTypes]         = useState<{ id: string; name: string }[]>([])
-  const [confirmDialog, setConfirmDialog]       = useState<{
+  const [editingExpense, setEditingExpense] = useState<Partial<Expense> | null>(null)
+  const [categories, setCategories] = useState<ExpenseCategory[]>([])
+  const [paymentTypes, setPaymentTypes] = useState<{ id: string; name: string }[]>([])
+  const [confirmDialog, setConfirmDialog] = useState<{
     isOpen: boolean; title: string; message: string
     type: 'info' | 'warning' | 'danger' | 'success'; onConfirm: () => void
-  }>({ isOpen: false, title: '', message: '', type: 'info', onConfirm: () => {} })
+  }>({ isOpen: false, title: '', message: '', type: 'info', onConfirm: () => { } })
 
   useEffect(() => {
     loadPendingExpenses()
     loadCategories()
     loadPaymentTypes()
-  // Re-run when the active-role subtree changes so a dept exec
-  // switching from class-rep mode immediately sees the wider queue.
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    // Re-run when the active-role subtree changes so a dept exec
+    // switching from class-rep mode immediately sees the wider queue.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeRole?.groupId, activeRole?.scopeLevel])
 
   // Own-tier scope: a tier exec manages only the dues/expenses THEIR
@@ -526,16 +526,20 @@ export default function ExpenseApprovalQueue() {
     setSelectedExpense(expense)
 
     const expenseCategory = (expense as any).category?.name || (expense as any).category || (expense as any).payment_types?.[0]?.category || 'Other'
-    const currentBalance  = balanceMap.get(expenseCategory) || 0
-    const balanceAfter    = currentBalance - (expense.amount || 0)
-    const LOW_THRESHOLD   = 15000
+    const currentBalance = balanceMap.get(expenseCategory) || 0
+    const balanceAfter = currentBalance - (expense.amount || 0)
+    const LOW_THRESHOLD = 15000
 
     const performApproval = async () => {
       try {
         setApprovalLoading(true)
         const adminId = user?.admins?.[0]?.id
         if (!adminId) { showError('Admin ID not found'); return }
-        await approveExpense({ expense_id: expenseId, approved: true, admin_id: adminId })
+        const result = await approveExpense({ expense_id: expenseId, approved: true, admin_id: adminId })
+        if (!result?.success) {
+          showError(result?.error || 'Failed to approve expense')
+          return
+        }
         success('Expense approved')
         setPendingExpenses(prev => prev.filter(e => e.id !== expenseId))
         setSelectedExpense(null)
@@ -569,18 +573,22 @@ export default function ExpenseApprovalQueue() {
   }
 
   async function handleReject(expenseId: string) {
-    if (!rejectionReason.trim()) { showError('Please provide a rejection reason'); return }
-    try {
-      setApprovalLoading(true)
-      const adminId = user?.admins?.[0]?.id
-      if (!adminId) { showError('Admin ID not found'); return }
-      await approveExpense({ expense_id: expenseId, approved: false, admin_id: adminId, reason: rejectionReason })
-      success('Expense rejected')
-      setPendingExpenses(prev => prev.filter(e => e.id !== expenseId))
-      setSelectedExpense(null); setShowRejectModal(false); setRejectionReason('')
-    } catch { showError('Failed to reject expense') }
-    finally { setApprovalLoading(false) }
-  }
+  if (!rejectionReason.trim()) { showError('Please provide a rejection reason'); return }
+  try {
+    setApprovalLoading(true)
+    const adminId = user?.admins?.[0]?.id
+    if (!adminId) { showError('Admin ID not found'); return }
+    const result = await approveExpense({ expense_id: expenseId, approved: false, admin_id: adminId, reason: rejectionReason })
+    if (!result?.success) {
+      showError(result?.error || 'Failed to reject expense')
+      return
+    }
+    success('Expense rejected')
+    setPendingExpenses(prev => prev.filter(e => e.id !== expenseId))
+    setSelectedExpense(null); setShowRejectModal(false); setRejectionReason('')
+  } catch { showError('Failed to reject expense') }
+  finally { setApprovalLoading(false) }
+}
 
   async function handleDelete(expenseId: string) {
     try {
@@ -634,7 +642,7 @@ export default function ExpenseApprovalQueue() {
   }
 
   const totalAmount = pendingExpenses.reduce((s, e) => s + (e.amount || 0), 0)
-  const avgAmount   = pendingExpenses.length > 0 ? Math.round(totalAmount / pendingExpenses.length) : 0
+  const avgAmount = pendingExpenses.length > 0 ? Math.round(totalAmount / pendingExpenses.length) : 0
 
   return (
     <>
@@ -909,7 +917,7 @@ export default function ExpenseApprovalQueue() {
                       label="Date"
                       value={editingExpense.expense_date?.split('T')[0] || ''}
                       onChange={(v: any) => setEditingExpense({ ...editingExpense, expense_date: v })}
-                      // includeTime={false}
+                    // includeTime={false}
                     />
                   </div>
                 </div>
