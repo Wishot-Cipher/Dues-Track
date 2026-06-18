@@ -31,6 +31,7 @@ import {
   ArrowRight,
   Banknote,
   Building2,
+  Sparkles,
   CalendarClock,
   Layers,
   Loader2,
@@ -436,6 +437,37 @@ export default function DepartmentExecDashboardPage() {
           </p>
         </div>
         <ArrowRight className="w-4 h-4 shrink-0" style={{ color: tk.primary }} />
+      </motion.button>
+
+      {/* ── Upgrade to Pro nudge ─────────────────────────────────── */}
+      <motion.button
+        type="button"
+        onClick={() => navigate(`/${orgSlug}/admin/billing`)}
+        initial={{ opacity: 0, y: 12 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ delay: 0.09 }}
+        className="w-full text-left rounded-2xl p-4 flex items-center gap-3 transition-all hover:-translate-y-0.5 active:scale-[0.995]"
+        style={{
+          background: `linear-gradient(135deg, ${tk.amber}12, ${tk.primary}08)`,
+          border: `1px solid ${tk.amber}35`,
+          boxShadow: tk.shadow,
+        }}
+      >
+        <span
+          className="w-10 h-10 rounded-xl flex items-center justify-center shrink-0"
+          style={{ background: `${tk.amber}18`, color: tk.amber, border: `1px solid ${tk.amber}35` }}
+        >
+          <Sparkles className="w-5 h-5" />
+        </span>
+        <div className="flex-1 min-w-0">
+          <p className="text-sm font-bold" style={{ color: tk.text }}>
+            Upgrade to Pro
+          </p>
+          <p className="text-[11px] mt-0.5" style={{ color: tk.textTer }}>
+            Unlock instant card & USSD payments, analytics exports, and more for your department.
+          </p>
+        </div>
+        <ArrowRight className="w-4 h-4 shrink-0" style={{ color: tk.amber }} />
       </motion.button>
 
       {/* ── Publish a due — quick targeting CTAs ────────────────── */}

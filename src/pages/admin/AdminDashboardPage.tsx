@@ -1,4 +1,4 @@
-﻿import { useState, useEffect} from 'react';
+﻿import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useNavigate } from 'react-router-dom';
 import { useAppNav } from '@/hooks/useAppNav';
@@ -149,12 +149,12 @@ export default function AdminDashboardPage() {
   };
 
   // ── Class-rep view resolution ──────────────────────────────────
-const reactNavigate = useNavigate();
+  const reactNavigate = useNavigate();
 
   useEffect(() => {
     if (!activeRole || activeRole.kind !== 'exec') return;
     if (activeRole.scopeLevel === 'group') {
-      reactNavigate(`/${orgSlug}/admin/class`);
+      reactNavigate(`/${orgSlug}/admin/class`, { replace: true });
       return;
     }
     if (activeRole.scopeLevel === 'unit') {
@@ -162,11 +162,12 @@ const reactNavigate = useNavigate();
       reactNavigate(
         kind === 'faculty' || kind === 'college'
           ? `/${orgSlug}/admin/faculty`
-          : `/${orgSlug}/admin/dept`
+          : `/${orgSlug}/admin/dept`,
+        { replace: true }
       );
     }
   }, [activeRole?.scopeLevel, activeRole?.kind, activeRole?.groupId, orgSlug]);
-  
+
   const [loading, setLoading] = useState(true);
   const [recentPaymentsLoading, setRecentPaymentsLoading] = useState(true);
   const [recentExpensesLoading, setRecentExpensesLoading] = useState(true);
@@ -177,7 +178,7 @@ const reactNavigate = useNavigate();
   const [reviewsPage, setReviewsPage] = useState(1);
   const [allPayments, setAllPayments] = useState<RecentPayment[]>([]);
   const reviewsPerPage = 8;
-  
+
   // Expenses state
   const [recentExpenses, setRecentExpenses] = useState<{
     id: string;
@@ -189,7 +190,7 @@ const reactNavigate = useNavigate();
   }[]>([]);
   const [expensesPage, setExpensesPage] = useState(1);
   const expensesPerPage = 5;
-  
+
   const [stats, setStats] = useState<AdminStats>({
     totalStudents: 0,
     totalPaymentTypes: 0,
@@ -237,11 +238,11 @@ const reactNavigate = useNavigate();
         amount: exp.amount,
         status: exp.status,
         expense_date: exp.expense_date || exp.created_at,
-        category: Array.isArray(exp.payment_types) 
-          ? (exp.payment_types[0] as { category?: string } | undefined)?.category 
+        category: Array.isArray(exp.payment_types)
+          ? (exp.payment_types[0] as { category?: string } | undefined)?.category
           : (exp.payment_types as { category?: string } | null)?.category || 'Other'
       }));
-      
+
       setRecentExpenses(formatted);
     } catch (error) {
       console.error('Error fetching recent expenses:', error);
@@ -349,7 +350,7 @@ const reactNavigate = useNavigate();
     try {
       setRecentPaymentsLoading(true);
       const scope = getOrgScope();
-      
+
       // Fetch all payments for the modal (including pending)
       let payQ = supabase
         .from('payments')
@@ -372,7 +373,7 @@ const reactNavigate = useNavigate();
       const { data: allData } = await payQ;
 
       setAllPayments(allData || []);
-      
+
       // Recent payments only shows approved/rejected (reviewed items)
       const reviewed = (allData || []).filter(p => p.status !== 'pending').slice(0, 5);
       setRecentPayments(reviewed);
@@ -388,7 +389,7 @@ const reactNavigate = useNavigate();
     if (reviewsFilter === 'all') return true;
     return p.status === reviewsFilter;
   });
-  
+
   const totalReviewPages = Math.ceil(filteredReviews.length / reviewsPerPage);
   const paginatedReviews = filteredReviews.slice(
     (reviewsPage - 1) * reviewsPerPage,
@@ -422,6 +423,12 @@ const reactNavigate = useNavigate();
   // For org-scope admins the probe resolves synchronously (no group
   // admin row), so this loader is at most a single frame for them.
   // Also covers the dept/faculty redirect window.
+
+  // Don't render anything while redirecting unit/group execs to their
+  // own dashboards — prevents the flash of this page before the effect fires.
+  if (activeRole?.kind === 'exec' && activeRole.scopeLevel !== 'org') {
+    return null;
+  }
 
   return (
     <div
@@ -593,42 +600,42 @@ const reactNavigate = useNavigate();
           </div>
         </motion.header>
 
-          {/* Quick Admin Shortcuts (visible and prominent on mobile) */}
-          <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.05 }}>
-            <div className="grid grid-cols-2 gap-3 sm:hidden">
-              <div onClick={() => navigate('/admin/groups')} className="cursor-pointer">
-                <GlassCard className="p-4">
-                  <div className="flex items-center gap-3">
-                    <div className="w-12 h-12 rounded-lg flex items-center justify-center"
-                         style={{ background: `linear-gradient(135deg, ${tk.primary}30, ${tk.primary}10)` }}>
-                      <Building2 className="w-6 h-6" style={{ color: tk.primary }} />
-                    </div>
-                    <div>
-                      <p className="text-sm font-semibold">Groups</p>
-                      <p className="text-xs" style={{ color: tk.textSec }}>Faculties & Classes</p>
-                    </div>
+        {/* Quick Admin Shortcuts (visible and prominent on mobile) */}
+        <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.05 }}>
+          <div className="grid grid-cols-2 gap-3 sm:hidden">
+            <div onClick={() => navigate('/admin/groups')} className="cursor-pointer">
+              <GlassCard className="p-4">
+                <div className="flex items-center gap-3">
+                  <div className="w-12 h-12 rounded-lg flex items-center justify-center"
+                    style={{ background: `linear-gradient(135deg, ${tk.primary}30, ${tk.primary}10)` }}>
+                    <Building2 className="w-6 h-6" style={{ color: tk.primary }} />
                   </div>
-                </GlassCard>
-              </div>
-
-              <div onClick={() => navigate('/admin/academic-calendar')} className="cursor-pointer">
-                <GlassCard className="p-4">
-                  <div className="flex items-center gap-3">
-                    <div className="w-12 h-12 rounded-lg flex items-center justify-center"
-                         style={{ background: `linear-gradient(135deg, ${tk.mint}30, ${tk.mint}10)` }}>
-                      <Calendar className="w-6 h-6" style={{ color: tk.mint }} />
-                    </div>
-                    <div>
-                      <p className="text-sm font-semibold">Academic Calendar</p>
-                      <p className="text-xs" style={{ color: tk.textSec }}>Sessions & Terms</p>
-                    </div>
+                  <div>
+                    <p className="text-sm font-semibold">Groups</p>
+                    <p className="text-xs" style={{ color: tk.textSec }}>Faculties & Classes</p>
                   </div>
-                </GlassCard>
-              </div>
+                </div>
+              </GlassCard>
             </div>
-          </motion.div>
 
-          {/* ── Stats grid ────────────────────────────────────
+            <div onClick={() => navigate('/admin/academic-calendar')} className="cursor-pointer">
+              <GlassCard className="p-4">
+                <div className="flex items-center gap-3">
+                  <div className="w-12 h-12 rounded-lg flex items-center justify-center"
+                    style={{ background: `linear-gradient(135deg, ${tk.mint}30, ${tk.mint}10)` }}>
+                    <Calendar className="w-6 h-6" style={{ color: tk.mint }} />
+                  </div>
+                  <div>
+                    <p className="text-sm font-semibold">Academic Calendar</p>
+                    <p className="text-xs" style={{ color: tk.textSec }}>Sessions & Terms</p>
+                  </div>
+                </div>
+              </GlassCard>
+            </div>
+          </div>
+        </motion.div>
+
+        {/* ── Stats grid ────────────────────────────────────
               Six metric tiles in the same shape as the dept / faculty
               exec dashboards: card surface, small accent icon chip,
               uppercase label, big number, no decorative GlassCard
@@ -638,59 +645,59 @@ const reactNavigate = useNavigate();
               GlassCard + hover-gradient + background-icon + chevron
               + right-side icon container — read as the old era of
               the app next to the new exec dashboards. */}
-          {loading ? (
-            <AdminDashboardSkeleton />
-          ) : (
-            <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-              <AdminStatTile
-                tk={tk}
-                color={tk.primary}
-                icon={<Users className="w-3.5 h-3.5" />}
-                label="Total students"
-                value={<AnimatedCounter value={stats.totalStudents} />}
-                onClick={hasPermission('can_manage_students') ? () => navigate('admin/members') : undefined}
-              />
-              <AdminStatTile
-                tk={tk}
-                color={tk.amber}
-                icon={<Clock className="w-3.5 h-3.5" />}
-                label="Pending review"
-                value={<AnimatedCounter value={stats.pendingReview} />}
-                badge={stats.pendingReview > 0 ? 'awaiting' : undefined}
-                onClick={() => navigate('/admin/review')}
-              />
-              <AdminStatTile
-                tk={tk}
-                color={tk.mint}
-                icon={<Wallet className="w-3.5 h-3.5" />}
-                label="Total collected"
-                value={<PrivacyMask>{formatCurrency(stats.totalCollected)}</PrivacyMask>}
-                onClick={() => navigate('/admin/collected')}
-              />
-              <AdminStatTile
-                tk={tk}
-                color={tk.primary}
-                icon={<FileText className="w-3.5 h-3.5" />}
-                label="Active dues"
-                value={<AnimatedCounter value={stats.totalPaymentTypes} />}
-                onClick={() => navigate('/admin/create-payment')}
-              />
-              <AdminStatTile
-                tk={tk}
-                color={tk.mint}
-                icon={<CheckCircle className="w-3.5 h-3.5" />}
-                label="Approved today"
-                value={<AnimatedCounter value={stats.approvedToday} />}
-              />
-              <AdminStatTile
-                tk={tk}
-                color={tk.danger}
-                icon={<XCircle className="w-3.5 h-3.5" />}
-                label="Rejected"
-                value={<AnimatedCounter value={stats.rejectedPayments} />}
-              />
-            </div>
-          )}
+        {loading ? (
+          <AdminDashboardSkeleton />
+        ) : (
+          <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+            <AdminStatTile
+              tk={tk}
+              color={tk.primary}
+              icon={<Users className="w-3.5 h-3.5" />}
+              label="Total students"
+              value={<AnimatedCounter value={stats.totalStudents} />}
+              onClick={hasPermission('can_manage_students') ? () => navigate('admin/members') : undefined}
+            />
+            <AdminStatTile
+              tk={tk}
+              color={tk.amber}
+              icon={<Clock className="w-3.5 h-3.5" />}
+              label="Pending review"
+              value={<AnimatedCounter value={stats.pendingReview} />}
+              badge={stats.pendingReview > 0 ? 'awaiting' : undefined}
+              onClick={() => navigate('/admin/review')}
+            />
+            <AdminStatTile
+              tk={tk}
+              color={tk.mint}
+              icon={<Wallet className="w-3.5 h-3.5" />}
+              label="Total collected"
+              value={<PrivacyMask>{formatCurrency(stats.totalCollected)}</PrivacyMask>}
+              onClick={() => navigate('/admin/collected')}
+            />
+            <AdminStatTile
+              tk={tk}
+              color={tk.primary}
+              icon={<FileText className="w-3.5 h-3.5" />}
+              label="Active dues"
+              value={<AnimatedCounter value={stats.totalPaymentTypes} />}
+              onClick={() => navigate('/admin/create-payment')}
+            />
+            <AdminStatTile
+              tk={tk}
+              color={tk.mint}
+              icon={<CheckCircle className="w-3.5 h-3.5" />}
+              label="Approved today"
+              value={<AnimatedCounter value={stats.approvedToday} />}
+            />
+            <AdminStatTile
+              tk={tk}
+              color={tk.danger}
+              icon={<XCircle className="w-3.5 h-3.5" />}
+              label="Rejected"
+              value={<AnimatedCounter value={stats.rejectedPayments} />}
+            />
+          </div>
+        )}
 
         {/* Recent Payments Table */}
         <motion.div
@@ -700,15 +707,15 @@ const reactNavigate = useNavigate();
         >
           <GlassCard className="relative overflow-hidden">
             {/* Section Header with gradient accent */}
-            <div 
+            <div
               className="absolute top-0 left-0 w-full h-1 opacity-60"
               style={{ background: `linear-gradient(90deg, ${tk.primary}, ${tk.mint}, transparent)` }}
             />
-            
+
             <div className="flex items-center justify-between mb-6">
               <div className="flex items-center gap-3">
                 <div className="w-10 h-10 rounded-lg flex items-center justify-center"
-                     style={{ background: `linear-gradient(135deg, ${tk.primary}30, ${tk.primary}10)` }}>
+                  style={{ background: `linear-gradient(135deg, ${tk.primary}30, ${tk.primary}10)` }}>
                   <Activity className="w-5 h-5" style={{ color: tk.primary }} />
                 </div>
                 <div>
@@ -721,7 +728,7 @@ const reactNavigate = useNavigate();
                 whileTap={{ scale: 0.95 }}
                 onClick={() => setShowAllReviewsModal(true)}
                 className="flex items-center gap-2 text-sm font-medium px-4 py-2 rounded-lg transition-all"
-                style={{ 
+                style={{
                   color: tk.primary,
                   background: `${tk.primary}10`,
                   border: `1px solid ${tk.primary}30`
@@ -734,7 +741,7 @@ const reactNavigate = useNavigate();
 
             <AnimatePresence mode="wait">
               {recentPaymentsLoading ? (
-                <motion.div 
+                <motion.div
                   initial={{ opacity: 0 }}
                   animate={{ opacity: 1 }}
                   exit={{ opacity: 0 }}
@@ -745,20 +752,20 @@ const reactNavigate = useNavigate();
                   ))}
                 </motion.div>
               ) : recentPayments.length === 0 ? (
-                <motion.div 
+                <motion.div
                   initial={{ opacity: 0 }}
                   animate={{ opacity: 1 }}
                   className="text-center py-12"
                 >
                   <div className="w-20 h-20 rounded-full mx-auto mb-4 flex items-center justify-center"
-                       style={{ background: 'rgba(255, 255, 255, 0.05)' }}>
+                    style={{ background: 'rgba(255, 255, 255, 0.05)' }}>
                     <AlertCircle className="w-10 h-10" style={{ color: tk.textSec }} />
                   </div>
                   <p className="text-lg font-medium mb-1">No Recent Activity</p>
                   <p style={{ color: tk.textSec }}>Submissions will appear here once reviewed</p>
                 </motion.div>
               ) : (
-                <motion.div 
+                <motion.div
                   initial={{ opacity: 0 }}
                   animate={{ opacity: 1 }}
                   className="space-y-3"
@@ -771,7 +778,7 @@ const reactNavigate = useNavigate();
                       transition={{ delay: index * 0.05 }}
                       whileHover={{ scale: 1.01, x: 4 }}
                       className="flex flex-col sm:flex-row sm:items-center sm:justify-between p-3 sm:p-4 rounded-xl transition-all cursor-pointer group gap-3 sm:gap-0"
-                      style={{ 
+                      style={{
                         background: 'rgba(255, 255, 255, 0.03)',
                         border: '1px solid rgba(255, 255, 255, 0.05)'
                       }}
@@ -782,10 +789,10 @@ const reactNavigate = useNavigate();
                     >
                       <div className="flex items-center gap-3 sm:gap-4 flex-1">
                         <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-full flex items-center justify-center font-bold text-base sm:text-lg transition-transform group-hover:scale-110 shrink-0"
-                             style={{ 
-                               background: `linear-gradient(135deg, ${tk.primary}40, ${tk.primary}20)`,
-                               color: tk.primary
-                             }}>
+                          style={{
+                            background: `linear-gradient(135deg, ${tk.primary}40, ${tk.primary}20)`,
+                            color: tk.primary
+                          }}>
                           {payment.member?.full_name?.charAt(0) || '?'}
                         </div>
                         <div className="flex-1 min-w-0">
@@ -809,11 +816,11 @@ const reactNavigate = useNavigate();
                           </p>
                         </div>
                         <span className="px-2 py-1 sm:px-3 sm:py-1.5 rounded-full text-[10px] sm:text-xs font-semibold capitalize"
-                              style={{ 
-                                background: `linear-gradient(135deg, ${getStatusColor(payment.status)}30, ${getStatusColor(payment.status)}10)`,
-                                color: getStatusColor(payment.status),
-                                border: `1px solid ${getStatusColor(payment.status)}40`
-                              }}>
+                          style={{
+                            background: `linear-gradient(135deg, ${getStatusColor(payment.status)}30, ${getStatusColor(payment.status)}10)`,
+                            color: getStatusColor(payment.status),
+                            border: `1px solid ${getStatusColor(payment.status)}40`
+                          }}>
                           {payment.status}
                         </span>
                         <motion.div
@@ -840,14 +847,14 @@ const reactNavigate = useNavigate();
           transition={{ delay: 0.8 }}
         >
           <GlassCard className="relative overflow-hidden">
-            <div 
+            <div
               className="absolute top-0 left-0 w-full h-1 opacity-60"
               style={{ background: `linear-gradient(90deg, ${tk.mint}, ${tk.primary}, transparent)` }}
             />
-            
+
             <div className="flex items-center gap-3 mb-6">
               <div className="w-10 h-10 rounded-lg flex items-center justify-center"
-                   style={{ background: `linear-gradient(135deg, ${tk.mint}30, ${tk.mint}10)` }}>
+                style={{ background: `linear-gradient(135deg, ${tk.mint}30, ${tk.mint}10)` }}>
                 <Sparkles className="w-5 h-5" style={{ color: tk.mint }} />
               </div>
               <div>
@@ -855,166 +862,166 @@ const reactNavigate = useNavigate();
                 <p className="text-xs" style={{ color: tk.textSec }}>Frequently used operations</p>
               </div>
             </div>
-            
+
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
               {hasPermission('can_create_payments') && (
-              <motion.button
-                whileHover={{ scale: 1.02, y: -2 }}
-                whileTap={{ scale: 0.98 }}
-                onClick={() => navigate('/admin/create-payment')}
-                className="flex items-center gap-3 p-4 rounded-xl transition-all group"
-                style={{ 
-                  background: `linear-gradient(135deg, ${tk.primary}15, ${tk.primary}05)`,
-                  border: `1px solid ${tk.primary}30`
-                }}
-              >
-                <div className="w-10 h-10 rounded-lg flex items-center justify-center transition-transform group-hover:scale-110"
-                     style={{ background: `${tk.primary}30` }}>
-                  <Plus className="w-5 h-5" style={{ color: tk.primary }} />
-                </div>
-                <div className="text-left">
-                  <span className="font-medium block">Create Payment</span>
-                  <span className="text-xs" style={{ color: tk.textSec }}>Add new payment type</span>
-                </div>
-              </motion.button>
-              )}
-              
-              {hasPermission('can_create_payments') && (
-              <motion.button
-                whileHover={{ scale: 1.02, y: -2 }}
-                whileTap={{ scale: 0.98 }}
-                onClick={() => navigate('/admin/manage-dues')}
-                className="flex items-center gap-3 p-4 rounded-xl transition-all group"
-                style={{ 
-                  background: 'rgba(255, 255, 255, 0.03)',
-                  border: '1px solid rgba(255, 255, 255, 0.1)'
-                }}
-              >
-                <div className="w-10 h-10 rounded-lg flex items-center justify-center transition-transform group-hover:scale-110"
-                     style={{ background: `${tk.mint}20` }}>
-                  <FileText className="w-5 h-5" style={{ color: tk.mint }} />
-                </div>
-                <div className="text-left">
-                  <span className="font-medium block">Manage Dues</span>
-                  <span className="text-xs" style={{ color: tk.textSec }}>Edit existing payment types</span>
-                </div>
-              </motion.button>
-              )}
-              
-              {hasPermission('can_approve_payments') && (
-              <motion.button
-                whileHover={{ scale: 1.02, y: -2 }}
-                whileTap={{ scale: 0.98 }}
-                onClick={() => navigate('/admin/review')}
-                className="flex items-center gap-3 p-4 rounded-xl transition-all group relative"
-                style={{ 
-                  background: 'rgba(255, 255, 255, 0.03)',
-                  border: '1px solid rgba(255, 255, 255, 0.1)'
-                }}
-              >
-                {stats.pendingReview > 0 && (
-                  <div className="absolute -top-1 -right-1 w-5 h-5 rounded-full flex items-center justify-center text-xs font-bold"
-                       style={{ background: tk.amber }}>
-                    {stats.pendingReview}
+                <motion.button
+                  whileHover={{ scale: 1.02, y: -2 }}
+                  whileTap={{ scale: 0.98 }}
+                  onClick={() => navigate('/admin/create-payment')}
+                  className="flex items-center gap-3 p-4 rounded-xl transition-all group"
+                  style={{
+                    background: `linear-gradient(135deg, ${tk.primary}15, ${tk.primary}05)`,
+                    border: `1px solid ${tk.primary}30`
+                  }}
+                >
+                  <div className="w-10 h-10 rounded-lg flex items-center justify-center transition-transform group-hover:scale-110"
+                    style={{ background: `${tk.primary}30` }}>
+                    <Plus className="w-5 h-5" style={{ color: tk.primary }} />
                   </div>
-                )}
-                <div className="w-10 h-10 rounded-lg flex items-center justify-center transition-transform group-hover:scale-110"
-                     style={{ background: `${tk.amber}20` }}>
-                  <Eye className="w-5 h-5" style={{ color: tk.amber }} />
-                </div>
-                <div className="text-left">
-                  <span className="font-medium block">Review Payments</span>
-                  <span className="text-xs" style={{ color: tk.textSec }}>Approve or reject submissions</span>
-                </div>
-              </motion.button>
+                  <div className="text-left">
+                    <span className="font-medium block">Create Payment</span>
+                    <span className="text-xs" style={{ color: tk.textSec }}>Add new payment type</span>
+                  </div>
+                </motion.button>
               )}
-              
-              {hasPermission('can_manage_students') && (
-              <motion.button
-                whileHover={{ scale: 1.02, y: -2 }}
-                whileTap={{ scale: 0.98 }}
-                onClick={() => navigate('admin/members')}
-                className="flex items-center gap-3 p-4 rounded-xl transition-all group"
-                style={{ 
-                  background: 'rgba(255, 255, 255, 0.03)',
-                  border: '1px solid rgba(255, 255, 255, 0.1)'
-                }}
-              >
-                <div className="w-10 h-10 rounded-lg flex items-center justify-center transition-transform group-hover:scale-110"
-                     style={{ background: `${tk.mint}20` }}>
-                  <Users className="w-5 h-5" style={{ color: tk.mint }} />
-                </div>
-                <div className="text-left">
-                  <span className="font-medium block">Manage Students</span>
-                  <span className="text-xs" style={{ color: tk.textSec }}>View and edit student records</span>
-                </div>
-              </motion.button>
+
+              {hasPermission('can_create_payments') && (
+                <motion.button
+                  whileHover={{ scale: 1.02, y: -2 }}
+                  whileTap={{ scale: 0.98 }}
+                  onClick={() => navigate('/admin/manage-dues')}
+                  className="flex items-center gap-3 p-4 rounded-xl transition-all group"
+                  style={{
+                    background: 'rgba(255, 255, 255, 0.03)',
+                    border: '1px solid rgba(255, 255, 255, 0.1)'
+                  }}
+                >
+                  <div className="w-10 h-10 rounded-lg flex items-center justify-center transition-transform group-hover:scale-110"
+                    style={{ background: `${tk.mint}20` }}>
+                    <FileText className="w-5 h-5" style={{ color: tk.mint }} />
+                  </div>
+                  <div className="text-left">
+                    <span className="font-medium block">Manage Dues</span>
+                    <span className="text-xs" style={{ color: tk.textSec }}>Edit existing payment types</span>
+                  </div>
+                </motion.button>
               )}
-              
-              {hasPermission('can_manage_students') && (
-              <motion.button
-                whileHover={{ scale: 1.02, y: -2 }}
-                whileTap={{ scale: 0.98 }}
-                onClick={() => navigate('/admin/expenses')}
-                className="flex items-center gap-3 p-4 rounded-xl transition-all group"
-                style={{ 
-                  background: 'rgba(255, 255, 255, 0.03)',
-                  border: '1px solid rgba(255, 255, 255, 0.1)'
-                }}
-              >
-                <div className="w-10 h-10 rounded-lg flex items-center justify-center transition-transform group-hover:scale-110"
-                     style={{ background: `${tk.primary}20` }}>
-                  <BarChart3 className="w-5 h-5" style={{ color: tk.primary }} />
-                </div>
-                <div className="text-left">
-                  <span className="font-medium block">Expenses</span>
-                  <span className="text-xs" style={{ color: tk.textSec }}>Track class expenditures</span>
-                </div>
-              </motion.button>
-              )}
-              
+
               {hasPermission('can_approve_payments') && (
-              <motion.button
-                whileHover={{ scale: 1.02, y: -2 }}
-                whileTap={{ scale: 0.98 }}
-                onClick={() => navigate('/admin/waive-payment')}
-                className="flex items-center gap-3 p-4 rounded-xl transition-all group"
-                style={{ 
-                  background: 'rgba(255, 255, 255, 0.03)',
-                  border: '1px solid rgba(255, 255, 255, 0.1)'
-                }}
-              >
-                <div className="w-10 h-10 rounded-lg flex items-center justify-center transition-transform group-hover:scale-110"
-                     style={{ background: `${tk.mint}20` }}>
-                  <Edit className="w-5 h-5" style={{ color: tk.mint }} />
-                </div>
-                <div className="text-left">
-                  <span className="font-medium block">Waive Payment</span>
-                  <span className="text-xs" style={{ color: tk.textSec }}>Grant payment exemptions</span>
-                </div>
-              </motion.button>
+                <motion.button
+                  whileHover={{ scale: 1.02, y: -2 }}
+                  whileTap={{ scale: 0.98 }}
+                  onClick={() => navigate('/admin/review')}
+                  className="flex items-center gap-3 p-4 rounded-xl transition-all group relative"
+                  style={{
+                    background: 'rgba(255, 255, 255, 0.03)',
+                    border: '1px solid rgba(255, 255, 255, 0.1)'
+                  }}
+                >
+                  {stats.pendingReview > 0 && (
+                    <div className="absolute -top-1 -right-1 w-5 h-5 rounded-full flex items-center justify-center text-xs font-bold"
+                      style={{ background: tk.amber }}>
+                      {stats.pendingReview}
+                    </div>
+                  )}
+                  <div className="w-10 h-10 rounded-lg flex items-center justify-center transition-transform group-hover:scale-110"
+                    style={{ background: `${tk.amber}20` }}>
+                    <Eye className="w-5 h-5" style={{ color: tk.amber }} />
+                  </div>
+                  <div className="text-left">
+                    <span className="font-medium block">Review Payments</span>
+                    <span className="text-xs" style={{ color: tk.textSec }}>Approve or reject submissions</span>
+                  </div>
+                </motion.button>
               )}
-              
+
+              {hasPermission('can_manage_students') && (
+                <motion.button
+                  whileHover={{ scale: 1.02, y: -2 }}
+                  whileTap={{ scale: 0.98 }}
+                  onClick={() => navigate('admin/members')}
+                  className="flex items-center gap-3 p-4 rounded-xl transition-all group"
+                  style={{
+                    background: 'rgba(255, 255, 255, 0.03)',
+                    border: '1px solid rgba(255, 255, 255, 0.1)'
+                  }}
+                >
+                  <div className="w-10 h-10 rounded-lg flex items-center justify-center transition-transform group-hover:scale-110"
+                    style={{ background: `${tk.mint}20` }}>
+                    <Users className="w-5 h-5" style={{ color: tk.mint }} />
+                  </div>
+                  <div className="text-left">
+                    <span className="font-medium block">Manage Students</span>
+                    <span className="text-xs" style={{ color: tk.textSec }}>View and edit student records</span>
+                  </div>
+                </motion.button>
+              )}
+
+              {hasPermission('can_manage_students') && (
+                <motion.button
+                  whileHover={{ scale: 1.02, y: -2 }}
+                  whileTap={{ scale: 0.98 }}
+                  onClick={() => navigate('/admin/expenses')}
+                  className="flex items-center gap-3 p-4 rounded-xl transition-all group"
+                  style={{
+                    background: 'rgba(255, 255, 255, 0.03)',
+                    border: '1px solid rgba(255, 255, 255, 0.1)'
+                  }}
+                >
+                  <div className="w-10 h-10 rounded-lg flex items-center justify-center transition-transform group-hover:scale-110"
+                    style={{ background: `${tk.primary}20` }}>
+                    <BarChart3 className="w-5 h-5" style={{ color: tk.primary }} />
+                  </div>
+                  <div className="text-left">
+                    <span className="font-medium block">Expenses</span>
+                    <span className="text-xs" style={{ color: tk.textSec }}>Track class expenditures</span>
+                  </div>
+                </motion.button>
+              )}
+
               {hasPermission('can_approve_payments') && (
-              <motion.button
-                whileHover={{ scale: 1.02, y: -2 }}
-                whileTap={{ scale: 0.98 }}
-                onClick={() => navigate('/admin/donation-settings')}
-                className="flex items-center gap-3 p-4 rounded-xl transition-all group"
-                style={{ 
-                  background: `linear-gradient(135deg, ${tk.mint}10, transparent)`,
-                  border: `1px solid ${tk.mint}30`
-                }}
-              >
-                <div className="w-10 h-10 rounded-lg flex items-center justify-center transition-transform group-hover:scale-110"
-                     style={{ background: `${tk.mint}30` }}>
-                  <Heart className="w-5 h-5" style={{ color: tk.mint }} />
-                </div>
-                <div className="text-left">
-                  <span className="font-medium block">Public Donations</span>
-                  <span className="text-xs" style={{ color: tk.textSec }}>Manage contributions & settings</span>
-                </div>
-              </motion.button>
+                <motion.button
+                  whileHover={{ scale: 1.02, y: -2 }}
+                  whileTap={{ scale: 0.98 }}
+                  onClick={() => navigate('/admin/waive-payment')}
+                  className="flex items-center gap-3 p-4 rounded-xl transition-all group"
+                  style={{
+                    background: 'rgba(255, 255, 255, 0.03)',
+                    border: '1px solid rgba(255, 255, 255, 0.1)'
+                  }}
+                >
+                  <div className="w-10 h-10 rounded-lg flex items-center justify-center transition-transform group-hover:scale-110"
+                    style={{ background: `${tk.mint}20` }}>
+                    <Edit className="w-5 h-5" style={{ color: tk.mint }} />
+                  </div>
+                  <div className="text-left">
+                    <span className="font-medium block">Waive Payment</span>
+                    <span className="text-xs" style={{ color: tk.textSec }}>Grant payment exemptions</span>
+                  </div>
+                </motion.button>
+              )}
+
+              {hasPermission('can_approve_payments') && (
+                <motion.button
+                  whileHover={{ scale: 1.02, y: -2 }}
+                  whileTap={{ scale: 0.98 }}
+                  onClick={() => navigate('/admin/donation-settings')}
+                  className="flex items-center gap-3 p-4 rounded-xl transition-all group"
+                  style={{
+                    background: `linear-gradient(135deg, ${tk.mint}10, transparent)`,
+                    border: `1px solid ${tk.mint}30`
+                  }}
+                >
+                  <div className="w-10 h-10 rounded-lg flex items-center justify-center transition-transform group-hover:scale-110"
+                    style={{ background: `${tk.mint}30` }}>
+                    <Heart className="w-5 h-5" style={{ color: tk.mint }} />
+                  </div>
+                  <div className="text-left">
+                    <span className="font-medium block">Public Donations</span>
+                    <span className="text-xs" style={{ color: tk.textSec }}>Manage contributions & settings</span>
+                  </div>
+                </motion.button>
               )}
             </div>
           </GlassCard>
@@ -1063,27 +1070,27 @@ const reactNavigate = useNavigate();
         >
           <GlassCard className="relative overflow-hidden">
             {/* Gradient top border for consistency */}
-            <div 
+            <div
               className="absolute top-0 left-0 w-full h-1"
               style={{ background: `linear-gradient(90deg, ${tk.danger}, ${tk.amber}, transparent)` }}
             />
-            
+
             {/* Header */}
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
               <div className="flex items-center gap-3">
                 <div className="w-12 h-12 rounded-xl flex items-center justify-center"
-                     style={{ 
-                       background: `linear-gradient(135deg, ${tk.danger}30, ${tk.danger}10)`,
-                       border: `1px solid ${tk.danger}40`,
-                       boxShadow: `0 4px 15px ${tk.danger}20`
-                     }}>
+                  style={{
+                    background: `linear-gradient(135deg, ${tk.danger}30, ${tk.danger}10)`,
+                    border: `1px solid ${tk.danger}40`,
+                    boxShadow: `0 4px 15px ${tk.danger}20`
+                  }}>
                   <TrendingUp className="w-6 h-6" style={{ color: tk.danger }} />
                 </div>
                 <div>
                   <div className="flex items-center gap-2 mb-1">
                     <h2 className="text-xl font-bold">Recent Expenses</h2>
                     <span className="px-2 py-0.5 rounded-full text-[10px] font-bold uppercase"
-                          style={{ background: `${tk.danger}30`, color: tk.danger }}>
+                      style={{ background: `${tk.danger}30`, color: tk.danger }}>
                       {recentExpenses.length} Total
                     </span>
                   </div>
@@ -1095,7 +1102,7 @@ const reactNavigate = useNavigate();
                 whileTap={{ scale: 0.98 }}
                 onClick={() => navigate('/admin/expenses')}
                 className="flex items-center justify-center gap-2 px-5 py-2.5 rounded-xl font-medium transition-all shadow-lg"
-                style={{ 
+                style={{
                   background: `linear-gradient(135deg, ${tk.danger}, ${tk.primary})`,
                   boxShadow: `0 4px 15px ${tk.danger}40`
                 }}
@@ -1109,7 +1116,7 @@ const reactNavigate = useNavigate();
             {/* Expenses List */}
             <AnimatePresence mode="wait">
               {recentExpensesLoading ? (
-                <motion.div 
+                <motion.div
                   initial={{ opacity: 0 }}
                   animate={{ opacity: 1 }}
                   exit={{ opacity: 0 }}
@@ -1120,13 +1127,13 @@ const reactNavigate = useNavigate();
                   ))}
                 </motion.div>
               ) : paginatedExpenses.length === 0 ? (
-                <motion.div 
+                <motion.div
                   initial={{ opacity: 0 }}
                   animate={{ opacity: 1 }}
                   className="text-center py-12"
                 >
                   <div className="w-16 h-16 rounded-full mx-auto mb-4 flex items-center justify-center"
-                       style={{ background: 'rgba(255, 255, 255, 0.05)' }}>
+                    style={{ background: 'rgba(255, 255, 255, 0.05)' }}>
                     <Wallet className="w-8 h-8" style={{ color: tk.textSec }} />
                   </div>
                   <p className="font-medium mb-1">No Expenses Recorded</p>
@@ -1135,7 +1142,7 @@ const reactNavigate = useNavigate();
                   </p>
                 </motion.div>
               ) : (
-                <motion.div 
+                <motion.div
                   initial={{ opacity: 0 }}
                   animate={{ opacity: 1 }}
                   className="space-y-2"
@@ -1147,20 +1154,20 @@ const reactNavigate = useNavigate();
                       animate={{ opacity: 1, x: 0 }}
                       transition={{ delay: index * 0.03 }}
                       className="flex items-center justify-between p-3 rounded-xl transition-all hover:scale-[1.01]"
-                      style={{ 
+                      style={{
                         background: 'rgba(255, 255, 255, 0.03)',
                         border: '1px solid rgba(255, 255, 255, 0.05)'
                       }}
                     >
                       <div className="flex items-center gap-3 flex-1 min-w-0">
                         <div className="w-10 h-10 rounded-lg flex items-center justify-center shrink-0"
-                             style={{ 
-                               background: expense.status === 'approved' 
-                                 ? `${tk.mint}20` 
-                                 : expense.status === 'rejected' 
-                                 ? `${tk.danger}20`
-                                 : `${tk.amber}20`
-                             }}>
+                          style={{
+                            background: expense.status === 'approved'
+                              ? `${tk.mint}20`
+                              : expense.status === 'rejected'
+                                ? `${tk.danger}20`
+                                : `${tk.amber}20`
+                          }}>
                           {expense.status === 'approved' && <CheckCircle className="w-5 h-5" style={{ color: tk.mint }} />}
                           {expense.status === 'rejected' && <XCircle className="w-5 h-5" style={{ color: tk.danger }} />}
                           {expense.status === 'pending' && <Clock className="w-5 h-5" style={{ color: tk.amber }} />}
@@ -1169,7 +1176,7 @@ const reactNavigate = useNavigate();
                           <p className="font-medium text-sm truncate">{expense.title}</p>
                           <div className="flex items-center gap-2 flex-wrap">
                             <span className="text-xs capitalize px-2 py-0.5 rounded-full"
-                                  style={{ background: 'rgba(255, 255, 255, 0.05)', color: tk.textSec }}>
+                              style={{ background: 'rgba(255, 255, 255, 0.05)', color: tk.textSec }}>
                               {expense.category?.replace(/_/g, ' ') || 'Other'}
                             </span>
                             <span className="text-xs" style={{ color: tk.textSec }}>
@@ -1183,18 +1190,18 @@ const reactNavigate = useNavigate();
                           -{formatCurrency(expense.amount)}
                         </p></PrivacyMask>
                         <span className="px-2 py-1 rounded-full text-[10px] font-semibold capitalize"
-                              style={{ 
-                                background: expense.status === 'approved' 
-                                  ? `${tk.mint}20` 
-                                  : expense.status === 'rejected' 
-                                  ? `${tk.danger}20`
-                                  : `${tk.amber}20`,
-                                color: expense.status === 'approved' 
-                                  ? tk.mint 
-                                  : expense.status === 'rejected' 
-                                  ? tk.danger
-                                  : tk.amber
-                              }}>
+                          style={{
+                            background: expense.status === 'approved'
+                              ? `${tk.mint}20`
+                              : expense.status === 'rejected'
+                                ? `${tk.danger}20`
+                                : `${tk.amber}20`,
+                            color: expense.status === 'approved'
+                              ? tk.mint
+                              : expense.status === 'rejected'
+                                ? tk.danger
+                                : tk.amber
+                          }}>
                           {expense.status}
                         </span>
                       </div>
@@ -1226,7 +1233,7 @@ const reactNavigate = useNavigate();
                     <ChevronLeft className="w-3 h-3" />
                     Prev
                   </motion.button>
-                  
+
                   <div className="flex gap-1">
                     {Array.from({ length: Math.min(totalExpensePages, 5) }, (_, i) => {
                       let page: number;
@@ -1239,7 +1246,7 @@ const reactNavigate = useNavigate();
                       } else {
                         page = expensesPage - 2 + i;
                       }
-                      
+
                       return (
                         <motion.button
                           key={page}
@@ -1248,7 +1255,7 @@ const reactNavigate = useNavigate();
                           onClick={() => setExpensesPage(page)}
                           className="w-7 h-7 rounded-lg text-xs font-semibold transition-all"
                           style={{
-                            background: expensesPage === page 
+                            background: expensesPage === page
                               ? `linear-gradient(135deg, ${tk.danger}, ${tk.primary})`
                               : 'rgba(255, 255, 255, 0.05)',
                             color: expensesPage === page ? 'white' : tk.textSec,
@@ -1259,7 +1266,7 @@ const reactNavigate = useNavigate();
                       );
                     })}
                   </div>
-                  
+
                   <motion.button
                     whileHover={{ scale: 1.05 }}
                     whileTap={{ scale: 0.95 }}
@@ -1304,32 +1311,32 @@ const reactNavigate = useNavigate();
                 <GlassCard className="p-0 overflow-hidden">
                   {/* Modal Header */}
                   <div className="relative p-6 border-b border-white/10"
-                       style={{ background: `linear-gradient(135deg, ${tk.primary}10, transparent)` }}>
-                    <div 
+                    style={{ background: `linear-gradient(135deg, ${tk.primary}10, transparent)` }}>
+                    <div
                       className="absolute top-0 left-0 w-full h-1"
                       style={{ background: `linear-gradient(90deg, ${tk.primary}, ${tk.mint}, transparent)` }}
                     />
                     <div className="flex items-start justify-between">
                       <div className="flex items-center gap-4">
                         <div className="w-14 h-14 rounded-2xl flex items-center justify-center shadow-lg"
-                             style={{ 
-                               background: `linear-gradient(135deg, ${tk.primary}40, ${tk.primary}20)`,
-                               border: `1px solid ${tk.primary}50`,
-                               boxShadow: `0 4px 15px ${tk.primary}30`
-                             }}>
+                          style={{
+                            background: `linear-gradient(135deg, ${tk.primary}40, ${tk.primary}20)`,
+                            border: `1px solid ${tk.primary}50`,
+                            boxShadow: `0 4px 15px ${tk.primary}30`
+                          }}>
                           <FileText className="w-7 h-7" style={{ color: tk.primary }} />
                         </div>
                         <div>
                           <div className="flex items-center gap-2 mb-1">
                             <span className="px-2 py-0.5 rounded-full text-[10px] font-bold uppercase"
-                                  style={{ background: `${tk.primary}30`, color: tk.primary }}>
+                              style={{ background: `${tk.primary}30`, color: tk.primary }}>
                               Payment Receipt
                             </span>
                             <span className="px-2 py-0.5 rounded-full text-[10px] font-bold uppercase flex items-center gap-1"
-                                  style={{ 
-                                    background: `${getStatusColor(selectedPayment.status)}20`,
-                                    color: getStatusColor(selectedPayment.status)
-                                  }}>
+                              style={{
+                                background: `${getStatusColor(selectedPayment.status)}20`,
+                                color: getStatusColor(selectedPayment.status)
+                              }}>
                               {selectedPayment.status === 'approved' && <CheckCircle className="w-3 h-3" />}
                               {selectedPayment.status === 'rejected' && <XCircle className="w-3 h-3" />}
                               {selectedPayment.status === 'pending' && <Clock className="w-3 h-3" />}
@@ -1359,35 +1366,35 @@ const reactNavigate = useNavigate();
                   <div className="p-6 space-y-6">
                     {/* Payment Details Grid */}
                     <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                      <div className="p-4 rounded-xl text-center" 
-                           style={{ background: `linear-gradient(135deg, ${tk.primary}20, ${tk.primary}05)`, border: `1px solid ${tk.primary}30` }}>
+                      <div className="p-4 rounded-xl text-center"
+                        style={{ background: `linear-gradient(135deg, ${tk.primary}20, ${tk.primary}05)`, border: `1px solid ${tk.primary}30` }}>
                         <p className="text-xs font-medium mb-1" style={{ color: tk.textSec }}>Amount</p>
                         <PrivacyMask><p className="text-xl sm:text-2xl font-bold" style={{ color: tk.primary }}>
                           {formatCurrency(selectedPayment.amount)}
                         </p></PrivacyMask>
                       </div>
-                      <div className="p-4 rounded-xl text-center" 
-                           style={{ background: 'rgba(255, 255, 255, 0.03)', border: '1px solid rgba(255, 255, 255, 0.08)' }}>
+                      <div className="p-4 rounded-xl text-center"
+                        style={{ background: 'rgba(255, 255, 255, 0.03)', border: '1px solid rgba(255, 255, 255, 0.08)' }}>
                         <p className="text-xs font-medium mb-1" style={{ color: tk.textSec }}>Payment Type</p>
                         <p className="font-semibold text-sm sm:text-base">
                           {selectedPayment.payment_types?.name || 'N/A'}
                         </p>
                       </div>
-                      <div className="p-4 rounded-xl text-center" 
-                           style={{ background: 'rgba(255, 255, 255, 0.03)', border: '1px solid rgba(255, 255, 255, 0.08)' }}>
+                      <div className="p-4 rounded-xl text-center"
+                        style={{ background: 'rgba(255, 255, 255, 0.03)', border: '1px solid rgba(255, 255, 255, 0.08)' }}>
                         <p className="text-xs font-medium mb-1" style={{ color: tk.textSec }}>Date Submitted</p>
                         <p className="font-medium text-sm">
                           {formatDate(selectedPayment.created_at, 'short')}
                         </p>
                       </div>
-                      <div className="p-4 rounded-xl text-center" 
-                           style={{ 
-                             background: `${getStatusColor(selectedPayment.status)}10`, 
-                             border: `1px solid ${getStatusColor(selectedPayment.status)}30` 
-                           }}>
+                      <div className="p-4 rounded-xl text-center"
+                        style={{
+                          background: `${getStatusColor(selectedPayment.status)}10`,
+                          border: `1px solid ${getStatusColor(selectedPayment.status)}30`
+                        }}>
                         <p className="text-xs font-medium mb-1" style={{ color: tk.textSec }}>Status</p>
                         <p className="font-semibold text-sm capitalize flex items-center justify-center gap-1"
-                           style={{ color: getStatusColor(selectedPayment.status) }}>
+                          style={{ color: getStatusColor(selectedPayment.status) }}>
                           {selectedPayment.status === 'approved' && <CheckCircle className="w-4 h-4" />}
                           {selectedPayment.status === 'rejected' && <XCircle className="w-4 h-4" />}
                           {selectedPayment.status === 'pending' && <Clock className="w-4 h-4" />}
@@ -1397,8 +1404,8 @@ const reactNavigate = useNavigate();
                     </div>
 
                     {/* Transaction Reference */}
-                    <div className="p-4 rounded-xl" 
-                         style={{ background: 'rgba(255, 255, 255, 0.03)', border: '1px solid rgba(255, 255, 255, 0.08)' }}>
+                    <div className="p-4 rounded-xl"
+                      style={{ background: 'rgba(255, 255, 255, 0.03)', border: '1px solid rgba(255, 255, 255, 0.08)' }}>
                       <p className="text-xs font-medium mb-2" style={{ color: tk.textSec }}>Transaction Reference</p>
                       <p className="font-mono text-sm sm:text-base break-all bg-black/20 px-3 py-2 rounded-lg">
                         {selectedPayment.transaction_ref}
@@ -1407,8 +1414,8 @@ const reactNavigate = useNavigate();
 
                     {/* Notes if available */}
                     {selectedPayment.notes && (
-                      <div className="p-4 rounded-xl" 
-                           style={{ background: `${tk.mint}08`, border: `1px solid ${tk.mint}20` }}>
+                      <div className="p-4 rounded-xl"
+                        style={{ background: `${tk.mint}08`, border: `1px solid ${tk.mint}20` }}>
                         <p className="text-xs font-medium mb-2" style={{ color: tk.mint }}>Payment Notes</p>
                         <p className="text-sm whitespace-pre-wrap leading-relaxed">
                           {selectedPayment.notes}
@@ -1421,13 +1428,13 @@ const reactNavigate = useNavigate();
                       <p className="text-xs font-semibold uppercase tracking-wider mb-3" style={{ color: tk.textSec }}>
                         Receipt Attachment
                       </p>
-                      <div className="rounded-xl overflow-hidden" 
-                           style={{ background: 'rgba(0, 0, 0, 0.3)', border: '1px solid rgba(255, 255, 255, 0.1)' }}>
+                      <div className="rounded-xl overflow-hidden"
+                        style={{ background: 'rgba(0, 0, 0, 0.3)', border: '1px solid rgba(255, 255, 255, 0.1)' }}>
                         {selectedPayment.receipt_url ? (
                           selectedPayment.receipt_url.endsWith('.pdf') ? (
                             <div className="p-8 text-center">
                               <div className="w-16 h-16 rounded-xl mx-auto mb-4 flex items-center justify-center"
-                                   style={{ background: `${tk.primary}20` }}>
+                                style={{ background: `${tk.primary}20` }}>
                                 <FileText size={32} style={{ color: tk.primary }} />
                               </div>
                               <p className="font-medium mb-4">PDF Receipt Document</p>
@@ -1438,7 +1445,7 @@ const reactNavigate = useNavigate();
                                 target="_blank"
                                 rel="noopener noreferrer"
                                 className="inline-flex items-center gap-2 px-6 py-3 rounded-xl font-medium transition-all shadow-lg"
-                                style={{ 
+                                style={{
                                   background: gradients.primary,
                                   boxShadow: `0 4px 15px ${tk.primary}30`
                                 }}
@@ -1449,9 +1456,9 @@ const reactNavigate = useNavigate();
                             </div>
                           ) : (
                             <div>
-                              <img 
-                                src={selectedPayment.receipt_url} 
-                                alt="Payment Receipt" 
+                              <img
+                                src={selectedPayment.receipt_url}
+                                alt="Payment Receipt"
                                 className="w-full h-auto object-contain"
                                 style={{ maxHeight: '400px' }}
                               />
@@ -1471,7 +1478,7 @@ const reactNavigate = useNavigate();
                         ) : (
                           <div className="p-8 text-center">
                             <div className="w-16 h-16 rounded-full mx-auto mb-4 flex items-center justify-center"
-                                 style={{ background: 'rgba(255, 255, 255, 0.05)' }}>
+                              style={{ background: 'rgba(255, 255, 255, 0.05)' }}>
                               <AlertCircle size={32} style={{ color: tk.textSec }} />
                             </div>
                             <p className="font-medium mb-1">No Receipt Uploaded</p>
@@ -1512,14 +1519,14 @@ const reactNavigate = useNavigate();
                 <GlassCard className="p-0 overflow-hidden">
                   {/* Modal Header */}
                   <div className="relative p-4 sm:p-6 border-b border-white/10">
-                    <div 
+                    <div
                       className="absolute top-0 left-0 w-full h-1"
                       style={{ background: `linear-gradient(90deg, ${tk.primary}, ${tk.mint}, transparent)` }}
                     />
                     <div className="flex items-center justify-between">
                       <div className="flex items-center gap-2 sm:gap-3">
                         <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-xl flex items-center justify-center shrink-0"
-                             style={{ background: `linear-gradient(135deg, ${tk.primary}30, ${tk.primary}10)` }}>
+                          style={{ background: `linear-gradient(135deg, ${tk.primary}30, ${tk.primary}10)` }}>
                           <Receipt className="w-5 h-5 sm:w-6 sm:h-6" style={{ color: tk.primary }} />
                         </div>
                         <div>
@@ -1558,8 +1565,8 @@ const reactNavigate = useNavigate();
                           }}
                           className="flex items-center gap-1 sm:gap-2 px-2.5 sm:px-4 py-1.5 sm:py-2 rounded-lg text-xs sm:text-sm font-medium transition-all"
                           style={{
-                            background: reviewsFilter === filter.key 
-                              ? `linear-gradient(135deg, ${filter.color || tk.primary}30, ${filter.color || tk.primary}10)` 
+                            background: reviewsFilter === filter.key
+                              ? `linear-gradient(135deg, ${filter.color || tk.primary}30, ${filter.color || tk.primary}10)`
                               : 'rgba(255, 255, 255, 0.05)',
                             border: `1px solid ${reviewsFilter === filter.key ? (filter.color || tk.primary) + '50' : 'rgba(255, 255, 255, 0.1)'}`,
                             color: reviewsFilter === filter.key ? (filter.color || tk.primary) : tk.textSec,
@@ -1567,7 +1574,7 @@ const reactNavigate = useNavigate();
                         >
                           {filter.label}
                           <span className="px-1 sm:px-1.5 py-0.5 rounded-full text-[10px] sm:text-xs"
-                                style={{ background: 'rgba(255, 255, 255, 0.1)' }}>
+                            style={{ background: 'rgba(255, 255, 255, 0.1)' }}>
                             {filter.count}
                           </span>
                         </motion.button>
@@ -1580,7 +1587,7 @@ const reactNavigate = useNavigate();
                     {paginatedReviews.length === 0 ? (
                       <div className="text-center py-12">
                         <div className="w-16 h-16 rounded-full mx-auto mb-4 flex items-center justify-center"
-                             style={{ background: 'rgba(255, 255, 255, 0.05)' }}>
+                          style={{ background: 'rgba(255, 255, 255, 0.05)' }}>
                           <AlertCircle className="w-8 h-8" style={{ color: tk.textSec }} />
                         </div>
                         <p className="font-medium mb-1">No Payments Found</p>
@@ -1598,7 +1605,7 @@ const reactNavigate = useNavigate();
                             transition={{ delay: index * 0.03 }}
                             whileHover={{ scale: 1.01 }}
                             className="flex flex-col sm:flex-row sm:items-center sm:justify-between p-3 sm:p-4 rounded-xl cursor-pointer group transition-all gap-3 sm:gap-0"
-                            style={{ 
+                            style={{
                               background: 'rgba(255, 255, 255, 0.03)',
                               border: '1px solid rgba(255, 255, 255, 0.05)'
                             }}
@@ -1609,10 +1616,10 @@ const reactNavigate = useNavigate();
                           >
                             <div className="flex items-center gap-3 sm:gap-4 flex-1">
                               <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-full flex items-center justify-center font-bold text-base sm:text-lg transition-transform group-hover:scale-110 shrink-0"
-                                   style={{ 
-                                     background: `linear-gradient(135deg, ${getStatusColor(payment.status)}40, ${getStatusColor(payment.status)}20)`,
-                                     color: getStatusColor(payment.status)
-                                   }}>
+                                style={{
+                                  background: `linear-gradient(135deg, ${getStatusColor(payment.status)}40, ${getStatusColor(payment.status)}20)`,
+                                  color: getStatusColor(payment.status)
+                                }}>
                                 {payment.member?.full_name?.charAt(0) || '?'}
                               </div>
                               <div className="flex-1 min-w-0">
@@ -1622,7 +1629,7 @@ const reactNavigate = useNavigate();
                                     {payment.payment_types?.name}
                                   </p>
                                   <span className="text-[10px] sm:text-xs px-1.5 sm:px-2 py-0.5 rounded-full hidden xs:inline"
-                                        style={{ background: 'rgba(255, 255, 255, 0.05)', color: tk.textSec }}>
+                                    style={{ background: 'rgba(255, 255, 255, 0.05)', color: tk.textSec }}>
                                     {payment.member?.member_id}
                                   </span>
                                 </div>
@@ -1643,11 +1650,11 @@ const reactNavigate = useNavigate();
                                 </p>
                               </div>
                               <span className="px-2 py-1 sm:px-3 sm:py-1.5 rounded-full text-[10px] sm:text-xs font-semibold capitalize flex items-center gap-1"
-                                    style={{ 
-                                      background: `linear-gradient(135deg, ${getStatusColor(payment.status)}30, ${getStatusColor(payment.status)}10)`,
-                                      color: getStatusColor(payment.status),
-                                      border: `1px solid ${getStatusColor(payment.status)}40`
-                                    }}>
+                                style={{
+                                  background: `linear-gradient(135deg, ${getStatusColor(payment.status)}30, ${getStatusColor(payment.status)}10)`,
+                                  color: getStatusColor(payment.status),
+                                  border: `1px solid ${getStatusColor(payment.status)}40`
+                                }}>
                                 {payment.status === 'approved' && <CheckCircle className="w-3 h-3" />}
                                 {payment.status === 'rejected' && <XCircle className="w-3 h-3" />}
                                 {payment.status === 'pending' && <Clock className="w-3 h-3" />}
@@ -1690,7 +1697,7 @@ const reactNavigate = useNavigate();
                             <ChevronLeft className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
                             <span className="hidden xs:inline">Prev</span>
                           </motion.button>
-                          
+
                           <div className="flex gap-1">
                             {Array.from({ length: Math.min(totalReviewPages, 5) }, (_, i) => {
                               let page: number;
@@ -1703,7 +1710,7 @@ const reactNavigate = useNavigate();
                               } else {
                                 page = reviewsPage - 2 + i;
                               }
-                              
+
                               return (
                                 <motion.button
                                   key={page}
@@ -1712,7 +1719,7 @@ const reactNavigate = useNavigate();
                                   onClick={() => setReviewsPage(page)}
                                   className="w-7 h-7 sm:w-8 sm:h-8 rounded-lg text-xs sm:text-sm font-semibold transition-all"
                                   style={{
-                                    background: reviewsPage === page 
+                                    background: reviewsPage === page
                                       ? gradients.primary
                                       : 'rgba(255, 255, 255, 0.05)',
                                     color: reviewsPage === page ? 'white' : tk.textSec,
@@ -1723,7 +1730,7 @@ const reactNavigate = useNavigate();
                               );
                             })}
                           </div>
-                          
+
                           <motion.button
                             whileHover={{ scale: 1.05 }}
                             whileTap={{ scale: 0.95 }}
@@ -1754,7 +1761,7 @@ const reactNavigate = useNavigate();
                         navigate('/admin/review');
                       }}
                       className="w-full flex items-center justify-center gap-2 py-3 rounded-xl font-medium transition-all"
-                      style={{ 
+                      style={{
                         background: gradients.primary,
                         boxShadow: `0 4px 15px ${tk.primary}30`
                       }}

@@ -30,6 +30,7 @@ import {
   ArrowRight,
   Banknote,
   Building2,
+  Sparkles,
   CalendarClock,
   GraduationCap,
   Layers,
@@ -78,9 +79,7 @@ interface RecentDue {
  *     someone typed.
  * Anything below the top level falls through to the dept exec page.
  */
-function pickFacultyAdmin(records: MemberAdmin[], groups: OrganizationGroup[]):
-  { admin: MemberAdmin; faculty: OrganizationGroup } | null
-{
+function pickFacultyAdmin(records: MemberAdmin[], groups: OrganizationGroup[]): { admin: MemberAdmin; faculty: OrganizationGroup } | null {
   for (const a of records) {
     if (!a.is_active) continue;
     if ((a.verification_layer ?? 0) < 4) continue;
@@ -177,11 +176,11 @@ export default function FacultyExecDashboardPage() {
 
       const { data: dueRows } = allRelevantIds.length > 0
         ? await supabase
-            .from('payment_types')
-            .select('id, group_id')
-            .eq('organization_id', organization.id)
-            .in('group_id', allRelevantIds)
-            .eq('is_active', true)
+          .from('payment_types')
+          .select('id, group_id')
+          .eq('organization_id', organization.id)
+          .in('group_id', allRelevantIds)
+          .eq('is_active', true)
         : { data: [] };
 
       const activeByGroup = new Map<string, number>();
@@ -281,7 +280,7 @@ export default function FacultyExecDashboardPage() {
           p.group_id === facultyGroup.id
             ? facultyGroup
             : (deptGroups.find((d) => d.id === p.group_id)
-               ?? classGroups.find((c) => c.id === p.group_id));
+              ?? classGroups.find((c) => c.id === p.group_id));
         return {
           id: p.id,
           title: p.title,
@@ -306,8 +305,8 @@ export default function FacultyExecDashboardPage() {
 
   const totals = useMemo(() => {
     const memberTotal = departments.reduce((s, d) => s + d.memberCount, 0);
-    const classTotal  = departments.reduce((s, d) => s + d.classCount, 0);
-    const duesTotal   = departments.reduce((s, d) => s + d.activeDuesCount, 0);
+    const classTotal = departments.reduce((s, d) => s + d.classCount, 0);
+    const duesTotal = departments.reduce((s, d) => s + d.activeDuesCount, 0);
     return { deptCount: departments.length, classTotal, memberTotal, duesTotal };
   }, [departments]);
 
@@ -390,10 +389,10 @@ export default function FacultyExecDashboardPage() {
         transition={{ delay: 0.05 }}
         className="grid grid-cols-2 sm:grid-cols-4 gap-3"
       >
-        <Stat label="Departments" value={totals.deptCount}   icon={<Building2 className="w-3.5 h-3.5" />} tk={tk} color={tk.primary} />
-        <Stat label="Classes"     value={totals.classTotal}  icon={<Layers className="w-3.5 h-3.5" />}    tk={tk} color={tk.purple} />
-        <Stat label="Members"     value={totals.memberTotal} icon={<Users className="w-3.5 h-3.5" />}     tk={tk} color={tk.blue} />
-        <Stat label="Active dues" value={totals.duesTotal}   icon={<Receipt className="w-3.5 h-3.5" />}   tk={tk} color={tk.mint} />
+        <Stat label="Departments" value={totals.deptCount} icon={<Building2 className="w-3.5 h-3.5" />} tk={tk} color={tk.primary} />
+        <Stat label="Classes" value={totals.classTotal} icon={<Layers className="w-3.5 h-3.5" />} tk={tk} color={tk.purple} />
+        <Stat label="Members" value={totals.memberTotal} icon={<Users className="w-3.5 h-3.5" />} tk={tk} color={tk.blue} />
+        <Stat label="Active dues" value={totals.duesTotal} icon={<Receipt className="w-3.5 h-3.5" />} tk={tk} color={tk.mint} />
       </motion.div>
 
       {/* ── Payout shortcut ──────────────────────────────────────
@@ -430,6 +429,37 @@ export default function FacultyExecDashboardPage() {
           </p>
         </div>
         <ArrowRight className="w-4 h-4 shrink-0" style={{ color: tk.primary }} />
+      </motion.button>
+
+      {/* ── Upgrade to Pro nudge ─────────────────────────────────── */}
+      <motion.button
+        type="button"
+        onClick={() => navigate(`/${orgSlug}/admin/billing`)}
+        initial={{ opacity: 0, y: 12 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ delay: 0.09 }}
+        className="w-full text-left rounded-2xl p-4 flex items-center gap-3 transition-all hover:-translate-y-0.5 active:scale-[0.995]"
+        style={{
+          background: `linear-gradient(135deg, ${tk.amber}12, ${tk.primary}08)`,
+          border: `1px solid ${tk.amber}35`,
+          boxShadow: tk.shadow,
+        }}
+      >
+        <span
+          className="w-10 h-10 rounded-xl flex items-center justify-center shrink-0"
+          style={{ background: `${tk.amber}18`, color: tk.amber, border: `1px solid ${tk.amber}35` }}
+        >
+          <Sparkles className="w-5 h-5" />
+        </span>
+        <div className="flex-1 min-w-0">
+          <p className="text-sm font-bold" style={{ color: tk.text }}>
+            Upgrade to Pro
+          </p>
+          <p className="text-[11px] mt-0.5" style={{ color: tk.textTer }}>
+            Unlock instant card & USSD payments, analytics exports, and more for your faculty.
+          </p>
+        </div>
+        <ArrowRight className="w-4 h-4 shrink-0" style={{ color: tk.amber }} />
       </motion.button>
 
       {/* ── Publish a due — targeting CTAs ──────────────────────── */}
