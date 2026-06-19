@@ -47,6 +47,7 @@ import DepartmentDetailPage from '@/pages/DepartmentDetailPage';
 import GroupWelcomePage from '@/pages/GroupWelcomePage';
 import ForgotPasswordPage from '@/pages/student/ForgotPasswordPage';
 import ResetPasswordPage from '@/pages/student/ResetPasswordPage';
+import HowItWorksPage from './pages/student/how-it-works';
 
 // ── Lazily imported pages ──────────────────────────────────────────
 // Admin surface, platform console, heavy public pages (receipt PDF,
@@ -120,6 +121,7 @@ function App() {
 
                     {/* Bring a school / org online (community trust) */}
                     <Route path="/bring-school" element={<BringMySchoolPage />} />
+                    <Route path="/how-it-works" element={<HowItWorksPage />} />
 
                     {/* Create organization — NOW MOVED TO ADMIN CONSOLE (/pvx-console) */}
                     {/* <Route path="/create" element={<CreateOrganizationPage />} /> */}
