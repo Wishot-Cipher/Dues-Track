@@ -917,7 +917,11 @@ export default function OrgLoginPage() {
         {/* Bottom wordmark */}
         <div className="px-12 pb-8 text-center lg:text-right">
           <p className="text-[10px] tracking-wider" style={{ color: tk.textTertiary }}>
-            Secured by <span className="font-semibold" style={{ color: tk.textSecondary }}>{APP_NAME}</span>
+            Secured by{' '}
+            <span className="font-semibold">
+              <span style={{ color: tk.accent }}>Pay</span>
+              <span style={{ color: tk.textSecondary }}>vexo</span>
+            </span>
           </p>
         </div>
       </div>

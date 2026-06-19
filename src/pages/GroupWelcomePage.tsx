@@ -44,7 +44,7 @@ import { useMultiTenantAuth } from '@/hooks/useMultiTenantAuth';
 import { organizationService } from '@/services/organizationService';
 import { groupMembershipService } from '@/services/groupMembershipService';
 import TrustBadge from '@/components/trust/TrustBadge';
-import { APP_NAME, levelFieldLabel } from '@/config/constants';
+import { levelFieldLabel } from '@/config/constants';
 import { getDashboardTokens, useTheme } from '@/hooks/useTheme';
 import type {
   Organization,
@@ -431,13 +431,18 @@ export default function GroupWelcomePage() {
           <span className="truncate">Back to {org.short_name}</span>
         </button>
         <div className="flex items-center gap-2">
-          <div
-            className="w-8 h-8 rounded-lg flex items-center justify-center font-extrabold text-white text-sm"
-            style={{ background: tk.gradPrimary }}
-          >
-            P
+          <div className="w-6 h-6 rounded-lg overflow-hidden shrink-0">
+            <img
+              src="/pavexoLogo.jpeg"
+              alt="Payvexo"
+              className="w-full h-full object-cover"
+              style={{ transform: 'scale(1.45)' }}
+            />
           </div>
-          <span className="hidden sm:inline text-base font-bold" style={{ color: tk.text }}>{APP_NAME}</span>
+          <span className="text-sm font-bold">
+            <span style={{ color: tk.primary }}>Pay</span>
+            <span style={{ color: tk.textSec }}>vexo</span>
+          </span>
         </div>
       </nav>
 

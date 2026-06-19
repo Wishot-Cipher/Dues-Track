@@ -37,7 +37,8 @@ import {
 import { organizationService } from '@/services/organizationService';
 import { supabase } from '@/config/supabase';
 import TrustBadge from '@/components/trust/TrustBadge';
-import { APP_NAME, isAcademicOrgType } from '@/config/constants';
+import AppLogo from '@/components/ui/Applogo';
+import { isAcademicOrgType } from '@/config/constants';
 import { useTheme, getDashboardTokens } from '@/hooks/useTheme';
 import type {
   Organization,
@@ -486,15 +487,7 @@ export default function AddDepartmentPage() {
           <ArrowLeft className="w-4 h-4" />
           Back to {faculty.short_name}
         </button>
-        <div className="flex items-center gap-2">
-          <div
-            className="w-8 h-8 rounded-lg flex items-center justify-center font-extrabold text-white text-sm"
-            style={{ background: 'linear-gradient(135deg, #FF6803 0%, #FFAC5F 100%)' }}
-          >
-            P
-          </div>
-          <span className="text-base font-bold text-white">{APP_NAME}</span>
-        </div>
+        <AppLogo size={32} textSize="text-base" isLight={theme === 'light'} />
       </nav>
 
       {/* Context header */}

@@ -440,23 +440,27 @@ export default function LandingPage() {
         transition={{ duration: 0.5 }}
       >
         {/* Logo + name */}
+        {/* Logo + name */}
         <div className="flex items-center gap-2.5">
           <motion.div
-            className="w-10 h-10 rounded-xl flex items-center justify-center font-extrabold text-white text-lg"
-            style={{
-              background: 'linear-gradient(135deg, #FF6803 0%, #FFAC5F 100%)',
-              boxShadow: '0 4px 16px rgba(255,104,3,0.40)',
-            }}
+            className="w-10 h-10 rounded-xl overflow-hidden shrink-0"
+            style={{ boxShadow: '0 4px 16px rgba(255,104,3,0.40)' }}
             whileHover={{ rotate: [0, -5, 5, 0], scale: 1.1 }}
             transition={{ duration: 0.4 }}
           >
-            P
+            <img
+              src="/pavexoLogo.jpeg"
+              alt="Payvexo"
+              className="w-full h-full object-cover"
+              style={{
+                objectPosition: 'center',
+                transform: 'scale(1.25)',  // zoom in to crop the white border
+              }}
+            />
           </motion.div>
-          <span
-            className="text-xl font-extrabold tracking-tight"
-            style={{ color: t.text }}
-          >
-            {APP_NAME}
+          <span className="text-xl font-extrabold tracking-tight">
+            <span style={{ color: t.primary }}>Pay</span>
+            <span style={{ color: isLight ? '#F5EEE6' : '#FAF0E6', textShadow: isLight ? 'none' : '0 0 20px rgba(255,200,150,0.25)' }}>vexo</span>
           </span>
         </div>
 
@@ -706,10 +710,10 @@ export default function LandingPage() {
               style={{
                 background: isLight ? 'rgba(255,255,255,0.90)' : 'rgba(26,14,9,0.90)',
                 border: `1px solid ${slugInput.length > 0
-                    ? slugValid
-                      ? isLight ? 'rgba(0,194,119,0.55)' : 'rgba(48,255,172,0.40)'
-                      : 'rgba(239,68,68,0.40)'
-                    : t.cardBorder
+                  ? slugValid
+                    ? isLight ? 'rgba(0,194,119,0.55)' : 'rgba(48,255,172,0.40)'
+                    : 'rgba(239,68,68,0.40)'
+                  : t.cardBorder
                   }`,
                 boxShadow: isLight ? '0 2px 12px rgba(15,7,3,0.06)' : 'none',
               }}
@@ -919,13 +923,18 @@ export default function LandingPage() {
         style={{ borderTop: `1px solid ${t.cardBorder}` }}
       >
         <div className="flex items-center justify-center gap-2 mb-2">
-          <div
-            className="w-6 h-6 rounded-lg flex items-center justify-center font-extrabold text-white text-xs"
-            style={{ background: t.primary }}
-          >
-            P
+          <div className="w-6 h-6 rounded-lg overflow-hidden shrink-0">
+            <img
+              src="/pavexoLogo.jpeg"
+              alt="Payvexo"
+              className="w-full h-full object-cover"
+              style={{ transform: 'scale(1.25)' }}
+            />
           </div>
-          <span className="text-sm font-bold" style={{ color: t.text }}>{APP_NAME}</span>
+          <span className="text-sm font-bold">
+            <span style={{ color: t.primary }}>Pay</span>
+            <span style={{ color: isLight ? '#F5EEE6' : '#FAF0E6' }}>vexo</span>
+          </span>
         </div>
         <p className="text-xs" style={{ color: t.textTer }}>
           © {new Date().getFullYear()} {APP_NAME}. Built in Nigeria, for Nigerian organizations.

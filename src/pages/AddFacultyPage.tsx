@@ -30,7 +30,7 @@ import {
 } from 'lucide-react';
 import { organizationService } from '@/services/organizationService';
 import TrustBadge from '@/components/trust/TrustBadge';
-import { APP_NAME } from '@/config/constants';
+import AppLogo from '@/components/ui/Applogo';
 import { useThemeTokens, type ThemeTokens } from '@/hooks/useThemeTokens';
 import type { Organization, TrustLevel } from '@/types/multiTenant';
 
@@ -69,8 +69,8 @@ export default function AddFacultyPage() {
     setError(null);
 
     const res = await organizationService.addFacultyToOrg({
-      orgSlug:          org.slug,
-      facultyName:      name,
+      orgSlug: org.slug,
+      facultyName: name,
       facultyShortName: shortName || undefined,
     });
 
@@ -153,15 +153,7 @@ export default function AddFacultyPage() {
           <ChevronRight className="w-3 h-3" style={{ color: t.textTer }} />
           <span className="font-semibold" style={{ color: t.text }}>New {unitLabel.toLowerCase()}</span>
         </button>
-        <div className="flex items-center gap-2">
-          <div
-            className="w-8 h-8 rounded-lg flex items-center justify-center font-extrabold text-sm"
-            style={{ background: 'linear-gradient(135deg, #FF6803 0%, #FFAC5F 100%)', color: '#FFFFFF' }}
-          >
-            P
-          </div>
-          <span className="text-base font-bold" style={{ color: t.text }}>{APP_NAME}</span>
-        </div>
+        <AppLogo size={32} textSize="text-base" isLight={t.isLight} />
       </nav>
 
       <header className="relative z-10 max-w-3xl mx-auto px-5 sm:px-6 pt-2 pb-6">
