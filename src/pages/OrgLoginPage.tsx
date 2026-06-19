@@ -258,7 +258,7 @@ function TextInput({
     <div className="space-y-2">
       <label
         className="block text-[11px] font-semibold uppercase tracking-[0.12em]"
-        style={{ color: focused ? tk.accent : tk.textTertiary }}
+        style={{ color: focused ? tk.accent : tk.textPrimary }}
       >
         {label}
       </label>
@@ -308,7 +308,7 @@ function PasswordInput({
     <div className="space-y-2">
       <label
         className="block text-[11px] font-semibold uppercase tracking-[0.12em]"
-        style={{ color: focused ? tk.accent : tk.textTertiary }}
+        style={{ color: focused ? tk.accent : tk.textSecondary }}
       >
         {label}
       </label>
@@ -853,38 +853,39 @@ export default function OrgLoginPage() {
               </div>
 
               {/* Submit */}
+                  {/* ── Submit button — upgraded ── */}
               <motion.button
                 type="submit"
                 disabled={loading || !canSubmit}
-                className="w-full py-4 rounded-2xl text-sm font-bold tracking-wide relative overflow-hidden transition-all"
+                className="w-full py-4 rounded-2xl text-sm font-bold tracking-wide relative overflow-hidden"
                 style={{
                   background: canSubmit && !loading
                     ? `linear-gradient(135deg, ${color} 0%, ${lighten(color)} 100%)`
-                    : `linear-gradient(135deg, rgba(${rgb},0.08), rgba(${rgb},0.03))`,
-                  color: '#fff',
+                    : tk.inputBg,
+                  color: canSubmit && !loading ? '#FFFFFF' : tk.textSecondary,
                   border: `1px solid ${canSubmit && !loading ? 'transparent' : tk.borderFaint}`,
-                  boxShadow: canSubmit && !loading ? `0 12px 32px rgba(${rgb},0.22)` : 'none',
+                  boxShadow: canSubmit && !loading ? `0 8px 24px rgba(${rgb},0.30), 0 2px 8px rgba(${rgb},0.15)` : 'none',
                   cursor: loading || !canSubmit ? 'not-allowed' : 'pointer',
-                  
+                  transition: 'all 0.2s ease',
                 }}
-                whileHover={canSubmit && !loading ? { scale: 1.01, boxShadow: `0 16px 40px rgba(${rgb},0.28)` } : {}}
+                whileHover={canSubmit && !loading ? { scale: 1.015, boxShadow: `0 12px 32px rgba(${rgb},0.38), 0 4px 12px rgba(${rgb},0.2)` } : {}}
                 whileTap={canSubmit && !loading ? { scale: 0.985 } : {}}
               >
-                {/* Shimmer on hover */}
+                {/* Shimmer sweep on hover */}
                 {canSubmit && !loading && (
                   <motion.div
                     className="absolute inset-0 pointer-events-none"
                     style={{
-                      background: 'linear-gradient(105deg, transparent 35%, rgba(255,255,255,0.15) 50%, transparent 65%)',
+                      background: 'linear-gradient(105deg, transparent 30%, rgba(255,255,255,0.18) 50%, transparent 70%)',
                     }}
                     initial={{ x: '-100%' }}
                     whileHover={{ x: '100%' }}
-                    transition={{ duration: 0.5, ease: 'easeInOut' }}
+                    transition={{ duration: 0.55, ease: 'easeInOut' }}
                   />
                 )}
-                <span className="relative">
+                <span className="relative flex items-center justify-center gap-2.5">
                   {loading ? (
-                    <span className="flex items-center justify-center gap-2.5">
+                    <>
                       <motion.span
                         className="w-3.5 h-3.5 border-[1.5px] rounded-full"
                         style={{ borderColor: 'rgba(255,255,255,0.3)', borderTopColor: '#fff' }}
@@ -892,8 +893,12 @@ export default function OrgLoginPage() {
                         transition={{ duration: 0.75, repeat: Infinity, ease: 'linear' }}
                       />
                       Signing in…
-                    </span>
-                  ) : 'Sign in'}
+                    </>
+                  ) : canSubmit ? (
+                    'Sign in →'
+                  ) : (
+                    'Enter your credentials'
+                  )}
                 </span>
               </motion.button>
             </motion.form>

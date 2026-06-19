@@ -280,3 +280,29 @@ html {
 html {
   scroll-behavior: smooth;
 }
+
+/* Dark mode autofill */
+[data-theme="dark"] input:-webkit-autofill,
+[data-theme="dark"] input:-webkit-autofill:hover,
+[data-theme="dark"] input:-webkit-autofill:focus,
+[data-theme="dark"] input:-webkit-autofill:active {
+  -webkit-box-shadow: 0 0 0 1000px #1A0E09 inset !important;
+  box-shadow: 0 0 0 1000px #1A0E09 inset !important;
+  -webkit-text-fill-color: #FFFFFF !important;
+  caret-color: #FF6803 !important;
+  border-radius: 14px !important;
+  transition: background-color 5000s ease-in-out 0s !important;
+}
+
+/* Light mode autofill */
+[data-theme="light"] input:-webkit-autofill,
+[data-theme="light"] input:-webkit-autofill:hover,
+[data-theme="light"] input:-webkit-autofill:focus,
+[data-theme="light"] input:-webkit-autofill:active {
+  -webkit-box-shadow: 0 0 0 1000px #FFFFFF inset !important;
+  box-shadow: 0 0 0 1000px #FFFFFF inset !important;
+  -webkit-text-fill-color: #0F0703 !important;
+  caret-color: #FF6803 !important;
+  border-radius: 14px !important;
+  transition: background-color 5000s ease-in-out 0s !important;
+}
