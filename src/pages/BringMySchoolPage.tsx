@@ -574,7 +574,7 @@ export default function BringMySchoolPage() {
           </p>
           <div className="space-y-3">
             <motion.button
-              onClick={() => navigate('/')}
+              onClick={() => navigate('/how-it-works')}
               whileHover={{ y: -2 }}
               whileTap={{ scale: 0.98 }}
               className="w-full py-3.5 rounded-2xl text-sm font-bold flex items-center justify-center gap-2"

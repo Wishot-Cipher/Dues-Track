@@ -651,15 +651,29 @@ export default function LandingPage() {
                     </>
                   ) : (
                     <div className="px-5 py-6 text-center space-y-3">
-                      <p className="text-sm" style={{ color: t.textSec }}>
-                        No match for{' '}
-                        <span className="font-semibold" style={{ color: t.text }}>
-                          "{searchQuery}"
-                        </span>
+                      <p className="text-sm font-semibold" style={{ color: t.text }}>
+                        No results for "{searchQuery}"
                       </p>
-                      <p className="text-xs" style={{ color: t.textTer }}>
-                        Be the first to bring your school onto Payvexo.
+                      <p className="text-xs leading-5" style={{ color: t.textSec }}>
+                        We couldn't find an organization matching that. A few things to try:
                       </p>
+                      <ul className="text-xs text-left space-y-1.5 px-2" style={{ color: t.textTer }}>
+                        <li className="flex items-start gap-2">
+                          <span style={{ color: t.primary }}>·</span>
+                          Check the spelling of your school or organization name
+                        </li>
+                        <li className="flex items-start gap-2">
+                          <span style={{ color: t.primary }}>·</span>
+                          Search a shorter version — e.g. "UNN" instead of the full name
+                        </li>
+                      </ul>
+                      <div
+                        className="mt-1 pt-3 text-xs leading-5"
+                        style={{ borderTop: `1px solid ${t.cardBorder}`, color: t.textTer }}
+                      >
+                        Still nothing? If you're a real member of an organization
+                        that isn't listed yet, you can add it.
+                      </div>
                       <motion.button
                         onClick={() => navigate(`/bring-school?name=${encodeURIComponent(searchQuery)}`)}
                         className="inline-flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold"
@@ -672,7 +686,7 @@ export default function LandingPage() {
                         whileTap={{ scale: 0.97 }}
                       >
                         <Plus className="w-4 h-4" />
-                        Bring my school here
+                        My organization isn't here →
                       </motion.button>
                     </div>
                   )}
