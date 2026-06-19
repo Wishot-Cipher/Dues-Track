@@ -281,6 +281,11 @@ export default function BringMySchoolPage() {
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  // Layer 1 — confirmation gate. Starts as 'pending' so the modal
+  // shows before any form fields are revealed. 'confirmed' lets them
+  // through; 'exploring' shows the redirect screen.
+  const [memberConfirm, setMemberConfirm] = useState<'pending' | 'confirmed' | 'exploring'>('pending');
+
   // ── Wizard state ──────────────────────────────────────────────
   // Was a single long page that asked for everything at once. The
   // user kept seeing "school → faculty → account" as a wall of
@@ -489,6 +494,110 @@ export default function BringMySchoolPage() {
     navigate(`/${res.slug}/dashboard`);
   };
 
+  // ── Layer 1: Confirmation gate — are you a real member? ──────────
+  if (memberConfirm === 'pending') {
+    return (
+      <div className="min-h-screen flex items-center justify-center px-5" style={{ minHeight: '100dvh', background: tk.bg }}>
+        <motion.div
+          initial={{ opacity: 0, y: 16, scale: 0.98 }}
+          animate={{ opacity: 1, y: 0, scale: 1 }}
+          className="w-full max-w-md rounded-3xl p-7 text-center"
+          style={{ background: tk.panel, border: `1px solid ${tk.border}` }}
+        >
+          <div
+            className="w-14 h-14 mx-auto mb-5 rounded-2xl flex items-center justify-center text-2xl"
+            style={{ background: `${tk.primary}14`, border: `1px solid ${tk.primary}28` }}
+          >
+            🎓
+          </div>
+          <h2 className="text-xl font-extrabold tracking-tight mb-2" style={{ color: tk.text }}>
+            Before you continue
+          </h2>
+          <p className="text-sm leading-6 mb-6" style={{ color: tk.textSec }}>
+            Are you currently a student, member, or executive at this organization?
+            Payvexo works best when real members set things up — this keeps the
+            platform trustworthy for everyone who joins after you.
+          </p>
+          <div className="space-y-3">
+            <motion.button
+              onClick={() => setMemberConfirm('confirmed')}
+              whileHover={{ y: -2 }}
+              whileTap={{ scale: 0.98 }}
+              className="w-full py-3.5 rounded-2xl text-sm font-bold flex items-center justify-center gap-2"
+              style={{ background: `linear-gradient(135deg, ${tk.primary}, ${tk.primary}CC)`, color: '#FFFFFF', boxShadow: `0 8px 24px ${tk.primary}35` }}
+            >
+              <Check className="w-4 h-4" />
+              Yes, I'm a current member
+            </motion.button>
+            <motion.button
+              onClick={() => setMemberConfirm('exploring')}
+              whileHover={{ y: -1 }}
+              whileTap={{ scale: 0.98 }}
+              className="w-full py-3.5 rounded-2xl text-sm font-semibold"
+              style={{ background: tk.panelHov, color: tk.textSec, border: `1px solid ${tk.border}` }}
+            >
+              No, I'm just exploring
+            </motion.button>
+          </div>
+        </motion.div>
+      </div>
+    );
+  }
+
+  // ── Exploring state — redirect screen, no org created ────────────
+  if (memberConfirm === 'exploring') {
+    return (
+      <div className="min-h-screen flex items-center justify-center px-5" style={{ minHeight: '100dvh', background: tk.bg }}>
+        <motion.div
+          initial={{ opacity: 0, y: 16, scale: 0.98 }}
+          animate={{ opacity: 1, y: 0, scale: 1 }}
+          className="w-full max-w-md rounded-3xl p-7 text-center"
+          style={{ background: tk.panel, border: `1px solid ${tk.border}` }}
+        >
+          <div
+            className="w-14 h-14 mx-auto mb-5 rounded-2xl flex items-center justify-center text-2xl"
+            style={{ background: `${tk.mint}14`, border: `1px solid ${tk.mint}28` }}
+          >
+            👀
+          </div>
+          <h2 className="text-xl font-extrabold tracking-tight mb-2" style={{ color: tk.text }}>
+            No worries — explore freely
+          </h2>
+          <p className="text-sm leading-6 mb-2" style={{ color: tk.textSec }}>
+            You can browse how Payvexo works, but creating an organization is
+            reserved for real members so the platform stays accurate for
+            everyone searching.
+          </p>
+          <p className="text-xs leading-5 mb-6" style={{ color: tk.textTer }}>
+            When you're ready to set up dues for your own class or organization,
+            come back and we'll walk you through it.
+          </p>
+          <div className="space-y-3">
+            <motion.button
+              onClick={() => navigate('/')}
+              whileHover={{ y: -2 }}
+              whileTap={{ scale: 0.98 }}
+              className="w-full py-3.5 rounded-2xl text-sm font-bold flex items-center justify-center gap-2"
+              style={{ background: `linear-gradient(135deg, ${tk.primary}, ${tk.primary}CC)`, color: '#FFFFFF', boxShadow: `0 8px 24px ${tk.primary}35` }}
+            >
+              See how Payvexo works
+              <ArrowRight className="w-4 h-4" />
+            </motion.button>
+            <motion.button
+              onClick={() => navigate('/')}
+              whileHover={{ y: -1 }}
+              whileTap={{ scale: 0.98 }}
+              className="w-full py-3.5 rounded-2xl text-sm font-semibold"
+              style={{ background: tk.panelHov, color: tk.textSec, border: `1px solid ${tk.border}` }}
+            >
+              Back to search
+            </motion.button>
+          </div>
+        </motion.div>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen relative overflow-x-hidden" style={{ minHeight: '100dvh', background: tk.bg }}>
       {/* Background glow */}
@@ -522,13 +631,18 @@ export default function BringMySchoolPage() {
           Back
         </button>
         <div className="flex items-center gap-2">
-          <div
-            className="w-8 h-8 rounded-lg flex items-center justify-center font-extrabold text-sm"
-            style={{ background: 'linear-gradient(135deg, #FF6803 0%, #FFAC5F 100%)' }}
-          >
-            P
+          <div className="w-8 h-8 rounded-lg overflow-hidden shrink-0">
+            <img
+              src="/pavexoLogo.jpeg"
+              alt="Payvexo"
+              className="w-full h-full object-cover"
+              style={{ transform: 'scale(1.25)' }}
+            />
           </div>
-          <span className="text-base font-bold" style={{ color: tk.text }}>{APP_NAME}</span>
+          <span className="text-base font-bold">
+            <span style={{ color: tk.primary }}>Pay</span>
+            <span style={{ color: tk.textSec }}>vexo</span>
+          </span>
         </div>
       </nav>
 
@@ -714,16 +828,16 @@ export default function BringMySchoolPage() {
                 </div>
               )}
 
-                {isAcademic && form.facultyName && (
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                    <Field tk={tk} label="Department name" required hint="e.g. Computer Science">
-                      <TextInput tk={tk} value={form.departmentName} onChange={(v) => setField('departmentName', v)} placeholder="Computer Science" />
-                    </Field>
-                    <Field tk={tk} label="Department short name" hint="e.g. CSC">
-                      <TextInput tk={tk} value={form.departmentShort} onChange={(v) => setField('departmentShort', v.toUpperCase())} placeholder="CSC" />
-                    </Field>
-                  </div>
-                )}
+              {isAcademic && form.facultyName && (
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <Field tk={tk} label="Department name" required hint="e.g. Computer Science">
+                    <TextInput tk={tk} value={form.departmentName} onChange={(v) => setField('departmentName', v)} placeholder="Computer Science" />
+                  </Field>
+                  <Field tk={tk} label="Department short name" hint="e.g. CSC">
+                    <TextInput tk={tk} value={form.departmentShort} onChange={(v) => setField('departmentShort', v.toUpperCase())} placeholder="CSC" />
+                  </Field>
+                </div>
+              )}
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <Field tk={tk} label={leafLabel} required icon={<Layers className="w-3 h-3" />}>
@@ -736,7 +850,7 @@ export default function BringMySchoolPage() {
 
               <div className={`grid grid-cols-1 ${isAcademic ? '' : 'sm:grid-cols-2'} gap-4`}>
 
-              
+
                 {/* Group kind picker hidden for academic orgs in
                     Chunk G5c — every founder there is in a class,
                     and the picker just made people second-guess
