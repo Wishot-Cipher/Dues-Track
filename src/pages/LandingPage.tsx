@@ -460,7 +460,7 @@ export default function LandingPage() {
           </motion.div>
           <span className="text-xl font-extrabold tracking-tight">
             <span style={{ color: t.primary }}>Pay</span>
-            <span style={{ color: isLight ? '#F5EEE6' : '#FAF0E6', textShadow: isLight ? 'none' : '0 0 20px rgba(255,200,150,0.25)' }}>vexo</span>
+            <span style={{ color: isLight ? '#C2A98E' : '#FAF0E6', textShadow: isLight ? 'none' : '0 0 20px rgba(255,200,150,0.25)' }}>vexo</span>
           </span>
         </div>
 
@@ -933,7 +933,7 @@ export default function LandingPage() {
           </div>
           <span className="text-sm font-bold">
             <span style={{ color: t.primary }}>Pay</span>
-            <span style={{ color: isLight ? '#F5EEE6' : '#FAF0E6' }}>vexo</span>
+            <span style={{ color: isLight ? '#C2A98E' : '#FAF0E6' }}>vexo</span>
           </span>
         </div>
         <p className="text-xs" style={{ color: t.textTer }}>
