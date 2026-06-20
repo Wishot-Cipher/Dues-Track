@@ -599,9 +599,9 @@ export function Communications({ orgs }: { orgs: OrgOverview[] }) {
                 sub="Persists on the member dashboard until deactivated or expired"
               />
 
-              <div className="grid grid-cols-1 lg:grid-cols-[1fr_280px] gap-5" style={{ padding: 20 }}>
+              <div className="grid grid-cols-1 lg:grid-cols-[1fr_280px] gap-5 p-4 sm:p-5">
                 <div style={{ display: 'grid', gap: 14, minWidth: 0 }}>
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 90px', gap: 12 }}>
+                  <div className="grid grid-cols-1 sm:grid-cols-[1fr_90px] gap-3">
                     <Field label="Title" hint="required">
                       <input value={form.title} onChange={(e) => set('title', e.target.value)} placeholder="New feature: receipt downloads" style={inputStyle} />
                     </Field>
@@ -648,7 +648,7 @@ export function Communications({ orgs }: { orgs: OrgOverview[] }) {
                     </div>
                   </div>
 
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                     <Field label="CTA label" hint="optional">
                       <input value={form.cta_label} onChange={(e) => set('cta_label', e.target.value)} placeholder="See what changed" style={inputStyle} />
                     </Field>
@@ -657,7 +657,7 @@ export function Communications({ orgs }: { orgs: OrgOverview[] }) {
                     </Field>
                   </div>
 
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 12 }}>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
                     <Field label="Priority" hint="higher shows first">
                       <input type="number" value={form.priority} onChange={(e) => set('priority', Number(e.target.value))} style={inputStyle} />
                     </Field>
@@ -694,7 +694,7 @@ export function Communications({ orgs }: { orgs: OrgOverview[] }) {
                     </Field>
                   </div>
 
-                  <div style={{ display: 'flex', gap: 10, marginTop: 2 }}>
+                  <div className="flex flex-wrap gap-2.5 mt-0.5">
                     {isEditing && <Btn onClick={cancelEdit} color={T.textSec}><X size={13} /> Cancel edit</Btn>}
                     <Btn onClick={submit} disabled={saving} color={T.primary}>
                       {saving ? <Loader2 size={14} className="animate-spin" /> : <Check size={14} />}
@@ -790,7 +790,7 @@ export function Communications({ orgs }: { orgs: OrgOverview[] }) {
                 sub="Push notification to real members — fires immediately on send"
               />
 
-              <div className="grid grid-cols-1 lg:grid-cols-[1fr_260px] gap-5" style={{ padding: 20 }}>
+              <div className="grid grid-cols-1 lg:grid-cols-[1fr_260px] gap-5 p-4 sm:p-5">
                 <div style={{ display: 'grid', gap: 14, minWidth: 0 }}>
                   <Field label="Title" hint={`required · ${broadcastForm.title.length}/80`}>
                     <input
