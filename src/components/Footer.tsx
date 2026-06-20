@@ -48,7 +48,7 @@ export default function Footer() {
           aria-label="Footer"
         >
           <a
-            href="mailto:support@payvexo.com"
+            href="mailto:payvexo.noreply@gmail.com"
             className="transition-opacity hover:opacity-80"
             style={{ color: tt.textSec }}
           >

@@ -48,6 +48,8 @@ import GroupWelcomePage from '@/pages/GroupWelcomePage';
 import ForgotPasswordPage from '@/pages/student/ForgotPasswordPage';
 import ResetPasswordPage from '@/pages/student/ResetPasswordPage';
 import HowItWorksPage from './pages/student/how-it-works';
+import PrivacyPolicyPage from './pages/student/Privacypolicypage';
+import TermsOfServicePage from './pages/student/Termsofservicepage';
 
 // ── Lazily imported pages ──────────────────────────────────────────
 // Admin surface, platform console, heavy public pages (receipt PDF,
@@ -122,6 +124,10 @@ function App() {
                     {/* Bring a school / org online (community trust) */}
                     <Route path="/bring-school" element={<BringMySchoolPage />} />
                     <Route path="/how-it-works" element={<HowItWorksPage />} />
+
+                    {/* * PrivacyPolicyPage & TermsOfServicePage — Payvexo's privacy policy and terms of service. */}
+                    <Route path="/privacy" element={<PrivacyPolicyPage />} />
+                    <Route path="/terms" element={<TermsOfServicePage />} />
 
                     {/* Create organization — NOW MOVED TO ADMIN CONSOLE (/pvx-console) */}
                     {/* <Route path="/create" element={<CreateOrganizationPage />} /> */}
