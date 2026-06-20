@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
+import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { ChevronDown, Check, Search, X } from 'lucide-react';
 import { colors } from '@/config/colors';
@@ -51,13 +52,21 @@ export default function ProfessionalDropdown({
   const [isOpen, setIsOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [highlightedIndex, setHighlightedIndex] = useState(-1);
+  const [menuRect, setMenuRect] = useState<{ top: number; left: number; width: number } | null>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
   const searchInputRef = useRef<HTMLInputElement>(null);
 
-  // Close on outside click
+  // Close on outside click — checks both the trigger/wrapper AND the
+  // portaled menu, since the menu renders at document.body and is no
+  // longer a DOM descendant of dropdownRef once portaled.
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
-      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
+      const target = event.target as Node;
+      const insideTrigger = dropdownRef.current?.contains(target);
+      const insideMenu = menuRef.current?.contains(target);
+      if (!insideTrigger && !insideMenu) {
         setIsOpen(false);
         setSearchQuery('');
       }
@@ -73,6 +82,29 @@ export default function ProfessionalDropdown({
       setTimeout(() => searchInputRef.current?.focus(), 100);
     }
   }, [isOpen, searchable]);
+
+  // Recompute the trigger's viewport position whenever the menu opens,
+  // and keep it in sync on scroll/resize while open. Since the panel
+  // now renders in a portal at document.body, it can no longer rely on
+  // a positioned ancestor for placement and must track the trigger's
+  // real screen position manually. This is what makes the menu immune
+  // to being painted-over by later siblings (e.g. cards in a list
+  // below the form) regardless of how many nested stacking contexts
+  // sit between this component and the page root.
+  useEffect(() => {
+    if (!isOpen || !triggerRef.current) return;
+    const updateRect = () => {
+      const r = triggerRef.current?.getBoundingClientRect();
+      if (r) setMenuRect({ top: r.bottom + window.scrollY + 8, left: r.left + window.scrollX, width: r.width });
+    };
+    updateRect();
+    window.addEventListener('scroll', updateRect, true);
+    window.addEventListener('resize', updateRect);
+    return () => {
+      window.removeEventListener('scroll', updateRect, true);
+      window.removeEventListener('resize', updateRect);
+    };
+  }, [isOpen]);
 
   const getFilteredOptions = useCallback(() => {
     if (!searchQuery) return options;
@@ -204,7 +236,7 @@ export default function ProfessionalDropdown({
   const filteredOptions = getFilteredOptions();
 
   return (
-    <div className={`relative ${className}`} ref={dropdownRef} style={{ zIndex: isOpen ? 9999 : 'auto' }}>
+    <div className={`relative ${className}`} ref={dropdownRef}>
       {/* Label */}
       {label && (
         <label className="block text-sm font-medium text-white mb-2">
@@ -214,6 +246,7 @@ export default function ProfessionalDropdown({
 
       {/* Trigger Button */}
       <motion.button
+        ref={triggerRef}
         type="button"
         onClick={() => !disabled && setIsOpen(!isOpen)}
         disabled={disabled}
@@ -262,16 +295,29 @@ export default function ProfessionalDropdown({
         </div>
       </motion.button>
 
-      {/* Dropdown Menu */}
-      <AnimatePresence>
-        {isOpen && (
+      {/* Dropdown Menu — portaled to document.body so it always paints
+          above sibling content (cards, lists, buttons below it) no
+          matter how deeply nested this component is, or how many
+          intermediate stacking contexts (transforms from framer-motion,
+          z-index islands from surrounding layout) sit between this
+          trigger and the page root. Position is computed from the
+          trigger's real getBoundingClientRect() and kept in sync on
+          scroll/resize while open, since a portaled element can no
+          longer anchor to a positioned ancestor via plain CSS. */}
+      {isOpen && menuRect && createPortal(
+        <AnimatePresence>
           <motion.div
+            ref={menuRef}
             initial={{ opacity: 0, y: -10, scale: 0.95 }}
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: -10, scale: 0.95 }}
             transition={{ duration: 0.15 }}
-            className="absolute w-full mt-2 rounded-xl overflow-hidden shadow-2xl"
+            className="rounded-xl overflow-hidden shadow-2xl"
             style={{
+              position: 'absolute',
+              top: menuRect.top,
+              left: menuRect.left,
+              width: menuRect.width,
               zIndex: 9999,
               background: 'linear-gradient(180deg, #1A1A2E 0%, #16162A 100%)',
               border: '1px solid rgba(255, 107, 53, 0.2)',
@@ -398,8 +444,9 @@ export default function ProfessionalDropdown({
               </div>
             )}
           </motion.div>
-        )}
-      </AnimatePresence>
+        </AnimatePresence>,
+        document.body
+      )}
 
       {/* Helper/Error Text */}
       {(error || helperText) && (
