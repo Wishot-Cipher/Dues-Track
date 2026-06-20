@@ -17,7 +17,7 @@
 
 import { createClient } from '@supabase/supabase-js';
 import { verifyMember } from '../_lib/auth.js';
-import { sendEmail, schoolEmailVerifyEmail } from '../_lib/email.js';
+import { sendEmail, schoolEmailVerifyEmail, accountDeletionRequestEmail } from '../_lib/email.js';
 
 const TRUSTED = ['email_verified', 'document_verified', 'admin_verified', 'member_confirmed'];
 const PURPOSE = 'exec_school_email';
@@ -193,10 +193,69 @@ export default async function handler(req: any, res: any) {
       });
     }
 
+    if (action === 'request_deletion_email') {
+      const token = String(body.token || '').trim();
+      if (!token) return res.status(400).json({ ok: false, error: 'Missing confirmation token.' });
+
+      const { data: delReq } = await supabase
+        .from('account_deletion_requests')
+        .select('id, deletion_path, status')
+        .eq('confirmation_token', token)
+        .eq('member_id', member.id)
+        .eq('status', 'pending')
+        .maybeSingle();
+
+      if (!delReq) {
+        return res.status(400).json({ ok: false, error: 'No matching pending deletion request for this token.' });
+      }
+
+      const { data: memberRow } = await supabase
+        .from('organization_members')
+        .select('email, full_name')
+        .eq('id', member.id)
+        .maybeSingle();
+
+      const memberEmail = memberRow?.email || member.email;
+      const memberName = memberRow?.full_name || member.full_name || 'there';
+
+      if (!memberEmail) {
+        return res.status(400).json({ ok: false, error: 'No email on file for this account.' });
+      }
+
+      const { data: org } = await supabase
+        .from('organizations')
+        .select('name, slug')
+        .eq('id', member.organization_id)
+        .maybeSingle();
+
+      const orgName = org?.name || 'Payvexo';
+      const orgSlug = org?.slug || '';
+      const appUrl = process.env.NEXT_PUBLIC_APP_URL || process.env.VITE_APP_URL || 'https://payvexo.ng';
+      const confirmUrl = `${appUrl}/${orgSlug}/confirm-delete?token=${token}`;
+
+      const deletionPath = (delReq.deletion_path as 'hard' | 'soft' | 'hard_with_orphan_group') ?? 'soft';
+
+      const sent = await sendEmail(
+        memberEmail,
+        `Confirm deletion of your ${orgName} account`,
+        accountDeletionRequestEmail({
+          memberName,
+          orgName,
+          confirmUrl,
+          deletionPath,
+        }),
+      );
+
+      if (!sent) {
+        return res.status(502).json({ ok: false, error: 'Could not send the confirmation email. Try again shortly.' });
+      }
+      return res.status(200).json({ ok: true, sentTo: maskEmail(memberEmail) });
+    }
+
     return res.status(400).json({ ok: false, error: 'Unknown action.' });
   } catch (err) {
     const e = err as Error;
     console.error('[verify-email] error', e?.stack || e);
-    return res.status(500).json({ ok: false, error: 'Verification failed. Please try again.' });
+    return res.status(500).json({ ok: false, error: `Handler crashed: ${e?.message || 'unknown error'}` });
   }
 }

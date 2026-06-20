@@ -26,7 +26,11 @@ import {
   Camera,
   Building2,
   Upload,
-  Loader2
+  Loader2,
+  Trash2,
+  AlertTriangle,
+  ShieldOff,
+  LogOut,
 } from 'lucide-react';
 import Footer from '@/components/Footer';
 import { gradients } from '@/config/colors';
@@ -47,6 +51,384 @@ import { ProfileSkeleton } from '@/components/ui/Skeleton';
 import { useMultiTenantAuth } from '@/hooks/useMultiTenantAuth';
 import { organizationService } from '@/services/organizationService';
 import { supabase } from '@/config/supabase';
+
+
+// ── Delete Account Section ────────────────────────────────────────────────────
+// Implements the full decision tree from migration 141:
+//   • Platform admin → blocked (manual support)
+//   • Mid-handover outgoing → blocked (finish handover)
+//   • Active verified exec role(s) → blocked (hand over first)
+//   • Sole founder, no history → hard delete (account + orphan group archived)
+//   • Has financial/receipt history → soft delete + anonymize
+//   • No history → hard delete
+
+type DeletionResult =
+  | { ok: false; error: string }   // 'Member not found.' or already-deleted — no `code` at all
+  | { ok: false; code: 'platform_admin_blocked'; error: string }
+  | { ok: false; code: 'handover_in_progress'; error: string; handovers?: Array<{ handover_id: string; role_label: string; status: string }> }
+  | { ok: false; code: 'active_role_blocked'; error: string; roles?: Array<{ admin_id: string; role: string; role_label: string; scope_level: string; group_id: string; group_name: string; group_kind: string }> }
+  | { ok: true; deletion_path: 'hard' | 'soft' | 'hard_with_orphan_group'; had_transaction_history: boolean; confirmation_token: string; expires_in_hours?: number };
+
+function DeleteAccountSection({ memberId }: { memberId: string }) {
+  const t = useThemeTokens();
+  const [phase, setPhase] = useState<'idle' | 'confirm' | 'loading' | 'result'>('idle');
+  const [result, setResult] = useState<DeletionResult | null>(null);
+  const [typed, setTyped] = useState('');
+  const CONFIRM_PHRASE = 'delete my account';
+
+  const requestDeletion = async () => {
+    setPhase('loading');
+    try {
+      const { data, error } = await supabase.rpc('request_account_deletion', {
+        p_member_id: memberId,
+      });
+      if (error) throw error;
+      const deletionResult = data as DeletionResult;
+
+      // Every blocked path already explains itself without an email —
+      // only the success path needs the confirmation link sent.
+      if (deletionResult.ok) {
+        const emailRes = await fetch('/api/auth/verify-email', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            action: 'request_deletion_email',
+            memberId,
+            token: deletionResult.confirmation_token,
+          }),
+        });
+        const emailData = await emailRes.json().catch(() => ({}));
+        if (!emailRes.ok || !emailData.ok) {
+          setResult({
+            ok: false,
+            error: emailData.error || 'Your deletion request was created, but we could not send the confirmation email. Please try again.',
+          });
+          setPhase('result');
+          return;
+        }
+      }
+
+      setResult(deletionResult);
+      setPhase('result');
+    } catch (err) {
+      setResult({
+        ok: false,
+        error: err instanceof Error ? err.message : 'Something went wrong. Please try again.',
+      });
+      setPhase('result');
+    }
+  };
+
+  // ── Idle state — the entry card ──
+  if (phase === 'idle') {
+    return (
+      <motion.div
+        initial={{ opacity: 0, y: 16 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ delay: 1.2 }}
+        className="rounded-2xl overflow-hidden"
+        style={{ border: `1px solid ${t.danger}30`, background: `${t.danger}06` }}
+      >
+        <div className="px-5 py-4 flex items-center gap-3" style={{ borderBottom: `1px solid ${t.danger}20` }}>
+          <div className="w-9 h-9 rounded-xl flex items-center justify-center shrink-0" style={{ background: `${t.danger}15`, color: t.danger }}>
+            <ShieldOff size={17} />
+          </div>
+          <div>
+            <h3 className="text-sm font-bold" style={{ color: t.text }}>Danger zone</h3>
+            <p className="text-[11px]" style={{ color: t.textSec }}>Irreversible account actions</p>
+          </div>
+        </div>
+        <div className="px-5 py-4 flex items-center justify-between gap-4 flex-wrap">
+          <div className="flex-1 min-w-0">
+            <p className="text-sm font-semibold" style={{ color: t.text }}>Delete my account</p>
+            <p className="text-[11px] mt-0.5 leading-5" style={{ color: t.textSec }}>
+              Permanently remove your access. Financial records are retained in anonymized form as required by law.
+            </p>
+          </div>
+          <motion.button
+            onClick={() => setPhase('confirm')}
+            whileHover={{ scale: 1.02 }}
+            whileTap={{ scale: 0.97 }}
+            className="shrink-0 px-4 py-2 rounded-xl text-xs font-bold"
+            style={{ background: `${t.danger}15`, color: t.danger, border: `1px solid ${t.danger}30` }}
+          >
+            Delete account
+          </motion.button>
+        </div>
+      </motion.div>
+    );
+  }
+
+  // ── Confirm phase — type to confirm ──
+  if (phase === 'confirm') {
+    const ready = typed.toLowerCase() === CONFIRM_PHRASE;
+    return (
+      <motion.div
+        initial={{ opacity: 0, scale: 0.98 }}
+        animate={{ opacity: 1, scale: 1 }}
+        className="rounded-2xl p-5 space-y-4"
+        style={{ border: `1px solid ${t.danger}40`, background: `${t.danger}08` }}
+      >
+        <div className="flex items-start gap-3">
+          <div className="w-9 h-9 rounded-xl flex items-center justify-center shrink-0 mt-0.5" style={{ background: `${t.danger}18`, color: t.danger }}>
+            <AlertTriangle size={17} />
+          </div>
+          <div>
+            <p className="text-sm font-bold" style={{ color: t.danger }}>Are you absolutely sure?</p>
+            <p className="text-[12px] mt-1 leading-5" style={{ color: t.textSec }}>
+              This will check your account status and either permanently remove your account
+              or anonymize your personal data while preserving financial records for audit compliance.
+              <strong style={{ color: t.text }}> This cannot be undone.</strong>
+            </p>
+          </div>
+        </div>
+
+        <div
+          className="rounded-xl p-3 text-[11px] leading-5"
+          style={{ background: `${t.amber}10`, border: `1px solid ${t.amber}25`, color: t.textSec }}
+        >
+          <strong style={{ color: t.amber }}>Before you delete:</strong> If you hold an exec role (class rep, treasurer, etc.),
+          you must hand it over first. If you have payment history, your personal details
+          will be anonymized but transaction records stay to keep the org's books accurate.
+        </div>
+
+        <div>
+          <label className="block text-[11px] font-semibold uppercase tracking-wider mb-2" style={{ color: t.textSec }}>
+            Type <span style={{ color: t.danger, fontStyle: 'italic' }}>"{CONFIRM_PHRASE}"</span> to continue
+          </label>
+          <input
+            value={typed}
+            onChange={(e) => setTyped(e.target.value)}
+            placeholder={CONFIRM_PHRASE}
+            className="w-full rounded-xl px-3.5 py-2.5 text-sm outline-none transition-colors"
+            style={{
+              background: t.card,
+              border: `1px solid ${ready ? t.danger + '60' : t.cardBorder}`,
+              color: t.text,
+            }}
+          />
+        </div>
+
+        <div className="flex gap-2 pt-1">
+          <motion.button
+            onClick={() => { setPhase('idle'); setTyped(''); }}
+            whileTap={{ scale: 0.97 }}
+            className="flex-1 py-2.5 rounded-xl text-sm font-semibold"
+            style={{ background: t.card, color: t.textSec, border: `1px solid ${t.cardBorder}` }}
+          >
+            Cancel
+          </motion.button>
+          <motion.button
+            onClick={requestDeletion}
+            disabled={!ready}
+            whileHover={ready ? { scale: 1.01 } : undefined}
+            whileTap={ready ? { scale: 0.98 } : undefined}
+            className="flex-1 py-2.5 rounded-xl text-sm font-bold disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+            style={{ background: ready ? t.danger : `${t.danger}30`, color: '#fff' }}
+          >
+            <Trash2 size={14} />
+            Continue
+          </motion.button>
+        </div>
+      </motion.div>
+    );
+  }
+
+  // ── Loading ──
+  if (phase === 'loading') {
+    return (
+      <div className="rounded-2xl p-8 flex flex-col items-center gap-3" style={{ border: `1px solid ${t.cardBorder}`, background: t.card }}>
+        <Loader2 size={24} className="animate-spin" style={{ color: t.primary }} />
+        <p className="text-sm" style={{ color: t.textSec }}>Checking your account status…</p>
+      </div>
+    );
+  }
+
+  // ── Result ──
+ // ── Result ──
+  if (phase === 'result' && result) {
+    // ── BLOCKED: member not found / already deleted (no code at all) ──
+    // Must run BEFORE any check that accesses result.code, since this
+    // is the one ok:false member that doesn't have that property —
+    // narrowing it out here is what lets every check below safely
+    // access .code without TypeScript complaining it might be missing.
+    if (!result.ok && !('code' in result)) {
+      return (
+        <ResultCard
+          icon={<AlertCircle size={20} />}
+          color={t.danger}
+          title="Could not process request"
+          body={result.error}
+          onReset={() => setPhase('idle')}
+          t={t}
+        />
+      );
+    }
+
+    // ── BLOCKED: platform admin ──
+    if (!result.ok && result.code === 'platform_admin_blocked') {
+      return (
+        <ResultCard
+          icon={<Shield size={20} />}
+          color={t.amber}
+          title="Platform admin accounts"
+          body="Platform admin accounts cannot be self-deleted. Contact the Payvexo team directly to proceed."
+          onReset={() => setPhase('idle')}
+          t={t}
+        />
+      );
+    }
+
+    // ── BLOCKED: mid-handover ──
+    if (!result.ok && result.code === 'handover_in_progress') {
+      return (
+        <ResultCard
+          icon={<LogOut size={20} />}
+          color={t.amber}
+          title="Handover in progress"
+          body={result.error}
+          detail="Your successor hasn't been verified yet — you still hold the role. Wait for the handover to complete, then return here."
+          onReset={() => setPhase('idle')}
+          t={t}
+        />
+      );
+    }
+
+    // ── BLOCKED: active exec role(s) ──
+    if (!result.ok && result.code === 'active_role_blocked') {
+      const roles = result.roles;
+      return (
+        <ResultCard
+          icon={<ShieldOff size={20} />}
+          color={t.danger}
+          title="Hand over your role first"
+          body="You hold an active exec role. If you delete your account without handing over, the members in your tier lose access to dues collection and payout management."
+          detail={roles?.map(r => `${r.role_label || 'Exec'} — ${r.group_name || 'your group'}`).join('\n')}
+          action={{ label: 'Go to handover', onClick: () => window.location.href = '#handover' }}
+          onReset={() => setPhase('idle')}
+          t={t}
+        />
+      );
+    }
+
+    // ── SUCCESS: deletion queued ──
+    const isSoft = result.deletion_path === 'soft';
+    const isHardOrphan = result.deletion_path === 'hard_with_orphan_group';
+
+    return (
+      <motion.div
+        initial={{ opacity: 0, scale: 0.97 }}
+        animate={{ opacity: 1, scale: 1 }}
+        className="rounded-2xl p-5 space-y-4"
+        style={{ border: `1px solid ${t.mint}30`, background: `${t.mint}06` }}
+      >
+        <div className="flex items-start gap-3">
+          <div className="w-9 h-9 rounded-xl flex items-center justify-center shrink-0" style={{ background: `${t.mint}18`, color: t.mint }}>
+            <CheckCircle2 size={17} />
+          </div>
+          <div>
+            <p className="text-sm font-bold" style={{ color: t.text }}>Confirmation email sent</p>
+            <p className="text-[12px] mt-1 leading-5" style={{ color: t.textSec }}>
+              Check your email for a confirmation link. It expires in 24 hours. Click it to finalize deletion.
+            </p>
+          </div>
+        </div>
+
+        <div
+          className="rounded-xl p-3 space-y-1.5 text-[11px]"
+          style={{ background: t.card, border: `1px solid ${t.cardBorder}` }}
+        >
+          <p className="font-bold uppercase tracking-wider text-[10px]" style={{ color: t.textTer }}>What will happen</p>
+          {isSoft ? (
+            <>
+              <p style={{ color: t.textSec }}>✓ Your name, email, and phone will be permanently removed</p>
+              <p style={{ color: t.textSec }}>✓ Your login access will be revoked immediately</p>
+              <p style={{ color: t.textSec }}>· Payment records stay as anonymous entries — the org's books stay accurate</p>
+              <p style={{ color: t.textSec }}>· Receipt images are preserved for audit compliance</p>
+            </>
+          ) : (
+            <>
+              <p style={{ color: t.textSec }}>✓ Your account and all personal data will be permanently deleted</p>
+              {isHardOrphan && <p style={{ color: t.textSec }}>✓ The group you founded (with no other members) will be archived</p>}
+              <p style={{ color: t.textSec }}>✓ Your login access will be revoked immediately</p>
+            </>
+          )}
+        </div>
+
+        <motion.button
+          onClick={() => { setPhase('idle'); setTyped(''); setResult(null); }}
+          whileTap={{ scale: 0.97 }}
+          className="w-full py-2.5 rounded-xl text-sm font-semibold"
+          style={{ background: t.card, color: t.textSec, border: `1px solid ${t.cardBorder}` }}
+        >
+          Back to profile
+        </motion.button>
+      </motion.div>
+    );
+  }
+
+  return null;
+}
+
+function ResultCard({
+  icon, color, title, body, detail, action, onReset, t,
+}: {
+  icon: React.ReactNode;
+  color: string;
+  title: string;
+  body: string;
+  detail?: string;
+  action?: { label: string; onClick: () => void };
+  onReset: () => void;
+  t: ReturnType<typeof useThemeTokens>;
+}) {
+  return (
+    <motion.div
+      initial={{ opacity: 0, scale: 0.97 }}
+      animate={{ opacity: 1, scale: 1 }}
+      className="rounded-2xl p-5 space-y-3"
+      style={{ border: `1px solid ${color}30`, background: `${color}06` }}
+    >
+      <div className="flex items-start gap-3">
+        <div className="w-9 h-9 rounded-xl flex items-center justify-center shrink-0" style={{ background: `${color}18`, color }}>
+          {icon}
+        </div>
+        <div>
+          <p className="text-sm font-bold" style={{ color: t.text }}>{title}</p>
+          <p className="text-[12px] mt-1 leading-5" style={{ color: t.textSec }}>{body}</p>
+        </div>
+      </div>
+      {detail && (
+        <div
+          className="rounded-xl px-3 py-2.5 text-[11px] leading-5 whitespace-pre-line"
+          style={{ background: t.card, border: `1px solid ${t.cardBorder}`, color: t.textSec }}
+        >
+          {detail}
+        </div>
+      )}
+      <div className="flex gap-2 pt-1">
+        <motion.button
+          onClick={onReset}
+          whileTap={{ scale: 0.97 }}
+          className="flex-1 py-2.5 rounded-xl text-sm font-semibold"
+          style={{ background: t.card, color: t.textSec, border: `1px solid ${t.cardBorder}` }}
+        >
+          Go back
+        </motion.button>
+        {action && (
+          <motion.button
+            onClick={action.onClick}
+            whileTap={{ scale: 0.97 }}
+            className="flex-1 py-2.5 rounded-xl text-sm font-bold"
+            style={{ background: `${color}18`, color, border: `1px solid ${color}35` }}
+          >
+            {action.label}
+          </motion.button>
+        )}
+      </div>
+    </motion.div>
+  );
+}
 
 export default function ProfilePage() {
   const t = useThemeTokens();
@@ -1036,6 +1418,17 @@ export default function ProfilePage() {
                 </motion.div>
               )}
             </GlassCard>
+
+            {/* Delete Account */}
+            {user?.id && (
+              <motion.div
+                initial={{ opacity: 0, y: 16 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 1.15 }}
+              >
+                <DeleteAccountSection memberId={user.id} />
+              </motion.div>
+            )}
 
             {/* Payment Summary Card - Desktop */}
             <motion.div

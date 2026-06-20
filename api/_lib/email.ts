@@ -564,6 +564,44 @@ export function schoolEmailVerifyEmail(data: {
 
 
 /**
+ * 10. ACCOUNT DELETION CONFIRMATION — bearer-token confirmation link sent
+ * when a member requests to delete their account. Same shape as
+ * passwordResetEmail (one CTA, fallback link, 24h expiry notice), but
+ * uses the danger color since the action it confirms is irreversible.
+ */
+export function accountDeletionRequestEmail(data: {
+  memberName: string
+  orgName: string
+  confirmUrl: string
+  deletionPath: 'hard' | 'soft' | 'hard_with_orphan_group'
+}): string {
+  const { memberName, orgName, confirmUrl, deletionPath } = data
+
+  const whatHappens = deletionPath === 'soft'
+    ? 'Your name, email and phone will be permanently removed. Payment records stay as anonymized entries so the organization\u2019s books remain accurate.'
+    : 'Your account and all personal data will be permanently deleted.'
+
+  return emailLayout({
+    preheader: `Confirm deletion of your ${orgName} account`,
+    orgName,
+    bodyContent: [
+      heading('Confirm Account Deletion'),
+      greeting(memberName),
+      paragraph(`We received a request to delete your account on <strong style="color: ${brand.white};">${orgName}</strong>. This is permanent and cannot be undone.`),
+      alertBox(`<strong>What happens:</strong> ${whatHappens}`, 'danger'),
+      ctaButton('Confirm Account Deletion', confirmUrl, brand.danger),
+      fallbackLink(confirmUrl),
+      alertBox(
+        `<strong>This link expires in 24 hours.</strong> If you didn't request this, ignore this email \u2014 your account will remain exactly as it is.`,
+        'warning'
+      ),
+    ].join(''),
+    footerExtra: 'You received this because an account deletion was requested for your account. If this wasn\u2019t you, no action is needed.',
+  })
+}
+
+
+/**
  * 8. ADMIN RESET PASSWORD — sent when an admin resets a member's password
  */
 export function adminResetPasswordEmail(data: {

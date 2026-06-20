@@ -458,6 +458,13 @@ export default function SettingsPage() {
           type: 'action',
           onClick: () => navigate('/change-password'),
         },
+        {
+          id: 'delete',
+          label: 'Delete Account',
+          description: 'Permanently remove your account',
+          type: 'action',
+          onClick: () => navigate('/profile'),
+        },
       ],
     },
   ];
