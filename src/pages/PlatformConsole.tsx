@@ -27,13 +27,14 @@ import {
   verifySession, platformAdminLogout, fetchPlatformStats, fetchOrganizations,
   toggleOrganizationStatus, listPendingClaims, grantClaimOverride, rejectClaim,
   getFinancialSummary, getAuditFeed, getGrowthFunnel,
-  getPlatformSettings, updatePlatformSettings, getUniversityMap, broadcast,
+  getPlatformSettings, updatePlatformSettings, getUniversityMap,
   listOrgAdmins, setAdminActive, updateOrgSubscription, setGroupPlan,
   type PlatformAdmin, type PlatformStats, type OrgOverview, type PendingClaim,
   type FinancialSummary, type AuditEntry, type FunnelStage,
   type PlatformSettings, type UniRow, type OrgAdminRow,
 } from '@/services/platformAdminService';
 import { useToast } from '@/hooks/useToast';
+import { Communications } from '@/components/platform/PlatformComms';
 import Pagination, { usePagination } from '@/components/ui/Pagination';
 
 const naira = (kobo: number) => '₦' + Math.round((kobo || 0) / 100).toLocaleString();
@@ -1488,211 +1489,6 @@ function TrustSafety() {
   );
 }
 
-function Communications() {
-  const [orgs, setOrgs]     = useState<OrgOverview[]>([]);
-  const [target, setTarget] = useState<string>('all');
-  const [title, setTitle]   = useState('');
-  const [message, setMessage] = useState('');
-  const [sending, setSending] = useState(false);
-  const [dropdownOpen, setDropdownOpen] = useState(false);
-  const [confirmOpen, setConfirmOpen] = useState(false);
-  const toast = useToast();
-
-  useEffect(() => { (async () => { try { setOrgs(await fetchOrganizations()); } catch { /* */ } })(); }, []);
-
-  const audienceLabel = target === 'all'
-    ? 'All organizations (everyone)'
-    : orgs.find((o) => o.id === target)?.name || 'Selected organization';
-
-  const send = async () => {
-    if (title.trim().length < 2 || message.trim().length < 2) {
-      toast.error('Title and message required.');
-      return;
-    }
-    setSending(true);
-    try {
-      const n = await broadcast(target === 'all' ? null : target, title.trim(), message.trim());
-      toast.success(`Sent to ${n} member${n === 1 ? '' : 's'}.`);
-      setTitle('');
-      setMessage('');
-      setConfirmOpen(false);
-    } catch (e) { toast.error(e instanceof Error ? e.message : 'Failed'); }
-    setSending(false);
-  };
-
-  return (
-    <div>
-      <SectionHead title="Communications" sub="Broadcast an in-app announcement" />
-      <div style={{ background: T.card, border: `1px solid ${T.border}`, borderRadius: 14, padding: 18, maxWidth: 560, display: 'grid', gap: 14 }}>
-        <Field label="Audience">
-          <div style={{ position: 'relative' }}>
-            <button
-              type="button"
-              onClick={() => setDropdownOpen((v) => !v)}
-              style={{
-                ...inputStyle,
-                textAlign: 'left',
-                cursor: 'pointer',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'space-between',
-                gap: 12,
-              }}
-            >
-              <span style={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{audienceLabel}</span>
-              <span style={{ color: T.textTer, fontFamily: mono, fontSize: 11 }}>⌄</span>
-            </button>
-
-            <AnimatePresence>
-              {dropdownOpen && (
-                <motion.div
-                  initial={{ opacity: 0, y: -6, scale: 0.98 }}
-                  animate={{ opacity: 1, y: 0, scale: 1 }}
-                  exit={{ opacity: 0, y: -6, scale: 0.98 }}
-                  transition={{ duration: 0.14 }}
-                  style={{
-                    position: 'absolute',
-                    top: 'calc(100% + 8px)',
-                    left: 0,
-                    right: 0,
-                    zIndex: 20,
-                    background: '#0A1020',
-                    border: `1px solid ${T.border}`,
-                    borderRadius: 12,
-                    boxShadow: '0 18px 40px rgba(0,0,0,0.35)',
-                    overflow: 'hidden',
-                    maxHeight: 280,
-                    overflowY: 'auto',
-                  }}
-                >
-                  <button
-                    type="button"
-                    onClick={() => { setTarget('all'); setDropdownOpen(false); }}
-                    style={{
-                      width: '100%',
-                      padding: '10px 12px',
-                      background: target === 'all' ? 'rgba(255,104,3,0.12)' : 'transparent',
-                      color: target === 'all' ? T.primary : T.text,
-                      border: 'none',
-                      textAlign: 'left',
-                      cursor: 'pointer',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'space-between',
-                      gap: 10,
-                    }}
-                  >
-                    <span>All organizations (everyone)</span>
-                    {target === 'all' && <Check size={14} />}
-                  </button>
-                  {orgs.map((o) => (
-                    <button
-                      key={o.id}
-                      type="button"
-                      onClick={() => { setTarget(o.id); setDropdownOpen(false); }}
-                      style={{
-                        width: '100%',
-                        padding: '10px 12px',
-                        background: target === o.id ? 'rgba(255,104,3,0.12)' : 'transparent',
-                        color: target === o.id ? T.primary : T.text,
-                        border: 'none',
-                        textAlign: 'left',
-                        cursor: 'pointer',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'space-between',
-                        gap: 10,
-                      }}
-                    >
-                      <span style={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{o.name}</span>
-                      {target === o.id && <Check size={14} />}
-                    </button>
-                  ))}
-                </motion.div>
-              )}
-            </AnimatePresence>
-
-            {dropdownOpen && (
-              <button
-                type="button"
-                aria-label="Close audience dropdown"
-                onClick={() => setDropdownOpen(false)}
-                style={{ position: 'fixed', inset: 0, zIndex: 10, background: 'transparent', border: 'none', padding: 0, margin: 0 }}
-              />
-            )}
-          </div>
-        </Field>
-        <Field label="Title"><input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Scheduled maintenance" style={inputStyle} /></Field>
-        <Field label="Message"><textarea value={message} onChange={(e) => setMessage(e.target.value)} rows={4} placeholder="What do you want members to know?" style={{ ...inputStyle, resize: 'vertical' }} /></Field>
-        <div>
-          <Btn onClick={() => {
-            if (title.trim().length < 2 || message.trim().length < 2) {
-              toast.error('Title and message required.');
-              return;
-            }
-            setConfirmOpen(true);
-          }} disabled={sending} color={T.primary}>
-            {sending ? <Loader2 size={14} className="animate-spin" /> : <Megaphone size={14} />} Send broadcast
-          </Btn>
-        </div>
-      </div>
-
-      <AnimatePresence>
-        {confirmOpen && (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            style={{ position: 'fixed', inset: 0, zIndex: 80, background: 'rgba(3,7,18,0.68)', backdropFilter: 'blur(10px)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}
-            onClick={() => !sending && setConfirmOpen(false)}
-          >
-            <motion.div
-              initial={{ opacity: 0, y: 10, scale: 0.98 }}
-              animate={{ opacity: 1, y: 0, scale: 1 }}
-              exit={{ opacity: 0, y: 10, scale: 0.98 }}
-              transition={{ duration: 0.16 }}
-              onClick={(e) => e.stopPropagation()}
-              style={{ width: '100%', maxWidth: 520, background: '#0C1220', border: `1px solid ${T.borderHot}`, borderRadius: 18, padding: 22, boxShadow: '0 24px 60px rgba(0,0,0,0.45)' }}
-            >
-              <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12 }}>
-                <div style={{ width: 38, height: 38, borderRadius: 12, background: 'rgba(255,104,3,0.12)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: T.primary }}>
-                  <Megaphone size={18} />
-                </div>
-                <div>
-                  <h3 style={{ margin: 0, fontSize: 18, color: T.text }}>Confirm broadcast</h3>
-                  <p style={{ margin: '2px 0 0', fontSize: 12, color: T.textSec }}>Review the target audience before sending.</p>
-                </div>
-              </div>
-
-              <div style={{ display: 'grid', gap: 10, marginBottom: 18 }}>
-                <div style={{ padding: 12, borderRadius: 12, background: 'rgba(255,255,255,0.03)', border: `1px solid ${T.border}` }}>
-                  <div style={{ fontSize: 10, color: T.textTer, textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 4 }}>Audience</div>
-                  <div style={{ fontSize: 13, color: T.text }}>{audienceLabel}</div>
-                </div>
-                <div style={{ padding: 12, borderRadius: 12, background: 'rgba(255,255,255,0.03)', border: `1px solid ${T.border}` }}>
-                  <div style={{ fontSize: 10, color: T.textTer, textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 4 }}>Title</div>
-                  <div style={{ fontSize: 13, color: T.text }}>{title.trim()}</div>
-                </div>
-                <div style={{ padding: 12, borderRadius: 12, background: 'rgba(255,255,255,0.03)', border: `1px solid ${T.border}` }}>
-                  <div style={{ fontSize: 10, color: T.textTer, textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 4 }}>Message</div>
-                  <div style={{ fontSize: 13, color: T.textSec, lineHeight: 1.6, whiteSpace: 'pre-wrap' }}>{message.trim()}</div>
-                </div>
-              </div>
-
-              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, flexWrap: 'wrap' }}>
-                <Btn onClick={() => setConfirmOpen(false)} disabled={sending} color={T.textSec}>Cancel</Btn>
-                <Btn onClick={send} disabled={sending} color={T.primary}>
-                  {sending ? <Loader2 size={14} className="animate-spin" /> : <Megaphone size={14} />} Confirm send
-                </Btn>
-              </div>
-            </motion.div>
-          </motion.div>
-        )}
-      </AnimatePresence>
-    </div>
-  );
-}
-
 // ── Nav items ────────────────────────────────────────────────────
 const NAV = [
   { id: 'command',      label: 'Command',      icon: LayoutDashboard },
@@ -1738,7 +1534,11 @@ export default function PlatformConsole() {
   const [collapsed, setCollapsed] = useState(false);   // desktop icon-rail
   const [mobileOpen, setMobileOpen] = useState(false); // mobile drawer
   const [showLogoutModal, setShowLogoutModal] = useState(false);
-  const [logoutBusy, setLogoutBusy] = useState(false);
+const [logoutBusy, setLogoutBusy] = useState(false);
+const [orgs, setOrgs] = useState<OrgOverview[]>([]);
+useEffect(() => {
+  (async () => { try { setOrgs(await fetchOrganizations()); } catch { /* ignore */ } })();
+}, []);
   const isMobile = useIsMobile(768);
 
   const confirmLogout = useCallback(async () => {
@@ -1986,7 +1786,7 @@ export default function PlatformConsole() {
               {section === 'financial'    && <FinancialIntel />}
               {section === 'map'          && <UniversityMap />}
               {section === 'safety'       && <TrustSafety />}
-              {section === 'comms'        && <Communications />}
+              {section === 'comms' && <Communications orgs={orgs} />}
               {section === 'config'       && <PlatformConfig />}
               {section === 'analytics'    && <GrowthAnalytics />}
               {section === 'audit'        && <AuditTrail />}

@@ -392,6 +392,73 @@ export async function broadcast(orgId: string | null, title: string, message: st
   return d.notified;
 }
 
+// ── Platform notices (Comms) ──────────────────────────────────────
+
+export interface PlatformNoticeRow {
+  id: string;
+  title: string;
+  body: string;
+  kind: 'announcement' | 'tip' | 'update' | 'maintenance' | 'milestone';
+  emoji: string | null;
+  cta_label: string | null;
+  cta_url: string | null;
+  priority: number;
+  org_id: string | null;
+  is_active: boolean;
+  expires_at: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export const listPlatformNotices = async () =>
+  (await callPlatformRpc<{ ok: boolean; notices: PlatformNoticeRow[] }>('platform_list_notices')).notices;
+
+export interface NoticeInput {
+  title: string;
+  body: string;
+  kind: PlatformNoticeRow['kind'];
+  emoji?: string | null;
+  cta_label?: string | null;
+  cta_url?: string | null;
+  priority?: number;
+  org_id?: string | null;
+  expires_at?: string | null;
+}
+
+export async function createPlatformNotice(input: NoticeInput): Promise<string> {
+  const d = await callPlatformRpc<{ ok: boolean; id: string }>('platform_create_notice', {
+    p_title: input.title,
+    p_body: input.body,
+    p_kind: input.kind,
+    p_emoji: input.emoji ?? null,
+    p_cta_label: input.cta_label ?? null,
+    p_cta_url: input.cta_url ?? null,
+    p_priority: input.priority ?? 0,
+    p_org_id: input.org_id ?? null,
+    p_expires_at: input.expires_at ?? null,
+  });
+  return d.id;
+}
+
+export async function updatePlatformNotice(noticeId: string, input: NoticeInput): Promise<void> {
+  await callPlatformRpc('platform_update_notice', {
+    p_notice_id: noticeId,
+    p_title: input.title,
+    p_body: input.body,
+    p_kind: input.kind,
+    p_emoji: input.emoji ?? null,
+    p_cta_label: input.cta_label ?? null,
+    p_cta_url: input.cta_url ?? null,
+    p_priority: input.priority ?? 0,
+    p_org_id: input.org_id ?? null,
+    p_expires_at: input.expires_at ?? null,
+  });
+}
+
+export async function setNoticeActive(noticeId: string, active: boolean): Promise<void> {
+  await callPlatformRpc('platform_set_notice_active', { p_notice_id: noticeId, p_active: active });
+}
+
 /**
  * Fetch all organizations with aggregated stats
  */
