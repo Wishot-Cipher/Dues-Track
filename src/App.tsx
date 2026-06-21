@@ -87,6 +87,7 @@ const OrgGroupsPage = lazy(() => import('@/pages/admin/OrgGroupsPage'));
 const OrgAcademicCalendarPage = lazy(() => import('@/pages/admin/OrgAcademicCalendarPage'));
 const TicketCheckInPage = lazy(() => import('@/pages/admin/TicketCheckInPage'));
 const AuditPage = lazy(() => import('@/pages/admin/AuditPage'));
+const DeleteAccountConfirmPage = lazy(() => import('@/pages/student/DeleteAccountPage'));
 
 function App() {
   // Ensure html[data-theme] is applied on every route, not only theme-aware pages.
@@ -195,6 +196,7 @@ function App() {
                       <Route path="change-password" element={<OrgProtectedRoute><OrgChangePasswordPage /></OrgProtectedRoute>} />
                       <Route path="complete-profile" element={<OrgProtectedRoute><OrgCompleteProfilePage /></OrgProtectedRoute>} />
                       <Route path="verify-email" element={<OrgProtectedRoute><VerifyEmailPage /></OrgProtectedRoute>} />
+                      <Route path="confirm-delete" element={<DeleteAccountConfirmPage />} />
 
                       {/* Admin pages. Layered trust:
                       ACTING (Layer 2, school-email verified) → setup-only routes
