@@ -1503,23 +1503,99 @@ export default function OrgMembersPage() {
                 </div>
               </div>
             ) : sortedFiltered.length === 0 ? (
-              <div className="text-center py-12">
-                <Users className="w-16 h-16 mx-auto mb-4" style={{ color: colors.textSecondary }} />
-                <p className="text-lg font-medium text-white mb-2">No {memberLabelPlural.toLowerCase()} found</p>
-                <p style={{ color: colors.textSecondary }}>
-                  {searchQuery ? 'Try a different search term' : `Add your first ${memberLabel.toLowerCase()} to get started`}
-                </p>
-                {!searchQuery && (
-                  <button
-                    onClick={() => { setShowAddModal(true); setAddError(''); setAddSuccess(null); }}
-                    className="inline-flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-medium mt-4"
-                    style={{ color: colors.primary, border: `1px solid ${colors.borderPrimary}` }}
+              <motion.div
+                initial={{ opacity: 0, y: 8 }}
+                animate={{ opacity: 1, y: 0 }}
+                className="flex flex-col items-center text-center py-14 px-6"
+              >
+                <div className="relative mb-5">
+                  <div
+                    className="w-20 h-20 rounded-3xl flex items-center justify-center"
+                    style={{
+                      background: searchQuery
+                        ? `${tk.cardBorder}`
+                        : `linear-gradient(135deg, ${tk.primary}22, ${tk.primary}10)`,
+                      border: `1px solid ${searchQuery ? tk.cardBorder : tk.primaryRing}`,
+                      boxShadow: searchQuery ? 'none' : `0 0 40px ${tk.primary}18`,
+                    }}
                   >
-                    <UserPlus size={16} />
-                    Add {memberLabel}
-                  </button>
+                    <Users className="w-9 h-9" style={{ color: searchQuery ? tk.textTer : tk.primary }} />
+                  </div>
+                  {!searchQuery && (
+                    <span
+                      className="absolute -top-1 -right-1 w-5 h-5 rounded-full border-2 flex items-center justify-center"
+                      style={{ background: tk.amber, borderColor: tk.card }}
+                    >
+                      <Plus className="w-3 h-3 text-white" />
+                    </span>
+                  )}
+                </div>
+
+                <h3 className="text-lg font-extrabold mb-2 tracking-tight" style={{ color: tk.text }}>
+                  {searchQuery
+                    ? `No results for "${searchQuery}"`
+                    : statusFilter !== 'all' || roleFilter !== 'all'
+                      ? 'No members match these filters'
+                      : `No ${memberLabelPlural.toLowerCase()} yet`}
+                </h3>
+                <p className="text-sm leading-6 max-w-xs mb-1" style={{ color: tk.textSec }}>
+                  {searchQuery
+                    ? 'Try a different name, ID, or email.'
+                    : statusFilter !== 'all' || roleFilter !== 'all'
+                      ? 'Try clearing your filters to see all members.'
+                      : `Add ${memberLabelPlural.toLowerCase()} one by one, bulk-import a spreadsheet, or share an invite link for them to join directly.`}
+                </p>
+                {!searchQuery && statusFilter === 'all' && roleFilter === 'all' && (
+                  <p className="text-xs mb-7" style={{ color: tk.textTer }}>
+                    Each {memberLabel.toLowerCase()} gets a login ID and password — they can change it on first login.
+                  </p>
                 )}
-              </div>
+
+                {!searchQuery && statusFilter === 'all' && roleFilter === 'all' && (
+                  <div className="flex flex-col sm:flex-row items-center gap-3 mt-2">
+                    <motion.button
+                      whileHover={{ scale: 1.04, y: -2 }}
+                      whileTap={{ scale: 0.97 }}
+                      onClick={() => { setShowAddModal(true); setAddError(''); setAddSuccess(null); }}
+                      className="inline-flex items-center gap-2 px-5 py-3 rounded-2xl text-sm font-bold text-white"
+                      style={{
+                        background: tk.gradOrange,
+                        boxShadow: `0 4px 20px ${tk.primary}40`,
+                      }}
+                    >
+                      <UserPlus size={16} />
+                      Invite your first {memberLabel.toLowerCase()} →
+                    </motion.button>
+                    <motion.button
+                      whileHover={{ scale: 1.02 }}
+                      whileTap={{ scale: 0.97 }}
+                      onClick={() => setShowBulkModal(true)}
+                      className="inline-flex items-center gap-2 px-4 py-3 rounded-2xl text-sm font-semibold"
+                      style={{
+                        background: `${tk.mint}14`,
+                        color: tk.mint,
+                        border: `1px solid ${tk.mint}30`,
+                      }}
+                    >
+                      <Upload size={15} />
+                      Bulk import
+                    </motion.button>
+                  </div>
+                )}
+
+                {(searchQuery || statusFilter !== 'all' || roleFilter !== 'all') && (
+                  <motion.button
+                    whileHover={{ scale: 1.02 }}
+                    whileTap={{ scale: 0.97 }}
+                    onClick={() => { setSearchQuery(''); setStatusFilter('all'); setRoleFilter('all'); setCurrentPage(1); }}
+                    className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold mt-4"
+                    style={{ background: tk.primarySoft, color: tk.primary, border: `1px solid ${tk.primaryRing}` }}
+                  >
+                    <X size={14} />
+                    Clear filters
+                  </motion.button>
+                )}
+              </motion.div>
             ) : (
               <>
                 {/* Desktop Table View */}

@@ -261,6 +261,14 @@ function SearchResultItem({
             {result.name}
           </p>
           <TrustBadge level={result.trust_level} size="sm" />
+          {!isSeed && typeof result.member_count === 'number' && result.member_count > 0 && (
+            <span
+              className="shrink-0 text-[9px] font-bold px-1.5 py-0.5 rounded-full uppercase tracking-wider"
+              style={{ background: `${t.mint}18`, color: t.mint, border: `1px solid ${t.mint}28` }}
+            >
+              Active
+            </span>
+          )}
         </div>
         <p className="text-xs capitalize" style={{ color: t.textTer }}>
           {subtitleLeft}{subtitleRight ? ` · ${subtitleRight}` : ''}
@@ -632,10 +640,20 @@ export default function LandingPage() {
                   ) : searchResults.length > 0 ? (
                     <>
                       <div
-                        className="px-5 py-2.5 text-[10px] uppercase tracking-widest font-semibold"
-                        style={{ color: t.textTer, borderBottom: `1px solid ${t.cardBorder}` }}
+                        className="px-5 py-2.5 flex items-center justify-between"
+                        style={{ borderBottom: `1px solid ${t.cardBorder}` }}
                       >
-                        {searchResults.length} result{searchResults.length !== 1 ? 's' : ''} found
+                        <span className="text-[10px] uppercase tracking-widest font-semibold" style={{ color: t.textTer }}>
+                          {searchResults.length} result{searchResults.length !== 1 ? 's' : ''} found
+                        </span>
+                        {searchResults.some(r => r.kind === 'organization') && (
+                          <span
+                            className="text-[10px] font-semibold px-2 py-0.5 rounded-full"
+                            style={{ background: `${t.mint}14`, color: t.mint }}
+                          >
+                            Already on Payvexo
+                          </span>
+                        )}
                       </div>
                       <div>
                         {searchResults.map((r, i) => (
@@ -903,7 +921,15 @@ export default function LandingPage() {
             Ready to get your organization set up?
           </p>
           <motion.button
-            onClick={() => navigate('/bring-school')}
+            onClick={() => {
+              if (searchResults.some(r => r.kind === 'organization')) {
+                const confirmed = window.confirm(
+                  `We found existing organizations matching your search. Are you sure you want to create a new one instead of joining an existing one?\n\nCreating a duplicate splits your members across two organizations.`
+                );
+                if (!confirmed) return;
+              }
+              navigate('/bring-school');
+            }}
             className="px-8 py-4 rounded-2xl text-white font-bold text-base relative overflow-hidden"
             style={{
               background: t.gradOrange,

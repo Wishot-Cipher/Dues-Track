@@ -280,6 +280,12 @@ export default function BringMySchoolPage() {
 
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [duplicateOrg, setDuplicateOrg] = useState<{
+    slug: string;
+    name: string;
+    members: number;
+    isFuzzy: boolean;
+  } | null>(null);
 
   // Layer 1 — confirmation gate. Starts as 'pending' so the modal
   // shows before any form fields are revealed. 'confirmed' lets them
@@ -363,6 +369,8 @@ export default function BringMySchoolPage() {
     if (n === 1) {
       if (form.orgName.trim().length < 3) return 'Organisation name needs at least 3 characters.';
       if (!form.orgType) return 'Pick the organisation type so we set up the right terminology.';
+      if (form.orgShortName.trim().length > 0 && form.orgShortName.trim().length < 2)
+        return 'Short name needs at least 2 characters.';
     }
     if (n === 2) {
       if (form.groupName.trim().length < 2) {
@@ -469,8 +477,24 @@ export default function BringMySchoolPage() {
       userLevel: form.userLevel || undefined,
     });
 
-    if (!res.ok || !res.slug || !res.member_id || !res.group_id || !res.org_id) {
+    if (!res.ok) {
+      if (res.code === 'duplicate_org_short_name' || res.code === 'duplicate_org_fuzzy_name') {
+        setDuplicateOrg({
+          slug: res.existing_slug || '',
+          name: res.existing_name || res.error || 'an existing organization',
+          members: res.existing_members || 0,
+          isFuzzy: res.code === 'duplicate_org_fuzzy_name',
+        });
+        setSubmitting(false);
+        return;
+      }
       setError(res.error || 'Could not create your organization. Please try again.');
+      setSubmitting(false);
+      return;
+    }
+
+    if (!res.slug || !res.member_id || !res.group_id || !res.org_id) {
+      setError('Organization was created but response was incomplete. Please contact support.');
       setSubmitting(false);
       return;
     }
@@ -592,6 +616,101 @@ export default function BringMySchoolPage() {
             >
               Back to search
             </motion.button>
+          </div>
+        </motion.div>
+      </div>
+    );
+  }
+
+   // ── Duplicate org screen ─────────────────────────────────
+  if (duplicateOrg) {
+    return (
+      <div className="min-h-screen flex items-center justify-center px-5" style={{ minHeight: '100dvh', background: tk.bg }}>
+        <motion.div
+          initial={{ opacity: 0, y: 16, scale: 0.98 }}
+          animate={{ opacity: 1, y: 0, scale: 1 }}
+          className="w-full max-w-md rounded-3xl p-7"
+          style={{ background: tk.panel, border: `1px solid ${tk.border}` }}
+        >
+          {/* Icon */}
+          <div
+            className="w-14 h-14 mx-auto mb-5 rounded-2xl flex items-center justify-center text-2xl"
+            style={{ background: `${tk.amber}14`, border: `1px solid ${tk.amber}28` }}
+          >
+            🏫
+          </div>
+
+          {/* Heading */}
+          <h2 className="text-xl font-extrabold tracking-tight mb-2 text-center" style={{ color: tk.text }}>
+            {duplicateOrg.isFuzzy ? 'Did you mean this?' : 'This org already exists'}
+          </h2>
+
+          {/* Explanation */}
+          <p className="text-sm leading-6 mb-4 text-center" style={{ color: tk.textSec }}>
+            {duplicateOrg.isFuzzy
+              ? `We found an organization with a very similar name. Is this the same school you're trying to set up?`
+              : `This school is already on Payvexo. Creating a duplicate would split your members across two separate organizations — join the existing one instead.`}
+          </p>
+
+          {/* Existing org card */}
+          <div
+            className="rounded-2xl px-4 py-3.5 mb-5 flex items-center gap-3"
+            style={{ background: `${tk.primary}0A`, border: `1px solid ${tk.primary}25` }}
+          >
+            <div
+              className="w-10 h-10 rounded-xl shrink-0 flex items-center justify-center text-sm font-extrabold"
+              style={{ background: `${tk.primary}20`, color: tk.primary }}
+            >
+              {duplicateOrg.name.charAt(0).toUpperCase()}
+            </div>
+            <div className="min-w-0 flex-1">
+              <p className="text-sm font-bold truncate" style={{ color: tk.text }}>{duplicateOrg.name}</p>
+              <p className="text-[11px] mt-0.5" style={{ color: tk.textSec }}>
+                {duplicateOrg.members} member{duplicateOrg.members !== 1 ? 's' : ''} · payvexo.com/{duplicateOrg.slug}
+              </p>
+            </div>
+          </div>
+
+          {/* What this means box */}
+          <div
+            className="rounded-xl p-3 mb-5 text-[11px] leading-5 space-y-1"
+            style={{ background: `${tk.amber}0A`, border: `1px solid ${tk.amber}22`, color: tk.textSec }}
+          >
+            <p><strong style={{ color: tk.amber }}>Why does this matter?</strong></p>
+            <p>If two versions of the same school exist, your members will be split — some in one org, some in another. Dues, payments, and analytics won't line up. One clean org is always better.</p>
+          </div>
+
+          {/* Actions */}
+          <div className="space-y-3">
+            <motion.button
+              onClick={() => navigate(`/${duplicateOrg.slug}/overview`)}
+              whileHover={{ y: -2 }}
+              whileTap={{ scale: 0.98 }}
+              className="w-full py-3.5 rounded-2xl text-sm font-bold flex items-center justify-center gap-2"
+              style={{ background: `linear-gradient(135deg, ${tk.primary}, ${tk.primary}CC)`, color: '#FFFFFF', boxShadow: `0 8px 24px ${tk.primary}35` }}
+            >
+              <ArrowRight className="w-4 h-4" />
+              Go to {duplicateOrg.name}
+            </motion.button>
+
+            {duplicateOrg.isFuzzy && (
+              <motion.button
+                onClick={() => setDuplicateOrg(null)}
+                whileHover={{ y: -1 }}
+                whileTap={{ scale: 0.98 }}
+                className="w-full py-3.5 rounded-2xl text-sm font-semibold"
+                style={{ background: tk.panelHov, color: tk.textSec, border: `1px solid ${tk.border}` }}
+              >
+                No, this is a different school — go back
+              </motion.button>
+            )}
+
+            {!duplicateOrg.isFuzzy && (
+              <p className="text-[11px] text-center leading-5" style={{ color: tk.textTer }}>
+                If this is genuinely a different school with the same short name, contact{' '}
+                <a href="mailto:support@payvexo.com" style={{ color: tk.primary }}>support@payvexo.com</a>
+              </p>
+            )}
           </div>
         </motion.div>
       </div>

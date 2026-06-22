@@ -6,6 +6,7 @@ import Modal from '@/components/ui/Modal'
 import { colors, gradients } from '@/config/colors'
 import { useExpenses } from '@/hooks/useExpenses'
 import { useAppAuth as useAuth } from '@/hooks/useAppAuth'
+import { useAppNav } from '@/hooks/useAppNav'
 import { getPublicUrl, supabase } from '@/config/supabase'
 import { getOrgScope } from '@/utils/orgScope'
 import { getOwnedTierScope, applyOwnedTierScope } from '@/utils/scopedGroups'
@@ -173,6 +174,7 @@ export default function ExpenseList({ categoryFilter = 'all' }: { categoryFilter
   }, [paymentFilter, ownedScope])
   const { hasPermission } = useAuth()
   const { success: showSuccess, error: showError } = useToast()
+  const { go } = useAppNav()
   const [selected, setSelected] = useState<Expense | null>(null)
   const [imageModal, setImageModal] = useState<string | null>(null)
   const [currentPage, setCurrentPage] = useState(1)
@@ -579,15 +581,57 @@ export default function ExpenseList({ categoryFilter = 'all' }: { categoryFilter
         )}
 
         {!loading && sortedExpenses.length === 0 && (
-          <div className="text-center py-12">
-            <div className="w-20 h-20 rounded-full mx-auto mb-4 flex items-center justify-center" style={{ background: `${colors.primary}10` }}>
-              <FileText className="w-10 h-10" style={{ color: colors.primary }} />
+          <motion.div
+            initial={{ opacity: 0, y: 8 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="flex flex-col items-center text-center py-14 px-6"
+          >
+            {/* Icon with glow */}
+            <div className="relative mb-5">
+              <div
+                className="w-20 h-20 rounded-3xl flex items-center justify-center"
+                style={{
+                  background: `linear-gradient(135deg, ${colors.primary}22, ${colors.primary}10)`,
+                  border: `1px solid ${colors.primary}30`,
+                  boxShadow: `0 0 40px ${colors.primary}18`,
+                }}
+              >
+                <FileText className="w-9 h-9" style={{ color: colors.primary }} />
+              </div>
             </div>
-            <h3 className="text-lg font-semibold text-white mb-2">No Expenses Yet</h3>
-            <p className="text-sm" style={{ color: colors.textSecondary }}>
-              Expenses recorded will appear here
+
+            <h3 className="text-lg font-extrabold text-white mb-2 tracking-tight">
+              {paymentFilter && paymentFilter !== 'all'
+                ? 'No expenses for this funding source'
+                : 'No expenses recorded yet'}
+            </h3>
+            <p className="text-sm leading-6 max-w-xs mb-1" style={{ color: colors.textSecondary }}>
+              {paymentFilter && paymentFilter !== 'all'
+                ? 'Try switching the funding source filter, or record a new expense against this source.'
+                : 'Expenses your scope records will appear here — categorized, dated, and linked to a funding source.'}
             </p>
-          </div>
+            <p className="text-xs mb-7" style={{ color: colors.textTertiary }}>
+              Every approved expense reduces the available balance shown above.
+            </p>
+
+            {hasPermission('can_manage_students') && (
+              <div className="flex flex-col sm:flex-row items-center gap-3">
+                <motion.button
+                  whileHover={{ scale: 1.04, y: -2 }}
+                  whileTap={{ scale: 0.97 }}
+                  onClick={() => go('/admin/record-expense')}
+                  className="inline-flex items-center gap-2 px-5 py-3 rounded-2xl text-sm font-bold text-white"
+                  style={{
+                    background: `linear-gradient(135deg, ${colors.primary}, ${colors.accentMint})`,
+                    boxShadow: `0 4px 20px ${colors.primary}40`,
+                  }}
+                >
+                  <FileText className="w-4 h-4" />
+                  Record your first expense →
+                </motion.button>
+              </div>
+            )}
+          </motion.div>
         )}
 
         {!loading && paginatedExpenses.length > 0 && (

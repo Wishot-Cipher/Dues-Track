@@ -680,8 +680,8 @@ export default function OrgLoginPage() {
               <button
                 type="button"
                 onClick={() => navigate(backTarget)}
-                className="flex items-center gap-1.5 text-xs font-medium transition-colors"
-                style={{ color: tk.textTertiary }}
+                className="flex items-center gap-1.5 text-xs font-medium transition-colors hover:opacity-80"
+                style={{ color: tk.textSecondary }}
               >
                 <ArrowLeft className="w-3.5 h-3.5" /> Back
               </button>
@@ -787,7 +787,7 @@ export default function OrgLoginPage() {
                     type="button"
                     onClick={() => setShowIdHelp((v) => !v)}
                     className="text-[11px] font-medium transition-opacity hover:opacity-70"
-                    style={{ color: tk.textTertiary }}
+                    style={{ color: tk.textSecondary }}
                   >
                     Forgot your {idLabel.toLowerCase()}?
                   </button>

@@ -218,6 +218,11 @@ export default function AddFacultyPage() {
 
           <Field t={t} label="Short name" hint="e.g. SOE — auto-generated if empty">
             <Input t={t} value={shortName} onChange={(v) => setShortName(v.toUpperCase())} placeholder="SOE" />
+            {shortName.trim().length > 0 && shortName.trim().length < 2 && (
+              <p className="text-[11px] mt-1.5 flex items-center gap-1.5" style={{ color: t.danger }}>
+                <AlertCircle className="w-3 h-3" /> Short name needs at least 2 characters.
+              </p>
+            )}
           </Field>
 
           <AnimatePresence>

@@ -632,42 +632,92 @@ export default function ManageDuesPage() {
           )}
 
           {!loading && filteredPaymentTypes.length === 0 && (
-            <div
-              className="text-center py-14 rounded-2xl"
+            <motion.div
+              initial={{ opacity: 0, y: 8 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="flex flex-col items-center text-center py-16 px-6 rounded-2xl"
               style={{ background: tk.card, border: `1px solid ${tk.cardBorder}` }}
             >
-              <div
-                className="w-14 h-14 mx-auto mb-4 rounded-2xl flex items-center justify-center"
-                style={{ background: tk.primarySoft, border: `1px solid ${tk.primaryRing}` }}
-              >
-                <CreditCard className="w-7 h-7" style={{ color: tk.primary }} />
-              </div>
-              <h3 className="text-lg font-extrabold tracking-tight mb-1" style={{ color: tk.text }}>
-                {searchTerm || filterStatus !== 'all' || filterCategory !== 'all'
-                  ? 'No results found'
-                  : 'No payment types yet'}
-              </h3>
-              <p className="text-sm max-w-sm mx-auto mb-5" style={{ color: tk.textSec }}>
-                {searchTerm || filterStatus !== 'all' || filterCategory !== 'all'
-                  ? 'Try adjusting your search or filters.'
-                  : 'Create your first due to start collecting from your scope.'}
-              </p>
-              {!searchTerm && filterStatus === 'all' && filterCategory === 'all' && (
-                <button
-                  type="button"
-                  onClick={() => navigate('/admin/create-payment')}
-                  className="inline-flex items-center gap-1.5 px-4 py-2.5 rounded-xl text-sm font-bold transition-all hover:-translate-y-0.5 active:scale-[0.98]"
+              {/* Icon */}
+              <div className="relative mb-5">
+                <div
+                  className="w-20 h-20 rounded-3xl flex items-center justify-center"
                   style={{
-                    background: tk.primary,
-                    color: '#FFFFFF',
-                    border: `1px solid ${tk.primary}`,
+                    background: searchTerm || filterStatus !== 'all' || filterCategory !== 'all'
+                      ? `${tk.cardBorder}`
+                      : `linear-gradient(135deg, ${tk.primary}22, ${tk.primary}10)`,
+                    border: `1px solid ${searchTerm || filterStatus !== 'all' || filterCategory !== 'all' ? tk.cardBorder : tk.primaryRing}`,
+                    boxShadow: searchTerm || filterStatus !== 'all' || filterCategory !== 'all'
+                      ? 'none'
+                      : `0 0 40px ${tk.primary}18`,
+                  }}
+                >
+                  <CreditCard
+                    className="w-9 h-9"
+                    style={{
+                      color: searchTerm || filterStatus !== 'all' || filterCategory !== 'all'
+                        ? tk.textTer
+                        : tk.primary,
+                    }}
+                  />
+                </div>
+                {!searchTerm && filterStatus === 'all' && filterCategory === 'all' && (
+                  <span
+                    className="absolute -top-1 -right-1 w-5 h-5 rounded-full border-2 flex items-center justify-center"
+                    style={{ background: tk.amber, borderColor: tk.card }}
+                  >
+                    <Plus className="w-3 h-3 text-white" />
+                  </span>
+                )}
+              </div>
+
+              <h3 className="text-lg font-extrabold tracking-tight mb-2" style={{ color: tk.text }}>
+                {searchTerm || filterStatus !== 'all' || filterCategory !== 'all'
+                  ? 'No dues match your filters'
+                  : 'No dues published yet'}
+              </h3>
+
+              <p className="text-sm leading-6 max-w-xs mb-1" style={{ color: tk.textSec }}>
+                {searchTerm || filterStatus !== 'all' || filterCategory !== 'all'
+                  ? 'Try clearing the search or switching the status/category filter.'
+                  : 'Create a due to define what your members owe — amount, deadline, payment method, and who it targets.'}
+              </p>
+
+              {!searchTerm && filterStatus === 'all' && filterCategory === 'all' && (
+                <p className="text-xs mb-7" style={{ color: tk.textTer }}>
+                  Members only see dues that are active and targeted at their level.
+                </p>
+              )}
+
+              {!searchTerm && filterStatus === 'all' && filterCategory === 'all' ? (
+                <motion.button
+                  type="button"
+                  whileHover={{ scale: 1.04, y: -2 }}
+                  whileTap={{ scale: 0.97 }}
+                  onClick={() => navigate('/admin/create-payment')}
+                  className="inline-flex items-center gap-2 px-5 py-3 rounded-2xl text-sm font-bold text-white"
+                  style={{
+                    background: `linear-gradient(135deg, ${tk.primary}, ${tk.amber})`,
+                    boxShadow: `0 4px 20px ${tk.primary}40`,
                   }}
                 >
                   <Plus className="w-4 h-4" />
-                  Create payment type
-                </button>
+                  Publish your first due →
+                </motion.button>
+              ) : (
+                <motion.button
+                  type="button"
+                  whileHover={{ scale: 1.02 }}
+                  whileTap={{ scale: 0.97 }}
+                  onClick={() => { setSearchTerm(''); setFilterStatus('all'); setFilterCategory('all'); setCurrentPage(1); }}
+                  className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold"
+                  style={{ background: tk.primarySoft, color: tk.primary, border: `1px solid ${tk.primaryRing}` }}
+                >
+                  <RefreshCw className="w-3.5 h-3.5" />
+                  Clear filters
+                </motion.button>
               )}
-            </div>
+            </motion.div>
           )}
 
           {!loading && filteredPaymentTypes.length > 0 && (

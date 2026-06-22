@@ -585,6 +585,11 @@ export default function AddDepartmentPage() {
           <Row>
             <Field label="Short code" hint={isAddingClass ? 'e.g. CSC23' : 'e.g. ECE'}>
               <Input value={form.departmentShortName} onChange={(v) => setF('departmentShortName', v.toUpperCase())} placeholder={isAddingClass ? 'CSC23' : 'ECE'} />
+              {form.departmentShortName.trim().length > 0 && form.departmentShortName.trim().length < 2 && (
+                <p className="text-[11px] mt-1.5 flex items-center gap-1" style={{ color: tk.danger }}>
+                  <AlertCircle className="w-3 h-3" /> Short code needs at least 2 characters.
+                </p>
+              )}
             </Field>
             {/*
               Kind is fixed by the URL you came from:

@@ -1074,12 +1074,16 @@ export const organizationService = {
   }): Promise<{
     ok: boolean;
     error?: string;
+    code?: string;
     slug?: string;
     org_id?: string;
     group_id?: string;
     faculty_id?: string;
     member_id?: string;
     member_login_id?: string;
+    existing_slug?: string;
+    existing_name?: string;
+    existing_members?: number;
   }> {
     const { data, error } = await supabase.rpc('bring_school_online', {
       p_full_name: input.fullName,

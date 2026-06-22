@@ -479,17 +479,46 @@ export default function GroupWelcomePage() {
                   style={{ background: `${km.color}14`, color: km.color }}>
                   {km.label}
                 </span>
-                <span className="inline-flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-full font-medium"
-                  style={{ background: tk.panelHov, color: tk.textSec }}>
-                  <Users className="w-3 h-3" />
-                  {(group.member_count ?? 0).toLocaleString()} members
-                </span>
                 {group.levels?.length ? (
                   <span className="inline-flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-full font-medium"
                     style={{ background: `${tk.primary}14`, color: tk.primary }}>
                     Level {group.levels.join(' · ')}
                   </span>
                 ) : null}
+              </div>
+
+              {/* Member count — rendered as a readable stat below the
+                  badge row so it gets its own visual weight. Zero
+                  members gets a caution treatment instead of a
+                  confident number, which actively deters joining an
+                  accidental duplicate. */}
+              <div className="mt-3 flex items-center gap-3">
+                {(group.member_count ?? 0) > 0 ? (
+                  <div className="flex items-center gap-2">
+                    <div
+                      className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl"
+                      style={{ background: `${tk.mint}14`, border: `1px solid ${tk.mint}28` }}
+                    >
+                      <Users className="w-3.5 h-3.5" style={{ color: tk.mint }} />
+                      <span className="text-sm font-bold" style={{ color: tk.mint }}>
+                        {(group.member_count ?? 0).toLocaleString()}
+                      </span>
+                      <span className="text-[11px]" style={{ color: tk.textSec }}>
+                        member{group.member_count !== 1 ? 's' : ''} already here
+                      </span>
+                    </div>
+                  </div>
+                ) : (
+                  <div
+                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl"
+                    style={{ background: 'rgba(245,158,11,0.10)', border: '1px solid rgba(245,158,11,0.25)' }}
+                  >
+                    <AlertCircle className="w-3.5 h-3.5" style={{ color: tk.textSec }} />
+                    <span className="text-[11px]" style={{ color: tk.textSec }}>
+                      No members yet — make sure this is the right class
+                    </span>
+                  </div>
+                )}
               </div>
             </div>
           </div>
@@ -508,6 +537,13 @@ export default function GroupWelcomePage() {
               transition={{ duration: 0.28 }}
               className="space-y-4"
             >
+
+              {/* Trust signal — surfaces what TrustBadge abbreviates.
+                  A new student shouldn't have to wonder what "Community"
+                  means; this tells them in plain language what it means
+                  for their money and their data. */}
+              <TrustSignalCard org={org} group={group} tk={tk} />
+
               <h2 className="text-base font-semibold px-1" style={{ color: tk.text }}>How would you like to continue?</h2>
 
               {!allowSignup && (
@@ -825,6 +861,82 @@ function Input({
       onFocus={(e) => { e.currentTarget.style.borderColor = tk.borderHov; }}
       onBlur={(e) => { e.currentTarget.style.borderColor = tk.border; }}
     />
+  );
+}
+
+function TrustSignalCard({
+  org, group, tk,
+}: {
+  org: Organization;
+  group: OrganizationGroup;
+  tk: GroupWelcomeTokens;
+}) {
+  const trustLevel = ((org as { trust_level?: string }).trust_level ?? 'community') as string;
+
+  const trustCopy: Record<string, { label: string; body: string; color: string }> = {
+    community: {
+      label: 'Community trust',
+      body: 'This class is peer-governed — member payments are tracked transparently, but exec roles are still being verified.',
+      color: '#6B7280',
+    },
+    email_verified: {
+      label: 'Email-verified leadership',
+      body: 'The class rep has verified their school email. Your payments are tracked and receipts are issued automatically.',
+      color: '#3B82F6',
+    },
+    document_verified: {
+      label: 'Document-verified leadership',
+      body: 'Leadership identity has been verified with official documents. Payout accounts are linked and audited.',
+      color: '#8B5CF6',
+    },
+    admin_verified: {
+      label: 'Admin-verified organization',
+      body: 'This organization has been reviewed and approved by Payvexo. Full trust — dues, receipts, and payouts are all active.',
+      color: '#10B981',
+    },
+    member_confirmed: {
+      label: 'Member-confirmed class',
+      body: 'Verified by the organization\'s own members through a peer-voting process. The highest trust level on the platform.',
+      color: '#10B981',
+    },
+  };
+
+  const info = trustCopy[trustLevel] ?? trustCopy.community;
+  const memberCount = group.member_count ?? 0;
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 6 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ delay: 0.1, duration: 0.25 }}
+      className="rounded-2xl p-4 flex gap-3"
+      style={{
+        background: `${info.color}0D`,
+        border: `1px solid ${info.color}28`,
+      }}
+    >
+      <div
+        className="w-8 h-8 rounded-xl flex items-center justify-center shrink-0 mt-0.5"
+        style={{ background: `${info.color}18`, color: info.color }}
+      >
+        <ShieldCheck className="w-4 h-4" />
+      </div>
+      <div className="min-w-0 flex-1">
+        <div className="flex items-center gap-2 flex-wrap mb-1">
+          <span className="text-[11px] font-bold uppercase tracking-wider" style={{ color: info.color }}>
+            {info.label}
+          </span>
+          {memberCount > 0 && (
+            <span className="text-[10px] font-semibold" style={{ color: tk.textTer }}>
+              · {memberCount.toLocaleString()} member{memberCount !== 1 ? 's' : ''}
+            </span>
+          )}
+        </div>
+        <p className="text-[12px] leading-5" style={{ color: tk.textSec }}>
+          {info.body}
+        </p>
+      </div>
+    </motion.div>
   );
 }
 
