@@ -388,7 +388,7 @@ export default function OrgLoginPage() {
   const navigate = useNavigate();
 
   const fromLocation   = (location.state as { from?: { pathname: string; search?: string } } | null)?.from;
-  const backTarget     = fromLocation ? `${fromLocation.pathname}${fromLocation.search || ''}` : `/${orgSlug}`;
+  const backTarget     = fromLocation ? `${fromLocation.pathname}${fromLocation.search || ''}` : `/${orgSlug}/overview`;
   const afterLoginTarget = fromLocation ? backTarget : `/${orgSlug}/dashboard`;
 
   // ── Fetch org ──

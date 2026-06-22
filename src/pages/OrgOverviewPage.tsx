@@ -249,7 +249,7 @@ function FacultyCard({
       onClick={onClick}
       onHoverStart={() => setHov(true)}
       onHoverEnd={() => setHov(false)}
-      className="w-full text-left rounded-2xl p-5 flex flex-col gap-3 transition-all"
+      className="w-full min-w-0 text-left rounded-2xl p-5 flex flex-col gap-3 transition-all overflow-hidden"
       style={{
         background: hov ? tk.cardHov : tk.card,
         border: `1px solid ${hov ? km.color + '50' : tk.cardBorder}`,
@@ -260,7 +260,7 @@ function FacultyCard({
       transition={{ delay: Math.min(index * 0.04, 0.28), duration: 0.2 }}
       whileTap={{ scale: 0.983 }}
     >
-      <div className="flex items-start gap-3">
+      <div className="flex items-start gap-3 min-w-0">
         <div className="w-10 h-10 rounded-xl flex items-center justify-center shrink-0 transition-all"
           style={{
             background: hov ? `${km.color}22` : `${km.color}12`,
@@ -268,11 +268,18 @@ function FacultyCard({
           }}>
           <km.icon className="w-4 h-4" style={{ color: km.color }} />
         </div>
-        <div className="min-w-0 flex-1">
-          <p className="text-sm font-bold leading-snug truncate" style={{ color: tk.text }}>
+        <div className="min-w-0 flex-1 overflow-hidden">
+          <p className="text-sm font-bold leading-snug" style={{
+            color: tk.text,
+            display: '-webkit-box',
+            WebkitLineClamp: 2,
+            WebkitBoxOrient: 'vertical',
+            overflow: 'hidden',
+            wordBreak: 'break-word',
+          }}>
             {group.name}
           </p>
-          <p className="text-[11px] font-mono uppercase tracking-wider mt-0.5"
+          <p className="text-[11px] font-mono uppercase tracking-wider mt-0.5 truncate"
             style={{ color: tk.textTer }}>
             {group.short_name}
           </p>
@@ -348,7 +355,14 @@ function GroupRow({
             Level {levelText}
           </span>
         )}
-        <p className="text-sm font-semibold truncate" style={{ color: tk.text }}>{group.name}</p>
+        <p className="text-sm font-semibold" style={{
+          color: tk.text,
+          display: '-webkit-box',
+          WebkitLineClamp: 2,
+          WebkitBoxOrient: 'vertical',
+          overflow: 'hidden',
+          wordBreak: 'break-word',
+        }}>{group.name}</p>
         <p className="text-[11px] font-mono uppercase tracking-wider mt-0.5" style={{ color: tk.textTer }}>
           {group.short_name}
           {group.kind && !levelText && (
@@ -1038,7 +1052,7 @@ export default function OrgOverviewPage() {
                     {/* ── Faculty grid ── */}
                     {!isEmpty && hasFacultyStructure && (
                       <>
-                        <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
                           {pagedList.map((g, i) => (
                             <FacultyCard
                               key={g.id} group={g} index={i}

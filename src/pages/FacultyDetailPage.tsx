@@ -497,9 +497,12 @@ export default function FacultyDetailPage() {
                   t={t}
                   onClick={() => {
                     const kind = g.kind?.toLowerCase();
-                    if (kind === 'department' || kind === 'college') {
+                    if (kind === 'faculty' || kind === 'college') {
+                      navigate(`/${orgSlug}/f/${encodeURIComponent(g.short_name)}`);
+                    } else if (kind === 'department') {
                       navigate(`/${orgSlug}/d/${encodeURIComponent(g.short_name)}`);
                     } else {
+                      // class, level, general, fellowship etc — public browse page
                       navigate(`/${orgSlug}/g/${encodeURIComponent(g.short_name)}`);
                     }
                   }}

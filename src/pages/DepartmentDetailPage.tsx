@@ -515,7 +515,14 @@ export default function DepartmentDetailPage() {
                   key={g.id}
                   group={g}
                   index={i}
-                  onClick={() => navigate(`/${orgSlug}/g/${encodeURIComponent(g.short_name)}`)}
+                 onClick={() => {
+                  const kind = g.kind?.toLowerCase();
+                  if (kind === 'department') {
+                    navigate(`/${orgSlug}/d/${encodeURIComponent(g.short_name)}`);
+                  } else {
+                    navigate(`/${orgSlug}/g/${encodeURIComponent(g.short_name)}`);
+                  }
+                }}
                 />
               ))}
             </div>

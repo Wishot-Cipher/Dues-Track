@@ -581,7 +581,9 @@ export default function GroupWelcomePage() {
                 description={`Sign in with your member ID and password for ${group.name}.`}
                 ctaLabel="Sign in"
                 onClick={() =>
-                  navigate(`/${org.slug}/login?group=${encodeURIComponent(group.id)}`)
+                  navigate(`/${org.slug}/login?group=${encodeURIComponent(group.id)}`, {
+                    state: { from: { pathname: `/${org.slug}/g/${encodeURIComponent(group.short_name)}` } },
+                  })
                 }
               />
 
