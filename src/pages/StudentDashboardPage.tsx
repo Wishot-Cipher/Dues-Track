@@ -535,10 +535,48 @@ export default function StudentDashboardPage() {
             renders nothing when there are no active notices, so the
             spacing gap below collapses cleanly when empty.
         ───────────────────────────────────────────────────────────── */}
-        <PlatformNoticeBoard
-          theme={theme}
-          orgId={orgId || null}
-        />
+        <div>
+          {/* Notice board header — branded strip, not a plain label.
+              The pulsing dot signals live content; the gradient line
+              anchors it visually to the board below. */}
+          <div className="flex items-center gap-2.5 px-1 mb-3">
+            {/* Pulsing live dot */}
+            <span className="relative flex h-2 w-2 shrink-0">
+              <motion.span
+                className="absolute inline-flex h-full w-full rounded-full opacity-75"
+                style={{ background: dt.primary }}
+                animate={{ scale: [1, 1.8, 1], opacity: [0.75, 0, 0.75] }}
+                transition={{ duration: 2.2, repeat: Infinity, ease: 'easeInOut' }}
+              />
+              <span
+                className="relative inline-flex rounded-full h-2 w-2"
+                style={{ background: dt.primary }}
+              />
+            </span>
+
+            {/* Wordmark */}
+            <p className="text-[11px] font-bold tracking-wide" style={{ color: dt.textSec }}>
+              From{' '}
+              <span style={{ color: dt.primary }}>Pay</span>
+              <span style={{ color: dt.amber }}>vexo</span>
+            </p>
+
+            {/* Gradient rule that fills the remaining space */}
+            <div
+              className="flex-1 h-px"
+              style={{
+                background: theme === 'light'
+                  ? `linear-gradient(90deg, ${dt.primary}40, transparent)`
+                  : `linear-gradient(90deg, ${dt.primary}30, transparent)`,
+              }}
+            />
+          </div>
+
+          <PlatformNoticeBoard
+            theme={theme}
+            orgId={orgId || null}
+          />
+        </div>
 
         {/* Pay on time card */}
         <div className="pt-4">
