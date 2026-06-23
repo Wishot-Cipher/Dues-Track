@@ -297,7 +297,7 @@ export default function DepartmentDetailPage() {
             <span className="font-semibold">/{orgSlug}/d/{departmentShort}</span>.
           </p>
           <motion.button
-            onClick={() => navigate(`/${orgSlug}`)}
+            onClick={() => navigate(`/${orgSlug}/overview`)}
             className="mt-6 px-6 py-3 rounded-xl font-semibold text-sm text-white"
             style={{ background: 'linear-gradient(135deg, #FF6803, #FFAC5F)' }}
             whileHover={{ scale: 1.02 }}
@@ -323,7 +323,7 @@ export default function DepartmentDetailPage() {
         <nav className="flex items-center gap-1.5 text-xs font-medium flex-wrap"
           style={{ color: t.textSec }}>
           <motion.button
-            onClick={() => navigate(`/${orgSlug}`)}
+            onClick={() => navigate(`/${orgSlug}/overview`)}
             className="inline-flex items-center gap-1.5 px-2 py-1 rounded-lg"
             style={{ color: t.textSec }}
             whileHover={{ x: -1 }}

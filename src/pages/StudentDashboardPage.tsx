@@ -23,7 +23,6 @@ import {
   Sparkles,
   CreditCard,
   User as UserIcon,
-  Users,
   AlertCircle,
   CheckCircle2,
   Loader2,
@@ -390,40 +389,58 @@ export default function StudentDashboardPage() {
           </div>
         </div>
 
-        {/* Quick actions — visually quiet: small label, no card chrome
-            of its own beyond what QuickActionsGrid already provides. */}
+        {/* Quick actions */}
         <div>
-          <p className="text-[9.5px] uppercase tracking-[0.18em] font-bold px-1 mb-2 opacity-80" style={{ color: dt.textTer }}>
-            Quick tools
+          <p className="text-[9.5px] uppercase tracking-[0.18em] font-bold px-1 mb-2.5 opacity-80" style={{ color: dt.textTer }}>
+            Quick access
           </p>
           <QuickActionsGrid
             theme={theme}
             tiles={[
               {
                 icon: CreditCard,
-                label: 'Pay',
-                hint: unpaidCount ? `${unpaidCount} pending` : 'all clear',
+                label: 'Pay dues',
+                hint: unpaidCount
+                  ? unpaidCount === 1
+                    ? '1 outstanding'
+                    : `${unpaidCount} outstanding`
+                  : 'all clear',
                 tint: theme === 'light' ? '#C84600' : '#FF7A1E',
-                onClick: () => go('/payments'),
+                badge: unpaidCount || undefined,
+                // If exactly 1 due, go directly. If 0, go to history.
+                // If 2+, the grid opens the sheet (handled inside grid).
+                onClick: unpaidCount === 1 && urgent
+                  ? () => go(`/payment/${urgent.pt.id}`)
+                  : () => go('/payments'),
+                dueItems: dueNextItems.map((item) => ({
+                  id: item.id,
+                  title: item.title,
+                  amount: item.amount,
+                  daysLeft: item.daysLeft,
+                  isMandatory: item.isMandatory,
+                  status: item.status as 'unpaid' | 'partial',
+                  paidAmount: item.paidAmount ?? 0,
+                })),
+                onDueSelect: (id) => go(`/payment/${id}`),
               },
               {
                 icon: History,
-                label: 'History',
-                hint: receiptsCount ? `${receiptsCount} paid` : 'nothing yet',
+                label: 'Receipts',
+                hint: receiptsCount ? `${receiptsCount} approved` : 'none yet',
                 tint: theme === 'light' ? '#047857' : '#10D49B',
                 onClick: () => go('/payments'),
               },
               {
-                icon: Users,
-                label: 'Groups',
-                hint: 'see & join',
-                tint: theme === 'light' ? '#0F766E' : '#2DD4BF',
-                onClick: () => go('/groups'),
+                icon: BookOpen,
+                label: 'Events',
+                hint: 'upcoming',
+                tint: theme === 'light' ? '#0369A1' : '#38BDF8',
+                onClick: () => go('/events'),
               },
               {
                 icon: UserIcon,
                 label: 'Profile',
-                hint: memberLoginId?.slice(0, 6) || 'me',
+                hint: memberLoginId?.slice(0, 8) || 'my account',
                 tint: theme === 'light' ? '#5B21B6' : '#A78BFA',
                 onClick: () => go('/profile'),
               },
