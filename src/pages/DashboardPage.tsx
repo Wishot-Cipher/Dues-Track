@@ -98,6 +98,7 @@ export default function DashboardPage() {
     }
   });
   const [showDismissed, setShowDismissed] = useState(false);
+  const [showAllUnpaidDues, setShowAllUnpaidDues] = useState(false);
 
   // Save dismissed dues to localStorage when it changes
   useEffect(() => {
@@ -666,7 +667,7 @@ export default function DashboardPage() {
                           const dateB = new Date(b.paymentType.created_at || 0).getTime();
                           return dateA - dateB;
                         })
-                        .slice(0, 2)
+                        .slice(0, showAllUnpaidDues ? undefined : 2)
                         .map((item, index) => {
                           const { paymentType } = item;
                           const isOverdue = new Date(paymentType.deadline) < new Date();
@@ -789,7 +790,7 @@ export default function DashboardPage() {
                           const dateB = new Date(b.paymentType.created_at || 0).getTime();
                           return dateA - dateB;
                         })
-                        .slice(0, 2)
+                        .slice(0, showAllUnpaidDues ? undefined : 2)
                         .map((item, index) => {
                           const { paymentType } = item;
                           const isOverdue = new Date(paymentType.deadline) < new Date();
@@ -977,10 +978,10 @@ export default function DashboardPage() {
                     )}
                   </AnimatePresence>
                   
-                  {/* View All Button if more than visible dues */}
+                  {/* Expand the list without sending students away from payable dues */}
                   {(mandatoryUnpaidDues.length > 2 || optionalUnpaidDues.length > 2) && (
                     <button
-                      onClick={() => navigate('/payments')}
+                      onClick={() => setShowAllUnpaidDues(prev => !prev)}
                       className="w-full mt-3 py-2.5 px-4 rounded-lg font-medium text-sm transition-all border"
                       style={{
                         background: 'rgba(255, 255, 255, 0.05)',
@@ -996,7 +997,9 @@ export default function DashboardPage() {
                         e.currentTarget.style.borderColor = 'rgba(255, 104, 3, 0.3)';
                       }}
                     >
-                      View All Dues ({mandatoryUnpaidDues.length + optionalUnpaidDues.length}) →
+                      {showAllUnpaidDues
+                        ? 'Show fewer dues'
+                        : `Show all unpaid dues (${mandatoryUnpaidDues.length + optionalUnpaidDues.length})`}
                     </button>
                   )}
                 </div>
