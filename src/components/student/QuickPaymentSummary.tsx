@@ -46,7 +46,17 @@ export default function QuickPaymentSummary() {
           .limit(3)
 
         if (fetchError) throw fetchError
-        if (mounted) setRecentPayments((data || []) as RecentPayment[])
+        if (mounted) {
+          const normalizedPayments: RecentPayment[] = (data || []).map(payment => ({
+            id: payment.id,
+            amount: payment.amount,
+            status: payment.status,
+            transaction_ref: payment.transaction_ref,
+            created_at: payment.created_at,
+            payment_type: payment.payment_type?.[0] || null,
+          }))
+          setRecentPayments(normalizedPayments)
+        }
       } catch (fetchError) {
         console.error('Failed to load recent payments:', fetchError)
       } finally {
