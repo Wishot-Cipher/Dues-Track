@@ -310,7 +310,7 @@ export function exportPaymentsToPrint(
  */
 export function exportExpensesToPrint(
   expenses: ExpenseExport[],
-  options?: { paymentSource?: string }
+  options?: { paymentSource?: string; totalCollected?: number }
 ): void {
   const approvedExpenses = expenses.filter(e => e.status === 'approved');
   const pendingExpenses = expenses.filter(e => e.status === 'pending');
@@ -318,6 +318,8 @@ export function exportExpensesToPrint(
   
   const totalApproved = approvedExpenses.reduce((sum, e) => sum + e.amount, 0);
   const totalPending = pendingExpenses.reduce((sum, e) => sum + e.amount, 0);
+  const totalCollected = options?.totalCollected ?? 0;
+  const remainingBalance = totalCollected - totalApproved;
   
   // Category breakdown
   const categoryBreakdown = new Map<string, { count: number; approved: number; pending: number }>();
@@ -337,6 +339,9 @@ export function exportExpensesToPrint(
   const infoItems = [
     { label: 'Report Generated', value: new Date().toLocaleDateString('en-US', { dateStyle: 'full' }) },
     { label: 'Total Expenses', value: expenses.length.toString() },
+    { label: 'Approved Spending', value: formatNaira(totalApproved) },
+    { label: 'Collected Funds', value: formatNaira(totalCollected) },
+    { label: 'Remaining Balance', value: formatNaira(remainingBalance) },
     { label: 'Academic Session', value: getAcademicSession() },
     { label: 'Payment Source', value: options?.paymentSource || 'All Funding Sources' },
   ];
@@ -352,6 +357,15 @@ export function exportExpensesToPrint(
     { value: expenses.length.toString(), label: 'Total Count', type: 'total' },
   ];
   summaryContent += generateSection('💰', 'Expense Summary', generateStatsGrid(stats, 3));
+  summaryContent += generateSection('🧮', 'Balance Reconciliation', generateTable(
+    ['Metric', 'Amount', 'Meaning'],
+    [
+      ['Collected Funds', formatNaira(totalCollected), 'Approved payments excluding waived transactions'],
+      ['Approved Expenses', formatNaira(totalApproved), 'Expenses deducted from the class fund'],
+      ['Remaining Balance', formatNaira(remainingBalance), remainingBalance >= 0 ? 'Funds remaining after approved expenses' : 'Amount by which expenses exceed collected funds'],
+      ['Pending Expenses', formatNaira(totalPending), 'Not deducted until approved'],
+    ]
+  ));
   
   // Category Breakdown
   if (categoryBreakdown.size > 0) {

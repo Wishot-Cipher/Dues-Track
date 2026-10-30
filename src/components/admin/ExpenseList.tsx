@@ -284,7 +284,10 @@ export default function ExpenseList({ categoryFilter = 'all' }: { categoryFilter
         ? (paymentTypes.find(pt => pt.id === paymentFilter)?.title || undefined)
         : undefined
 
-      exportExpensesToPDF(expenseData, { paymentSource: paymentSourceTitle })
+      exportExpensesToPDF(expenseData, {
+        paymentSource: paymentSourceTitle,
+        totalCollected: collectedAmount,
+      })
       showSuccess('Expenses exported to PDF!')
     } catch (err) {
       console.error('Export error:', err)

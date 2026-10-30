@@ -1,9 +1,19 @@
-import { useState, useRef } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { FileText, Printer, Share2, CheckCircle, Clock, XCircle, Sparkles, FileSpreadsheet, Eye } from 'lucide-react'
+import { FileText, Printer, Share2, CheckCircle, Clock, XCircle, Sparkles, FileSpreadsheet, Eye, ArrowRight, Calendar } from 'lucide-react'
 import { colors, gradients } from '@/config/colors'
 import { supabase } from '@/config/supabase'
 import { useAuth } from '@/hooks/useAuth'
+import { useNavigate } from 'react-router-dom'
+
+interface RecentPayment {
+  id: string
+  amount: number
+  status: 'pending' | 'approved' | 'rejected'
+  transaction_ref: string
+  created_at: string
+  payment_type: { title: string } | null
+}
 
 // Detect iOS device
 const isIOS = () => {
@@ -13,11 +23,40 @@ const isIOS = () => {
 
 export default function QuickPaymentSummary() {
   const { user } = useAuth()
+  const navigate = useNavigate()
   const [loading, setLoading] = useState(false)
   const [activeAction, setActiveAction] = useState<'csv' | 'print' | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [success, setSuccess] = useState<string | null>(null)
   const printFrameRef = useRef<HTMLIFrameElement | null>(null)
+  const [recentPayments, setRecentPayments] = useState<RecentPayment[]>([])
+  const [historyLoading, setHistoryLoading] = useState(true)
+
+  useEffect(() => {
+    if (!user) return
+
+    let mounted = true
+    const loadRecentPayments = async () => {
+      try {
+        const { data, error: fetchError } = await supabase
+          .from('payments')
+          .select('id, amount, status, transaction_ref, created_at, payment_type:payment_types(title)')
+          .eq('student_id', user.id)
+          .order('created_at', { ascending: false })
+          .limit(3)
+
+        if (fetchError) throw fetchError
+        if (mounted) setRecentPayments((data || []) as RecentPayment[])
+      } catch (fetchError) {
+        console.error('Failed to load recent payments:', fetchError)
+      } finally {
+        if (mounted) setHistoryLoading(false)
+      }
+    }
+
+    loadRecentPayments()
+    return () => { mounted = false }
+  }, [user])
 
   async function generatePaymentSummary() {
     if (!user) return
@@ -925,6 +964,63 @@ export default function QuickPaymentSummary() {
             </motion.div>
           )}
         </AnimatePresence>
+
+        <div
+          className="rounded-xl p-4"
+          style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.07)' }}
+        >
+          <div className="flex items-center justify-between gap-3 mb-3">
+            <div>
+              <p className="text-sm font-semibold text-white">Recent dues payments</p>
+              <p className="text-[11px]" style={{ color: colors.textSecondary }}>Your latest payment activity</p>
+            </div>
+            <button
+              type="button"
+              onClick={() => navigate('/payments')}
+              className="inline-flex items-center gap-1 text-xs font-semibold transition-colors hover:text-white"
+              style={{ color: colors.primary }}
+            >
+              Show more <ArrowRight className="w-3.5 h-3.5" />
+            </button>
+          </div>
+
+          {historyLoading ? (
+            <div className="h-10 rounded-lg animate-pulse" style={{ background: 'rgba(255,255,255,0.05)' }} />
+          ) : recentPayments.length > 0 ? (
+            <div className="space-y-2">
+              {recentPayments.map((payment) => {
+                const statusColor = payment.status === 'approved'
+                  ? colors.statusPaid
+                  : payment.status === 'rejected'
+                    ? colors.statusUnpaid
+                    : colors.statusPending
+                return (
+                  <button
+                    type="button"
+                    key={payment.id}
+                    onClick={() => navigate('/payments')}
+                    className="w-full flex items-center justify-between gap-3 rounded-lg p-2.5 text-left transition-colors hover:bg-white/10"
+                    style={{ background: 'rgba(255,255,255,0.025)' }}
+                  >
+                    <div className="min-w-0">
+                      <p className="text-xs font-medium text-white truncate">{payment.payment_type?.title || 'Dues payment'}</p>
+                      <p className="text-[11px] flex items-center gap-1 mt-1" style={{ color: colors.textSecondary }}>
+                        <Calendar className="w-3 h-3" />
+                        {new Date(payment.created_at).toLocaleDateString()}
+                      </p>
+                    </div>
+                    <div className="text-right shrink-0">
+                      <p className="text-xs font-semibold text-white">₦{Number(payment.amount || 0).toLocaleString()}</p>
+                      <p className="text-[10px] capitalize mt-1" style={{ color: statusColor }}>{payment.status}</p>
+                    </div>
+                  </button>
+                )
+              })}
+            </div>
+          ) : (
+            <p className="text-xs" style={{ color: colors.textSecondary }}>No payment records yet.</p>
+          )}
+        </div>
 
         {/* Features List */}
         <div 
