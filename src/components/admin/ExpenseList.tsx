@@ -181,10 +181,13 @@ export default function ExpenseList({ categoryFilter = 'all' }: { categoryFilter
   const expenseStats = useMemo(() => {
     const approved = sortedExpenses.filter(e => e.status === 'approved')
     const pending = sortedExpenses.filter(e => e.status === 'pending')
+    const rejected = sortedExpenses.filter(e => e.status === 'rejected')
     const totalApproved = approved.reduce((sum, e) => sum + (e.amount || 0), 0)
     const totalPending = pending.reduce((sum, e) => sum + (e.amount || 0), 0)
+    const totalRejected = rejected.reduce((sum, e) => sum + (e.amount || 0), 0)
     const netBalance = collectedAmount - totalApproved
-    return { approved, pending, totalApproved, totalPending, netBalance }
+    const spentPercentage = collectedAmount > 0 ? (totalApproved / collectedAmount) * 100 : 0
+    return { approved, pending, rejected, totalApproved, totalPending, totalRejected, netBalance, spentPercentage }
   }, [sortedExpenses, collectedAmount])
 
   // Pagination
@@ -417,24 +420,36 @@ export default function ExpenseList({ categoryFilter = 'all' }: { categoryFilter
                   clearable
                 />
               </div>
-              {/* Collected / Expenses / Net Balance for selected funding source */}
+              {/* Financial summary for the selected funding source */}
               <div className="flex flex-wrap items-center gap-2 mt-2 sm:mt-0">
                 <div className="flex items-center gap-2 px-4 py-2 rounded-xl" style={{ background: 'rgba(255,255,255,0.03)', border: `1px solid rgba(255,255,255,0.04)` }}>
-                  <div className="text-xs" style={{ color: colors.textSecondary }}>Collected</div>
+                  <div className="text-xs" style={{ color: colors.textSecondary }}>Total Collected</div>
                   <div className="font-semibold ml-2 whitespace-nowrap" style={{ color: colors.statusPaid }}>₦{collectedAmount.toLocaleString()}</div>
                 </div>
                 <div className="flex items-center gap-2 px-4 py-2 rounded-xl" style={{ background: 'rgba(255,255,255,0.03)', border: `1px solid rgba(255,255,255,0.04)` }}>
-                  <div className="text-xs" style={{ color: colors.textSecondary }}>Spent</div>
+                  <div className="text-xs" style={{ color: colors.textSecondary }}>Approved Spent</div>
                   <div className="font-semibold ml-2 whitespace-nowrap" style={{ color: colors.statusFailed }}>₦{expenseStats.totalApproved.toLocaleString()}</div>
                 </div>
                 <div className="flex items-center gap-2 px-4 py-2 rounded-xl" style={{ background: expenseStats.netBalance >= 0 ? 'rgba(34, 197, 94, 0.08)' : 'rgba(239, 68, 68, 0.08)', border: `1px solid ${expenseStats.netBalance >= 0 ? 'rgba(34, 197, 94, 0.2)' : 'rgba(239, 68, 68, 0.2)'}` }}>
-                  <div className="text-xs" style={{ color: colors.textSecondary }}>Available</div>
+                  <div className="text-xs" style={{ color: colors.textSecondary }}>Remaining</div>
                   <div className="font-semibold ml-2 whitespace-nowrap" style={{ color: expenseStats.netBalance >= 0 ? colors.statusPaid : colors.statusFailed }}>₦{expenseStats.netBalance.toLocaleString()}</div>
+                </div>
+                <div className="flex items-center gap-2 px-3 py-2 rounded-xl" style={{ background: 'rgba(255,255,255,0.03)', border: `1px solid rgba(255,255,255,0.04)` }}>
+                  <div className="text-xs" style={{ color: colors.textSecondary }}>Utilization</div>
+                  <div className="font-semibold ml-2 whitespace-nowrap" style={{ color: expenseStats.spentPercentage > 90 ? colors.statusFailed : colors.textPrimary }}>
+                    {expenseStats.spentPercentage.toFixed(1)}%
+                  </div>
                 </div>
                 {expenseStats.pending.length > 0 && (
                   <div className="flex items-center gap-2 px-3 py-2 rounded-xl" style={{ background: 'rgba(251, 191, 36, 0.08)', border: '1px solid rgba(251, 191, 36, 0.2)' }}>
                     <Clock className="w-3.5 h-3.5" style={{ color: '#FBBF24' }} />
                     <div className="text-xs whitespace-nowrap" style={{ color: '#FBBF24' }}>{expenseStats.pending.length} pending (₦{expenseStats.totalPending.toLocaleString()})</div>
+                  </div>
+                )}
+                {expenseStats.rejected.length > 0 && (
+                  <div className="flex items-center gap-2 px-3 py-2 rounded-xl" style={{ background: 'rgba(239, 68, 68, 0.08)', border: '1px solid rgba(239, 68, 68, 0.2)' }}>
+                    <XCircle className="w-3.5 h-3.5" style={{ color: colors.statusFailed }} />
+                    <div className="text-xs whitespace-nowrap" style={{ color: colors.statusFailed }}>{expenseStats.rejected.length} rejected (₦{expenseStats.totalRejected.toLocaleString()})</div>
                   </div>
                 )}
               </div>

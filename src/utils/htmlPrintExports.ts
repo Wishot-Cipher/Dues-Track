@@ -354,7 +354,7 @@ export function exportExpensesToPrint(
     { value: approvedExpenses.length.toString(), label: 'Approved Count', type: 'expense' },
     { value: pendingExpenses.length.toString(), label: 'Pending Count', type: 'pending' },
     { value: rejectedExpenses.length.toString(), label: 'Rejected Count', type: 'rejected' },
-    { value: expenses.length.toString(), label: 'Total Count', type: 'total' },
+    { value: formatNaira(totalCollected), label: 'Total Collected', type: 'approved' },
   ];
   summaryContent += generateSection('💰', 'Expense Summary', generateStatsGrid(stats, 3));
   summaryContent += generateSection('🧮', 'Balance Reconciliation', generateTable(
