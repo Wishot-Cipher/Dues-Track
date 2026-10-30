@@ -8,7 +8,7 @@ export function useExpenses(status?: 'pending' | 'approved' | 'rejected') {
   const [error, setError] = useState<Error | null>(null)
 
   
-  const load = useCallback(async (limit = 50) => {
+  const load = useCallback(async (limit?: number) => {
     setLoading(true)
     setError(null)
     try {

@@ -226,24 +226,41 @@ export async function createExpense(payload: CreateExpensePayload) {
   }
 }
 
-// Fetch expenses with optional status filter
-export async function fetchExpenses(limit = 50, status?: 'pending' | 'approved' | 'rejected') {
-  let query = supabase
-    .from('expenses')
-    .select(`
-      *,
-      category:expense_categories(id, name, icon, color)
-    `)
-    .order('expense_date', { ascending: false })
-    .limit(limit)
+// Fetch expenses with optional status filter. Without a limit, fetch every
+// record in pages because Supabase caps the number of rows returned per query.
+export async function fetchExpenses(limit?: number, status?: 'pending' | 'approved' | 'rejected'): Promise<Expense[]> {
+  if (limit !== undefined && limit <= 0) return []
 
-  if (status) {
-    query = query.eq('status', status)
+  const pageSize = 1000
+  const expenses: Expense[] = []
+  let offset = 0
+
+  while (limit === undefined || offset < limit) {
+    const requestedSize = limit === undefined ? pageSize : Math.min(pageSize, limit - offset)
+    let query = supabase
+      .from('expenses')
+      .select(`
+        *,
+        category:expense_categories(id, name, icon, color)
+      `)
+      .order('expense_date', { ascending: false })
+      .range(offset, offset + requestedSize - 1)
+
+    if (status) {
+      query = query.eq('status', status)
+    }
+
+    const { data, error } = await query
+    if (error) throw error
+
+    const page = data || []
+    expenses.push(...page)
+
+    if (page.length < requestedSize) break
+    offset += page.length
   }
 
-  const { data, error } = await query
-  if (error) throw error
-  return data
+  return expenses
 }
 
 // Fetch expense categories
